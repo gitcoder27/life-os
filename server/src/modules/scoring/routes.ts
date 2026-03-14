@@ -1,0 +1,32 @@
+import type { FastifyPluginAsync } from "fastify";
+import type { IsoDateString } from "@life-os/contracts";
+import { z } from "zod";
+
+import { requireAuthenticatedUser } from "../../lib/auth/require-auth.js";
+import { parseIsoDate } from "../../lib/time/cycle.js";
+import { parseOrThrow } from "../../lib/validation/parse.js";
+import { calculateDailyScore, getWeeklyMomentum } from "./service.js";
+
+const isoDateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/) as unknown as z.ZodType<IsoDateString>;
+
+export const registerScoringRoutes: FastifyPluginAsync = async (app) => {
+  app.get("/scores/daily/:date", async (request, reply) => {
+    const user = requireAuthenticatedUser(request);
+    const { date } = request.params as { date: IsoDateString };
+    const parsedDate = parseOrThrow(isoDateSchema, date);
+    const score = await calculateDailyScore(app.prisma, user.id, parseIsoDate(parsedDate));
+
+    return reply.send(score);
+  });
+
+  app.get("/scores/weekly-momentum", async (request, reply) => {
+    const user = requireAuthenticatedUser(request);
+    const querySchema = z.object({
+      endingOn: isoDateSchema,
+    });
+    const query = parseOrThrow(querySchema, request.query);
+    const momentum = await getWeeklyMomentum(app.prisma, user.id, parseIsoDate(query.endingOn));
+
+    return reply.send(momentum);
+  });
+};

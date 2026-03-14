@@ -71,16 +71,77 @@ enum CheckinStatus {
   SKIPPED
 }
 
+enum HabitCheckinSource {
+  TAP
+  QUICK_CAPTURE
+  REVIEW
+}
+
 enum RoutinePeriod {
   MORNING
   EVENING
 }
 
-enum WorkoutStatus {
-  NOT_LOGGED
-  PLANNED
-  DONE
+enum RoutineStatus {
+  ACTIVE
+  ARCHIVED
+}
+
+enum WaterLogSource {
+  TAP
+  QUICK_CAPTURE
+  MANUAL
+}
+
+enum MealSlot {
+  BREAKFAST
+  LUNCH
+  DINNER
+  SNACK
+}
+
+enum MealLoggingQuality {
+  PARTIAL
+  MEANINGFUL
+  FULL
+}
+
+enum WorkoutPlanType {
+  WORKOUT
+  RECOVERY
+  NONE
+}
+
+enum WorkoutActualStatus {
+  COMPLETED
+  RECOVERY_RESPECTED
+  FALLBACK
   MISSED
+  NONE
+}
+
+enum ExpenseSource {
+  MANUAL
+  QUICK_CAPTURE
+  TEMPLATE
+}
+
+enum RecurringExpenseStatus {
+  ACTIVE
+  PAUSED
+  ARCHIVED
+}
+
+enum AdminItemType {
+  BILL
+  ADMIN
+}
+
+enum AdminItemStatus {
+  PENDING
+  DONE
+  RESCHEDULED
+  DROPPED
 }
 
 enum ReviewType {
@@ -89,90 +150,97 @@ enum ReviewType {
   MONTHLY
 }
 
-enum NotificationTone {
+enum NotificationSeverity {
   INFO
   WARNING
-  URGENT
-}
-
-enum NotificationStatus {
-  UNREAD
-  READ
-  DISMISSED
+  CRITICAL
 }
 
 model User {
-  id             String             @id @default(uuid())
-  email          String             @unique
-  passwordHash   String
-  displayName    String?
-  status         UserStatus         @default(ACTIVE)
-  onboardedAt    DateTime?
-  lastLoginAt    DateTime?
-  createdAt      DateTime           @default(now())
-  updatedAt      DateTime           @updatedAt
-  sessions       Session[]
-  preferences    UserPreference?
-  goals          Goal[]
-  planningCycles PlanningCycle[]
-  tasks          Task[]
-  habits         Habit[]
-  routines       Routine[]
-  categories     ExpenseCategory[]
-  expenses       Expense[]
-  notifications  Notification[]
+  id                    String                    @id @default(uuid())
+  email                 String                    @unique
+  passwordHash          String
+  displayName           String?
+  status                UserStatus                @default(ACTIVE)
+  onboardedAt           DateTime?
+  lastLoginAt           DateTime?
+  createdAt             DateTime                  @default(now())
+  updatedAt             DateTime                  @updatedAt
+  sessions              Session[]
+  auditEvents           AuditEvent[]
+  preferences           UserPreference?
+  goals                 Goal[]
+  planningCycles        PlanningCycle[]
+  tasks                 Task[]
+  habits                Habit[]
+  routines              Routine[]
+  waterLogs             WaterLog[]
+  mealTemplates         MealTemplate[]
+  mealLogs              MealLog[]
+  workoutDays           WorkoutDay[]
+  weightLogs            WeightLog[]
+  expenseCategories     ExpenseCategory[]
+  recurringExpenseTemplates RecurringExpenseTemplate[]
+  expenses              Expense[]
+  adminItems            AdminItem[]
+  dailyReviews          DailyReview[]
+  weeklyReviews         WeeklyReview[]
+  monthlyReviews        MonthlyReview[]
+  dailyScores           DailyScore[]
+  notifications         Notification[]
 }
 
 model Session {
-  id               String    @id @default(uuid())
+  id               String   @id @default(uuid())
   userId           String
-  sessionTokenHash String    @unique
-  ipAddress        String?
-  userAgent        String?
+  sessionTokenHash String   @unique
+  createdAt        DateTime @default(now())
   lastSeenAt       DateTime?
   expiresAt        DateTime
+  ipAddress        String?
+  userAgent        String?
   revokedAt        DateTime?
-  createdAt        DateTime  @default(now())
-  user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, expiresAt])
 }
 
 model AuditEvent {
-  id           String   @id @default(uuid())
-  userId       String?
-  eventType    String
-  payload      Json
-  createdAt    DateTime @default(now())
+  id               String   @id @default(uuid())
+  userId           String?
+  eventType        String
+  eventPayloadJson Json
+  createdAt        DateTime @default(now())
+  user             User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
 }
 
 model UserPreference {
-  userId                String   @id
-  timezone              String   @default("UTC")
-  currencyCode          String   @default("USD")
-  weekStartsOn          Int      @default(1)
-  dailyReviewStartTime  String?
-  dailyReviewEndTime    String?
-  dailyWaterTargetMl    Int      @default(2500)
-  scoringEnabled        Boolean  @default(true)
-  createdAt             DateTime @default(now())
-  updatedAt             DateTime @updatedAt
-  user                  User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId               String   @id
+  timezone             String   @default("UTC")
+  currencyCode         String   @default("USD")
+  weekStartsOn         Int      @default(1)
+  dailyReviewStartTime String?
+  dailyReviewEndTime   String?
+  dailyWaterTargetMl   Int      @default(2500)
+  defaultScoreEnabled  Boolean  @default(true)
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+  user                 User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model Goal {
-  id          String      @id @default(uuid())
-  userId      String
-  title       String
-  domain      GoalDomain
-  status      GoalStatus  @default(ACTIVE)
-  targetDate  DateTime?
-  notes       String?
-  createdAt   DateTime    @default(now())
-  updatedAt   DateTime    @updatedAt
-  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
-  priorities  CyclePriority[]
-  tasks       Task[]
+  id         String      @id @default(uuid())
+  userId     String
+  title      String
+  domain     GoalDomain
+  status     GoalStatus  @default(ACTIVE)
+  targetDate DateTime?
+  notes      String?
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
+  user       User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  priorities CyclePriority[]
+  tasks      Task[]
 }
 
 model PlanningCycle {
@@ -187,6 +255,10 @@ model PlanningCycle {
   updatedAt      DateTime            @updatedAt
   user           User                @relation(fields: [userId], references: [id], onDelete: Cascade)
   priorities     CyclePriority[]
+  dailyReview    DailyReview?
+  weeklyReview   WeeklyReview?
+  monthlyReview  MonthlyReview?
+  dailyScore     DailyScore?
 
   @@unique([userId, cycleType, cycleStartDate])
 }
@@ -224,6 +296,11 @@ model Task {
   updatedAt         DateTime       @updatedAt
   user              User           @relation(fields: [userId], references: [id], onDelete: Cascade)
   goal              Goal?          @relation(fields: [goalId], references: [id], onDelete: SetNull)
+  carriedFromTask   Task?          @relation("TaskCarryForward", fields: [carriedFromTaskId], references: [id], onDelete: SetNull)
+  carriedTasks      Task[]         @relation("TaskCarryForward")
+  adminItems        AdminItem[]    @relation("AdminItemTask")
+
+  @@index([userId, scheduledForDate, status])
 }
 
 model Habit {
@@ -234,35 +311,37 @@ model Habit {
   scheduleRuleJson Json
   targetPerDay     Int            @default(1)
   status           HabitStatus    @default(ACTIVE)
-  archivedAt       DateTime?
   createdAt        DateTime       @default(now())
   updatedAt        DateTime       @updatedAt
+  archivedAt       DateTime?
   user             User           @relation(fields: [userId], references: [id], onDelete: Cascade)
   checkins         HabitCheckin[]
+  weeklyReviewFocuses WeeklyReview[] @relation("WeeklyReviewFocusHabit")
 }
 
 model HabitCheckin {
-  id          String        @id @default(uuid())
+  id          String             @id @default(uuid())
   habitId      String
   occurredOn   DateTime
-  status       CheckinStatus @default(COMPLETED)
-  source       String        @default("tap")
-  note         String?
+  status       CheckinStatus      @default(COMPLETED)
+  source       HabitCheckinSource @default(TAP)
   completedAt  DateTime?
-  habit        Habit         @relation(fields: [habitId], references: [id], onDelete: Cascade)
+  note         String?
+  habit        Habit              @relation(fields: [habitId], references: [id], onDelete: Cascade)
 
   @@unique([habitId, occurredOn])
 }
 
 model Routine {
-  id         String        @id @default(uuid())
-  userId     String
-  name       String
-  period     RoutinePeriod
-  createdAt  DateTime      @default(now())
-  updatedAt  DateTime      @updatedAt
-  user       User          @relation(fields: [userId], references: [id], onDelete: Cascade)
-  items      RoutineItem[]
+  id        String        @id @default(uuid())
+  userId    String
+  name      String
+  period    RoutinePeriod
+  status    RoutineStatus @default(ACTIVE)
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+  user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  items     RoutineItem[]
 }
 
 model RoutineItem {
@@ -288,140 +367,233 @@ model RoutineItemCheckin {
 }
 
 model WaterLog {
-  id         String   @id @default(uuid())
+  id         String         @id @default(uuid())
   userId     String
-  amountMl   Int
   occurredAt DateTime
-  createdAt  DateTime @default(now())
+  amountMl   Int
+  source     WaterLogSource @default(TAP)
+  createdAt  DateTime       @default(now())
+  user       User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model MealTemplate {
+  id                  String    @id @default(uuid())
+  userId              String
+  name                String
+  mealSlot            MealSlot?
+  templatePayloadJson Json
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+  archivedAt          DateTime?
+  user                User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  mealLogs            MealLog[]
 }
 
 model MealLog {
-  id         String   @id @default(uuid())
-  userId     String
-  label      String
-  occurredAt DateTime
-  notes      String?
-  createdAt  DateTime @default(now())
+  id             String             @id @default(uuid())
+  userId         String
+  occurredAt     DateTime
+  mealSlot       MealSlot?
+  mealTemplateId String?
+  description    String
+  loggingQuality MealLoggingQuality
+  createdAt      DateTime           @default(now())
+  user           User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  mealTemplate   MealTemplate?      @relation(fields: [mealTemplateId], references: [id], onDelete: SetNull)
 }
 
 model WorkoutDay {
-  id          String        @id @default(uuid())
-  userId      String
-  workoutDate DateTime
-  status      WorkoutStatus @default(NOT_LOGGED)
-  notes       String?
-  updatedAt   DateTime      @updatedAt
+  id           String              @id @default(uuid())
+  userId       String
+  date         DateTime
+  planType     WorkoutPlanType     @default(NONE)
+  plannedLabel String?
+  actualStatus WorkoutActualStatus @default(NONE)
+  note         String?
+  updatedAt    DateTime            @updatedAt
+  user         User                @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@unique([userId, workoutDate])
+  @@unique([userId, date])
 }
 
 model WeightLog {
-  id         String   @id @default(uuid())
-  userId     String
-  weightKg   Decimal  @db.Decimal(5, 2)
-  occurredAt DateTime
-  createdAt  DateTime @default(now())
+  id          String   @id @default(uuid())
+  userId      String
+  measuredOn  DateTime
+  weightValue Decimal  @db.Decimal(7, 2)
+  unit        String   @default("kg")
+  note        String?
+  createdAt   DateTime @default(now())
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model ExpenseCategory {
-  id        String   @id @default(uuid())
-  userId    String
-  name      String
-  color     String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  expenses  Expense[]
+  id         String   @id @default(uuid())
+  userId     String
+  name       String
+  color      String?
+  sortOrder  Int      @default(0)
+  createdAt  DateTime @default(now())
+  archivedAt DateTime?
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expenses   Expense[]
+  recurringExpenseTemplates RecurringExpenseTemplate[]
+  weeklyReviewSpendWatches WeeklyReview[] @relation("WeeklyReviewSpendCategory")
 
   @@unique([userId, name])
 }
 
-model RecurringExpense {
-  id               String   @id @default(uuid())
-  userId           String
+model RecurringExpenseTemplate {
+  id                String                 @id @default(uuid())
+  userId            String
+  title             String
   expenseCategoryId String?
-  title            String
-  amount           Decimal  @db.Decimal(12, 2)
-  dueDayOfMonth    Int
-  isActive         Boolean  @default(true)
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  defaultAmountMinor Int?
+  currencyCode      String
+  recurrenceRule    String
+  nextDueOn         DateTime
+  remindDaysBefore  Int                    @default(0)
+  status            RecurringExpenseStatus @default(ACTIVE)
+  createdAt         DateTime               @default(now())
+  updatedAt         DateTime               @updatedAt
+  user              User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expenseCategory   ExpenseCategory?       @relation(fields: [expenseCategoryId], references: [id], onDelete: SetNull)
+  expenses          Expense[]
+  adminItems        AdminItem[]
 }
 
 model Expense {
-  id               String           @id @default(uuid())
-  userId           String
-  expenseCategoryId String?
-  title            String
-  amount           Decimal          @db.Decimal(12, 2)
-  occurredAt       DateTime
-  notes            String?
-  createdAt        DateTime         @default(now())
-  updatedAt        DateTime         @updatedAt
-  user             User             @relation(fields: [userId], references: [id], onDelete: Cascade)
-  category         ExpenseCategory? @relation(fields: [expenseCategoryId], references: [id], onDelete: SetNull)
+  id                         String                    @id @default(uuid())
+  userId                     String
+  expenseCategoryId          String?
+  amountMinor                Int
+  currencyCode               String
+  spentOn                    DateTime
+  description                String?
+  source                     ExpenseSource             @default(MANUAL)
+  recurringExpenseTemplateId String?
+  createdAt                  DateTime                  @default(now())
+  updatedAt                  DateTime                  @updatedAt
+  user                       User                      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expenseCategory            ExpenseCategory?          @relation(fields: [expenseCategoryId], references: [id], onDelete: SetNull)
+  recurringExpenseTemplate   RecurringExpenseTemplate? @relation(fields: [recurringExpenseTemplateId], references: [id], onDelete: SetNull)
+
+  @@index([userId, spentOn])
+}
+
+model AdminItem {
+  id                         String                    @id @default(uuid())
+  userId                     String
+  title                      String
+  itemType                   AdminItemType
+  dueOn                      DateTime
+  status                     AdminItemStatus           @default(PENDING)
+  relatedTaskId              String?
+  recurringExpenseTemplateId String?
+  amountMinor                Int?
+  note                       String?
+  completedAt                DateTime?
+  createdAt                  DateTime                  @default(now())
+  updatedAt                  DateTime                  @updatedAt
+  user                       User                      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  relatedTask                Task?                     @relation("AdminItemTask", fields: [relatedTaskId], references: [id], onDelete: SetNull)
+  recurringExpenseTemplate   RecurringExpenseTemplate? @relation(fields: [recurringExpenseTemplateId], references: [id], onDelete: SetNull)
+
+  @@index([userId, dueOn, status])
 }
 
 model DailyReview {
-  id              String   @id @default(uuid())
+  id              String        @id @default(uuid())
   userId          String
-  reviewDate      DateTime
-  wins            Json
-  misses          Json
-  tomorrowFocus   Json
-  submittedAt     DateTime @default(now())
-
-  @@unique([userId, reviewDate])
+  planningCycleId String        @unique
+  biggestWin      String
+  frictionTag     String
+  frictionNote    String?
+  energyRating    Int
+  optionalNote    String?
+  completedAt     DateTime
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  user            User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  planningCycle   PlanningCycle @relation(fields: [planningCycleId], references: [id], onDelete: Cascade)
 }
 
 model WeeklyReview {
-  id                String   @id @default(uuid())
-  userId            String
-  weekStartDate     DateTime
-  summary           Json
-  nextWeekFocus     Json
-  submittedAt       DateTime @default(now())
-
-  @@unique([userId, weekStartDate])
+  id                      String        @id @default(uuid())
+  userId                  String
+  planningCycleId         String        @unique
+  biggestWin              String
+  biggestMiss             String
+  mainLesson              String
+  keepText                String
+  improveText             String
+  focusHabitId            String?
+  healthTargetText        String?
+  spendingWatchCategoryId String?
+  notes                   String?
+  completedAt             DateTime
+  createdAt               DateTime      @default(now())
+  updatedAt               DateTime      @updatedAt
+  user                    User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  planningCycle           PlanningCycle @relation(fields: [planningCycleId], references: [id], onDelete: Cascade)
+  focusHabit              Habit?        @relation("WeeklyReviewFocusHabit", fields: [focusHabitId], references: [id], onDelete: SetNull)
+  spendingWatchCategory   ExpenseCategory? @relation("WeeklyReviewSpendCategory", fields: [spendingWatchCategoryId], references: [id], onDelete: SetNull)
 }
 
 model MonthlyReview {
-  id                String   @id @default(uuid())
+  id                String        @id @default(uuid())
   userId            String
-  monthStartDate    DateTime
-  summary           Json
-  nextMonthFocus    Json
-  submittedAt       DateTime @default(now())
-
-  @@unique([userId, monthStartDate])
+  planningCycleId   String        @unique
+  monthVerdict      String
+  biggestWin        String
+  biggestLeak       String
+  ratingsJson       Json
+  nextMonthTheme    String
+  threeOutcomesJson Json
+  habitChangesJson  Json
+  simplifyText      String
+  notes             String?
+  completedAt       DateTime
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+  user              User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  planningCycle     PlanningCycle @relation(fields: [planningCycleId], references: [id], onDelete: Cascade)
 }
 
 model DailyScore {
-  id             String   @id @default(uuid())
-  userId         String
-  scoreDate      DateTime
-  value          Int
-  earnedPoints   Int
-  possiblePoints Int
-  label          String
-  breakdown      Json
-  finalisedAt    DateTime?
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  id               String        @id @default(uuid())
+  userId           String
+  planningCycleId  String        @unique
+  scoreValue       Int
+  scoreBand        String
+  earnedPoints     Decimal       @db.Decimal(7, 2)
+  applicablePoints Decimal       @db.Decimal(7, 2)
+  breakdownJson    Json
+  finalizedAt      DateTime?
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+  user             User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  planningCycle    PlanningCycle @relation(fields: [planningCycleId], references: [id], onDelete: Cascade)
 
-  @@unique([userId, scoreDate])
+  @@index([userId, finalizedAt])
 }
 
 model Notification {
-  id          String             @id @default(uuid())
-  userId      String
-  title       String
-  body        String
-  tone        NotificationTone   @default(INFO)
-  status      NotificationStatus @default(UNREAD)
-  visibleFrom DateTime?
-  expiresAt   DateTime?
-  createdAt   DateTime           @default(now())
-  updatedAt   DateTime           @updatedAt
-  user        User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id             String               @id @default(uuid())
+  userId         String
+  notificationType String
+  severity       NotificationSeverity @default(INFO)
+  title          String
+  body           String
+  entityType     String?
+  entityId       String?
+  ruleKey        String
+  visibleFrom    DateTime?
+  expiresAt      DateTime?
+  readAt         DateTime?
+  dismissedAt    DateTime?
+  createdAt      DateTime             @default(now())
+  user           User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, readAt, dismissedAt, visibleFrom])
 }

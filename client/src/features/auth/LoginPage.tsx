@@ -4,19 +4,39 @@ export function LoginPage() {
   return (
     <div className="auth-layout">
       <div className="auth-layout__panel">
-        <span className="page-eyebrow">Self-hosted owner access</span>
+        <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", marginBottom: "0.5rem" }}>
+          <span
+            style={{
+              display: "inline-flex",
+              width: "2.4rem",
+              height: "2.4rem",
+              alignItems: "center",
+              justifyContent: "center",
+              borderRadius: "var(--r-sm)",
+              background: "linear-gradient(135deg, rgba(217,153,58,0.2), rgba(217,153,58,0.06))",
+              border: "1px solid rgba(217,153,58,0.25)",
+              color: "var(--accent-bright)",
+              fontFamily: "var(--font-display)",
+              fontSize: "1.1rem",
+              fontWeight: 600,
+            }}
+          >
+            L
+          </span>
+          <span className="page-eyebrow">Self-hosted owner access</span>
+        </div>
         <h1 className="auth-layout__title">Sign in to Life OS</h1>
         <p className="auth-layout__copy">
-          This bootstrap keeps authentication intentionally simple. The backend
-          remains the source of truth for sessions and account state.
+          Your personal command center. One account, one login, full visibility across every life domain.
         </p>
 
-        <form className="stack-form">
+        <form className="stack-form" onSubmit={(e) => e.preventDefault()}>
           <label className="field">
             <span>Email</span>
             <input
               placeholder="owner@example.com"
               type="email"
+              autoComplete="email"
             />
           </label>
 
@@ -25,10 +45,11 @@ export function LoginPage() {
             <input
               placeholder="••••••••"
               type="password"
+              autoComplete="current-password"
             />
           </label>
 
-          <div className="button-row">
+          <div className="button-row" style={{ marginTop: "0.5rem" }}>
             <button
               className="button button--primary"
               type="submit"
@@ -39,7 +60,7 @@ export function LoginPage() {
               className="button button--ghost"
               to="/onboarding"
             >
-              Review onboarding
+              First-time setup
             </Link>
           </div>
         </form>

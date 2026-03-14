@@ -3,6 +3,15 @@ export type IsoMonthString = `${number}-${number}`;
 export type EntityId = string;
 
 export type LifecycleStatus = "active" | "inactive";
+export type ApiErrorCode =
+  | "BAD_REQUEST"
+  | "VALIDATION_ERROR"
+  | "UNAUTHENTICATED"
+  | "FORBIDDEN"
+  | "NOT_FOUND"
+  | "CONFLICT"
+  | "RATE_LIMITED"
+  | "INTERNAL_ERROR";
 
 export interface ApiMeta {
   generatedAt: string;
@@ -12,7 +21,14 @@ export interface ApiSuccess {
   success: true;
 }
 
-export interface ApiError {
-  success: false;
+export interface ApiFieldError {
+  field: string;
   message: string;
+}
+
+export interface ApiError extends ApiMeta {
+  success: false;
+  code: ApiErrorCode;
+  message: string;
+  fieldErrors?: ApiFieldError[];
 }

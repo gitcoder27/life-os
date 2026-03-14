@@ -1,36 +1,21 @@
 import type { FastifyReply, FastifyRequest } from "fastify";
 
-import type { SessionUser } from "@life-os/contracts";
+import type { AppEnv } from "../../app/env.js";
 
-const PLACEHOLDER_USER: SessionUser = {
-  id: "usr_owner",
-  email: "owner@example.com",
-  displayName: "Owner",
-};
-
-export function getPlaceholderSessionUser(
-  request: FastifyRequest,
-  cookieName: string,
-): SessionUser | null {
-  const sessionCookie = request.cookies[cookieName];
-
-  return sessionCookie ? PLACEHOLDER_USER : null;
-}
-
-export function writePlaceholderSession(reply: FastifyReply, cookieName: string) {
-  reply.setCookie(cookieName, "dev-session-token", {
+function getCookieOptions(env: AppEnv) {
+  return {
     httpOnly: true,
     path: "/",
-    sameSite: "lax",
-    secure: false,
-  });
+    sameSite: "strict" as const,
+    secure: env.NODE_ENV === "production",
+    maxAge: env.SESSION_TTL_DAYS * 24 * 60 * 60,
+  };
 }
 
-export function clearPlaceholderSession(reply: FastifyReply, cookieName: string) {
-  reply.clearCookie(cookieName, {
-    httpOnly: true,
-    path: "/",
-    sameSite: "lax",
-    secure: false,
-  });
+export function writeSessionCookie(reply: FastifyReply, env: AppEnv, sessionToken: string) {
+  reply.setCookie(env.SESSION_COOKIE_NAME, sessionToken, getCookieOptions(env));
+}
+
+export function clearSessionCookie(reply: FastifyReply, env: AppEnv) {
+  reply.clearCookie(env.SESSION_COOKIE_NAME, getCookieOptions(env));
 }

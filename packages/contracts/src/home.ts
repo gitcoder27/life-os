@@ -2,7 +2,7 @@ import type { ApiMeta, EntityId, IsoDateString } from "./common.js";
 
 export interface DailyScoreSnapshot {
   value: number;
-  label: string;
+  label: "Strong Day" | "Solid Day" | "Recovering Day" | "Off-Track Day";
   earnedPoints: number;
   possiblePoints: number;
 }
@@ -37,7 +37,7 @@ export interface HealthSummary {
   waterMl: number;
   waterTargetMl: number;
   mealsLogged: number;
-  workoutStatus: "not_logged" | "planned" | "done" | "missed";
+  workoutStatus: "completed" | "recovery_respected" | "fallback" | "missed" | "none";
 }
 
 export interface FinanceSummary {
@@ -49,11 +49,11 @@ export interface FinanceSummary {
 export interface AttentionItem {
   id: EntityId;
   title: string;
-  kind: "task" | "habit" | "routine" | "finance" | "review" | "notification";
+  kind: "task" | "habit" | "routine" | "finance" | "admin" | "review" | "notification";
   tone: "info" | "warning" | "urgent";
 }
 
-export interface NotificationItem {
+export interface HomeNotificationItem {
   id: EntityId;
   title: string;
   body: string;
@@ -73,5 +73,5 @@ export interface HomeOverviewResponse extends ApiMeta {
   healthSummary: HealthSummary;
   financeSummary: FinanceSummary;
   attentionItems: AttentionItem[];
-  notifications: NotificationItem[];
+  notifications: HomeNotificationItem[];
 }

@@ -1,2 +1,1 @@
-// Finance module placeholder for expenses, recurring bills, and summaries.
-export {};
+export * from "./routes.js";

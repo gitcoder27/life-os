@@ -172,3 +172,74 @@ export const captureTypes = [
   "Note",
   "Reminder",
 ];
+
+export const morningRoutine = [
+  { title: "Wake at 6:30 AM", done: true },
+  { title: "Cold water + vitamins", done: true },
+  { title: "Sunlight walk", done: true },
+  { title: "Review priorities", done: true },
+  { title: "First deep work block", done: false },
+];
+
+export const eveningRoutine = [
+  { title: "Screen off by 10 PM", done: false },
+  { title: "Journal entry", done: false },
+  { title: "Prepare tomorrow", done: true },
+];
+
+export const waterProgress = { current: 2.4, target: 3.5, unit: "L" };
+
+export const mealLogs = [
+  { name: "Breakfast", time: "7:30 AM", logged: true },
+  { name: "Lunch", time: "12:30 PM", logged: true },
+  { name: "Dinner", time: "7:00 PM", logged: false },
+];
+
+export const workoutStatus = {
+  type: "Strength",
+  status: "Complete",
+  duration: "45 min",
+};
+
+export const weightLogs = [
+  { date: "Mar 14", value: "79.8 kg" },
+  { date: "Mar 12", value: "80.0 kg" },
+  { date: "Mar 10", value: "80.2 kg" },
+  { date: "Mar 8", value: "79.9 kg" },
+];
+
+export const financeCategories = [
+  { label: "Food & groceries", amount: "$480", pct: 38 },
+  { label: "Transport", amount: "$220", pct: 17 },
+  { label: "Subscriptions", amount: "$145", pct: 11 },
+  { label: "Utilities", amount: "$180", pct: 14 },
+  { label: "Health", amount: "$95", pct: 8 },
+  { label: "Other", amount: "$160", pct: 12 },
+];
+
+export const recentExpenses = [
+  { title: "Grocery haul", category: "Food", amount: "$65.40", date: "Today" },
+  { title: "Metro pass reload", category: "Transport", amount: "$40.00", date: "Yesterday" },
+  { title: "Cloud hosting", category: "Subscriptions", amount: "$12.00", date: "Mar 12" },
+  { title: "Pharmacy", category: "Health", amount: "$28.50", date: "Mar 11" },
+];
+
+export const recurringExpenses = [
+  { title: "Internet", amount: "$59", dueIn: "2 days" },
+  { title: "Gym membership", amount: "$45", dueIn: "9 days" },
+  { title: "Streaming services", amount: "$32", dueIn: "15 days" },
+];
+
+export const scoreBuckets = [
+  { label: "Plan", earned: 23, possible: 30 },
+  { label: "Routines", earned: 19.5, possible: 25 },
+  { label: "Health", earned: 22, possible: 25 },
+  { label: "Finance", earned: 0, possible: 0 },
+  { label: "Review", earned: 10, possible: 10 },
+];
+
+export const weeklyPriorities = [
+  "Ship the first usable Life OS build",
+  "Stabilize morning routine consistency",
+  "Close March spending to under $1,400",
+];

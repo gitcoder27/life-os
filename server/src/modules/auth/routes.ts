@@ -4,11 +4,22 @@ import type { LoginResponse, LogoutResponse, SessionResponse } from "@life-os/co
 import { z } from "zod";
 
 import type { AppEnv } from "../../app/env.js";
+import { AppError } from "../../lib/errors/app-error.js";
+import { withWriteSuccess } from "../../lib/http/response.js";
+import { clearCsrfCookie, createCsrfToken, setCsrfCookie } from "../../lib/security/csrf.js";
+import { parseOrThrow } from "../../lib/validation/parse.js";
 import {
-  clearPlaceholderSession,
-  getPlaceholderSessionUser,
-  writePlaceholderSession,
+  clearSessionCookie,
+  writeSessionCookie,
 } from "./session-placeholder.js";
+import { assertLoginRateLimit, clearLoginFailures, recordLoginFailure } from "./rate-limit.js";
+import {
+  createAuditEvent,
+  createUserSession,
+  toSessionUser,
+  validateOwnerCredentials,
+  revokeSessionByToken,
+} from "./service.js";
 
 const loginBodySchema = z.object({
   email: z.string().email(),
@@ -24,46 +35,101 @@ export const registerAuthRoutes: FastifyPluginAsync<AuthRouteOptions> = async (
   options,
 ) => {
   app.post("/login", async (request, reply) => {
-    const parsed = loginBodySchema.safeParse(request.body);
+    const payload = parseOrThrow(loginBodySchema, request.body);
+    assertLoginRateLimit(options.env, {
+      ipAddress: request.ip,
+      email: payload.email,
+    });
+    const user = await validateOwnerCredentials(app.prisma, payload.email, payload.password);
 
-    if (!parsed.success) {
-      return reply.status(400).send({
-        success: false,
-        message: "Invalid login payload",
+    if (!user) {
+      recordLoginFailure(options.env, {
+        ipAddress: request.ip,
+        email: payload.email,
+      });
+      await createAuditEvent(app.prisma, {
+        eventType: "auth.login_failed",
+        eventPayloadJson: {
+          email: payload.email,
+          ipAddress: request.ip,
+        },
+      });
+
+      throw new AppError({
+        statusCode: 401,
+        code: "UNAUTHENTICATED",
+        message: "Invalid email or password",
       });
     }
 
-    writePlaceholderSession(reply, options.env.SESSION_COOKIE_NAME);
+    const { sessionToken } = await createUserSession(app.prisma, options.env, user.id, {
+      ipAddress: request.ip,
+      userAgent: request.headers["user-agent"] ?? null,
+    });
+
+    await app.prisma.user.update({
+      where: {
+        id: user.id,
+      },
+      data: {
+        lastLoginAt: new Date(),
+      },
+    });
+
+    await createAuditEvent(app.prisma, {
+      userId: user.id,
+      eventType: "auth.login_succeeded",
+      eventPayloadJson: {
+        email: user.email,
+        ipAddress: request.ip,
+      },
+    });
+
+    writeSessionCookie(reply, options.env, sessionToken);
+    setCsrfCookie(reply, options.env, createCsrfToken());
+    clearLoginFailures({
+      ipAddress: request.ip,
+      email: payload.email,
+    });
 
     const response: LoginResponse = {
-      generatedAt: new Date().toISOString(),
-      user: {
-        id: "usr_owner",
-        email: parsed.data.email,
-        displayName: "Owner",
-      },
+      ...withWriteSuccess({
+        user: toSessionUser(user),
+      }),
     };
 
     return reply.send(response);
   });
 
-  app.post("/logout", async (_request, reply) => {
-    clearPlaceholderSession(reply, options.env.SESSION_COOKIE_NAME);
+  app.post("/logout", async (request, reply) => {
+    if (request.auth.sessionToken) {
+      await revokeSessionByToken(app.prisma, request.auth.sessionToken);
+    }
 
-    const response: LogoutResponse = {
-      success: true,
-      generatedAt: new Date().toISOString(),
-    };
+    if (request.auth.userId) {
+      await createAuditEvent(app.prisma, {
+        userId: request.auth.userId,
+        eventType: "auth.logout",
+        eventPayloadJson: {},
+      });
+    }
+
+    clearSessionCookie(reply, options.env);
+    clearCsrfCookie(reply, options.env);
+    const response: LogoutResponse = withWriteSuccess();
 
     return reply.send(response);
   });
 
   app.get("/session", async (request, reply) => {
-    const user = getPlaceholderSessionUser(request, options.env.SESSION_COOKIE_NAME);
+    if (request.auth.user && !request.cookies[options.env.CSRF_COOKIE_NAME]) {
+      setCsrfCookie(reply, options.env, createCsrfToken());
+    }
+
     const response: SessionResponse = {
-      authenticated: Boolean(user),
+      authenticated: Boolean(request.auth.user),
       generatedAt: new Date().toISOString(),
-      user,
+      user: request.auth.user,
     };
 
     return reply.send(response);

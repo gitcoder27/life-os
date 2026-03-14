@@ -11,7 +11,7 @@ export interface LoginRequest {
   password: string;
 }
 
-export interface LoginResponse extends ApiMeta {
+export interface LoginResponse extends ApiSuccess, ApiMeta {
   user: SessionUser;
 }
 

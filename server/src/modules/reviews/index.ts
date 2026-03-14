@@ -1,2 +1,1 @@
-// Reviews module placeholder for daily, weekly, and monthly review flows.
-export {};
+export { registerReviewRoutes } from "./routes.js";
