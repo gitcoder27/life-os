@@ -62,6 +62,35 @@ export interface ExpenseMutationResponse extends ApiMeta {
   expense: ExpenseItem;
 }
 
+export interface ExpensesResponse extends ApiMeta {
+  from: IsoDateString;
+  to: IsoDateString;
+  expenses: ExpenseItem[];
+}
+
+export interface ExpenseCategoryItem {
+  id: EntityId;
+  name: string;
+  color: string | null;
+  sortOrder: number;
+  createdAt: string;
+  archivedAt: string | null;
+}
+
+export interface FinanceCategoriesResponse extends ApiMeta {
+  categories: ExpenseCategoryItem[];
+}
+
+export interface CreateExpenseCategoryRequest {
+  name: string;
+  color?: string | null;
+  sortOrder?: number;
+}
+
+export interface ExpenseCategoryMutationResponse extends ApiMeta {
+  category: ExpenseCategoryItem;
+}
+
 export interface RecurringExpenseItem {
   id: EntityId;
   title: string;
@@ -93,4 +122,38 @@ export interface CreateRecurringExpenseRequest {
 
 export interface RecurringExpenseMutationResponse extends ApiMeta {
   recurringExpense: RecurringExpenseItem;
+}
+
+export type AdminItemType = "bill" | "admin";
+
+export interface AdminItemRecord {
+  id: EntityId;
+  title: string;
+  itemType: AdminItemType;
+  dueOn: IsoDateString;
+  status: AdminItemStatus;
+  relatedTaskId: EntityId | null;
+  recurringExpenseTemplateId: EntityId | null;
+  amountMinor: number | null;
+  note: string | null;
+  completedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AdminItemsResponse extends ApiMeta {
+  adminItems: AdminItemRecord[];
+}
+
+export interface UpdateAdminItemRequest {
+  title?: string;
+  dueOn?: IsoDateString;
+  status?: AdminItemStatus;
+  relatedTaskId?: EntityId | null;
+  amountMinor?: number | null;
+  note?: string | null;
+}
+
+export interface AdminItemMutationResponse extends ApiMeta {
+  adminItem: AdminItemRecord;
 }

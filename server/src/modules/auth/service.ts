@@ -172,6 +172,20 @@ export async function revokeSessionByToken(prisma: PrismaClient, sessionToken: s
   });
 }
 
+export async function revokeAllUserSessions(prisma: PrismaClient, userId: string) {
+  const result = await prisma.session.updateMany({
+    where: {
+      userId,
+      revokedAt: null,
+    },
+    data: {
+      revokedAt: new Date(),
+    },
+  });
+
+  return result.count;
+}
+
 export async function createAuditEvent(
   prisma: PrismaClient,
   input: {

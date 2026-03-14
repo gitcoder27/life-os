@@ -1,6 +1,11 @@
 import type { FastifyPluginAsync } from "fastify";
 
-import type { LoginResponse, LogoutResponse, SessionResponse } from "@life-os/contracts";
+import type {
+  LoginResponse,
+  LogoutAllResponse,
+  LogoutResponse,
+  SessionResponse,
+} from "@life-os/contracts";
 import { z } from "zod";
 
 import type { AppEnv } from "../../app/env.js";
@@ -18,6 +23,7 @@ import {
   createUserSession,
   toSessionUser,
   validateOwnerCredentials,
+  revokeAllUserSessions,
   revokeSessionByToken,
 } from "./service.js";
 
@@ -117,6 +123,33 @@ export const registerAuthRoutes: FastifyPluginAsync<AuthRouteOptions> = async (
     clearSessionCookie(reply, options.env);
     clearCsrfCookie(reply, options.env);
     const response: LogoutResponse = withWriteSuccess();
+
+    return reply.send(response);
+  });
+
+  app.post("/logout-all", async (request, reply) => {
+    if (!request.auth.userId) {
+      throw new AppError({
+        statusCode: 401,
+        code: "UNAUTHENTICATED",
+        message: "Authentication required",
+      });
+    }
+
+    const revokedSessions = await revokeAllUserSessions(app.prisma, request.auth.userId);
+    await createAuditEvent(app.prisma, {
+      userId: request.auth.userId,
+      eventType: "auth.logout_all",
+      eventPayloadJson: {
+        revokedSessions,
+      },
+    });
+
+    clearSessionCookie(reply, options.env);
+    clearCsrfCookie(reply, options.env);
+    const response: LogoutAllResponse = withWriteSuccess({
+      revokedSessions,
+    });
 
     return reply.send(response);
   });

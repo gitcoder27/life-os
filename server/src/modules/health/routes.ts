@@ -6,11 +6,15 @@ import type {
   HealthSummaryResponse,
   IsoDateString,
   MealLogItem,
+  MealLogsResponse,
   MealLogMutationResponse,
   MealLoggingQuality,
+  MealTemplateItem,
+  MealTemplatesResponse,
   MealSlot,
   UpdateWorkoutDayRequest,
   WaterLogItem,
+  WaterLogsResponse,
   WaterLogMutationResponse,
   WaterLogSource,
   WeightLogItem,
@@ -56,6 +60,10 @@ const workoutActualStatusSchema = z.enum([
 const healthSummaryQuerySchema = z.object({
   from: isoDateSchema,
   to: isoDateSchema,
+});
+
+const byDateQuerySchema = z.object({
+  date: isoDateSchema,
 });
 
 const createWaterLogSchema = z.object({
@@ -249,6 +257,33 @@ function serializeMealLog(mealLog: MealLog): MealLogItem {
   };
 }
 
+function serializeMealTemplate(mealTemplate: {
+  id: string;
+  name: string;
+  mealSlot: PrismaMealSlot | null;
+  templatePayloadJson: unknown;
+  createdAt: Date;
+  updatedAt: Date;
+}): MealTemplateItem {
+  const description =
+    mealTemplate.templatePayloadJson &&
+    typeof mealTemplate.templatePayloadJson === "object" &&
+    !Array.isArray(mealTemplate.templatePayloadJson) &&
+    "description" in mealTemplate.templatePayloadJson &&
+    typeof mealTemplate.templatePayloadJson.description === "string"
+      ? mealTemplate.templatePayloadJson.description
+      : null;
+
+  return {
+    id: mealTemplate.id,
+    name: mealTemplate.name,
+    mealSlot: fromPrismaMealSlot(mealTemplate.mealSlot),
+    description,
+    createdAt: mealTemplate.createdAt.toISOString(),
+    updatedAt: mealTemplate.updatedAt.toISOString(),
+  };
+}
+
 function serializeWorkoutDay(workoutDay: WorkoutDay): WorkoutDayItem {
   return {
     id: workoutDay.id,
@@ -273,6 +308,73 @@ function serializeWeightLog(weightLog: WeightLog): WeightLogItem {
 }
 
 export const registerHealthRoutes: FastifyPluginAsync = async (app) => {
+  app.get("/water-logs", async (request, reply) => {
+    const user = requireAuthenticatedUser(request);
+    const query = parseOrThrow(byDateQuerySchema, request.query);
+    const targetDate = parseIsoDate(query.date);
+    const waterLogs = await app.prisma.waterLog.findMany({
+      where: {
+        userId: user.id,
+        occurredAt: {
+          gte: targetDate,
+          lt: new Date(targetDate.getTime() + 24 * 60 * 60 * 1000),
+        },
+      },
+      orderBy: {
+        occurredAt: "asc",
+      },
+    });
+
+    const response: WaterLogsResponse = withGeneratedAt({
+      date: query.date,
+      waterLogs: waterLogs.map(serializeWaterLog),
+    });
+
+    return reply.send(response);
+  });
+
+  app.get("/meal-templates", async (request, reply) => {
+    const user = requireAuthenticatedUser(request);
+    const mealTemplates = await app.prisma.mealTemplate.findMany({
+      where: {
+        userId: user.id,
+        archivedAt: null,
+      },
+      orderBy: [{ mealSlot: "asc" }, { name: "asc" }],
+    });
+
+    const response: MealTemplatesResponse = withGeneratedAt({
+      mealTemplates: mealTemplates.map(serializeMealTemplate),
+    });
+
+    return reply.send(response);
+  });
+
+  app.get("/meal-logs", async (request, reply) => {
+    const user = requireAuthenticatedUser(request);
+    const query = parseOrThrow(byDateQuerySchema, request.query);
+    const targetDate = parseIsoDate(query.date);
+    const mealLogs = await app.prisma.mealLog.findMany({
+      where: {
+        userId: user.id,
+        occurredAt: {
+          gte: targetDate,
+          lt: new Date(targetDate.getTime() + 24 * 60 * 60 * 1000),
+        },
+      },
+      orderBy: {
+        occurredAt: "asc",
+      },
+    });
+
+    const response: MealLogsResponse = withGeneratedAt({
+      date: query.date,
+      mealLogs: mealLogs.map(serializeMealLog),
+    });
+
+    return reply.send(response);
+  });
+
   app.get("/summary", async (request, reply) => {
     const user = requireAuthenticatedUser(request);
     const query = parseOrThrow(healthSummaryQuerySchema, request.query);

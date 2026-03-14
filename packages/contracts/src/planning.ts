@@ -100,3 +100,7 @@ export interface CarryForwardTaskRequest {
 export interface TaskMutationResponse extends ApiMeta {
   task: PlanningTaskItem;
 }
+
+export interface TasksResponse extends ApiMeta {
+  tasks: PlanningTaskItem[];
+}

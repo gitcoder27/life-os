@@ -1,6 +1,15 @@
 import type { FastifyPluginAsync } from "fastify";
-import type { IsoDateString, IsoMonthString } from "@life-os/contracts";
 import type {
+  CreateExpenseCategoryRequest,
+  ExpenseCategoryItem,
+  ExpenseCategoryMutationResponse,
+  ExpensesResponse,
+  FinanceCategoriesResponse,
+  IsoDateString,
+  IsoMonthString,
+} from "@life-os/contracts";
+import type {
+  ExpenseCategory,
   AdminItemStatus as PrismaAdminItemStatus,
   Expense,
   ExpenseSource as PrismaExpenseSource,
@@ -148,6 +157,17 @@ const createRecurringExpenseSchema = z.object({
   status: recurringExpenseStatusSchema.optional(),
 });
 
+const createExpenseCategorySchema = z.object({
+  name: z.string().min(1).max(120),
+  color: z.string().max(32).nullable().optional(),
+  sortOrder: z.number().int().min(0).max(1000).optional(),
+});
+
+const expenseRangeQuerySchema = z.object({
+  from: isoDateSchema,
+  to: isoDateSchema,
+});
+
 function getMonthBounds(month: IsoMonthString) {
   const [year, monthNumber] = month.split("-").map(Number);
   const monthStart = new Date(Date.UTC(year, monthNumber - 1, 1));
@@ -242,6 +262,17 @@ function serializeExpense(expense: Expense): ExpenseItem {
     recurringExpenseTemplateId: expense.recurringExpenseTemplateId,
     createdAt: expense.createdAt.toISOString(),
     updatedAt: expense.updatedAt.toISOString(),
+  };
+}
+
+function serializeExpenseCategory(category: ExpenseCategory): ExpenseCategoryItem {
+  return {
+    id: category.id,
+    name: category.name,
+    color: category.color,
+    sortOrder: category.sortOrder,
+    createdAt: category.createdAt.toISOString(),
+    archivedAt: category.archivedAt?.toISOString() ?? null,
   };
 }
 
@@ -351,6 +382,70 @@ async function findOwnedExpense(
 }
 
 export const registerFinanceRoutes: FastifyPluginAsync = async (app) => {
+  app.get("/categories", async (request, reply) => {
+    const user = requireAuthenticatedUser(request);
+    const categories = await app.prisma.expenseCategory.findMany({
+      where: {
+        userId: user.id,
+        archivedAt: null,
+      },
+      orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+    });
+
+    const response: FinanceCategoriesResponse = withGeneratedAt({
+      categories: categories.map(serializeExpenseCategory),
+    });
+
+    return reply.send(response);
+  });
+
+  app.post("/categories", async (request, reply) => {
+    const user = requireAuthenticatedUser(request);
+    const payload = parseOrThrow(
+      createExpenseCategorySchema,
+      request.body as CreateExpenseCategoryRequest,
+    );
+    const category = await app.prisma.expenseCategory.create({
+      data: {
+        userId: user.id,
+        name: payload.name,
+        color: payload.color ?? null,
+        sortOrder: payload.sortOrder ?? 0,
+      },
+    });
+
+    const response: ExpenseCategoryMutationResponse = withGeneratedAt({
+      category: serializeExpenseCategory(category),
+    });
+
+    return reply.status(201).send(response);
+  });
+
+  app.get("/expenses", async (request, reply) => {
+    const user = requireAuthenticatedUser(request);
+    const query = parseOrThrow(expenseRangeQuerySchema, request.query);
+    const fromDate = parseIsoDate(query.from);
+    const toDateExclusive = new Date(parseIsoDate(query.to).getTime() + 24 * 60 * 60 * 1000);
+    const expenses = await app.prisma.expense.findMany({
+      where: {
+        userId: user.id,
+        spentOn: {
+          gte: fromDate,
+          lt: toDateExclusive,
+        },
+      },
+      orderBy: [{ spentOn: "asc" }, { createdAt: "asc" }],
+    });
+
+    const response: ExpensesResponse = withGeneratedAt({
+      from: query.from,
+      to: query.to,
+      expenses: expenses.map(serializeExpense),
+    });
+
+    return reply.send(response);
+  });
+
   app.get("/summary", async (request, reply) => {
     const user = requireAuthenticatedUser(request);
     const query = parseOrThrow(

@@ -15,6 +15,7 @@ import type {
   PlanningPriorityItem,
   PlanningPriorityMutationResponse,
   PlanningTaskItem,
+  TasksResponse,
   TaskMutationResponse,
   UpdateDayPrioritiesRequest,
   UpdateGoalRequest,
@@ -123,6 +124,20 @@ const updateTaskSchema = z
 const carryForwardTaskSchema = z.object({
   targetDate: isoDateSchema,
 });
+
+const taskListQuerySchema = z
+  .object({
+    scheduledForDate: isoDateSchema.optional(),
+    from: isoDateSchema.optional(),
+    to: isoDateSchema.optional(),
+    status: taskStatusSchema.optional(),
+  })
+  .refine(
+    (value) =>
+      !(value.scheduledForDate && (value.from || value.to)) &&
+      !((value.from && !value.to) || (!value.from && value.to)),
+    "Use either scheduledForDate or both from and to",
+  );
 
 function toPrismaGoalDomain(domain: GoalDomain): PrismaGoalDomain {
   switch (domain) {
@@ -618,6 +633,35 @@ export const registerPlanningRoutes: FastifyPluginAsync = async (app) => {
     const response: MonthFocusMutationResponse = withGeneratedAt({
       theme: payload.theme,
       topOutcomes,
+    });
+
+    return reply.send(response);
+  });
+
+  app.get("/tasks", async (request, reply) => {
+    const user = requireAuthenticatedUser(request);
+    const query = parseOrThrow(taskListQuerySchema, request.query);
+    const scheduledForDate = query.scheduledForDate ? parseIsoDate(query.scheduledForDate) : null;
+    const fromDate = query.from ? parseIsoDate(query.from) : null;
+    const toDateExclusive = query.to ? addDays(parseIsoDate(query.to), 1) : null;
+    const tasks = await app.prisma.task.findMany({
+      where: {
+        userId: user.id,
+        status: query.status ? toPrismaTaskStatus(query.status) : undefined,
+        scheduledForDate: scheduledForDate
+          ? scheduledForDate
+          : fromDate && toDateExclusive
+            ? {
+                gte: fromDate,
+                lt: toDateExclusive,
+              }
+            : undefined,
+      },
+      orderBy: [{ scheduledForDate: "asc" }, { createdAt: "asc" }],
+    });
+
+    const response: TasksResponse = withGeneratedAt({
+      tasks: tasks.map(serializeTask),
     });
 
     return reply.send(response);

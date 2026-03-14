@@ -602,3 +602,56 @@ export async function getWeeklyMomentum(
     generatedAt: new Date().toISOString(),
   };
 }
+
+function getReviewWindowEnd(date: Date, dailyReviewEndTime: string | null | undefined) {
+  const [hourString, minuteString] = (dailyReviewEndTime ?? "10:00").split(":");
+  const hour = Number(hourString);
+  const minute = Number(minuteString);
+
+  return new Date(
+    Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate(), hour, minute, 0, 0),
+  );
+}
+
+export async function finalizeClosedDayScores(prisma: PrismaClient, now: Date) {
+  const users = await prisma.user.findMany({
+    where: {
+      status: "ACTIVE",
+    },
+    include: {
+      preferences: true,
+    },
+  });
+  const today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+  let finalizedCount = 0;
+
+  for (const user of users) {
+    const reviewWindowEndsToday = getReviewWindowEnd(today, user.preferences?.dailyReviewEndTime);
+    const thresholdDate = now >= reviewWindowEndsToday ? addDays(today, -1) : addDays(today, -2);
+    const openDayCycles = await prisma.planningCycle.findMany({
+      where: {
+        userId: user.id,
+        cycleType: "DAY",
+        cycleStartDate: {
+          lte: thresholdDate,
+        },
+        OR: [{ status: { not: "CLOSED" } }, { dailyScore: null }, { dailyScore: { finalizedAt: null } }],
+      },
+      include: {
+        dailyScore: true,
+      },
+      orderBy: {
+        cycleStartDate: "asc",
+      },
+    });
+
+    for (const cycle of openDayCycles) {
+      await finalizeDailyScore(prisma, user.id, cycle.cycleStartDate);
+      finalizedCount += 1;
+    }
+  }
+
+  return {
+    finalizedCount,
+  };
+}

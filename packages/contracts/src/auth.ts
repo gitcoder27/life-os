@@ -21,3 +21,7 @@ export interface SessionResponse extends ApiMeta {
 }
 
 export interface LogoutResponse extends ApiSuccess, ApiMeta {}
+
+export interface LogoutAllResponse extends ApiSuccess, ApiMeta {
+  revokedSessions: number;
+}

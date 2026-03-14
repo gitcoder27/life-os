@@ -75,6 +75,11 @@ export interface WaterLogMutationResponse extends ApiMeta {
   waterLog: WaterLogItem;
 }
 
+export interface WaterLogsResponse extends ApiMeta {
+  date: IsoDateString;
+  waterLogs: WaterLogItem[];
+}
+
 export interface CreateMealLogRequest {
   occurredAt?: string;
   mealSlot?: MealSlot | null;
@@ -85,6 +90,24 @@ export interface CreateMealLogRequest {
 
 export interface MealLogMutationResponse extends ApiMeta {
   mealLog: MealLogItem;
+}
+
+export interface MealTemplateItem {
+  id: EntityId;
+  name: string;
+  mealSlot: MealSlot | null;
+  description: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface MealTemplatesResponse extends ApiMeta {
+  mealTemplates: MealTemplateItem[];
+}
+
+export interface MealLogsResponse extends ApiMeta {
+  date: IsoDateString;
+  mealLogs: MealLogItem[];
 }
 
 export interface UpdateWorkoutDayRequest {

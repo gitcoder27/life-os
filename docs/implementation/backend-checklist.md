@@ -116,6 +116,7 @@ Use this checklist to track backend execution progress. Keep it updated as work 
 - [x] Implement `POST /api/auth/login`
 - [x] Implement `POST /api/auth/logout`
 - [x] Implement `GET /api/auth/session`
+- [x] Implement `POST /api/auth/logout-all`
 - [x] Implement `GET /api/onboarding/state`
 - [x] Implement `POST /api/onboarding/complete`
 - [x] Implement `GET /api/goals`
@@ -127,14 +128,15 @@ Use this checklist to track backend execution progress. Keep it updated as work 
 - [x] Implement `PUT /api/planning/weeks/:startDate/priorities`
 - [x] Implement `GET /api/planning/months/:startDate`
 - [x] Implement `PUT /api/planning/months/:startDate/focus`
+- [x] Implement `GET /api/tasks`
 - [x] Implement `POST /api/tasks`
 - [x] Implement `PATCH /api/tasks/:taskId`
 - [x] Implement `POST /api/tasks/:taskId/carry-forward`
 
 ### Jobs
 
-- [ ] Add session cleanup job
-- [ ] Add planning-cycle seed job for upcoming day/week/month windows
+- [x] Add session cleanup job
+- [x] Add planning-cycle seed job for upcoming day/week/month windows
 
 ### Tests
 
@@ -210,6 +212,9 @@ Use this checklist to track backend execution progress. Keep it updated as work 
 - [x] Implement `PATCH /api/routines/:routineId`
 - [x] Implement `POST /api/routine-items/:itemId/checkins`
 - [x] Implement `GET /api/health/summary`
+- [x] Implement `GET /api/health/water-logs`
+- [x] Implement `GET /api/health/meal-templates`
+- [x] Implement `GET /api/health/meal-logs`
 - [x] Implement `POST /api/health/water-logs`
 - [x] Implement `POST /api/health/meal-logs`
 - [x] Implement `PUT /api/health/workout-days/:date`
@@ -264,27 +269,32 @@ Use this checklist to track backend execution progress. Keep it updated as work 
 - [ ] Implement expense category service layer
 - [x] Implement expense create/edit service layer
 - [x] Implement recurring-expense template service layer
-- [ ] Implement due admin-item materialization
+- [x] Implement due admin-item materialization
 - [x] Implement monthly finance summary aggregation
-- [ ] Implement notification generation and dedupe rules
+- [x] Implement notification generation and dedupe rules
 - [x] Implement notification read/dismiss behavior
 
 ### Routes
 
+- [x] Implement `GET /api/finance/categories`
+- [x] Implement `POST /api/finance/categories`
+- [x] Implement `GET /api/finance/expenses`
 - [x] Implement `GET /api/finance/summary`
 - [x] Implement `POST /api/finance/expenses`
 - [x] Implement `PATCH /api/finance/expenses/:expenseId`
 - [x] Implement `GET /api/finance/recurring-expenses`
 - [x] Implement `POST /api/finance/recurring-expenses`
+- [x] Implement `GET /api/admin-items`
+- [x] Implement `PATCH /api/admin-items/:id`
 - [x] Implement `GET /api/notifications`
 - [x] Implement `POST /api/notifications/:notificationId/read`
 - [x] Implement `POST /api/notifications/:notificationId/dismiss`
 
 ### Jobs
 
-- [ ] Add recurring-expense materialization job
-- [ ] Add notification generation job
-- [ ] Add notification cleanup / expiry job if required
+- [x] Add recurring-expense materialization job
+- [x] Add notification generation job
+- [x] Add notification cleanup / expiry job if required
 
 ### Tests
 
@@ -351,7 +361,7 @@ Use this checklist to track backend execution progress. Keep it updated as work 
 
 ### Jobs
 
-- [ ] Add review reminder generation job
+- [x] Add review reminder generation job
 - [ ] Add any score backfill/admin correction hook only if explicitly needed
 
 ### Tests

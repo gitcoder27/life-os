@@ -1,6 +1,7 @@
 import type { FastifyPluginAsync } from "fastify";
 
 import type { AppEnv } from "../app/env.js";
+import { registerAdminRoutes } from "./admin/routes.js";
 import { registerAuthRoutes } from "./auth/routes.js";
 import { registerFinanceRoutes } from "./finance/routes.js";
 import { registerHabitsRoutes } from "./habits/routes.js";
@@ -21,6 +22,7 @@ export const registerModules: FastifyPluginAsync<ModuleRegistrationOptions> = as
   options,
 ) => {
   await app.register(registerHealthRoutes, { prefix: "/health" });
+  await app.register(registerAdminRoutes);
   await app.register(registerAuthRoutes, {
     env: options.env,
     prefix: "/auth",
