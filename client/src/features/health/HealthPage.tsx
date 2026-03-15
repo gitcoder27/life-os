@@ -1,3 +1,5 @@
+import { useState } from "react";
+
 import {
   formatMealSlotLabel,
   formatWorkoutStatus,
@@ -6,7 +8,10 @@ import {
   useAddMealMutation,
   useAddWaterMutation,
   useAddWeightMutation,
+  useCreateMealTemplateMutation,
   useHealthDataQuery,
+  useMealTemplatesQuery,
+  useUpdateMealTemplateMutation,
   useWorkoutMutation,
 } from "../../shared/lib/api";
 import { PageHeader } from "../../shared/ui/PageHeader";
@@ -17,6 +22,212 @@ import {
   PageLoadingState,
 } from "../../shared/ui/PageState";
 import { SectionCard } from "../../shared/ui/SectionCard";
+
+type MealSlot = "breakfast" | "lunch" | "dinner" | "snack";
+
+const mealSlotOptions: { value: MealSlot; label: string }[] = [
+  { value: "breakfast", label: "Breakfast" },
+  { value: "lunch", label: "Lunch" },
+  { value: "dinner", label: "Dinner" },
+  { value: "snack", label: "Snack" },
+];
+
+type TemplateFormState = {
+  name: string;
+  mealSlot: MealSlot;
+  description: string;
+};
+
+const emptyTemplateForm: TemplateFormState = {
+  name: "",
+  mealSlot: "breakfast",
+  description: "",
+};
+
+function MealTemplateManager() {
+  const templatesQuery = useMealTemplatesQuery();
+  const createMutation = useCreateMealTemplateMutation();
+  const updateMutation = useUpdateMealTemplateMutation();
+
+  const [showForm, setShowForm] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [form, setForm] = useState<TemplateFormState>(emptyTemplateForm);
+
+  const templates = templatesQuery.data?.mealTemplates ?? [];
+
+  function openCreate() {
+    setEditingId(null);
+    setForm(emptyTemplateForm);
+    setShowForm(true);
+  }
+
+  function openEdit(template: {
+    id: string;
+    name: string;
+    mealSlot: string | null;
+    description: string | null;
+  }) {
+    setEditingId(template.id);
+    setForm({
+      name: template.name,
+      mealSlot: (template.mealSlot as MealSlot) || "breakfast",
+      description: template.description ?? "",
+    });
+    setShowForm(true);
+  }
+
+  function handleCancel() {
+    setShowForm(false);
+    setEditingId(null);
+    setForm(emptyTemplateForm);
+  }
+
+  async function handleSubmit() {
+    if (!form.name.trim()) return;
+
+    if (editingId) {
+      await updateMutation.mutateAsync({
+        mealTemplateId: editingId,
+        name: form.name.trim(),
+        mealSlot: form.mealSlot,
+        description: form.description.trim() || null,
+      });
+    } else {
+      await createMutation.mutateAsync({
+        name: form.name.trim(),
+        mealSlot: form.mealSlot,
+        description: form.description.trim() || undefined,
+      });
+    }
+    handleCancel();
+  }
+
+  async function handleArchive(templateId: string) {
+    await updateMutation.mutateAsync({
+      mealTemplateId: templateId,
+      archived: true,
+    });
+  }
+
+  const isSaving = createMutation.isPending || updateMutation.isPending;
+
+  if (templatesQuery.isLoading && !templatesQuery.data) {
+    return null;
+  }
+
+  return (
+    <SectionCard
+      title="Meal templates"
+      subtitle={`${templates.length} active template${templates.length !== 1 ? "s" : ""}`}
+    >
+      {showForm && (
+        <div className="stack-form" style={{ marginBottom: "0.75rem" }}>
+          <label className="field">
+            <span>Name</span>
+            <input
+              type="text"
+              value={form.name}
+              placeholder="e.g. Morning oats"
+              onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+            />
+          </label>
+          <label className="field">
+            <span>Meal slot</span>
+            <select
+              value={form.mealSlot}
+              onChange={(e) =>
+                setForm((f) => ({ ...f, mealSlot: e.target.value as MealSlot }))
+              }
+            >
+              {mealSlotOptions.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="field">
+            <span>Description (optional)</span>
+            <input
+              type="text"
+              value={form.description}
+              placeholder="Brief description"
+              onChange={(e) =>
+                setForm((f) => ({ ...f, description: e.target.value }))
+              }
+            />
+          </label>
+          <div className="button-row button-row--tight">
+            <button
+              className="button button--primary button--small"
+              type="button"
+              disabled={!form.name.trim() || isSaving}
+              onClick={() => void handleSubmit()}
+            >
+              {isSaving ? "Saving…" : editingId ? "Update" : "Create"}
+            </button>
+            <button
+              className="button button--ghost button--small"
+              type="button"
+              onClick={handleCancel}
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
+      {templates.length > 0 ? (
+        <div className="template-grid">
+          {templates.map((t) => (
+            <div key={t.id} className="template-card">
+              <div className="template-card__name">{t.name}</div>
+              <div className="template-card__slot">
+                {formatMealSlotLabel(t.mealSlot)}
+              </div>
+              {t.description && (
+                <div className="template-card__desc">{t.description}</div>
+              )}
+              <div className="button-row button-row--tight" style={{ marginTop: "0.25rem" }}>
+                <button
+                  className="button button--ghost button--small"
+                  type="button"
+                  onClick={() => openEdit(t)}
+                >
+                  Edit
+                </button>
+                <button
+                  className="button button--ghost button--small"
+                  type="button"
+                  disabled={updateMutation.isPending}
+                  onClick={() => void handleArchive(t.id)}
+                >
+                  Archive
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <EmptyState
+          title="No meal templates"
+          description="Create templates for your regular meals to make logging faster."
+        />
+      )}
+
+      {!showForm && (
+        <button
+          className="button button--ghost button--small"
+          type="button"
+          style={{ marginTop: "0.5rem" }}
+          onClick={openCreate}
+        >
+          + New template
+        </button>
+      )}
+    </SectionCard>
+  );
+}
 
 export function HealthPage() {
   const today = getTodayDate();
@@ -271,6 +482,8 @@ export function HealthPage() {
           </button>
         </SectionCard>
       </div>
+
+      <MealTemplateManager />
     </div>
   );
 }

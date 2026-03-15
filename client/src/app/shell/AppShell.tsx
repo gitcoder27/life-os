@@ -1,12 +1,15 @@
-import { useState } from "react";
-import { NavLink, Outlet } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { NavLink, Outlet, useNavigate } from "react-router-dom";
 
 import { QuickCaptureSheet } from "../../features/capture/QuickCaptureSheet";
 import {
   formatLongDate,
   getTodayDate,
+  setPreferredTimezone,
+  setPreferredWeekStart,
   useHomeOverviewQuery,
   useSessionQuery,
+  useSettingsProfileQuery,
 } from "../../shared/lib/api";
 
 const navItems = [
@@ -25,11 +28,22 @@ function navClass(isActive: boolean) {
 
 export function AppShell() {
   const [captureOpen, setCaptureOpen] = useState(false);
+  const navigate = useNavigate();
   const today = getTodayDate();
   const sessionQuery = useSessionQuery();
   const homeQuery = useHomeOverviewQuery(today);
+  const settingsQuery = useSettingsProfileQuery();
   const userEmail = sessionQuery.data?.user?.email ?? "owner@life-os";
   const greeting = homeQuery.data?.greeting ?? "Good day";
+
+  useEffect(() => {
+    if (!settingsQuery.data) return;
+    const { preferences } = settingsQuery.data;
+    setPreferredWeekStart(preferences.weekStartsOn);
+    if (preferences.timezone) {
+      setPreferredTimezone(preferences.timezone);
+    }
+  }, [settingsQuery.data]);
 
   return (
     <div className="shell">
@@ -72,6 +86,14 @@ export function AppShell() {
             <span className="account-chip__dot" />
             {userEmail}
           </div>
+          <NavLink
+            to="/settings"
+            className={({ isActive }) =>
+              `button button--ghost button--small${isActive ? " button--active" : ""}`
+            }
+          >
+            Settings
+          </NavLink>
         </div>
       </aside>
 
@@ -85,6 +107,7 @@ export function AppShell() {
             <button
               className="button button--ghost"
               type="button"
+              onClick={() => navigate("/notifications")}
             >
               Notifications
             </button>

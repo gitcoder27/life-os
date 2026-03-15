@@ -495,6 +495,73 @@ type ExpenseMutationResponse = {
   expense: ExpensesResponse["expenses"][number];
 };
 
+type NotificationsResponse = {
+  generatedAt: string;
+  notifications: Array<{
+    id: string;
+    title: string;
+    body: string;
+    severity: "info" | "warning" | "critical";
+    entityType: string | null;
+    entityId: string | null;
+    read: boolean;
+    dismissedAt: string | null;
+    createdAt: string;
+  }>;
+};
+
+type NotificationMutationResponse = {
+  generatedAt: string;
+  notification: NotificationsResponse["notifications"][number];
+};
+
+type SettingsProfileResponse = {
+  generatedAt: string;
+  user: {
+    id: string;
+    email: string;
+    displayName: string;
+  };
+  preferences: {
+    timezone: string;
+    currencyCode: string;
+    weekStartsOn: number;
+    dailyWaterTargetMl: number;
+    dailyReviewStartTime: string | null;
+    dailyReviewEndTime: string | null;
+  };
+};
+
+type UpdateSettingsProfileRequest = {
+  displayName?: string;
+  timezone?: string;
+  currencyCode?: string;
+  weekStartsOn?: number;
+  dailyWaterTargetMl?: number;
+  dailyReviewStartTime?: string | null;
+  dailyReviewEndTime?: string | null;
+};
+
+type GoalMutationResponse = {
+  generatedAt: string;
+  goal: GoalsResponse["goals"][number];
+};
+
+type CategoryMutationResponse = {
+  generatedAt: string;
+  category: FinanceCategoriesResponse["categories"][number];
+};
+
+type RecurringExpenseMutationResponse = {
+  generatedAt: string;
+  recurringExpense: RecurringExpensesResponse["recurringExpenses"][number];
+};
+
+type MealTemplateMutationResponse = {
+  generatedAt: string;
+  mealTemplate: MealTemplatesResponse["mealTemplates"][number];
+};
+
 type GoalsResponse = {
   generatedAt: string;
   goals: Array<{
@@ -734,8 +801,14 @@ const queryKeys = {
   habits: ["habits"] as const,
   health: (date: string) => ["health", date] as const,
   finance: (month: string) => ["finance", month] as const,
+  financeCategories: ["finance", "categories"] as const,
+  financeRecurring: ["finance", "recurring"] as const,
   goals: (weekStart: string, monthStart: string) => ["goals", weekStart, monthStart] as const,
+  goalsAll: ["goals", "all"] as const,
   review: (cadence: ReviewCadence, dateKey: string) => ["review", cadence, dateKey] as const,
+  notifications: ["notifications"] as const,
+  settings: ["settings"] as const,
+  mealTemplates: ["health", "meal-templates"] as const,
 };
 
 function buildUrl(path: string, query?: Record<string, string | undefined>) {
@@ -1659,4 +1732,405 @@ export function useSubmitMonthlyReviewMutation(date: string) {
     },
     onSuccess: () => invalidateCoreData(queryClient, date),
   });
+}
+
+/* ── Notifications ─────────────────────────── */
+
+export function useNotificationsQuery() {
+  return useQuery({
+    queryKey: queryKeys.notifications,
+    queryFn: () => apiRequest<NotificationsResponse>("/api/notifications"),
+    retry: false,
+  });
+}
+
+export function useMarkNotificationReadMutation() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (notificationId: string) =>
+      apiRequest<NotificationMutationResponse>(
+        `/api/notifications/${notificationId}/read`,
+        { method: "POST" },
+      ),
+    meta: {
+      successMessage: "Notification marked as read.",
+      errorMessage: "Could not mark notification as read.",
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.notifications });
+    },
+  });
+}
+
+export function useDismissNotificationMutation() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (notificationId: string) =>
+      apiRequest<NotificationMutationResponse>(
+        `/api/notifications/${notificationId}/dismiss`,
+        { method: "POST" },
+      ),
+    meta: {
+      successMessage: "Notification dismissed.",
+      errorMessage: "Could not dismiss notification.",
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.notifications });
+    },
+  });
+}
+
+/* ── Settings ──────────────────────────────── */
+
+export function useSettingsProfileQuery() {
+  return useQuery({
+    queryKey: queryKeys.settings,
+    queryFn: () => apiRequest<SettingsProfileResponse>("/api/settings/profile"),
+    retry: false,
+  });
+}
+
+export function useUpdateSettingsProfileMutation() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (payload: UpdateSettingsProfileRequest) =>
+      apiRequest<SettingsProfileResponse>("/api/settings/profile", {
+        method: "PUT",
+        body: payload,
+      }),
+    meta: {
+      successMessage: "Settings saved.",
+      errorMessage: "Settings could not be saved.",
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.settings });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.session });
+    },
+  });
+}
+
+/* ── Goals CRUD ────────────────────────────── */
+
+export function useGoalsListQuery() {
+  return useQuery({
+    queryKey: queryKeys.goalsAll,
+    queryFn: () => apiRequest<GoalsResponse>("/api/goals"),
+    retry: false,
+  });
+}
+
+export function useCreateGoalMutation() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (payload: {
+      title: string;
+      domain: "health" | "money" | "work_growth" | "home_admin" | "discipline" | "other";
+      targetDate?: string | null;
+      notes?: string | null;
+    }) =>
+      apiRequest<GoalMutationResponse>("/api/goals", {
+        method: "POST",
+        body: payload,
+      }),
+    meta: {
+      successMessage: "Goal created.",
+      errorMessage: "Goal creation failed.",
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.goalsAll });
+      void queryClient.invalidateQueries({ queryKey: ["goals"] });
+    },
+  });
+}
+
+export function useUpdateGoalMutation() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      goalId,
+      ...payload
+    }: {
+      goalId: string;
+      title?: string;
+      domain?: "health" | "money" | "work_growth" | "home_admin" | "discipline" | "other";
+      status?: "active" | "paused" | "completed" | "archived";
+      targetDate?: string | null;
+      notes?: string | null;
+    }) =>
+      apiRequest<GoalMutationResponse>(`/api/goals/${goalId}`, {
+        method: "PATCH",
+        body: payload,
+      }),
+    meta: {
+      successMessage: "Goal updated.",
+      errorMessage: "Goal update failed.",
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.goalsAll });
+      void queryClient.invalidateQueries({ queryKey: ["goals"] });
+    },
+  });
+}
+
+/* ── Planning ──────────────────────────────── */
+
+export function useUpdateWeekPrioritiesMutation(weekStartDate: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (payload: {
+      priorities: Array<{
+        id?: string;
+        slot: 1 | 2 | 3;
+        title: string;
+        goalId?: string | null;
+      }>;
+    }) =>
+      apiRequest<WeekPlanResponse>(
+        `/api/planning/weeks/${weekStartDate}/priorities`,
+        { method: "PUT", body: payload },
+      ),
+    meta: {
+      successMessage: "Weekly priorities saved.",
+      errorMessage: "Weekly priorities update failed.",
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["goals"] });
+    },
+  });
+}
+
+export function useUpdateMonthFocusMutation(monthStartDate: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (payload: {
+      theme?: string;
+      topOutcomes?: Array<{
+        id?: string;
+        slot: 1 | 2 | 3;
+        title: string;
+        goalId?: string | null;
+      }>;
+    }) =>
+      apiRequest<MonthPlanResponse>(
+        `/api/planning/months/${monthStartDate}/focus`,
+        { method: "PUT", body: payload },
+      ),
+    meta: {
+      successMessage: "Monthly focus saved.",
+      errorMessage: "Monthly focus update failed.",
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["goals"] });
+    },
+  });
+}
+
+/* ── Finance CRUD ──────────────────────────── */
+
+export function useCreateCategoryMutation() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (payload: { name: string; color?: string | null }) =>
+      apiRequest<CategoryMutationResponse>("/api/finance/categories", {
+        method: "POST",
+        body: payload,
+      }),
+    meta: {
+      successMessage: "Category created.",
+      errorMessage: "Category creation failed.",
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.financeCategories });
+      void queryClient.invalidateQueries({ queryKey: ["finance"] });
+    },
+  });
+}
+
+export function useUpdateCategoryMutation() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      categoryId,
+      ...payload
+    }: {
+      categoryId: string;
+      name?: string;
+      color?: string | null;
+      archivedAt?: string | null;
+    }) =>
+      apiRequest<CategoryMutationResponse>(
+        `/api/finance/categories/${categoryId}`,
+        { method: "PATCH", body: payload },
+      ),
+    meta: {
+      successMessage: "Category updated.",
+      errorMessage: "Category update failed.",
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.financeCategories });
+      void queryClient.invalidateQueries({ queryKey: ["finance"] });
+    },
+  });
+}
+
+export function useCreateRecurringExpenseMutation() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (payload: {
+      title: string;
+      expenseCategoryId?: string | null;
+      defaultAmountMinor?: number | null;
+      currencyCode?: string;
+      recurrenceRule: string;
+      nextDueOn: string;
+      remindDaysBefore?: number;
+    }) =>
+      apiRequest<RecurringExpenseMutationResponse>("/api/finance/recurring-expenses", {
+        method: "POST",
+        body: payload,
+      }),
+    meta: {
+      successMessage: "Recurring expense created.",
+      errorMessage: "Recurring expense creation failed.",
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.financeRecurring });
+      void queryClient.invalidateQueries({ queryKey: ["finance"] });
+    },
+  });
+}
+
+export function useUpdateRecurringExpenseMutation() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      recurringExpenseId,
+      ...payload
+    }: {
+      recurringExpenseId: string;
+      title?: string;
+      expenseCategoryId?: string | null;
+      defaultAmountMinor?: number | null;
+      recurrenceRule?: string;
+      nextDueOn?: string;
+      remindDaysBefore?: number;
+      status?: "active" | "paused" | "archived";
+    }) =>
+      apiRequest<RecurringExpenseMutationResponse>(
+        `/api/finance/recurring-expenses/${recurringExpenseId}`,
+        { method: "PATCH", body: payload },
+      ),
+    meta: {
+      successMessage: "Recurring expense updated.",
+      errorMessage: "Recurring expense update failed.",
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.financeRecurring });
+      void queryClient.invalidateQueries({ queryKey: ["finance"] });
+    },
+  });
+}
+
+/* ── Meal templates CRUD ───────────────────── */
+
+export function useMealTemplatesQuery() {
+  return useQuery({
+    queryKey: queryKeys.mealTemplates,
+    queryFn: () => apiRequest<MealTemplatesResponse>("/api/health/meal-templates"),
+    retry: false,
+  });
+}
+
+export function useCreateMealTemplateMutation() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (payload: {
+      name: string;
+      mealSlot?: "breakfast" | "lunch" | "dinner" | "snack" | null;
+      description?: string;
+    }) =>
+      apiRequest<MealTemplateMutationResponse>("/api/health/meal-templates", {
+        method: "POST",
+        body: payload,
+      }),
+    meta: {
+      successMessage: "Meal template created.",
+      errorMessage: "Meal template creation failed.",
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.mealTemplates });
+      void queryClient.invalidateQueries({ queryKey: ["health"] });
+    },
+  });
+}
+
+export function useUpdateMealTemplateMutation() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      mealTemplateId,
+      ...payload
+    }: {
+      mealTemplateId: string;
+      name?: string;
+      mealSlot?: "breakfast" | "lunch" | "dinner" | "snack" | null;
+      description?: string | null;
+      archived?: boolean;
+    }) =>
+      apiRequest<MealTemplateMutationResponse>(
+        `/api/health/meal-templates/${mealTemplateId}`,
+        { method: "PATCH", body: payload },
+      ),
+    meta: {
+      successMessage: "Meal template updated.",
+      errorMessage: "Meal template update failed.",
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.mealTemplates });
+      void queryClient.invalidateQueries({ queryKey: ["health"] });
+    },
+  });
+}
+
+/* ── Preference-aware date helpers ─────────── */
+
+let _cachedWeekStartsOn: number | null = null;
+let _cachedTimezone: string | null = null;
+
+export function setPreferredWeekStart(day: number) {
+  _cachedWeekStartsOn = day;
+}
+
+export function setPreferredTimezone(tz: string) {
+  _cachedTimezone = tz;
+}
+
+export function getPreferredWeekStartsOn(): number {
+  return _cachedWeekStartsOn ?? 1;
+}
+
+export function getPreferredTimezone(): string | null {
+  return _cachedTimezone;
+}
+
+export function getPreferenceAwareWeekStartDate(isoDate: string) {
+  const weekStartsOn = getPreferredWeekStartsOn();
+  const date = new Date(`${isoDate}T12:00:00`);
+  const day = date.getDay();
+  const diff = ((day - weekStartsOn + 7) % 7);
+  date.setDate(date.getDate() - diff);
+  return toIsoDate(date);
 }

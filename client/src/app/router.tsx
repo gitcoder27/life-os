@@ -6,8 +6,10 @@ import { GoalsPage } from "../features/goals/GoalsPage";
 import { HabitsPage } from "../features/habits/HabitsPage";
 import { HealthPage } from "../features/health/HealthPage";
 import { HomePage } from "../features/home/HomePage";
+import { NotificationsPage } from "../features/notifications/NotificationsPage";
 import { OnboardingPage } from "../features/onboarding/OnboardingPage";
 import { ReviewsPage } from "../features/reviews/ReviewsPage";
+import { SettingsPage } from "../features/settings/SettingsPage";
 import { TodayPage } from "../features/today/TodayPage";
 import {
   useOnboardingStateQuery,
@@ -143,6 +145,14 @@ export const router = createBrowserRouter([
       {
         path: "reviews/:cadence",
         element: <ReviewsPage />,
+      },
+      {
+        path: "notifications",
+        element: <NotificationsPage />,
+      },
+      {
+        path: "settings",
+        element: <SettingsPage />,
       },
     ],
   },

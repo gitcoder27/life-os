@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { NavLink, useParams } from "react-router-dom";
+import { NavLink, useParams, useSearchParams } from "react-router-dom";
 
 import {
   type DailyFrictionTag,
@@ -106,17 +106,20 @@ function fillThreePriorityDraft(values: DailyPriorityDraft[]) {
 
 export function ReviewsPage() {
   const { cadence = "daily" } = useParams();
+  const [searchParams] = useSearchParams();
   const today = getTodayDate();
-  const tomorrow = getTomorrowDate(today);
+  const dateParam = searchParams.get("date");
+  const reviewDate = dateParam || today;
+  const tomorrow = getTomorrowDate(reviewDate);
   const cadenceKey =
     cadence === "daily" || cadence === "weekly" || cadence === "monthly"
       ? cadence
       : "daily";
   const config = reviewCadences[cadenceKey];
-  const reviewQuery = useReviewDataQuery(cadenceKey, today);
-  const submitDailyReviewMutation = useSubmitDailyReviewMutation(today);
-  const submitWeeklyReviewMutation = useSubmitWeeklyReviewMutation(today);
-  const submitMonthlyReviewMutation = useSubmitMonthlyReviewMutation(today);
+  const reviewQuery = useReviewDataQuery(cadenceKey, reviewDate);
+  const submitDailyReviewMutation = useSubmitDailyReviewMutation(reviewDate);
+  const submitWeeklyReviewMutation = useSubmitWeeklyReviewMutation(reviewDate);
+  const submitMonthlyReviewMutation = useSubmitMonthlyReviewMutation(reviewDate);
   const [responses, setResponses] = useState<string[]>([]);
   const [dailyInputs, setDailyInputs] = useState({
     biggestWin: "",
