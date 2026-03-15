@@ -637,13 +637,15 @@ Scoring should feel like a transparent discipline system:
 
 Make the current app trustworthy enough for serious daily use.
 
+Status: implemented.
+
 ### Tasks
 
-- [ ] Fix all typecheck failures.
-- [ ] Fix timezone handling for day-based logic.
-- [ ] Correct scoring and summary inaccuracies.
-- [ ] Add explicit loading, empty, and error states to all primary pages.
-- [ ] Add better mutation success and failure feedback.
+- [x] Fix all typecheck failures.
+- [x] Fix timezone handling for day-based logic.
+- [x] Correct scoring and summary inaccuracies.
+- [x] Add explicit loading, empty, and error states to all primary pages.
+- [x] Add better mutation success and failure feedback.
 
 ### Exit criteria
 
@@ -662,7 +664,7 @@ Make planning, execution, and daily review work end-to-end.
 - [ ] Make Today fully operational.
 - [ ] Make Home attention items actionable.
 - [ ] Implement real daily review task decisions.
-- [ ] Show real review submission outputs.
+- [x] Show real review submission outputs.
 
 ### Exit criteria
 
@@ -713,7 +715,7 @@ Make the system more engaging without making it noisy or childish.
 
 ### Tasks
 
-- [ ] Add score delta explanations on Home.
+- [x] Add score delta explanations on Home.
 - [ ] Add streak rescue and recovery framing.
 - [ ] Add weekly focus challenge or quest.
 - [ ] Add habit-risk and drift indicators.
@@ -729,8 +731,8 @@ Make the system more engaging without making it noisy or childish.
 
 - [ ] Add priority status mutation endpoints.
 - [ ] Audit entity ownership validation on all write paths.
-- [ ] Make time calculations timezone-aware.
-- [ ] Correct scoring and review summary calculations.
+- [x] Make time calculations timezone-aware.
+- [x] Correct scoring and review summary calculations.
 - [ ] Add settings/preferences endpoints.
 - [ ] Expand CRUD where persisted entities already exist but are not manageable.
 - [ ] Consolidate request/response types around shared contracts.
@@ -743,8 +745,8 @@ Make the system more engaging without making it noisy or childish.
 - [ ] Add management UIs for goals, weekly plan, monthly focus.
 - [ ] Add recurring expense and category management.
 - [ ] Replace prompts with forms.
-- [ ] Improve loading, empty, and error states.
-- [ ] Improve mutation feedback and reduce stale UI risk.
+- [x] Improve loading, empty, and error states.
+- [x] Improve mutation feedback and reduce stale UI risk.
 
 ## Product backlog
 

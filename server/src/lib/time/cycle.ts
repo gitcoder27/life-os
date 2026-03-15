@@ -12,12 +12,30 @@ export function addDays(date: Date, days: number) {
   return new Date(date.getTime() + days * DAY_MS);
 }
 
+export function addIsoDays(isoDate: IsoDateString, days: number): IsoDateString {
+  return toIsoDateString(addDays(parseIsoDate(isoDate), days));
+}
+
 export function getWeekEndDate(startDate: Date) {
   return addDays(startDate, 6);
 }
 
 export function getMonthEndDate(startDate: Date) {
   return new Date(Date.UTC(startDate.getUTCFullYear(), startDate.getUTCMonth() + 1, 0));
+}
+
+export function getWeekStartIsoDate(isoDate: IsoDateString, weekStartsOn: number) {
+  const date = parseIsoDate(isoDate);
+  const day = date.getUTCDay();
+  const delta = (day - weekStartsOn + 7) % 7;
+
+  return addIsoDays(isoDate, -delta);
+}
+
+export function getMonthStartIsoDate(isoDate: IsoDateString): IsoDateString {
+  const date = parseIsoDate(isoDate);
+
+  return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}-01` as IsoDateString;
 }
 
 export function normalizeIsoDate(date: Date) {

@@ -8,18 +8,18 @@ import type { AppEnv } from "./env.js";
 import { registerRequestContext } from "./plugins/request-context.js";
 import { isAppError } from "../lib/errors/app-error.js";
 import { withGeneratedAt } from "../lib/http/response.js";
+import {
+  createLoggerOptions,
+  registerDevelopmentRequestLogging,
+} from "../lib/logger/dev-logger.js";
 import { enforceCsrfProtection } from "../lib/security/csrf.js";
 import { ensureOwnerAccount } from "../modules/auth/service.js";
 import { registerModules } from "../modules/index.js";
 
 export async function buildApp(env: AppEnv) {
   const app = Fastify({
-    logger: {
-      level: env.NODE_ENV === "production" ? "info" : "debug",
-      redact: {
-        paths: ["req.headers.cookie", "req.headers.authorization", "res.headers.set-cookie"],
-      },
-    },
+    logger: createLoggerOptions(env),
+    disableRequestLogging: env.NODE_ENV !== "production",
   });
 
   await app.register(cors, {
@@ -41,6 +41,7 @@ export async function buildApp(env: AppEnv) {
 
   await ensureOwnerAccount(prisma, env, app.log);
   await registerRequestContext(app, { env });
+  registerDevelopmentRequestLogging(app, env);
 
   app.addHook("preHandler", async (request) => {
     enforceCsrfProtection(request, env);

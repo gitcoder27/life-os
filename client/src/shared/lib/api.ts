@@ -679,6 +679,10 @@ export class ApiClientError extends Error {
   }
 }
 
+type SectionError = {
+  message: string;
+};
+
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? "").replace(/\/$/, "");
 const CSRF_COOKIE_NAME = import.meta.env.VITE_CSRF_COOKIE_NAME ?? "life_os_csrf";
 const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
@@ -726,6 +730,26 @@ async function readErrorPayload(response: Response) {
   } catch {
     return undefined;
   }
+}
+
+function toSectionError(error: unknown, fallback: string): SectionError {
+  if (error instanceof Error && error.message.trim()) {
+    return {
+      message: error.message,
+    };
+  }
+
+  return {
+    message: fallback,
+  };
+}
+
+function unwrapRequiredResult<T>(result: PromiseSettledResult<T>, fallback: string) {
+  if (result.status === "fulfilled") {
+    return result.value;
+  }
+
+  throw result.reason instanceof Error ? result.reason : new Error(fallback);
 }
 
 export async function apiRequest<TResponse>(
@@ -1037,7 +1061,8 @@ export function useHealthDataQuery(date: string) {
   return useQuery({
     queryKey: queryKeys.health(date),
     queryFn: async () => {
-      const [summary, waterLogs, mealTemplates, mealLogs] = await Promise.all([
+      const [summaryResult, waterLogsResult, mealTemplatesResult, mealLogsResult] =
+        await Promise.allSettled([
         apiRequest<HealthSummaryResponse>("/api/health/summary", {
           query: { from: date, to: date },
         }),
@@ -1048,13 +1073,30 @@ export function useHealthDataQuery(date: string) {
         apiRequest<MealLogsResponse>("/api/health/meal-logs", {
           query: { date },
         }),
-      ]);
+        ]);
 
       return {
-        summary,
-        waterLogs,
-        mealTemplates,
-        mealLogs,
+        summary: unwrapRequiredResult(summaryResult, "Health summary could not load."),
+        waterLogs:
+          waterLogsResult.status === "fulfilled" ? waterLogsResult.value : null,
+        mealTemplates:
+          mealTemplatesResult.status === "fulfilled" ? mealTemplatesResult.value : null,
+        mealLogs:
+          mealLogsResult.status === "fulfilled" ? mealLogsResult.value : null,
+        sectionErrors: {
+          waterLogs:
+            waterLogsResult.status === "rejected"
+              ? toSectionError(waterLogsResult.reason, "Water logs could not load.")
+              : null,
+          mealTemplates:
+            mealTemplatesResult.status === "rejected"
+              ? toSectionError(mealTemplatesResult.reason, "Meal templates could not load.")
+              : null,
+          mealLogs:
+            mealLogsResult.status === "rejected"
+              ? toSectionError(mealLogsResult.reason, "Meal logs could not load.")
+              : null,
+        },
       };
     },
     retry: false,
@@ -1069,7 +1111,8 @@ export function useFinanceDataQuery(date: string) {
   return useQuery({
     queryKey: queryKeys.finance(month),
     queryFn: async () => {
-      const [summary, expenses, recurringExpenses, categories] = await Promise.all([
+      const [summaryResult, expensesResult, recurringExpensesResult, categoriesResult] =
+        await Promise.allSettled([
         apiRequest<FinanceSummaryResponse>("/api/finance/summary", {
           query: { month },
         }),
@@ -1078,13 +1121,31 @@ export function useFinanceDataQuery(date: string) {
         }),
         apiRequest<RecurringExpensesResponse>("/api/finance/recurring-expenses"),
         apiRequest<FinanceCategoriesResponse>("/api/finance/categories"),
-      ]);
+        ]);
 
       return {
-        summary,
-        expenses,
-        recurringExpenses,
-        categories,
+        summary: unwrapRequiredResult(summaryResult, "Finance summary could not load."),
+        expenses: expensesResult.status === "fulfilled" ? expensesResult.value : null,
+        recurringExpenses:
+          recurringExpensesResult.status === "fulfilled"
+            ? recurringExpensesResult.value
+            : null,
+        categories:
+          categoriesResult.status === "fulfilled" ? categoriesResult.value : null,
+        sectionErrors: {
+          expenses:
+            expensesResult.status === "rejected"
+              ? toSectionError(expensesResult.reason, "Expenses could not load.")
+              : null,
+          recurringExpenses:
+            recurringExpensesResult.status === "rejected"
+              ? toSectionError(recurringExpensesResult.reason, "Recurring bills could not load.")
+              : null,
+          categories:
+            categoriesResult.status === "rejected"
+              ? toSectionError(categoriesResult.reason, "Categories could not load.")
+              : null,
+        },
       };
     },
     retry: false,
@@ -1098,16 +1159,26 @@ export function useGoalsDataQuery(date: string) {
   return useQuery({
     queryKey: queryKeys.goals(weekStart, monthStart),
     queryFn: async () => {
-      const [goals, weekPlan, monthPlan] = await Promise.all([
+      const [goalsResult, weekPlanResult, monthPlanResult] = await Promise.allSettled([
         apiRequest<GoalsResponse>("/api/goals"),
         apiRequest<WeekPlanResponse>(`/api/planning/weeks/${weekStart}`),
         apiRequest<MonthPlanResponse>(`/api/planning/months/${monthStart}`),
       ]);
 
       return {
-        goals,
-        weekPlan,
-        monthPlan,
+        goals: unwrapRequiredResult(goalsResult, "Goals could not load."),
+        weekPlan: weekPlanResult.status === "fulfilled" ? weekPlanResult.value : null,
+        monthPlan: monthPlanResult.status === "fulfilled" ? monthPlanResult.value : null,
+        sectionErrors: {
+          weekPlan:
+            weekPlanResult.status === "rejected"
+              ? toSectionError(weekPlanResult.reason, "Weekly priorities could not load.")
+              : null,
+          monthPlan:
+            monthPlanResult.status === "rejected"
+              ? toSectionError(monthPlanResult.reason, "Monthly focus could not load.")
+              : null,
+        },
       };
     },
     retry: false,
@@ -1135,7 +1206,7 @@ export function useReviewDataQuery(cadence: ReviewCadence, date: string) {
       }
 
       if (cadence === "weekly") {
-        const [review, momentum] = await Promise.all([
+        const [reviewResult, momentumResult] = await Promise.allSettled([
           apiRequest<WeeklyReviewResponse>(`/api/reviews/weekly/${keyDate}`),
           apiRequest<WeeklyMomentumResponse>("/api/scores/weekly-momentum", {
             query: { endingOn: getWeekEndDate(date) },
@@ -1145,8 +1216,13 @@ export function useReviewDataQuery(cadence: ReviewCadence, date: string) {
         return {
           cadence,
           keyDate,
-          review,
-          momentum,
+          review: unwrapRequiredResult(reviewResult, "Weekly review data could not load."),
+          momentum:
+            momentumResult.status === "fulfilled" ? momentumResult.value : null,
+          momentumError:
+            momentumResult.status === "rejected"
+              ? toSectionError(momentumResult.reason, "Weekly momentum could not load.")
+              : null,
         } as const;
       }
 
@@ -1170,6 +1246,10 @@ export function useLoginMutation() {
         method: "POST",
         body: payload,
       }),
+    meta: {
+      successMessage: "Signed in.",
+      errorMessage: "Sign-in failed.",
+    },
     onSuccess: (data) => {
       queryClient.setQueryData<SessionResponse>(queryKeys.session, {
         authenticated: true,
@@ -1195,6 +1275,10 @@ export function useCompleteOnboardingMutation() {
           body: payload,
         },
       ),
+    meta: {
+      successMessage: "Setup complete.",
+      errorMessage: "Setup could not be completed.",
+    },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.onboarding });
       void queryClient.invalidateQueries({ queryKey: queryKeys.session });
@@ -1211,6 +1295,10 @@ export function useTaskStatusMutation(date: string) {
         method: "PATCH",
         body: { status },
       }),
+    meta: {
+      successMessage: "Task updated.",
+      errorMessage: "Task update failed.",
+    },
     onSuccess: () => invalidateCoreData(queryClient, date),
   });
 }
@@ -1229,6 +1317,10 @@ export function useCreateTaskMutation(date: string) {
         method: "POST",
         body: payload,
       }),
+    meta: {
+      successMessage: "Task captured.",
+      errorMessage: "Task capture failed.",
+    },
     onSuccess: () => invalidateCoreData(queryClient, date),
   });
 }
@@ -1242,6 +1334,10 @@ export function useHabitCheckinMutation(date: string) {
         method: "POST",
         body: { date, status: "completed" },
       }),
+    meta: {
+      successMessage: "Habit logged.",
+      errorMessage: "Habit log failed.",
+    },
     onSuccess: () => invalidateCoreData(queryClient, date),
   });
 }
@@ -1255,6 +1351,10 @@ export function useRoutineCheckinMutation(date: string) {
         method: "POST",
         body: { date },
       }),
+    meta: {
+      successMessage: "Routine item completed.",
+      errorMessage: "Routine update failed.",
+    },
     onSuccess: () => invalidateCoreData(queryClient, date),
   });
 }
@@ -1271,6 +1371,10 @@ export function useAddWaterMutation(date: string) {
           source: "quick_capture",
         },
       }),
+    meta: {
+      successMessage: "Water logged.",
+      errorMessage: "Water log failed.",
+    },
     onSuccess: () => invalidateCoreData(queryClient, date),
   });
 }
@@ -1289,6 +1393,10 @@ export function useAddMealMutation(date: string) {
         method: "POST",
         body: payload,
       }),
+    meta: {
+      successMessage: "Meal logged.",
+      errorMessage: "Meal log failed.",
+    },
     onSuccess: () => invalidateCoreData(queryClient, date),
   });
 }
@@ -1307,6 +1415,10 @@ export function useWorkoutMutation(date: string) {
         method: "PUT",
         body: payload,
       }),
+    meta: {
+      successMessage: "Workout updated.",
+      errorMessage: "Workout update failed.",
+    },
     onSuccess: () => invalidateCoreData(queryClient, date),
   });
 }
@@ -1325,6 +1437,10 @@ export function useAddWeightMutation(date: string) {
         method: "POST",
         body: payload,
       }),
+    meta: {
+      successMessage: "Weight logged.",
+      errorMessage: "Weight log failed.",
+    },
     onSuccess: () => invalidateCoreData(queryClient, date),
   });
 }
@@ -1346,6 +1462,10 @@ export function useCreateExpenseMutation(date: string) {
         method: "POST",
         body: payload,
       }),
+    meta: {
+      successMessage: "Expense logged.",
+      errorMessage: "Expense log failed.",
+    },
     onSuccess: () => invalidateCoreData(queryClient, date),
   });
 }
@@ -1375,6 +1495,10 @@ export function useSubmitDailyReviewMutation(date: string) {
         method: "POST",
         body: payload,
       }),
+    meta: {
+      successMessage: "Daily review submitted.",
+      errorMessage: "Daily review submission failed.",
+    },
     onSuccess: () => invalidateCoreData(queryClient, date),
   });
 }
@@ -1403,6 +1527,10 @@ export function useSubmitWeeklyReviewMutation(date: string) {
         method: "POST",
         body: payload,
       }),
+    meta: {
+      successMessage: "Weekly review submitted.",
+      errorMessage: "Weekly review submission failed.",
+    },
     onSuccess: () => invalidateCoreData(queryClient, date),
   });
 }
@@ -1427,6 +1555,10 @@ export function useSubmitMonthlyReviewMutation(date: string) {
         method: "POST",
         body: payload,
       }),
+    meta: {
+      successMessage: "Monthly review submitted.",
+      errorMessage: "Monthly review submission failed.",
+    },
     onSuccess: () => invalidateCoreData(queryClient, date),
   });
 }

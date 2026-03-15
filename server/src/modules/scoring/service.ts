@@ -1,7 +1,16 @@
 import type { Prisma, PrismaClient, RoutinePeriod } from "@prisma/client";
 
-import { addDays, getMonthEndDate, getWeekEndDate, parseIsoDate } from "../../lib/time/cycle.js";
+import { filterDueHabits } from "../../lib/habits/schedule.js";
+import {
+  addDays,
+  getMonthEndDate,
+  getMonthStartIsoDate,
+  getWeekEndDate,
+  getWeekStartIsoDate,
+  parseIsoDate,
+} from "../../lib/time/cycle.js";
 import { toIsoDateString } from "../../lib/time/date.js";
+import { getDayWindowUtc, getTimeWindowUtc, getUserLocalDate, normalizeTimezone } from "../../lib/time/user-time.js";
 
 type ScoreLabel = "Strong Day" | "Solid Day" | "Recovering Day" | "Off-Track Day";
 type ScoreBucketKey =
@@ -128,14 +137,31 @@ function buildBucket(
 }
 
 async function getDayContext(prisma: PrismaClient, userId: string, date: Date) {
+  const targetIsoDate = toIsoDateString(date);
+  const targetDate = parseIsoDate(targetIsoDate);
+  const preferences = await prisma.userPreference.findUnique({
+    where: {
+      userId,
+    },
+  });
+  const timezone = normalizeTimezone(preferences?.timezone);
+  const weekStartsOn = preferences?.weekStartsOn ?? 1;
+  const { start: dayWindowStart, end: dayWindowEnd } = getDayWindowUtc(targetIsoDate, timezone);
+  const tomorrowDate = addDays(targetDate, 1);
+  const tomorrowIsoDate = toIsoDateString(tomorrowDate);
+  const weekStartDate = parseIsoDate(getWeekStartIsoDate(targetIsoDate, weekStartsOn));
+  const monthStartDate = parseIsoDate(getMonthStartIsoDate(targetIsoDate));
+  const nextMonthStart = new Date(
+    Date.UTC(monthStartDate.getUTCFullYear(), monthStartDate.getUTCMonth() + 1, 1),
+  );
+
   const dayCycle = await ensureCycle(prisma, {
     userId,
     cycleType: "DAY",
-    cycleStartDate: date,
-    cycleEndDate: date,
+    cycleStartDate: targetDate,
+    cycleEndDate: targetDate,
   });
 
-  const tomorrowDate = addDays(date, 1);
   const tomorrowCycle = await ensureCycle(prisma, {
     userId,
     cycleType: "DAY",
@@ -143,7 +169,6 @@ async function getDayContext(prisma: PrismaClient, userId: string, date: Date) {
     cycleEndDate: tomorrowDate,
   });
 
-  const weekStartDate = addDays(date, -6);
   const weekCycle = await ensureCycle(prisma, {
     userId,
     cycleType: "WEEK",
@@ -151,12 +176,11 @@ async function getDayContext(prisma: PrismaClient, userId: string, date: Date) {
     cycleEndDate: getWeekEndDate(weekStartDate),
   });
 
-  const nextMonthStart = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 1, 1));
   await ensureCycle(prisma, {
     userId,
     cycleType: "MONTH",
-    cycleStartDate: new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), 1)),
-    cycleEndDate: getMonthEndDate(new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), 1))),
+    cycleStartDate: monthStartDate,
+    cycleEndDate: getMonthEndDate(monthStartDate),
   });
   await ensureCycle(prisma, {
     userId,
@@ -176,12 +200,11 @@ async function getDayContext(prisma: PrismaClient, userId: string, date: Date) {
     workoutDay,
     expenses,
     dueAdminItems,
-    preferences,
   ] = await Promise.all([
     prisma.task.findMany({
       where: {
         userId,
-        scheduledForDate: date,
+        scheduledForDate: targetDate,
       },
       orderBy: {
         createdAt: "asc",
@@ -199,7 +222,7 @@ async function getDayContext(prisma: PrismaClient, userId: string, date: Date) {
         habit: {
           userId,
         },
-        occurredOn: date,
+        occurredOn: targetDate,
       },
     }),
     prisma.routine.findMany({
@@ -217,7 +240,7 @@ async function getDayContext(prisma: PrismaClient, userId: string, date: Date) {
     }),
     prisma.routineItemCheckin.findMany({
       where: {
-        occurredOn: date,
+        occurredOn: targetDate,
         routineItem: {
           routine: {
             userId,
@@ -229,8 +252,8 @@ async function getDayContext(prisma: PrismaClient, userId: string, date: Date) {
       where: {
         userId,
         occurredAt: {
-          gte: date,
-          lt: addDays(date, 1),
+          gte: dayWindowStart,
+          lt: dayWindowEnd,
         },
       },
     }),
@@ -238,8 +261,8 @@ async function getDayContext(prisma: PrismaClient, userId: string, date: Date) {
       where: {
         userId,
         occurredAt: {
-          gte: date,
-          lt: addDays(date, 1),
+          gte: dayWindowStart,
+          lt: dayWindowEnd,
         },
       },
     }),
@@ -247,7 +270,7 @@ async function getDayContext(prisma: PrismaClient, userId: string, date: Date) {
       where: {
         userId_date: {
           userId,
-          date,
+          date: targetDate,
         },
       },
     }),
@@ -255,26 +278,22 @@ async function getDayContext(prisma: PrismaClient, userId: string, date: Date) {
       where: {
         userId,
         spentOn: {
-          gte: date,
-          lt: addDays(date, 1),
+          gte: targetDate,
+          lt: tomorrowDate,
         },
       },
     }),
     prisma.adminItem.findMany({
       where: {
         userId,
-        dueOn: date,
-      },
-    }),
-    prisma.userPreference.findUnique({
-      where: {
-        userId,
+        dueOn: targetDate,
       },
     }),
   ]);
 
   return {
-    date,
+    date: targetDate,
+    targetIsoDate,
     dayCycle,
     tomorrowCycle,
     weekCycle,
@@ -289,6 +308,7 @@ async function getDayContext(prisma: PrismaClient, userId: string, date: Date) {
     expenses,
     dueAdminItems,
     preferences,
+    timezone,
   };
 }
 
@@ -297,9 +317,11 @@ function getRoutineCompletion(
   routines: Awaited<ReturnType<typeof getDayContext>>["activeRoutines"],
   routineCheckins: Awaited<ReturnType<typeof getDayContext>>["routineCheckins"],
 ) {
-  const routine = routines.find((entry) => entry.period === period);
+  const routineItems = routines
+    .filter((entry) => entry.period === period)
+    .flatMap((routine) => routine.items);
 
-  if (!routine || routine.items.length === 0) {
+  if (routineItems.length === 0) {
     return {
       earned: 0,
       applicable: 0,
@@ -308,15 +330,15 @@ function getRoutineCompletion(
     };
   }
 
-  const completed = routine.items.filter((item) =>
+  const completed = routineItems.filter((item) =>
     routineCheckins.some((checkin) => checkin.routineItemId === item.id),
   ).length;
 
   return {
-    earned: 5 * (completed / routine.items.length),
+    earned: 5 * (completed / routineItems.length),
     applicable: 5,
     completed,
-    total: routine.items.length,
+    total: routineItems.length,
   };
 }
 
@@ -350,7 +372,7 @@ export async function calculateDailyScore(
 
   const morningRoutine = getRoutineCompletion("MORNING", context.activeRoutines, context.routineCheckins);
   const eveningRoutine = getRoutineCompletion("EVENING", context.activeRoutines, context.routineCheckins);
-  const dueHabits = context.activeHabits;
+  const dueHabits = filterDueHabits(context.activeHabits, context.targetIsoDate);
   const completedHabits = dueHabits.filter((habit) =>
     context.habitCheckins.some(
       (checkin) => checkin.habitId === habit.id && checkin.status === "COMPLETED",
@@ -435,7 +457,7 @@ export async function calculateDailyScore(
     .slice(0, 3);
 
   return {
-    date: toIsoDateString(date),
+    date: context.targetIsoDate,
     value,
     label: getScoreLabel(value),
     earnedPoints,
@@ -604,13 +626,7 @@ export async function getWeeklyMomentum(
 }
 
 function getReviewWindowEnd(date: Date, dailyReviewEndTime: string | null | undefined) {
-  const [hourString, minuteString] = (dailyReviewEndTime ?? "10:00").split(":");
-  const hour = Number(hourString);
-  const minute = Number(minuteString);
-
-  return new Date(
-    Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate(), hour, minute, 0, 0),
-  );
+  return getTimeWindowUtc(toIsoDateString(date), dailyReviewEndTime ?? "10:00", "UTC");
 }
 
 export async function finalizeClosedDayScores(prisma: PrismaClient, now: Date) {
@@ -622,11 +638,17 @@ export async function finalizeClosedDayScores(prisma: PrismaClient, now: Date) {
       preferences: true,
     },
   });
-  const today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
   let finalizedCount = 0;
 
   for (const user of users) {
-    const reviewWindowEndsToday = getReviewWindowEnd(today, user.preferences?.dailyReviewEndTime);
+    const timezone = normalizeTimezone(user.preferences?.timezone);
+    const todayIsoDate = getUserLocalDate(now, timezone);
+    const today = parseIsoDate(todayIsoDate);
+    const reviewWindowEndsToday = getTimeWindowUtc(
+      todayIsoDate,
+      user.preferences?.dailyReviewEndTime ?? "10:00",
+      timezone,
+    );
     const thresholdDate = now >= reviewWindowEndsToday ? addDays(today, -1) : addDays(today, -2);
     const openDayCycles = await prisma.planningCycle.findMany({
       where: {

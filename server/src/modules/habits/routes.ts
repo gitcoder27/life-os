@@ -31,9 +31,15 @@ import { z } from "zod";
 
 import { requireAuthenticatedUser } from "../../lib/auth/require-auth.js";
 import { AppError } from "../../lib/errors/app-error.js";
+import {
+  calculateHabitStreak,
+  isHabitDueOnIsoDate,
+  normalizeHabitScheduleRule,
+} from "../../lib/habits/schedule.js";
 import { withGeneratedAt } from "../../lib/http/response.js";
-import { parseIsoDate } from "../../lib/time/cycle.js";
+import { addIsoDays, parseIsoDate } from "../../lib/time/cycle.js";
 import { toIsoDateString } from "../../lib/time/date.js";
+import { getUserLocalDate } from "../../lib/time/user-time.js";
 import { parseOrThrow } from "../../lib/validation/parse.js";
 
 const isoDateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/) as unknown as z.ZodType<IsoDateString>;
@@ -91,8 +97,20 @@ const routineItemCheckinSchema = z.object({
   date: isoDateSchema.optional(),
 });
 
-function getTodayIsoDate() {
-  return toIsoDateString(new Date());
+async function getTodayIsoDate(
+  app: Parameters<FastifyPluginAsync>[0],
+  userId: string,
+) {
+  const preferences = await app.prisma.userPreference.findUnique({
+    where: {
+      userId,
+    },
+    select: {
+      timezone: true,
+    },
+  });
+
+  return getUserLocalDate(new Date(), preferences?.timezone);
 }
 
 function toPrismaHabitStatus(status: NonNullable<UpdateHabitRequest["status"]>): PrismaHabitStatus {
@@ -162,45 +180,6 @@ function fromPrismaRoutineStatus(status: PrismaRoutineStatus): RoutineStatus {
   }
 }
 
-function normalizeScheduleRule(scheduleRule: unknown): HabitScheduleRule {
-  const parsed = habitScheduleRuleSchema.safeParse(scheduleRule);
-  return parsed.success ? parsed.data : {};
-}
-
-function isHabitDueOn(scheduleRule: HabitScheduleRule, date: Date) {
-  if (!scheduleRule.daysOfWeek || scheduleRule.daysOfWeek.length === 0) {
-    return true;
-  }
-
-  return scheduleRule.daysOfWeek.includes(date.getUTCDay());
-}
-
-async function calculateHabitStreak(habit: Habit, checkins: HabitCheckin[], onDate: Date) {
-  const completedDates = new Set(
-    checkins
-      .filter((checkin) => checkin.status === "COMPLETED")
-      .map((checkin) => toIsoDateString(checkin.occurredOn)),
-  );
-  const scheduleRule = normalizeScheduleRule(habit.scheduleRuleJson);
-  let streak = 0;
-
-  for (let offset = 0; offset < 30; offset += 1) {
-    const date = new Date(onDate.getTime() - offset * 24 * 60 * 60 * 1000);
-
-    if (!isHabitDueOn(scheduleRule, date)) {
-      continue;
-    }
-
-    if (!completedDates.has(toIsoDateString(date))) {
-      break;
-    }
-
-    streak += 1;
-  }
-
-  return streak;
-}
-
 function serializeRoutine(
   routine: Routine & {
     items: (RoutineItem & { checkins: RoutineItemCheckin[] })[];
@@ -227,9 +206,13 @@ function serializeRoutine(
   };
 }
 
-async function serializeHabit(habit: Habit, checkins: HabitCheckin[], targetDate: Date): Promise<HabitItem> {
-  const targetIsoDate = toIsoDateString(targetDate);
-  const dueToday = isHabitDueOn(normalizeScheduleRule(habit.scheduleRuleJson), targetDate);
+async function serializeHabit(
+  habit: Habit,
+  checkins: HabitCheckin[],
+  targetIsoDate: IsoDateString,
+): Promise<HabitItem> {
+  const scheduleRule = normalizeHabitScheduleRule(habit.scheduleRuleJson);
+  const dueToday = isHabitDueOnIsoDate(scheduleRule, targetIsoDate);
   const completedToday = checkins.some(
     (checkin) =>
       toIsoDateString(checkin.occurredOn) === targetIsoDate && checkin.status === "COMPLETED",
@@ -239,12 +222,12 @@ async function serializeHabit(habit: Habit, checkins: HabitCheckin[], targetDate
     id: habit.id,
     title: habit.title,
     category: habit.category,
-    scheduleRule: normalizeScheduleRule(habit.scheduleRuleJson),
+    scheduleRule,
     targetPerDay: habit.targetPerDay,
     status: fromPrismaHabitStatus(habit.status),
     dueToday,
     completedToday,
-    streakCount: await calculateHabitStreak(habit, checkins, targetDate),
+    streakCount: calculateHabitStreak(checkins, scheduleRule, targetIsoDate),
   };
 }
 
@@ -340,7 +323,7 @@ async function loadRoutineById(
 export const registerHabitsRoutes: FastifyPluginAsync = async (app) => {
   app.get("/habits", async (request, reply) => {
     const user = requireAuthenticatedUser(request);
-    const targetIsoDate = getTodayIsoDate();
+    const targetIsoDate = await getTodayIsoDate(app, user.id);
     const targetDate = parseIsoDate(targetIsoDate);
     const habits = await app.prisma.habit.findMany({
       where: {
@@ -350,7 +333,7 @@ export const registerHabitsRoutes: FastifyPluginAsync = async (app) => {
         checkins: {
           where: {
             occurredOn: {
-              gte: new Date(targetDate.getTime() - 30 * 24 * 60 * 60 * 1000),
+              gte: parseIsoDate(addIsoDays(targetIsoDate, -30)),
               lte: targetDate,
             },
           },
@@ -376,7 +359,7 @@ export const registerHabitsRoutes: FastifyPluginAsync = async (app) => {
       orderBy: [{ period: "asc" }, { createdAt: "asc" }],
     });
     const habitItems = await Promise.all(
-      habits.map((habit) => serializeHabit(habit, habit.checkins, targetDate)),
+      habits.map((habit) => serializeHabit(habit, habit.checkins, targetIsoDate)),
     );
 
     const response: HabitsResponse = withGeneratedAt({
@@ -401,9 +384,10 @@ export const registerHabitsRoutes: FastifyPluginAsync = async (app) => {
         targetPerDay: payload.targetPerDay ?? 1,
       },
     });
+    const targetIsoDate = await getTodayIsoDate(app, user.id);
 
     const response: HabitMutationResponse = withGeneratedAt({
-      habit: await serializeHabit(habit, [], parseIsoDate(getTodayIsoDate())),
+      habit: await serializeHabit(habit, [], targetIsoDate),
     });
 
     return reply.status(201).send(response);
@@ -414,7 +398,8 @@ export const registerHabitsRoutes: FastifyPluginAsync = async (app) => {
     const payload = parseOrThrow(updateHabitSchema, request.body as UpdateHabitRequest);
     const { habitId } = request.params as { habitId: string };
     await findOwnedHabit(app, user.id, habitId);
-    const todayDate = parseIsoDate(getTodayIsoDate());
+    const targetIsoDate = await getTodayIsoDate(app, user.id);
+    const todayDate = parseIsoDate(targetIsoDate);
     const habit = await app.prisma.habit.update({
       where: {
         id: habitId,
@@ -431,7 +416,7 @@ export const registerHabitsRoutes: FastifyPluginAsync = async (app) => {
         checkins: {
           where: {
             occurredOn: {
-              gte: new Date(todayDate.getTime() - 30 * 24 * 60 * 60 * 1000),
+              gte: parseIsoDate(addIsoDays(targetIsoDate, -30)),
               lte: todayDate,
             },
           },
@@ -440,7 +425,7 @@ export const registerHabitsRoutes: FastifyPluginAsync = async (app) => {
     });
 
     const response: HabitMutationResponse = withGeneratedAt({
-      habit: await serializeHabit(habit, habit.checkins, todayDate),
+      habit: await serializeHabit(habit, habit.checkins, targetIsoDate),
     });
 
     return reply.send(response);
@@ -450,7 +435,8 @@ export const registerHabitsRoutes: FastifyPluginAsync = async (app) => {
     const user = requireAuthenticatedUser(request);
     const payload = parseOrThrow(habitCheckinSchema, request.body as HabitCheckinRequest);
     const { habitId } = request.params as { habitId: string };
-    const targetDate = parseIsoDate(payload.date ?? getTodayIsoDate());
+    const targetIsoDate = payload.date ?? (await getTodayIsoDate(app, user.id));
+    const targetDate = parseIsoDate(targetIsoDate);
     await findOwnedHabit(app, user.id, habitId);
     await app.prisma.habitCheckin.upsert({
       where: {
@@ -482,7 +468,7 @@ export const registerHabitsRoutes: FastifyPluginAsync = async (app) => {
         checkins: {
           where: {
             occurredOn: {
-              gte: new Date(targetDate.getTime() - 30 * 24 * 60 * 60 * 1000),
+              gte: parseIsoDate(addIsoDays(targetIsoDate, -30)),
               lte: targetDate,
             },
           },
@@ -491,7 +477,7 @@ export const registerHabitsRoutes: FastifyPluginAsync = async (app) => {
     });
 
     const response: HabitMutationResponse = withGeneratedAt({
-      habit: await serializeHabit(habit, habit.checkins, targetDate),
+      habit: await serializeHabit(habit, habit.checkins, targetIsoDate),
     });
 
     return reply.send(response);
@@ -499,7 +485,7 @@ export const registerHabitsRoutes: FastifyPluginAsync = async (app) => {
 
   app.get("/routines", async (request, reply) => {
     const user = requireAuthenticatedUser(request);
-    const targetIsoDate = getTodayIsoDate();
+    const targetIsoDate = await getTodayIsoDate(app, user.id);
     const targetDate = parseIsoDate(targetIsoDate);
     const routines = await app.prisma.routine.findMany({
       where: {
@@ -544,8 +530,9 @@ export const registerHabitsRoutes: FastifyPluginAsync = async (app) => {
         },
       },
     });
+    const targetIsoDate = await getTodayIsoDate(app, user.id);
     const response: RoutineMutationResponse = withGeneratedAt({
-      routine: serializeRoutine(await loadRoutineById(app, routine.id, parseIsoDate(getTodayIsoDate()))),
+      routine: serializeRoutine(await loadRoutineById(app, routine.id, parseIsoDate(targetIsoDate))),
     });
 
     return reply.status(201).send(response);
@@ -588,8 +575,9 @@ export const registerHabitsRoutes: FastifyPluginAsync = async (app) => {
       }
     });
 
+    const targetIsoDate = await getTodayIsoDate(app, user.id);
     const response: RoutineMutationResponse = withGeneratedAt({
-      routine: serializeRoutine(await loadRoutineById(app, routineId, parseIsoDate(getTodayIsoDate()))),
+      routine: serializeRoutine(await loadRoutineById(app, routineId, parseIsoDate(targetIsoDate))),
     });
 
     return reply.send(response);
@@ -600,7 +588,7 @@ export const registerHabitsRoutes: FastifyPluginAsync = async (app) => {
     const payload = parseOrThrow(routineItemCheckinSchema, request.body as RoutineItemCheckinRequest);
     const { itemId } = request.params as { itemId: string };
     const item = await findOwnedRoutineItem(app, user.id, itemId);
-    const targetDate = parseIsoDate(payload.date ?? getTodayIsoDate());
+    const targetDate = parseIsoDate(payload.date ?? (await getTodayIsoDate(app, user.id)));
     await app.prisma.routineItemCheckin.upsert({
       where: {
         routineItemId_occurredOn: {

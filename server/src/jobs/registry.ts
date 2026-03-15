@@ -1,6 +1,14 @@
 import type { PrismaClient } from "@prisma/client";
 
-import { addDays, getMonthEndDate, getWeekEndDate } from "../lib/time/cycle.js";
+import {
+  addDays,
+  getMonthEndDate,
+  getMonthStartIsoDate,
+  getWeekEndDate,
+  getWeekStartIsoDate,
+  parseIsoDate,
+} from "../lib/time/cycle.js";
+import { getUserLocalDate, normalizeTimezone } from "../lib/time/user-time.js";
 import { materializeRecurringExpenseItems } from "../modules/finance/service.js";
 import { cleanupOldNotifications, generateRuleNotifications } from "../modules/notifications/service.js";
 import { ensureCycle, finalizeClosedDayScores } from "../modules/scoring/service.js";
@@ -20,22 +28,6 @@ export interface JobDefinition {
   schedule: string;
   description: string;
   run: (context: JobRunContext) => Promise<JobRunResult>;
-}
-
-function startOfDay(date: Date) {
-  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
-}
-
-function startOfWeek(date: Date, weekStartsOn: number) {
-  const normalized = startOfDay(date);
-  const day = normalized.getUTCDay();
-  const delta = (day - weekStartsOn + 7) % 7;
-
-  return addDays(normalized, -delta);
-}
-
-function startOfMonth(date: Date) {
-  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), 1));
 }
 
 const sessionCleanupJob: JobDefinition = {
@@ -68,21 +60,27 @@ const cycleSeedingJob: JobDefinition = {
         id: true,
         preferences: {
           select: {
+            timezone: true,
             weekStartsOn: true,
           },
         },
       },
     });
-    const today = startOfDay(now);
-    const tomorrow = addDays(today, 1);
     let seededCycles = 0;
 
     for (const user of users) {
+      const timezone = normalizeTimezone(user.preferences?.timezone);
       const weekStartsOn = user.preferences?.weekStartsOn ?? 1;
-      const currentWeekStart = startOfWeek(today, weekStartsOn);
+      const today = parseIsoDate(getUserLocalDate(now, timezone));
+      const tomorrow = addDays(today, 1);
+      const currentWeekStart = parseIsoDate(
+        getWeekStartIsoDate(getUserLocalDate(now, timezone), weekStartsOn),
+      );
       const nextWeekStart = addDays(currentWeekStart, 7);
-      const currentMonthStart = startOfMonth(today);
-      const nextMonthStart = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth() + 1, 1));
+      const currentMonthStart = parseIsoDate(getMonthStartIsoDate(getUserLocalDate(now, timezone)));
+      const nextMonthStart = new Date(
+        Date.UTC(currentMonthStart.getUTCFullYear(), currentMonthStart.getUTCMonth() + 1, 1),
+      );
 
       await Promise.all([
         ensureCycle(prisma, {

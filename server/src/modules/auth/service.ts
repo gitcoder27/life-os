@@ -20,7 +20,11 @@ export function toSessionUser(user: Pick<User, "id" | "email" | "displayName">):
   };
 }
 
-export async function ensureOwnerAccount(prisma: PrismaClient, env: AppEnv, logger: Console) {
+export async function ensureOwnerAccount(
+  prisma: PrismaClient,
+  env: AppEnv,
+  logger: Pick<Console, "info" | "warn">,
+) {
   if (!env.OWNER_EMAIL || !env.OWNER_PASSWORD) {
     logger.warn(
       "[auth] OWNER_EMAIL and OWNER_PASSWORD are not fully configured; owner bootstrap skipped",

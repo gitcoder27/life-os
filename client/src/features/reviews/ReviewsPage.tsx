@@ -12,6 +12,11 @@ import {
   useSubmitWeeklyReviewMutation,
 } from "../../shared/lib/api";
 import { PageHeader } from "../../shared/ui/PageHeader";
+import {
+  InlineErrorState,
+  PageErrorState,
+  PageLoadingState,
+} from "../../shared/ui/PageState";
 import { SectionCard } from "../../shared/ui/SectionCard";
 
 const reviewCadences = {
@@ -94,6 +99,8 @@ export function ReviewsPage() {
   );
 
   const requiredCount = config.prompts.length;
+  const completedCount = responses.filter((response) => response.trim().length > 0).length;
+  const activeStep = responses.findIndex((response) => response.trim().length === 0);
   const summaryItems = useMemo(() => {
     if (!reviewQuery.data) {
       return [];
@@ -231,6 +238,38 @@ export function ReviewsPage() {
     });
   }
 
+  if (reviewQuery.isLoading && !reviewQuery.data) {
+    return (
+      <PageLoadingState
+        title={`${config.label} review loading`}
+        description="Pulling the generated summary and existing responses into the review form."
+      />
+    );
+  }
+
+  if (reviewQuery.isError || !reviewQuery.data) {
+    return (
+      <PageErrorState
+        title={`${config.label} review is unavailable`}
+        message={reviewQuery.error instanceof Error ? reviewQuery.error.message : undefined}
+        onRetry={() => void reviewQuery.refetch()}
+      />
+    );
+  }
+
+  const isSubmitting =
+    submitDailyReviewMutation.isPending ||
+    submitWeeklyReviewMutation.isPending ||
+    submitMonthlyReviewMutation.isPending;
+  const submitError =
+    submitDailyReviewMutation.error ??
+    submitWeeklyReviewMutation.error ??
+    submitMonthlyReviewMutation.error;
+  const submitResult =
+    submitDailyReviewMutation.data ??
+    submitWeeklyReviewMutation.data ??
+    submitMonthlyReviewMutation.data;
+
   return (
     <div className="page">
       <div style={{ display: "flex", gap: "0.5rem", marginBottom: "0.25rem" }}>
@@ -255,24 +294,40 @@ export function ReviewsPage() {
         {config.prompts.map((_, index) => (
           <div
             key={index}
-            className={`review-progress__step${index < 0 ? " review-progress__step--complete" : index === 0 ? " review-progress__step--active" : ""}`}
+            className={`review-progress__step${
+              index < completedCount ? " review-progress__step--complete" : ""
+            }${
+              index === (activeStep === -1 ? completedCount - 1 : activeStep)
+                ? " review-progress__step--active"
+                : ""
+            }`}
           />
         ))}
       </div>
+      <p className="support-copy" style={{ marginTop: "0.75rem" }}>
+        {completedCount} of {requiredCount} prompts currently answered.
+      </p>
 
       <div className="two-column-grid stagger">
         <SectionCard
           title="Prefilled summary"
           subtitle="System-generated overview"
         >
-          <ul className="list">
-            {summaryItems.map((item) => (
-              <li key={item}>
-                <span>{item}</span>
-                <span className="tag tag--neutral">auto</span>
-              </li>
-            ))}
-          </ul>
+          {"momentumError" in reviewQuery.data && reviewQuery.data.momentumError ? (
+            <InlineErrorState
+              message={reviewQuery.data.momentumError.message}
+              onRetry={() => void reviewQuery.refetch()}
+            />
+          ) : (
+            <ul className="list">
+              {summaryItems.map((item) => (
+                <li key={item}>
+                  <span>{item}</span>
+                  <span className="tag tag--neutral">auto</span>
+                </li>
+              ))}
+            </ul>
+          )}
         </SectionCard>
 
         <SectionCard
@@ -302,11 +357,30 @@ export function ReviewsPage() {
       </div>
 
       <div className="button-row" style={{ paddingTop: "0.5rem" }}>
-        <button className="button button--ghost" type="button">Save draft</button>
-        <button className="button button--primary" type="button" onClick={() => void handleSubmit()}>
-          Submit review
+        <span className="support-copy">Draft saving is not live yet, so this form only supports full submit.</span>
+        <button
+          className="button button--primary"
+          type="button"
+          onClick={() => void handleSubmit()}
+          disabled={isSubmitting}
+        >
+          {isSubmitting ? "Submitting..." : "Submit review"}
         </button>
       </div>
+      {submitError ? (
+        <div className="inline-state inline-state--error" style={{ marginTop: "0.75rem" }}>
+          {submitError instanceof Error ? submitError.message : "Review submission failed."}
+        </div>
+      ) : null}
+      {submitResult ? (
+        <div className="inline-state inline-state--success" style={{ marginTop: "0.75rem" }}>
+          {"score" in submitResult
+            ? `Daily review closed. ${submitResult.tomorrowPriorities.length} priorities seeded for tomorrow.`
+            : "nextWeekPriorities" in submitResult
+              ? `Weekly review saved. ${submitResult.nextWeekPriorities.length} priorities seeded for next week.`
+              : `Monthly review saved. ${submitResult.nextMonthOutcomes.length} outcomes seeded for next month.`}
+        </div>
+      ) : null}
     </div>
   );
 }

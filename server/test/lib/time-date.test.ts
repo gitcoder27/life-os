@@ -8,6 +8,7 @@ import {
   parseIsoDate,
 } from "../../src/lib/time/cycle.js";
 import { getUtcGreeting, toIsoDateString } from "../../src/lib/time/date.js";
+import { getDayWindowUtc, getUserLocalDate } from "../../src/lib/time/user-time.js";
 
 describe("time utilities", () => {
   it("parses ISO dates at UTC midnight", () => {
@@ -41,5 +42,18 @@ describe("time utilities", () => {
 
   it("normalizes dates to UTC ISO date start-of-day", () => {
     expect(normalizeIsoDate(new Date("2026-03-14T23:45:00.000Z"))).toBe("2026-03-14");
+  });
+
+  it("derives a user-local date from the stored timezone", () => {
+    expect(getUserLocalDate(new Date("2026-01-15T05:30:00.000Z"), "America/Los_Angeles")).toBe(
+      "2026-01-14",
+    );
+  });
+
+  it("computes UTC windows for a user-local day", () => {
+    const window = getDayWindowUtc("2026-01-15", "America/Los_Angeles");
+
+    expect(window.start.toISOString()).toBe("2026-01-15T08:00:00.000Z");
+    expect(window.end.toISOString()).toBe("2026-01-16T08:00:00.000Z");
   });
 });

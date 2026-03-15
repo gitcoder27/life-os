@@ -128,4 +128,89 @@ describe("scoring service", () => {
     expect(score.buckets).toHaveLength(2);
     expect(score.topReasons).toHaveLength(2);
   });
+
+  it("scores only due habits and aggregates routines across the same period", async () => {
+    const prisma = {
+      planningCycle: {
+        upsert: vi
+          .fn()
+          .mockResolvedValueOnce({
+            id: "day",
+            priorities: [],
+            dailyReview: null,
+            dailyScore: null,
+          })
+          .mockResolvedValueOnce({
+            id: "tomorrow",
+            priorities: [],
+            dailyReview: null,
+            dailyScore: null,
+          })
+          .mockResolvedValueOnce({
+            id: "week",
+            priorities: [],
+          })
+          .mockResolvedValueOnce({
+            id: "month",
+            priorities: [],
+          })
+          .mockResolvedValueOnce({
+            id: "next-month",
+            priorities: [],
+          }),
+      },
+      userPreference: {
+        findUnique: vi.fn().mockResolvedValue({
+          timezone: "UTC",
+          weekStartsOn: 1,
+          dailyWaterTargetMl: 2500,
+        }),
+      },
+      task: { findMany: vi.fn().mockResolvedValue([]) },
+      habit: {
+        findMany: vi.fn().mockResolvedValue([
+          { id: "habit-due", scheduleRuleJson: { daysOfWeek: [6] }, status: "ACTIVE", archivedAt: null },
+          { id: "habit-not-due", scheduleRuleJson: { daysOfWeek: [1] }, status: "ACTIVE", archivedAt: null },
+        ]),
+      },
+      habitCheckin: {
+        findMany: vi.fn().mockResolvedValue([
+          { habitId: "habit-due", occurredOn: new Date("2026-03-14T00:00:00.000Z"), status: "COMPLETED" },
+        ]),
+      },
+      routine: {
+        findMany: vi.fn().mockResolvedValue([
+          {
+            id: "routine-1",
+            period: "MORNING",
+            items: [{ id: "item-1" }, { id: "item-2" }],
+          },
+          {
+            id: "routine-2",
+            period: "MORNING",
+            items: [{ id: "item-3" }, { id: "item-4" }],
+          },
+        ]),
+      },
+      routineItemCheckin: {
+        findMany: vi.fn().mockResolvedValue([
+          { routineItemId: "item-1", occurredOn: new Date("2026-03-14T00:00:00.000Z") },
+          { routineItemId: "item-3", occurredOn: new Date("2026-03-14T00:00:00.000Z") },
+        ]),
+      },
+      waterLog: { findMany: vi.fn().mockResolvedValue([]) },
+      mealLog: { findMany: vi.fn().mockResolvedValue([]) },
+      workoutDay: { findUnique: vi.fn().mockResolvedValue(null) },
+      expense: { findMany: vi.fn().mockResolvedValue([]) },
+      adminItem: { findMany: vi.fn().mockResolvedValue([]) },
+    } as any;
+
+    const score = await calculateDailyScore(prisma, "user-1", new Date("2026-03-14T00:00:00.000Z"));
+    const routinesBucket = score.buckets.find((bucket) => bucket.key === "routines_and_habits");
+
+    expect(routinesBucket).toMatchObject({
+      earnedPoints: 17.5,
+      applicablePoints: 20,
+    });
+  });
 });

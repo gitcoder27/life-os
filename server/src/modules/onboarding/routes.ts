@@ -250,6 +250,10 @@ export const registerOnboardingRoutes: FastifyPluginAsync = async (app) => {
     const payload = parseOrThrow(onboardingCompletionSchema, request.body as OnboardingCompleteRequest);
     const completedAt = new Date().toISOString();
     const weekStartDate = parseIsoDate(payload.firstWeekStartDate as IsoDateString);
+    const dailyReviewStartTime =
+      typeof payload.dailyReviewStartTime === "string" ? payload.dailyReviewStartTime : "20:00";
+    const dailyReviewEndTime =
+      typeof payload.dailyReviewEndTime === "string" ? payload.dailyReviewEndTime : "10:00";
     const inferredFirstMonthStartDate = `${weekStartDate.getUTCFullYear()}-${String(
       weekStartDate.getUTCMonth() + 1,
     ).padStart(2, "0")}-01` as OnboardingCompleteRequest["firstWeekStartDate"];
@@ -278,16 +282,16 @@ export const registerOnboardingRoutes: FastifyPluginAsync = async (app) => {
           currencyCode: payload.currencyCode,
           weekStartsOn: payload.weekStartsOn,
           dailyWaterTargetMl: payload.dailyWaterTargetMl,
-          dailyReviewStartTime: payload.dailyReviewStartTime ?? "20:00",
-          dailyReviewEndTime: payload.dailyReviewEndTime ?? "10:00",
+          dailyReviewStartTime,
+          dailyReviewEndTime,
         },
         update: {
           timezone: payload.timezone,
           currencyCode: payload.currencyCode,
           weekStartsOn: payload.weekStartsOn,
           dailyWaterTargetMl: payload.dailyWaterTargetMl,
-          dailyReviewStartTime: payload.dailyReviewStartTime ?? "20:00",
-          dailyReviewEndTime: payload.dailyReviewEndTime ?? "10:00",
+          dailyReviewStartTime,
+          dailyReviewEndTime,
         },
       });
 

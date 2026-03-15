@@ -21,21 +21,23 @@ interface RequestContextPluginOptions {
   env: AppEnv;
 }
 
+const defaultAuthContext: RequestAuthContext = {
+  sessionToken: null,
+  sessionId: null,
+  userId: null,
+  user: null,
+};
+
 export async function registerRequestContext(
   app: FastifyInstance,
   options: RequestContextPluginOptions,
 ) {
-  app.decorateRequest("auth", null);
+  app.decorateRequest("auth", null as unknown as RequestAuthContext);
 
   app.addHook("onRequest", async (request) => {
     const sessionToken = request.cookies[options.env.SESSION_COOKIE_NAME] ?? null;
 
-    request.auth = {
-      sessionToken,
-      sessionId: null,
-      userId: null,
-      user: null,
-    };
+    request.auth = { ...defaultAuthContext, sessionToken };
 
     if (!sessionToken) {
       return;

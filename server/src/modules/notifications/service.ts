@@ -1,7 +1,19 @@
 import type { Prisma, PrismaClient } from "@prisma/client";
 
-import { addDays, getMonthEndDate, getWeekEndDate } from "../../lib/time/cycle.js";
+import {
+  calculateHabitStreak,
+  isHabitDueOnIsoDate,
+  normalizeHabitScheduleRule,
+} from "../../lib/habits/schedule.js";
+import { addDays, addIsoDays, getMonthEndDate, getMonthStartIsoDate, getWeekEndDate, getWeekStartIsoDate, parseIsoDate } from "../../lib/time/cycle.js";
 import { toIsoDateString } from "../../lib/time/date.js";
+import {
+  getDayWindowUtc,
+  getTimeWindowUtc,
+  getUserLocalDate,
+  getUserLocalHour,
+  normalizeTimezone,
+} from "../../lib/time/user-time.js";
 import { ensureCycle } from "../scoring/service.js";
 
 interface NotificationGenerationResult {
@@ -17,32 +29,6 @@ type NotificationClient = PrismaClient | Prisma.TransactionClient;
 
 function startOfDay(date: Date) {
   return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
-}
-
-function startOfWeek(date: Date, weekStartsOn: number) {
-  const normalized = startOfDay(date);
-  const day = normalized.getUTCDay();
-  const delta = (day - weekStartsOn + 7) % 7;
-
-  return addDays(normalized, -delta);
-}
-
-function startOfMonth(date: Date) {
-  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), 1));
-}
-
-function atUtcHour(date: Date, hour: number) {
-  return new Date(
-    Date.UTC(
-      date.getUTCFullYear(),
-      date.getUTCMonth(),
-      date.getUTCDate(),
-      hour,
-      0,
-      0,
-      0,
-    ),
-  );
 }
 
 async function ensureGeneratedNotification(
@@ -91,51 +77,6 @@ async function ensureGeneratedNotification(
   return true;
 }
 
-function normalizeScheduleRule(input: unknown) {
-  if (!input || typeof input !== "object" || Array.isArray(input)) {
-    return {};
-  }
-
-  return input as { daysOfWeek?: number[] };
-}
-
-function isHabitDueOn(scheduleRule: { daysOfWeek?: number[] }, date: Date) {
-  if (!scheduleRule.daysOfWeek || scheduleRule.daysOfWeek.length === 0) {
-    return true;
-  }
-
-  return scheduleRule.daysOfWeek.includes(date.getUTCDay());
-}
-
-function calculateHabitStreak(
-  checkins: Array<{ occurredOn: Date; status: "COMPLETED" | "SKIPPED" }>,
-  scheduleRule: { daysOfWeek?: number[] },
-  onDate: Date,
-) {
-  const completedDates = new Set(
-    checkins
-      .filter((checkin) => checkin.status === "COMPLETED")
-      .map((checkin) => toIsoDateString(checkin.occurredOn)),
-  );
-  let streak = 0;
-
-  for (let offset = 1; offset <= 30; offset += 1) {
-    const date = addDays(onDate, -offset);
-
-    if (!isHabitDueOn(scheduleRule, date)) {
-      continue;
-    }
-
-    if (!completedDates.has(toIsoDateString(date))) {
-      break;
-    }
-
-    streak += 1;
-  }
-
-  return streak;
-}
-
 export async function generateRuleNotifications(
   prisma: PrismaClient,
   now: Date,
@@ -151,15 +92,18 @@ export async function generateRuleNotifications(
 
   let created = 0;
   let skippedExisting = 0;
-  const today = startOfDay(now);
-  const todayIso = toIsoDateString(today);
-  const tomorrow = addDays(today, 1);
-  const lateEvening = now >= atUtcHour(now, 20);
-  const lateAfternoon = now >= atUtcHour(now, 18);
 
   for (const user of users) {
+    const timezone = normalizeTimezone(user.preferences?.timezone);
     const weekStartsOn = user.preferences?.weekStartsOn ?? 1;
     const waterTargetMl = user.preferences?.dailyWaterTargetMl ?? 2500;
+    const todayIso = getUserLocalDate(now, timezone);
+    const today = parseIsoDate(todayIso);
+    const tomorrowIso = addIsoDays(todayIso, 1);
+    const tomorrow = parseIsoDate(tomorrowIso);
+    const dayWindow = getDayWindowUtc(todayIso, timezone);
+    const lateEvening = getUserLocalHour(now, timezone) >= 20;
+    const lateAfternoon = getUserLocalHour(now, timezone) >= 18;
 
     const [
       dueAdminItems,
@@ -185,8 +129,8 @@ export async function generateRuleNotifications(
         where: {
           userId: user.id,
           occurredAt: {
-            gte: today,
-            lt: tomorrow,
+            gte: dayWindow.start,
+            lt: dayWindow.end,
           },
         },
       }),
@@ -231,7 +175,7 @@ export async function generateRuleNotifications(
           },
           occurredOn: {
             gte: addDays(today, -30),
-            lt: tomorrow,
+            lte: today,
           },
         },
       }),
@@ -239,7 +183,7 @@ export async function generateRuleNotifications(
 
     for (const adminItem of dueAdminItems) {
       const daysUntilDue = Math.round(
-        (startOfDay(adminItem.dueOn).getTime() - today.getTime()) / (24 * 60 * 60 * 1000),
+        (adminItem.dueOn.getTime() - today.getTime()) / (24 * 60 * 60 * 1000),
       );
       const createdNotification = await ensureGeneratedNotification(prisma, {
         userId: user.id,
@@ -255,7 +199,7 @@ export async function generateRuleNotifications(
         entityType: "admin_item",
         entityId: `${adminItem.id}:${todayIso}`,
         ruleKey: "admin_item_due_soon",
-        expiresAt: addDays(startOfDay(adminItem.dueOn), 1),
+        expiresAt: getDayWindowUtc(toIsoDateString(adminItem.dueOn), timezone).end,
       });
 
       if (createdNotification) {
@@ -277,8 +221,8 @@ export async function generateRuleNotifications(
           entityType: "health_day",
           entityId: `water:${todayIso}`,
           ruleKey: "low_water_late_day",
-          visibleFrom: atUtcHour(now, 18),
-          expiresAt: tomorrow,
+          visibleFrom: getTimeWindowUtc(todayIso, "18:00", timezone),
+          expiresAt: dayWindow.end,
         });
 
         if (createdNotification) {
@@ -305,8 +249,8 @@ export async function generateRuleNotifications(
           entityType: "workout_day",
           entityId: `workout:${todayIso}`,
           ruleKey: "workout_unconfirmed_late_day",
-          visibleFrom: atUtcHour(now, 18),
-          expiresAt: tomorrow,
+          visibleFrom: getTimeWindowUtc(todayIso, "18:00", timezone),
+          expiresAt: dayWindow.end,
         });
 
         if (createdNotification) {
@@ -319,7 +263,7 @@ export async function generateRuleNotifications(
       const atRiskHabits = activeHabits
         .map((habit) => {
           const habitCheckins = recentHabitCheckins.filter((checkin) => checkin.habitId === habit.id);
-          const scheduleRule = normalizeScheduleRule(habit.scheduleRuleJson);
+          const scheduleRule = normalizeHabitScheduleRule(habit.scheduleRuleJson);
           const completedToday = habitCheckins.some(
             (checkin) =>
               toIsoDateString(checkin.occurredOn) === todayIso && checkin.status === "COMPLETED",
@@ -328,8 +272,8 @@ export async function generateRuleNotifications(
           return {
             habit,
             completedToday,
-            dueToday: isHabitDueOn(scheduleRule, today),
-            streak: calculateHabitStreak(habitCheckins, scheduleRule, today),
+            dueToday: isHabitDueOnIsoDate(scheduleRule, todayIso),
+            streak: calculateHabitStreak(habitCheckins, scheduleRule, todayIso, 1),
           };
         })
         .filter((item) => item.dueToday && !item.completedToday && item.streak >= 2)
@@ -346,8 +290,8 @@ export async function generateRuleNotifications(
           entityType: "habit",
           entityId: `${topHabit.habit.id}:${todayIso}`,
           ruleKey: "habit_streak_at_risk",
-          visibleFrom: atUtcHour(now, 18),
-          expiresAt: tomorrow,
+          visibleFrom: getTimeWindowUtc(todayIso, "18:00", timezone),
+          expiresAt: dayWindow.end,
         });
 
         if (createdNotification) {
@@ -370,8 +314,8 @@ export async function generateRuleNotifications(
           entityType: "routine_day",
           entityId: `routine:${todayIso}`,
           ruleKey: "incomplete_routine_late_day",
-          visibleFrom: atUtcHour(now, 20),
-          expiresAt: tomorrow,
+          visibleFrom: getTimeWindowUtc(todayIso, "20:00", timezone),
+          expiresAt: dayWindow.end,
         });
 
         if (createdNotification) {
@@ -398,8 +342,8 @@ export async function generateRuleNotifications(
         entityType: "daily_review",
         entityId: `daily-review:${todayIso}`,
         ruleKey: "daily_review_due",
-        visibleFrom: atUtcHour(now, 20),
-        expiresAt: tomorrow,
+        visibleFrom: getTimeWindowUtc(todayIso, "20:00", timezone),
+        expiresAt: dayWindow.end,
       });
 
       if (createdNotification) {
@@ -409,7 +353,7 @@ export async function generateRuleNotifications(
       }
     }
 
-    const yesterday = addDays(today, -1);
+    const yesterday = parseIsoDate(addIsoDays(todayIso, -1));
     const yesterdayCycle = await ensureCycle(prisma, {
       userId: user.id,
       cycleType: "DAY",
@@ -426,7 +370,7 @@ export async function generateRuleNotifications(
         entityType: "daily_review",
         entityId: `daily-review-overdue:${toIsoDateString(yesterday)}`,
         ruleKey: "daily_review_overdue",
-        expiresAt: tomorrow,
+        expiresAt: dayWindow.end,
       });
 
       if (createdNotification) {
@@ -436,7 +380,7 @@ export async function generateRuleNotifications(
       }
     }
 
-    const currentWeekStart = startOfWeek(today, weekStartsOn);
+    const currentWeekStart = parseIsoDate(getWeekStartIsoDate(todayIso, weekStartsOn));
     const previousWeekStart = addDays(currentWeekStart, -7);
     const previousWeekCycle = await ensureCycle(prisma, {
       userId: user.id,
@@ -454,7 +398,7 @@ export async function generateRuleNotifications(
         entityType: "weekly_review",
         entityId: `weekly-review:${toIsoDateString(previousWeekStart)}`,
         ruleKey: "weekly_review_overdue",
-        expiresAt: addDays(getWeekEndDate(currentWeekStart), 1),
+        expiresAt: getDayWindowUtc(addIsoDays(toIsoDateString(getWeekEndDate(currentWeekStart)), 1), timezone).start,
       });
 
       if (createdNotification) {
@@ -464,8 +408,10 @@ export async function generateRuleNotifications(
       }
     }
 
-    const currentMonthStart = startOfMonth(today);
-    const previousMonthStart = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth() - 1, 1));
+    const currentMonthStart = parseIsoDate(getMonthStartIsoDate(todayIso));
+    const previousMonthStart = new Date(
+      Date.UTC(currentMonthStart.getUTCFullYear(), currentMonthStart.getUTCMonth() - 1, 1),
+    );
     const previousMonthCycle = await ensureCycle(prisma, {
       userId: user.id,
       cycleType: "MONTH",
@@ -482,7 +428,7 @@ export async function generateRuleNotifications(
         entityType: "monthly_review",
         entityId: `monthly-review:${toIsoDateString(previousMonthStart).slice(0, 7)}`,
         ruleKey: "monthly_review_overdue",
-        expiresAt: addDays(getMonthEndDate(currentMonthStart), 1),
+        expiresAt: getDayWindowUtc(addIsoDays(toIsoDateString(getMonthEndDate(currentMonthStart)), 1), timezone).start,
       });
 
       if (createdNotification) {

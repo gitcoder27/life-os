@@ -1,7 +1,14 @@
 import type { Prisma, PrismaClient } from "@prisma/client";
 
-import { addDays, getMonthEndDate, getWeekEndDate, parseIsoDate } from "../../lib/time/cycle.js";
+import {
+  filterDueHabits,
+  isHabitDueOnIsoDate,
+  normalizeHabitScheduleRule,
+} from "../../lib/habits/schedule.js";
+import { buildWaterTotalsByLocalDate, countWaterTargetHits } from "../../lib/health/water.js";
+import { addDays, addIsoDays, getMonthEndDate, getWeekEndDate, parseIsoDate } from "../../lib/time/cycle.js";
 import { toIsoDateString } from "../../lib/time/date.js";
+import { getDateRangeWindowUtc, getDayWindowUtc, normalizeTimezone } from "../../lib/time/user-time.js";
 import { calculateDailyScore, ensureCycle, finalizeDailyScore, getWeeklyMomentum } from "../scoring/service.js";
 
 type ReviewFrictionTag =
@@ -189,8 +196,39 @@ function toJson(value: unknown): Prisma.InputJsonValue {
   return value as Prisma.InputJsonValue;
 }
 
+async function getUserPreferences(prisma: PrismaClient, userId: string) {
+  return prisma.userPreference?.findUnique
+    ? prisma.userPreference.findUnique({
+        where: {
+          userId,
+        },
+      })
+    : null;
+}
+
+function listIsoDates(startDate: string, endDate: string) {
+  const dates: string[] = [];
+
+  for (
+    let currentDate = startDate as `${number}-${number}-${number}`;
+    currentDate <= endDate;
+    currentDate = addIsoDays(currentDate, 1)
+  ) {
+    dates.push(currentDate);
+  }
+
+  return dates;
+}
+
 async function getDailySummary(prisma: PrismaClient, userId: string, date: Date) {
-  const [cycle, tasks, routines, routineCheckins, habits, habitCheckins, waterLogs, mealLogs, workoutDay, expenses, preferences] =
+  const targetIsoDate = toIsoDateString(date);
+  const preferences = await prisma.userPreference?.findUnique?.({
+    where: {
+      userId,
+    },
+  });
+  const dayWindow = getDayWindowUtc(targetIsoDate, preferences?.timezone);
+  const [cycle, tasks, routines, routineCheckins, habits, habitCheckins, waterLogs, mealLogs, workoutDay, expenses] =
     await Promise.all([
       ensureCycle(prisma, {
         userId,
@@ -242,8 +280,8 @@ async function getDailySummary(prisma: PrismaClient, userId: string, date: Date)
         where: {
           userId,
           occurredAt: {
-            gte: date,
-            lt: addDays(date, 1),
+            gte: dayWindow.start,
+            lt: dayWindow.end,
           },
         },
       }),
@@ -251,8 +289,8 @@ async function getDailySummary(prisma: PrismaClient, userId: string, date: Date)
         where: {
           userId,
           occurredAt: {
-            gte: date,
-            lt: addDays(date, 1),
+            gte: dayWindow.start,
+            lt: dayWindow.end,
           },
         },
       }),
@@ -273,12 +311,8 @@ async function getDailySummary(prisma: PrismaClient, userId: string, date: Date)
           },
         },
       }),
-      prisma.userPreference.findUnique({
-        where: {
-          userId,
-        },
-      }),
     ]);
+  const dueHabits = new Set(filterDueHabits(habits, targetIsoDate).map((habit) => habit.id));
 
   const routinesTotal = routines.reduce((sum, routine) => sum + routine.items.length, 0);
   const routinesCompleted = routineCheckins.length;
@@ -302,8 +336,10 @@ async function getDailySummary(prisma: PrismaClient, userId: string, date: Date)
       tasksScheduled: tasks.length,
       routinesCompleted,
       routinesTotal,
-      habitsCompleted: habitCheckins.filter((checkin) => checkin.status === "COMPLETED").length,
-      habitsDue: habits.length,
+      habitsCompleted: habitCheckins.filter(
+        (checkin) => checkin.status === "COMPLETED" && dueHabits.has(checkin.habitId),
+      ).length,
+      habitsDue: dueHabits.size,
       waterMl: waterLogs.reduce((sum, log) => sum + log.amountMl, 0),
       waterTargetMl: preferences?.dailyWaterTargetMl ?? 2500,
       mealsLogged: mealLogs.length,
@@ -567,12 +603,24 @@ export async function getWeeklyReviewModel(
   userId: string,
   startDate: Date,
 ): Promise<WeeklyReviewResponse> {
+  const startIsoDate = toIsoDateString(startDate);
   const cycle = await ensureCycle(prisma, {
     userId,
     cycleType: "WEEK",
     cycleStartDate: startDate,
     cycleEndDate: getWeekEndDate(startDate),
   });
+  const preferences = await prisma.userPreference?.findUnique?.({
+    where: {
+      userId,
+    },
+  });
+  const timezone = normalizeTimezone(preferences?.timezone);
+  const waterTargetMl = preferences?.dailyWaterTargetMl ?? 2500;
+  const effectiveEndDate = cycle.cycleEndDate;
+  const effectiveEndIsoDate = toIsoDateString(effectiveEndDate);
+  const rangeWindow = getDateRangeWindowUtc(startIsoDate, effectiveEndIsoDate, timezone);
+  const scopedIsoDates = listIsoDates(startIsoDate, effectiveEndIsoDate);
   const [scores, habits, routineCheckins, routines, workoutDays, waterLogs, mealLogs, expenses, dailyReviews] =
     await Promise.all([
       prisma.dailyScore.findMany({
@@ -584,7 +632,7 @@ export async function getWeeklyReviewModel(
           planningCycle: {
             cycleStartDate: {
               gte: startDate,
-              lte: cycle.cycleEndDate,
+              lte: effectiveEndDate,
             },
           },
         },
@@ -592,14 +640,20 @@ export async function getWeeklyReviewModel(
           planningCycle: true,
         },
       }),
-      prisma.habitCheckin.findMany({
+      prisma.habit.findMany({
         where: {
-          habit: {
-            userId,
-          },
-          occurredOn: {
-            gte: startDate,
-            lte: cycle.cycleEndDate,
+          userId,
+          status: "ACTIVE",
+          archivedAt: null,
+        },
+        include: {
+          checkins: {
+            where: {
+              occurredOn: {
+                gte: startDate,
+                lte: effectiveEndDate,
+              },
+            },
           },
         },
       }),
@@ -607,7 +661,7 @@ export async function getWeeklyReviewModel(
         where: {
           occurredOn: {
             gte: startDate,
-            lte: cycle.cycleEndDate,
+            lte: effectiveEndDate,
           },
           routineItem: {
             routine: {
@@ -629,7 +683,7 @@ export async function getWeeklyReviewModel(
           userId,
           date: {
             gte: startDate,
-            lte: cycle.cycleEndDate,
+            lte: effectiveEndDate,
           },
         },
       }),
@@ -637,8 +691,8 @@ export async function getWeeklyReviewModel(
         where: {
           userId,
           occurredAt: {
-            gte: startDate,
-            lt: addDays(cycle.cycleEndDate, 1),
+            gte: rangeWindow.start,
+            lt: rangeWindow.end,
           },
         },
       }),
@@ -646,8 +700,8 @@ export async function getWeeklyReviewModel(
         where: {
           userId,
           occurredAt: {
-            gte: startDate,
-            lt: addDays(cycle.cycleEndDate, 1),
+            gte: rangeWindow.start,
+            lt: rangeWindow.end,
           },
         },
       }),
@@ -656,7 +710,7 @@ export async function getWeeklyReviewModel(
           userId,
           spentOn: {
             gte: startDate,
-            lte: cycle.cycleEndDate,
+            lte: effectiveEndDate,
           },
         },
         include: {
@@ -669,7 +723,7 @@ export async function getWeeklyReviewModel(
           planningCycle: {
             cycleStartDate: {
               gte: startDate,
-              lte: cycle.cycleEndDate,
+              lte: effectiveEndDate,
             },
           },
         },
@@ -704,18 +758,44 @@ export async function getWeeklyReviewModel(
     acc[review.frictionTag] = (acc[review.frictionTag] ?? 0) + 1;
     return acc;
   }, {});
+  const habitTotals = habits.reduce(
+    (totals, habit) => {
+      const scheduleRule = normalizeHabitScheduleRule(habit.scheduleRuleJson);
+      const completedDates = new Set<string>(
+        habit.checkins
+          .filter((checkin) => checkin.status === "COMPLETED")
+          .map((checkin) => toIsoDateString(checkin.occurredOn)),
+      );
+
+      for (const isoDate of scopedIsoDates) {
+        if (!isHabitDueOnIsoDate(scheduleRule, isoDate as `${number}-${number}-${number}`)) {
+          continue;
+        }
+
+        totals.due += 1;
+
+        if (completedDates.has(isoDate)) {
+          totals.completed += 1;
+        }
+      }
+
+      return totals;
+    },
+    { due: 0, completed: 0 },
+  );
 
   return {
-    startDate: toIsoDateString(startDate),
+    startDate: startIsoDate,
     endDate: toIsoDateString(cycle.cycleEndDate),
     summary: {
       averageDailyScore,
       strongDayCount: scores.filter((score) => score.scoreValue >= 70).length,
-      habitCompletionRate: habits.length > 0 ? roundToPercent(habits.filter((checkin) => checkin.status === "COMPLETED").length / habits.length) : 0,
+      habitCompletionRate:
+        habitTotals.due > 0 ? roundToPercent(habitTotals.completed / habitTotals.due) : 0,
       routineCompletionRate: routines.length > 0 ? roundToPercent(routineCheckins.length / routines.length) : 0,
       workoutsCompleted: workoutDays.filter((day) => day.actualStatus === "COMPLETED").length,
       workoutsPlanned: workoutDays.filter((day) => day.planType === "WORKOUT").length,
-      waterTargetHitCount: 0,
+      waterTargetHitCount: countWaterTargetHits(waterLogs, timezone, waterTargetMl),
       mealsLoggedCount: mealLogs.length,
       spendingTotal: expenses.reduce((sum, expense) => sum + expense.amountMinor, 0),
       topSpendCategory: topSpendEntry?.[0] ?? null,
@@ -800,12 +880,24 @@ export async function getMonthlyReviewModel(
   userId: string,
   startDate: Date,
 ): Promise<MonthlyReviewResponse> {
+  const startIsoDate = toIsoDateString(startDate);
   const cycle = await ensureCycle(prisma, {
     userId,
     cycleType: "MONTH",
     cycleStartDate: startDate,
     cycleEndDate: getMonthEndDate(startDate),
   });
+  const preferences = await prisma.userPreference?.findUnique?.({
+    where: {
+      userId,
+    },
+  });
+  const timezone = normalizeTimezone(preferences?.timezone);
+  const waterTargetMl = preferences?.dailyWaterTargetMl ?? 2500;
+  const effectiveEndDate = cycle.cycleEndDate;
+  const effectiveEndIsoDate = toIsoDateString(effectiveEndDate);
+  const rangeWindow = getDateRangeWindowUtc(startIsoDate, effectiveEndIsoDate, timezone);
+  const scopedIsoDates = listIsoDates(startIsoDate, effectiveEndIsoDate);
   const [scores, habits, workoutDays, waterLogs, expenses, dailyReviews] = await Promise.all([
     prisma.dailyScore.findMany({
       where: {
@@ -816,7 +908,7 @@ export async function getMonthlyReviewModel(
         planningCycle: {
           cycleStartDate: {
             gte: startDate,
-            lte: cycle.cycleEndDate,
+            lte: effectiveEndDate,
           },
         },
       },
@@ -835,7 +927,7 @@ export async function getMonthlyReviewModel(
           where: {
             occurredOn: {
               gte: startDate,
-              lte: cycle.cycleEndDate,
+              lte: effectiveEndDate,
             },
           },
         },
@@ -846,7 +938,7 @@ export async function getMonthlyReviewModel(
         userId,
         date: {
           gte: startDate,
-          lte: cycle.cycleEndDate,
+          lte: effectiveEndDate,
         },
       },
     }),
@@ -854,8 +946,8 @@ export async function getMonthlyReviewModel(
       where: {
         userId,
         occurredAt: {
-          gte: startDate,
-          lt: addDays(cycle.cycleEndDate, 1),
+          gte: rangeWindow.start,
+          lt: rangeWindow.end,
         },
       },
     }),
@@ -864,7 +956,7 @@ export async function getMonthlyReviewModel(
         userId,
         spentOn: {
           gte: startDate,
-          lte: cycle.cycleEndDate,
+          lte: effectiveEndDate,
         },
       },
       include: {
@@ -877,7 +969,7 @@ export async function getMonthlyReviewModel(
         planningCycle: {
           cycleStartDate: {
             gte: startDate,
-            lte: cycle.cycleEndDate,
+            lte: effectiveEndDate,
           },
         },
       },
@@ -893,6 +985,28 @@ export async function getMonthlyReviewModel(
     acc[review.frictionTag] = (acc[review.frictionTag] ?? 0) + 1;
     return acc;
   }, {});
+  const waterTargetHitCount = countWaterTargetHits(waterLogs, timezone, waterTargetMl);
+  const topHabits = habits
+    .map((habit) => {
+      const scheduleRule = normalizeHabitScheduleRule(habit.scheduleRuleJson);
+      const completedDates = new Set<string>(
+        habit.checkins
+          .filter((checkin) => checkin.status === "COMPLETED")
+          .map((checkin) => toIsoDateString(checkin.occurredOn)),
+      );
+      const dueCount = scopedIsoDates.filter((isoDate) =>
+        isHabitDueOnIsoDate(scheduleRule, isoDate as `${number}-${number}-${number}`),
+      ).length;
+      const completedCount = scopedIsoDates.filter((isoDate) => completedDates.has(isoDate)).length;
+
+      return {
+        habitId: habit.id,
+        title: habit.title,
+        completionRate: dueCount > 0 ? roundToPercent(completedCount / dueCount) : 0,
+      };
+    })
+    .sort((a, b) => b.completionRate - a.completionRate)
+    .slice(0, 3);
 
   const existingReview: ExistingMonthlyReview | null = cycle.monthlyReview
     ? {
@@ -912,26 +1026,20 @@ export async function getMonthlyReviewModel(
   const weeklyMomentum = await getWeeklyMomentum(prisma, userId, cycle.cycleEndDate);
 
   return {
-    startDate: toIsoDateString(startDate),
+    startDate: startIsoDate,
     endDate: toIsoDateString(cycle.cycleEndDate),
     summary: {
       averageWeeklyMomentum: weeklyMomentum.value,
       bestScore: scores.length > 0 ? Math.max(...scores.map((score) => score.scoreValue)) : null,
       worstScore: scores.length > 0 ? Math.min(...scores.map((score) => score.scoreValue)) : null,
       workoutCount: workoutDays.filter((day) => day.actualStatus === "COMPLETED").length,
-      waterSuccessRate: scores.length > 0 ? roundToPercent(Math.min(1, waterLogs.length / scores.length)) : 0,
+      waterSuccessRate:
+        scopedIsoDates.length > 0 ? roundToPercent(waterTargetHitCount / scopedIsoDates.length) : 0,
       spendingByCategory: Object.entries(spendingByCategory).map(([category, amountMinor]) => ({
         category,
         amountMinor,
       })),
-      topHabits: habits
-        .map((habit) => ({
-          habitId: habit.id,
-          title: habit.title,
-          completionRate: habit.checkins.length > 0 ? roundToPercent(habit.checkins.filter((checkin) => checkin.status === "COMPLETED").length / habit.checkins.length) : 0,
-        }))
-        .sort((a, b) => b.completionRate - a.completionRate)
-        .slice(0, 3),
+      topHabits,
       commonFrictionTags: Object.entries(frictionCounts)
         .sort((a, b) => b[1] - a[1])
         .slice(0, 3)

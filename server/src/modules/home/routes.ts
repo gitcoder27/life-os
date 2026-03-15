@@ -11,9 +11,16 @@ import type {
 import { z } from "zod";
 
 import { requireAuthenticatedUser } from "../../lib/auth/require-auth.js";
+import { isHabitDueOnIsoDate, normalizeHabitScheduleRule } from "../../lib/habits/schedule.js";
 import { withGeneratedAt } from "../../lib/http/response.js";
-import { addDays, parseIsoDate } from "../../lib/time/cycle.js";
-import { getUtcGreeting, toIsoDateString } from "../../lib/time/date.js";
+import { getMonthStartIsoDate, parseIsoDate } from "../../lib/time/cycle.js";
+import { toIsoDateString } from "../../lib/time/date.js";
+import {
+  getDayWindowUtc,
+  getLocalGreeting,
+  getUserLocalDate,
+  getUserLocalHour,
+} from "../../lib/time/user-time.js";
 import { parseOrThrow } from "../../lib/validation/parse.js";
 import { calculateDailyScore, ensureCycle, getWeeklyMomentum } from "../scoring/service.js";
 
@@ -22,8 +29,8 @@ const dateQuerySchema = z.object({
   date: isoDateSchema.optional(),
 });
 
-function currentRoutinePeriod(date: Date): RoutineSummary["currentPeriod"] {
-  const hour = date.getUTCHours();
+function currentRoutinePeriod(date: Date, timezone?: string | null): RoutineSummary["currentPeriod"] {
+  const hour = getUserLocalHour(date, timezone);
 
   if (hour < 15) {
     return "morning";
@@ -34,22 +41,6 @@ function currentRoutinePeriod(date: Date): RoutineSummary["currentPeriod"] {
   }
 
   return "none";
-}
-
-function normalizeHabitScheduleRule(input: unknown) {
-  if (!input || typeof input !== "object" || Array.isArray(input)) {
-    return {};
-  }
-
-  return input as { daysOfWeek?: number[] };
-}
-
-function isHabitDueOn(scheduleRule: { daysOfWeek?: number[] }, date: Date) {
-  if (!scheduleRule.daysOfWeek || scheduleRule.daysOfWeek.length === 0) {
-    return true;
-  }
-
-  return scheduleRule.daysOfWeek.includes(date.getUTCDay());
 }
 
 function severityToTone(
@@ -70,7 +61,14 @@ async function buildHomeOverview(
   userId: string,
   targetDate: Date,
 ): Promise<HomeOverviewResponse> {
-  const [dayCycle, score, momentum, tasks, habits, habitCheckins, routines, routineCheckins, waterLogs, mealLogs, workoutDay, expenses, adminItems, notifications, preferences] =
+  const targetIsoDate = toIsoDateString(targetDate);
+  const preferences = await app.prisma.userPreference.findUnique({
+    where: {
+      userId,
+    },
+  });
+  const dayWindow = getDayWindowUtc(targetIsoDate, preferences?.timezone);
+  const [dayCycle, score, momentum, tasks, habits, habitCheckins, routines, routineCheckins, waterLogs, mealLogs, workoutDay, expenses, adminItems, notifications] =
     await Promise.all([
       ensureCycle(app.prisma, {
         userId,
@@ -129,8 +127,8 @@ async function buildHomeOverview(
         where: {
           userId,
           occurredAt: {
-            gte: targetDate,
-            lt: addDays(targetDate, 1),
+            gte: dayWindow.start,
+            lt: dayWindow.end,
           },
         },
       }),
@@ -138,8 +136,8 @@ async function buildHomeOverview(
         where: {
           userId,
           occurredAt: {
-            gte: targetDate,
-            lt: addDays(targetDate, 1),
+            gte: dayWindow.start,
+            lt: dayWindow.end,
           },
         },
       }),
@@ -155,7 +153,7 @@ async function buildHomeOverview(
         where: {
           userId,
           spentOn: {
-            gte: new Date(Date.UTC(targetDate.getUTCFullYear(), targetDate.getUTCMonth(), 1)),
+            gte: parseIsoDate(getMonthStartIsoDate(targetIsoDate)),
             lt: new Date(Date.UTC(targetDate.getUTCFullYear(), targetDate.getUTCMonth() + 1, 1)),
           },
         },
@@ -178,15 +176,10 @@ async function buildHomeOverview(
         orderBy: [{ createdAt: "desc" }],
         take: 5,
       }),
-      app.prisma.userPreference.findUnique({
-        where: {
-          userId,
-        },
-      }),
     ]);
 
   const dueHabits = habits.filter((habit) =>
-    isHabitDueOn(normalizeHabitScheduleRule(habit.scheduleRuleJson), targetDate),
+    isHabitDueOnIsoDate(normalizeHabitScheduleRule(habit.scheduleRuleJson), targetIsoDate),
   );
   const completedHabits = dueHabits.filter((habit) =>
     habitCheckins.some(
@@ -202,10 +195,12 @@ async function buildHomeOverview(
 
   const totalRoutineItems = routines.reduce((sum, routine) => sum + routine.items.length, 0);
   const completedRoutineItems = routineCheckins.length;
+  const currentIsoDate = getUserLocalDate(new Date(), preferences?.timezone);
   const routineSummary: RoutineSummary = {
     completedItems: completedRoutineItems,
     totalItems: totalRoutineItems,
-    currentPeriod: currentRoutinePeriod(targetDate),
+    currentPeriod:
+      targetIsoDate === currentIsoDate ? currentRoutinePeriod(new Date(), preferences?.timezone) : "none",
   };
 
   const healthSummary: HealthSummary = {
@@ -279,8 +274,8 @@ async function buildHomeOverview(
   }));
 
   return withGeneratedAt({
-    date: toIsoDateString(targetDate),
-    greeting: getUtcGreeting(new Date()),
+    date: targetIsoDate,
+    greeting: getLocalGreeting(new Date(), preferences?.timezone),
     dailyScore: {
       value: score.value,
       label: score.label,
@@ -323,7 +318,23 @@ export const registerHomeRoutes: FastifyPluginAsync = async (app) => {
   app.get("/overview", async (request, reply) => {
     const user = requireAuthenticatedUser(request);
     const query = parseOrThrow(dateQuerySchema, request.query);
-    const targetDate = query.date ? parseIsoDate(query.date) : parseIsoDate(toIsoDateString(new Date()));
+    const targetDate = query.date
+      ? parseIsoDate(query.date)
+      : parseIsoDate(
+          getUserLocalDate(
+            new Date(),
+            (
+              await app.prisma.userPreference.findUnique({
+                where: {
+                  userId: user.id,
+                },
+                select: {
+                  timezone: true,
+                },
+              })
+            )?.timezone,
+          ),
+        );
 
     return reply.send(await buildHomeOverview(app, user.id, targetDate));
   });

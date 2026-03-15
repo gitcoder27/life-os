@@ -9,16 +9,41 @@ import {
   useFinanceDataQuery,
 } from "../../shared/lib/api";
 import { PageHeader } from "../../shared/ui/PageHeader";
+import {
+  EmptyState,
+  InlineErrorState,
+  PageErrorState,
+  PageLoadingState,
+} from "../../shared/ui/PageState";
 import { SectionCard } from "../../shared/ui/SectionCard";
 
 export function FinancePage() {
   const today = getTodayDate();
   const financeQuery = useFinanceDataQuery(today);
   const createExpenseMutation = useCreateExpenseMutation(today);
-  const summary = financeQuery.data?.summary;
-  const expenses = financeQuery.data?.expenses.expenses ?? [];
-  const recurringExpenses = financeQuery.data?.recurringExpenses.recurringExpenses ?? [];
-  const categories = financeQuery.data?.categories.categories ?? [];
+  if (financeQuery.isLoading && !financeQuery.data) {
+    return (
+      <PageLoadingState
+        title="Loading finance"
+        description="Pulling together spend totals, recent expenses, and recurring bills."
+      />
+    );
+  }
+
+  if (financeQuery.isError || !financeQuery.data) {
+    return (
+      <PageErrorState
+        title="Finance could not load"
+        message={financeQuery.error instanceof Error ? financeQuery.error.message : undefined}
+        onRetry={() => void financeQuery.refetch()}
+      />
+    );
+  }
+
+  const summary = financeQuery.data.summary;
+  const expenses = financeQuery.data.expenses?.expenses ?? [];
+  const recurringExpenses = financeQuery.data.recurringExpenses?.recurringExpenses ?? [];
+  const categories = financeQuery.data.categories?.categories ?? [];
   const categoryNameById = new Map(categories.map((category) => [category.id, category.name]));
   const topCategory = summary?.categoryTotals[0];
 
@@ -83,60 +108,96 @@ export function FinancePage() {
           title="By category"
           subtitle="Spend distribution"
         >
-          <div className="category-grid">
-            {(summary?.categoryTotals ?? []).map((category) => (
-              <div key={category.name} className="category-card">
-                <span className="category-card__amount">
-                  {formatMinorCurrency(category.totalAmountMinor, summary?.currencyCode ?? "USD")}
-                </span>
-                <span className="category-card__label">{category.name}</span>
-              </div>
-            ))}
-          </div>
+          {financeQuery.data.sectionErrors.categories ? (
+            <InlineErrorState
+              message={financeQuery.data.sectionErrors.categories.message}
+              onRetry={() => void financeQuery.refetch()}
+            />
+          ) : summary.categoryTotals.length > 0 ? (
+            <div className="category-grid">
+              {summary.categoryTotals.map((category) => (
+                <div key={category.name} className="category-card">
+                  <span className="category-card__amount">
+                    {formatMinorCurrency(category.totalAmountMinor, summary.currencyCode ?? "USD")}
+                  </span>
+                  <span className="category-card__label">{category.name}</span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <EmptyState
+              title="No category spend yet"
+              description="Category breakdown starts after the first structured expense lands."
+            />
+          )}
         </SectionCard>
 
         <SectionCard
           title="Recent expenses"
           subtitle="Last 7 days"
         >
-          <div>
-            {expenses
-              .slice()
-              .sort((left, right) => right.spentOn.localeCompare(left.spentOn))
-              .slice(0, 7)
-              .map((expense) => (
-                <div key={expense.id} className="expense-row">
-                  <div className="expense-row__info">
-                    <div className="expense-row__title">{expense.description ?? "Expense"}</div>
-                    <div className="expense-row__meta">
-                      {categoryNameById.get(expense.expenseCategoryId ?? "") ?? "Uncategorized"} &middot; {formatRelativeDate(expense.spentOn)}
+          {financeQuery.data.sectionErrors.expenses ? (
+            <InlineErrorState
+              message={financeQuery.data.sectionErrors.expenses.message}
+              onRetry={() => void financeQuery.refetch()}
+            />
+          ) : expenses.length > 0 ? (
+            <div>
+              {expenses
+                .slice()
+                .sort((left, right) => right.spentOn.localeCompare(left.spentOn))
+                .slice(0, 7)
+                .map((expense) => (
+                  <div key={expense.id} className="expense-row">
+                    <div className="expense-row__info">
+                      <div className="expense-row__title">{expense.description ?? "Expense"}</div>
+                      <div className="expense-row__meta">
+                        {categoryNameById.get(expense.expenseCategoryId ?? "") ?? "Uncategorized"} &middot; {formatRelativeDate(expense.spentOn)}
+                      </div>
                     </div>
+                    <span className="expense-row__amount">
+                      {formatMinorCurrency(expense.amountMinor, expense.currencyCode)}
+                    </span>
                   </div>
-                  <span className="expense-row__amount">
-                    {formatMinorCurrency(expense.amountMinor, expense.currencyCode)}
-                  </span>
-                </div>
-              ))}
-          </div>
+                ))}
+            </div>
+          ) : (
+            <EmptyState
+              title="No recent expenses"
+              description="Recent expense history appears after the first log."
+            />
+          )}
         </SectionCard>
 
         <SectionCard
           title="Recurring"
           subtitle="Upcoming bills"
         >
-          <div>
-            {recurringExpenses.map((item) => (
-              <div key={item.id} className="expense-row">
-                <div className="expense-row__info">
-                  <div className="expense-row__title">{item.title}</div>
-                  <div className="expense-row__meta">Due in {formatDueLabel(item.nextDueOn)}</div>
+          {financeQuery.data.sectionErrors.recurringExpenses ? (
+            <InlineErrorState
+              message={financeQuery.data.sectionErrors.recurringExpenses.message}
+              onRetry={() => void financeQuery.refetch()}
+            />
+          ) : recurringExpenses.length > 0 ? (
+            <div>
+              {recurringExpenses.map((item) => (
+                <div key={item.id} className="expense-row">
+                  <div className="expense-row__info">
+                    <div className="expense-row__title">{item.title}</div>
+                    <div className="expense-row__meta">Due in {formatDueLabel(item.nextDueOn)}</div>
+                  </div>
+                  <span className="expense-row__amount">
+                    {formatMinorCurrency(item.defaultAmountMinor, item.currencyCode)}
+                  </span>
                 </div>
-                <span className="expense-row__amount">
-                  {formatMinorCurrency(item.defaultAmountMinor, item.currencyCode)}
-                </span>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          ) : (
+            <EmptyState
+              title="No recurring bills"
+              description="Recurring expense templates have not been set up yet."
+            />
+          )}
           <button
             className="button button--primary"
             type="button"

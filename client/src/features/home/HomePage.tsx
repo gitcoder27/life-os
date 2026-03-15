@@ -8,6 +8,12 @@ import {
   useWeeklyMomentumQuery,
 } from "../../shared/lib/api";
 import { MetricPill } from "../../shared/ui/MetricPill";
+import {
+  EmptyState,
+  InlineErrorState,
+  PageErrorState,
+  PageLoadingState,
+} from "../../shared/ui/PageState";
 import { ScoreRing } from "../../shared/ui/ScoreRing";
 import { SectionCard } from "../../shared/ui/SectionCard";
 
@@ -17,6 +23,30 @@ export function HomePage() {
   const scoreQuery = useDailyScoreQuery(today);
   const weeklyMomentumQuery = useWeeklyMomentumQuery(today);
   const updateTaskMutation = useTaskStatusMutation(today);
+  const retryAll = () => {
+    void homeQuery.refetch();
+    void scoreQuery.refetch();
+    void weeklyMomentumQuery.refetch();
+  };
+
+  if (homeQuery.isLoading && !homeQuery.data) {
+    return (
+      <PageLoadingState
+        title="Loading command center"
+        description="Pulling together today’s priorities, score, and attention items."
+      />
+    );
+  }
+
+  if (homeQuery.isError || !homeQuery.data) {
+    return (
+      <PageErrorState
+        title="Home is unavailable"
+        message={homeQuery.error instanceof Error ? homeQuery.error.message : undefined}
+        onRetry={retryAll}
+      />
+    );
+  }
 
   const home = homeQuery.data;
   const score = scoreQuery.data ?? home?.dailyScore;
@@ -77,6 +107,11 @@ export function HomePage() {
       value: String(home?.financeSummary.upcomingBills ?? 0),
     },
   ];
+  const scoreReasons = scoreQuery.data?.topReasons ?? [];
+  const scoreBuckets =
+    scoreQuery.data?.buckets?.filter((bucket) => bucket.applicablePoints > 0) ?? [];
+  const taskMutationError =
+    updateTaskMutation.error instanceof Error ? updateTaskMutation.error.message : null;
 
   return (
     <div className="page">
@@ -94,28 +129,57 @@ export function HomePage() {
                 {scoreQuery.data?.topReasons[0]?.label ??
                   "Live score details will reflect your latest planning, habits, and health data."}
               </p>
+              {score ? (
+                <p className="score-hero__detail">
+                  {Math.round(score.earnedPoints)} of {score.possiblePoints} available points earned today.
+                </p>
+              ) : null}
             </div>
           </div>
+          {scoreQuery.isError ? (
+            <InlineErrorState
+              message={scoreQuery.error instanceof Error ? scoreQuery.error.message : "Score details could not load."}
+              onRetry={() => void scoreQuery.refetch()}
+            />
+          ) : null}
           <div className="bucket-bar">
-            {(scoreQuery.data?.buckets ?? [])
-              .filter((bucket) => bucket.applicablePoints > 0)
-              .map((bucket) => (
-                <div key={bucket.key} className="bucket-row">
-                  <span className="bucket-row__label">{bucket.label}</span>
-                  <div className="bucket-row__bar">
-                    <div
-                      className="bucket-row__fill"
-                      style={{
-                        width: `${(bucket.earnedPoints / bucket.applicablePoints) * 100}%`,
-                      }}
-                    />
-                  </div>
-                  <span className="bucket-row__value">
-                    {Math.round(bucket.earnedPoints)}/{bucket.applicablePoints}
-                  </span>
+            {scoreBuckets.map((bucket) => (
+              <div key={bucket.key} className="bucket-row">
+                <span className="bucket-row__label">{bucket.label}</span>
+                <div className="bucket-row__bar">
+                  <div
+                    className="bucket-row__fill"
+                    style={{
+                      width: `${(bucket.earnedPoints / bucket.applicablePoints) * 100}%`,
+                    }}
+                  />
+                </div>
+                <span className="bucket-row__value">
+                  {Math.round(bucket.earnedPoints)}/{bucket.applicablePoints}
+                </span>
+              </div>
+            ))}
+          </div>
+          {scoreBuckets.length > 0 ? (
+            <div className="score-bucket-notes">
+              {scoreBuckets.map((bucket) => (
+                <div key={bucket.key} className="score-bucket-notes__item">
+                  <strong>{bucket.label}</strong>
+                  <span>{bucket.explanation}</span>
                 </div>
               ))}
-          </div>
+            </div>
+          ) : null}
+          {scoreReasons.length > 0 ? (
+            <div className="score-reasons">
+              {scoreReasons.map((reason) => (
+                <div key={reason.label} className="score-reasons__item">
+                  <strong>{reason.label}</strong>
+                  <span>{reason.missingPoints} points still open</span>
+                </div>
+              ))}
+            </div>
+          ) : null}
         </div>
         <div className="score-hero__metrics">
           {homeMetrics.map((metric) => (
@@ -133,91 +197,122 @@ export function HomePage() {
           title="Attention"
           subtitle="Items needing action now"
         >
-          <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
-            {attentionItems.map((item) => (
-              <div key={item.title} className="attention-item">
-                <span className="attention-item__icon" />
-                <div>
-                  <div className="attention-item__title">{item.title}</div>
-                  <div className="attention-item__detail">{item.detail}</div>
+          {attentionItems.length > 0 ? (
+            <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+              {attentionItems.map((item) => (
+                <div key={item.title} className="attention-item">
+                  <span className="attention-item__icon" />
+                  <div>
+                    <div className="attention-item__title">{item.title}</div>
+                    <div className="attention-item__detail">{item.detail}</div>
+                  </div>
                 </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          ) : (
+            <EmptyState
+              title="Nothing urgent"
+              description="The command center is clear for now. Use Today to push the next important task."
+            />
+          )}
         </SectionCard>
 
         <SectionCard
           title="Top priorities"
-          subtitle="Ordered by importance"
+          subtitle="Ordered by importance. Editing stays read-only in Phase 0."
         >
-          <ol className="priority-list">
-            {(home?.topPriorities ?? []).map((priority) => (
-              <li
-                key={priority.id}
-                className={
-                  priority.status === "completed"
-                    ? "priority-list__item priority-list__item--done"
-                    : "priority-list__item"
-                }
-              >
-                <span>{priority.title}</span>
-                <span
+          {home.topPriorities.length > 0 ? (
+            <ol className="priority-list">
+              {home.topPriorities.map((priority) => (
+                <li
+                  key={priority.id}
                   className={
-                    priority.status === "completed" ? "tag tag--positive" : "tag tag--warning"
+                    priority.status === "completed"
+                      ? "priority-list__item priority-list__item--done"
+                      : "priority-list__item"
                   }
                 >
-                  {priority.status === "completed" ? "done" : "open"}
-                </span>
-              </li>
-            ))}
-          </ol>
+                  <span>{priority.title}</span>
+                  <span
+                    className={
+                      priority.status === "completed" ? "tag tag--positive" : "tag tag--warning"
+                    }
+                  >
+                    {priority.status === "completed" ? "done" : "open"}
+                  </span>
+                </li>
+              ))}
+            </ol>
+          ) : (
+            <EmptyState
+              title="No priorities yet"
+              description="Today has no ranked priorities. The daily planning loop is still open."
+            />
+          )}
         </SectionCard>
 
         <SectionCard
           title="Task lane"
           subtitle="Today only"
         >
-          <ul className="list">
-            {(home?.tasks ?? []).map((task) => (
-              <li key={task.id}>
-                <div>
-                  <strong>{task.title}</strong>
-                  <div className="list__subtle">
-                    {task.status === "completed"
-                      ? "Completed"
-                      : task.scheduledForDate ?? "Scheduled today"}
+          {taskMutationError ? (
+            <InlineErrorState message={taskMutationError} onRetry={retryAll} />
+          ) : null}
+          {home.tasks.length > 0 ? (
+            <ul className="list">
+              {home.tasks.map((task) => (
+                <li key={task.id}>
+                  <div>
+                    <strong>{task.title}</strong>
+                    <div className="list__subtle">
+                      {task.status === "completed"
+                        ? "Completed"
+                        : task.scheduledForDate ?? "Scheduled today"}
+                    </div>
                   </div>
-                </div>
-                <button
-                  className="button button--ghost button--small"
-                  type="button"
-                  disabled={task.status === "completed" || updateTaskMutation.isPending}
-                  onClick={() =>
-                    updateTaskMutation.mutate({
-                      taskId: task.id,
-                      status: "completed",
-                    })
-                  }
-                >
-                  Done
-                </button>
-              </li>
-            ))}
-          </ul>
+                  <button
+                    className="button button--ghost button--small"
+                    type="button"
+                    disabled={task.status === "completed" || updateTaskMutation.isPending}
+                    onClick={() =>
+                      updateTaskMutation.mutate({
+                        taskId: task.id,
+                        status: "completed",
+                      })
+                    }
+                  >
+                    {updateTaskMutation.isPending ? "Saving..." : "Done"}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <EmptyState
+              title="Task lane is clear"
+              description="There are no day-specific tasks scheduled right now."
+            />
+          )}
         </SectionCard>
 
         <SectionCard
           title="Routines"
           subtitle="Morning and evening"
         >
-          <ul className="list">
-            {routines.map((routine) => (
-              <li key={routine.title}>
-                <strong>{routine.title}</strong>
-                <span className="list__subtle">{routine.detail}</span>
-              </li>
-            ))}
-          </ul>
+          {routines.length > 0 ? (
+            <ul className="list">
+              {routines.map((routine) => (
+                <li key={routine.title}>
+                  <strong>{routine.title}</strong>
+                  <span className="list__subtle">{routine.detail}</span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <EmptyState
+              title="No active routines"
+              description="Routine progress will appear here once a morning or evening routine is active."
+            />
+          )}
         </SectionCard>
 
         <SectionCard

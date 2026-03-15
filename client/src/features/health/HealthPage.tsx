@@ -10,6 +10,12 @@ import {
   useWorkoutMutation,
 } from "../../shared/lib/api";
 import { PageHeader } from "../../shared/ui/PageHeader";
+import {
+  EmptyState,
+  InlineErrorState,
+  PageErrorState,
+  PageLoadingState,
+} from "../../shared/ui/PageState";
 import { SectionCard } from "../../shared/ui/SectionCard";
 
 export function HealthPage() {
@@ -19,12 +25,31 @@ export function HealthPage() {
   const addMealMutation = useAddMealMutation(today);
   const updateWorkoutMutation = useWorkoutMutation(today);
   const addWeightMutation = useAddWeightMutation(today);
-  const currentDay = healthQuery.data?.summary.currentDay;
+  if (healthQuery.isLoading && !healthQuery.data) {
+    return (
+      <PageLoadingState
+        title="Loading health basics"
+        description="Pulling together water, meals, workout status, and weight history."
+      />
+    );
+  }
+
+  if (healthQuery.isError || !healthQuery.data) {
+    return (
+      <PageErrorState
+        title="Health could not load"
+        message={healthQuery.error instanceof Error ? healthQuery.error.message : undefined}
+        onRetry={() => void healthQuery.refetch()}
+      />
+    );
+  }
+
+  const currentDay = healthQuery.data.summary.currentDay;
   const waterMl = currentDay?.waterMl ?? 0;
   const waterTargetMl = currentDay?.waterTargetMl ?? 1;
   const pct = Math.min(100, (waterMl / waterTargetMl) * 100);
-  const templates = healthQuery.data?.mealTemplates.mealTemplates ?? [];
-  const mealLogs = healthQuery.data?.mealLogs.mealLogs ?? [];
+  const templates = healthQuery.data.mealTemplates?.mealTemplates ?? [];
+  const mealLogs = healthQuery.data.mealLogs?.mealLogs ?? [];
   const defaultMealSlots = [
     { id: "breakfast", name: "Breakfast", mealSlot: "breakfast" as const, description: null },
     { id: "lunch", name: "Lunch", mealSlot: "lunch" as const, description: null },
@@ -57,7 +82,7 @@ export function HealthPage() {
       logged: Boolean(log),
     };
   });
-  const weightLogs = healthQuery.data?.summary.weightHistory ?? [];
+  const weightLogs = healthQuery.data.summary.weightHistory ?? [];
 
   async function handleAddWeight() {
     const rawValue = window.prompt("Enter body weight");
@@ -87,6 +112,12 @@ export function HealthPage() {
           subtitle={`${Math.round(pct)}% of daily target`}
         >
           <div className="water-tracker">
+            {healthQuery.data.sectionErrors.waterLogs ? (
+              <InlineErrorState
+                message={healthQuery.data.sectionErrors.waterLogs.message}
+                onRetry={() => void healthQuery.refetch()}
+              />
+            ) : null}
             <div className="water-tracker__header">
               <span className="water-tracker__current">{(waterMl / 1000).toFixed(1)}L</span>
               <span className="water-tracker__target">/ {(waterTargetMl / 1000).toFixed(1)}L</span>
@@ -117,38 +148,54 @@ export function HealthPage() {
           title="Meals"
           subtitle={`${mealEntries.filter((meal) => meal.logged).length} of ${mealEntries.length} logged`}
         >
-          <div>
-            {mealEntries.map((meal) => (
-              <div key={meal.id} className="habit-item">
-                <button
-                  className={`habit-item__check${meal.logged ? " habit-item__check--done" : ""}`}
-                  type="button"
-                  aria-label={`${meal.name} ${meal.logged ? "logged" : "not logged"}`}
-                >
-                  {meal.logged ? "\u2713" : ""}
-                </button>
-                <div className="habit-item__info">
-                  <div className="habit-item__title">{meal.name}</div>
-                  <div className="habit-item__detail">{meal.time}</div>
-                </div>
-                {!meal.logged && (
+          {healthQuery.data.sectionErrors.mealTemplates || healthQuery.data.sectionErrors.mealLogs ? (
+            <InlineErrorState
+              message={
+                healthQuery.data.sectionErrors.mealTemplates?.message ??
+                healthQuery.data.sectionErrors.mealLogs?.message ??
+                "Meal data could not load."
+              }
+              onRetry={() => void healthQuery.refetch()}
+            />
+          ) : mealEntries.length > 0 ? (
+            <div>
+              {mealEntries.map((meal) => (
+                <div key={meal.id} className="habit-item">
                   <button
-                    className="button button--ghost button--small"
+                    className={`habit-item__check${meal.logged ? " habit-item__check--done" : ""}`}
                     type="button"
-                    onClick={() =>
-                      addMealMutation.mutate({
-                        description: meal.name,
-                        loggingQuality: "meaningful",
-                        mealSlot: meal.mealSlot,
-                      })
-                    }
+                    aria-label={`${meal.name} ${meal.logged ? "logged" : "not logged"}`}
                   >
-                    Log
+                    {meal.logged ? "\u2713" : ""}
                   </button>
-                )}
-              </div>
-            ))}
-          </div>
+                  <div className="habit-item__info">
+                    <div className="habit-item__title">{meal.name}</div>
+                    <div className="habit-item__detail">{meal.time}</div>
+                  </div>
+                  {!meal.logged && (
+                    <button
+                      className="button button--ghost button--small"
+                      type="button"
+                      onClick={() =>
+                        addMealMutation.mutate({
+                          description: meal.name,
+                          loggingQuality: "meaningful",
+                          mealSlot: meal.mealSlot,
+                        })
+                      }
+                    >
+                      Log
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <EmptyState
+              title="No meal structure yet"
+              description="Meal templates or meal logs will show up here once the first meal is captured."
+            />
+          )}
         </SectionCard>
 
         <SectionCard
@@ -197,16 +244,23 @@ export function HealthPage() {
           title="Body weight"
           subtitle="Recent entries"
         >
-          <div>
-            {weightLogs.map((entry) => (
-              <div key={entry.id} className="expense-row">
-                <div className="expense-row__info">
-                  <div className="expense-row__title">{entry.weightValue} {entry.unit}</div>
-                  <div className="expense-row__meta">{entry.measuredOn}</div>
+          {weightLogs.length > 0 ? (
+            <div>
+              {weightLogs.map((entry) => (
+                <div key={entry.id} className="expense-row">
+                  <div className="expense-row__info">
+                    <div className="expense-row__title">{entry.weightValue} {entry.unit}</div>
+                    <div className="expense-row__meta">{entry.measuredOn}</div>
+                  </div>
                 </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          ) : (
+            <EmptyState
+              title="No weight entries"
+              description="Body-weight history starts after the first manual log."
+            />
+          )}
           <button
             className="button button--ghost button--small"
             type="button"

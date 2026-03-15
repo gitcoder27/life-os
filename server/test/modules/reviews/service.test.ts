@@ -259,10 +259,17 @@ describe("reviews service", () => {
           { scoreValue: 90, scoreBand: "Strong Day", planningCycle: { cycleStartDate: new Date("2026-03-16") } },
         ]),
       },
-      habitCheckin: {
+      habit: {
         findMany: vi.fn().mockResolvedValue([
-          { habitId: "habit-1", status: "COMPLETED" },
-          { habitId: "habit-2", status: "COMPLETED" },
+          {
+            id: "habit-1",
+            title: "Push-up",
+            scheduleRuleJson: {},
+            checkins: [
+              { occurredOn: new Date("2026-03-14T00:00:00.000Z"), status: "COMPLETED" },
+              { occurredOn: new Date("2026-03-15T00:00:00.000Z"), status: "COMPLETED" },
+            ],
+          },
         ]),
       },
       routineItemCheckin: { findMany: vi.fn().mockResolvedValue([]) },
@@ -270,6 +277,7 @@ describe("reviews service", () => {
       workoutDay: { findMany: vi.fn().mockResolvedValue([{ actualStatus: "COMPLETED" }, { actualStatus: "FALLBACK" }]) },
       waterLog: { findMany: vi.fn().mockResolvedValue([{ amountMl: 1200 }]) },
       mealLog: { findMany: vi.fn().mockResolvedValue([{ id: "meal" }]) },
+      userPreference: { findUnique: vi.fn().mockResolvedValue({ timezone: "UTC", dailyWaterTargetMl: 2500 }) },
       expense: {
         findMany: vi.fn().mockResolvedValue([
           { amountMinor: 2000, expenseCategory: { name: "Transport" } },
@@ -328,20 +336,28 @@ describe("reviews service", () => {
           {
             id: "habit-1",
             title: "Push-up",
+            scheduleRuleJson: { daysOfWeek: [2, 5] },
             checkins: [
-              { status: "COMPLETED" },
-              { status: "COMPLETED" },
+              { occurredOn: new Date("2026-03-10T00:00:00.000Z"), status: "COMPLETED" },
+              { occurredOn: new Date("2026-03-20T00:00:00.000Z"), status: "COMPLETED" },
             ],
           },
           {
             id: "habit-2",
             title: "Read",
-            checkins: [{ status: "SKIPPED" }],
+            scheduleRuleJson: { daysOfWeek: [3] },
+            checkins: [{ occurredOn: new Date("2026-03-11T00:00:00.000Z"), status: "SKIPPED" }],
           },
         ]),
       },
       workoutDay: { findMany: vi.fn().mockResolvedValue([{ actualStatus: "COMPLETED" }]) },
-      waterLog: { findMany: vi.fn().mockResolvedValue([{ occurredAt: new Date() }, { occurredAt: new Date() }]) },
+      waterLog: {
+        findMany: vi.fn().mockResolvedValue([
+          { occurredAt: new Date("2026-03-10T12:00:00.000Z"), amountMl: 2500 },
+          { occurredAt: new Date("2026-03-20T12:00:00.000Z"), amountMl: 2500 },
+        ]),
+      },
+      userPreference: { findUnique: vi.fn().mockResolvedValue({ timezone: "UTC", dailyWaterTargetMl: 2500 }) },
       expense: { findMany: vi.fn().mockResolvedValue([{ amountMinor: 1000, expenseCategory: { name: "Food" } }]) },
       dailyReview: { findMany: vi.fn().mockResolvedValue([{ frictionTag: "low energy" }]) },
     } as any;
@@ -353,7 +369,7 @@ describe("reviews service", () => {
     expect(response.summary.worstScore).toBe(75);
     expect(response.summary.workoutCount).toBe(1);
     expect(response.summary.topHabits).toEqual([
-      { habitId: "habit-1", title: "Push-up", completionRate: 100 },
+      { habitId: "habit-1", title: "Push-up", completionRate: 22 },
       { habitId: "habit-2", title: "Read", completionRate: 0 },
     ]);
   });

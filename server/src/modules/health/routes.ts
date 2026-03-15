@@ -41,6 +41,11 @@ import { requireAuthenticatedUser } from "../../lib/auth/require-auth.js";
 import { withGeneratedAt } from "../../lib/http/response.js";
 import { parseIsoDate } from "../../lib/time/cycle.js";
 import { toIsoDateString } from "../../lib/time/date.js";
+import {
+  getDateRangeWindowUtc,
+  getDayWindowUtc,
+  getUserLocalDate,
+} from "../../lib/time/user-time.js";
 import { parseOrThrow } from "../../lib/validation/parse.js";
 
 const isoDateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/) as unknown as z.ZodType<IsoDateString>;
@@ -96,8 +101,20 @@ const createWeightLogSchema = z.object({
   note: z.string().max(4000).nullable().optional(),
 });
 
-function getTodayIsoDate() {
-  return toIsoDateString(new Date());
+async function getTodayIsoDate(
+  app: Parameters<FastifyPluginAsync>[0],
+  userId: string,
+) {
+  const preferences = await app.prisma.userPreference.findUnique({
+    where: {
+      userId,
+    },
+    select: {
+      timezone: true,
+    },
+  });
+
+  return getUserLocalDate(new Date(), preferences?.timezone);
 }
 
 function toPrismaWaterLogSource(source: WaterLogSource): PrismaWaterLogSource {
@@ -311,13 +328,21 @@ export const registerHealthRoutes: FastifyPluginAsync = async (app) => {
   app.get("/water-logs", async (request, reply) => {
     const user = requireAuthenticatedUser(request);
     const query = parseOrThrow(byDateQuerySchema, request.query);
-    const targetDate = parseIsoDate(query.date);
+    const preferences = await app.prisma.userPreference.findUnique({
+      where: {
+        userId: user.id,
+      },
+      select: {
+        timezone: true,
+      },
+    });
+    const dayWindow = getDayWindowUtc(query.date, preferences?.timezone);
     const waterLogs = await app.prisma.waterLog.findMany({
       where: {
         userId: user.id,
         occurredAt: {
-          gte: targetDate,
-          lt: new Date(targetDate.getTime() + 24 * 60 * 60 * 1000),
+          gte: dayWindow.start,
+          lt: dayWindow.end,
         },
       },
       orderBy: {
@@ -353,13 +378,21 @@ export const registerHealthRoutes: FastifyPluginAsync = async (app) => {
   app.get("/meal-logs", async (request, reply) => {
     const user = requireAuthenticatedUser(request);
     const query = parseOrThrow(byDateQuerySchema, request.query);
-    const targetDate = parseIsoDate(query.date);
+    const preferences = await app.prisma.userPreference.findUnique({
+      where: {
+        userId: user.id,
+      },
+      select: {
+        timezone: true,
+      },
+    });
+    const dayWindow = getDayWindowUtc(query.date, preferences?.timezone);
     const mealLogs = await app.prisma.mealLog.findMany({
       where: {
         userId: user.id,
         occurredAt: {
-          gte: targetDate,
-          lt: new Date(targetDate.getTime() + 24 * 60 * 60 * 1000),
+          gte: dayWindow.start,
+          lt: dayWindow.end,
         },
       },
       orderBy: {
@@ -378,26 +411,34 @@ export const registerHealthRoutes: FastifyPluginAsync = async (app) => {
   app.get("/summary", async (request, reply) => {
     const user = requireAuthenticatedUser(request);
     const query = parseOrThrow(healthSummaryQuerySchema, request.query);
-    const fromDate = parseIsoDate(query.from);
-    const toDate = parseIsoDate(query.to);
-    const inclusiveEnd = new Date(toDate.getTime() + 24 * 60 * 60 * 1000);
-    const todayIsoDate = getTodayIsoDate();
+    const [preferences, currentTimezone] = await Promise.all([
+      app.prisma.userPreference.findUnique({
+        where: {
+          userId: user.id,
+        },
+      }),
+      app.prisma.userPreference.findUnique({
+        where: {
+          userId: user.id,
+        },
+        select: {
+          timezone: true,
+        },
+      }),
+    ]);
+    const rangeWindow = getDateRangeWindowUtc(query.from, query.to, currentTimezone?.timezone);
+    const todayIsoDate = getUserLocalDate(new Date(), currentTimezone?.timezone);
     const todayDate = parseIsoDate(todayIsoDate);
-    const tomorrowDate = new Date(todayDate.getTime() + 24 * 60 * 60 * 1000);
+    const todayWindow = getDayWindowUtc(todayIsoDate, currentTimezone?.timezone);
 
-    const [preferences, rangeWaterLogs, mealLogs, workoutDays, weightHistory, currentWorkout] =
+    const [rangeWaterLogs, mealLogs, workoutDays, weightHistory, currentWorkout] =
       await Promise.all([
-        app.prisma.userPreference.findUnique({
-          where: {
-            userId: user.id,
-          },
-        }),
         app.prisma.waterLog.findMany({
           where: {
             userId: user.id,
             occurredAt: {
-              gte: fromDate,
-              lt: inclusiveEnd,
+              gte: rangeWindow.start,
+              lt: rangeWindow.end,
             },
           },
           orderBy: {
@@ -408,8 +449,8 @@ export const registerHealthRoutes: FastifyPluginAsync = async (app) => {
           where: {
             userId: user.id,
             occurredAt: {
-              gte: fromDate,
-              lt: inclusiveEnd,
+              gte: rangeWindow.start,
+              lt: rangeWindow.end,
             },
           },
           orderBy: {
@@ -420,8 +461,8 @@ export const registerHealthRoutes: FastifyPluginAsync = async (app) => {
           where: {
             userId: user.id,
             date: {
-              gte: fromDate,
-              lt: inclusiveEnd,
+              gte: parseIsoDate(query.from),
+              lte: parseIsoDate(query.to),
             },
           },
           orderBy: {
@@ -432,8 +473,8 @@ export const registerHealthRoutes: FastifyPluginAsync = async (app) => {
           where: {
             userId: user.id,
             measuredOn: {
-              gte: fromDate,
-              lt: inclusiveEnd,
+              gte: parseIsoDate(query.from),
+              lte: parseIsoDate(query.to),
             },
           },
           orderBy: {
@@ -451,10 +492,10 @@ export const registerHealthRoutes: FastifyPluginAsync = async (app) => {
       ]);
 
     const currentDayWaterMl = rangeWaterLogs
-      .filter((waterLog) => waterLog.occurredAt >= todayDate && waterLog.occurredAt < tomorrowDate)
+      .filter((waterLog) => waterLog.occurredAt >= todayWindow.start && waterLog.occurredAt < todayWindow.end)
       .reduce((total, waterLog) => total + waterLog.amountMl, 0);
     const currentDayMeals = mealLogs.filter(
-      (mealLog) => mealLog.occurredAt >= todayDate && mealLog.occurredAt < tomorrowDate,
+      (mealLog) => mealLog.occurredAt >= todayWindow.start && mealLog.occurredAt < todayWindow.end,
     );
     const response: HealthSummaryResponse = withGeneratedAt({
       from: query.from,
@@ -569,7 +610,9 @@ export const registerHealthRoutes: FastifyPluginAsync = async (app) => {
     const weightLog = await app.prisma.weightLog.create({
       data: {
         userId: user.id,
-        measuredOn: payload.measuredOn ? parseIsoDate(payload.measuredOn) : parseIsoDate(getTodayIsoDate()),
+        measuredOn: payload.measuredOn
+          ? parseIsoDate(payload.measuredOn)
+          : parseIsoDate(await getTodayIsoDate(app, user.id)),
         weightValue: payload.weightValue,
         unit: payload.unit ?? "kg",
         note: payload.note ?? null,
