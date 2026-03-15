@@ -183,6 +183,35 @@ type HomeOverviewResponse = {
     read: boolean;
     createdAt: string;
   }>;
+  guidance: {
+    recovery: {
+      tone: "steady" | "recovery";
+      title: string;
+      detail: string;
+    } | null;
+    weeklyChallenge: {
+      habitId: string;
+      title: string;
+      streakCount: number;
+      completedToday: boolean;
+      weekCompletions: number;
+      weekTarget: number;
+      status: "on_track" | "due_today" | "behind";
+      message: string;
+    } | null;
+    recommendations: Array<{
+      id: string;
+      kind: "habit" | "priority" | "task" | "review" | "health";
+      title: string;
+      detail: string;
+      impactLabel: string;
+      action:
+        | { type: "complete_task"; entityId: string }
+        | { type: "complete_habit"; entityId: string }
+        | { type: "open_review"; route: string }
+        | { type: "open_route"; route: string };
+    }>;
+  };
 };
 
 type ScoreBucket = {
@@ -276,6 +305,16 @@ type TaskMutationResponse = {
 type HabitsResponse = {
   generatedAt: string;
   date: string;
+  weeklyChallenge: {
+    habitId: string;
+    title: string;
+    streakCount: number;
+    completedToday: boolean;
+    weekCompletions: number;
+    weekTarget: number;
+    status: "on_track" | "due_today" | "behind";
+    message: string;
+  } | null;
   habits: Array<{
     id: string;
     title: string;
@@ -286,6 +325,14 @@ type HabitsResponse = {
     dueToday: boolean;
     completedToday: boolean;
     streakCount: number;
+    risk: {
+      level: "none" | "at_risk" | "drifting";
+      reason: "streak_at_risk" | "missed_recently" | "low_completion_rate" | null;
+      message: string | null;
+      dueCount7d: number;
+      completedCount7d: number;
+      completionRate7d: number;
+    };
   }>;
   dueHabits: Array<{
     id: string;
@@ -297,6 +344,14 @@ type HabitsResponse = {
     dueToday: boolean;
     completedToday: boolean;
     streakCount: number;
+    risk: {
+      level: "none" | "at_risk" | "drifting";
+      reason: "streak_at_risk" | "missed_recently" | "low_completion_rate" | null;
+      message: string | null;
+      dueCount7d: number;
+      completedCount7d: number;
+      completionRate7d: number;
+    };
   }>;
   routines: Array<{
     id: string;

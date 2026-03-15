@@ -31,6 +31,28 @@ function GoalChip({ goal }: { goal: LinkedGoal }) {
   );
 }
 
+function ChallengeProgressRing({ completions, target }: { completions: number; target: number }) {
+  const radius = 16;
+  const circumference = 2 * Math.PI * radius;
+  const progress = target > 0 ? Math.min(completions / target, 1) : 0;
+  const offset = circumference * (1 - progress);
+
+  return (
+    <svg className="challenge-card__progress-ring" viewBox="0 0 40 40">
+      <circle className="ring-bg" cx="20" cy="20" r={radius} />
+      <circle
+        className="ring-fill"
+        cx="20"
+        cy="20"
+        r={radius}
+        strokeDasharray={circumference}
+        strokeDashoffset={offset}
+        transform="rotate(-90 20 20)"
+      />
+    </svg>
+  );
+}
+
 export function HomePage() {
   const today = getTodayDate();
   const navigate = useNavigate();
@@ -211,6 +233,98 @@ export function HomePage() {
           ))}
         </div>
       </section>
+
+      {/* --- Guidance rail --- */}
+      {home.guidance ? (
+        <div className="guidance-rail">
+          {home.guidance.recovery ? (
+            <div className={`recovery-strip${home.guidance.recovery.tone === "recovery" ? " recovery-strip--recovery" : ""}`}>
+              <span className="recovery-strip__indicator" />
+              <div className="recovery-strip__body">
+                <div className="recovery-strip__title">{home.guidance.recovery.title}</div>
+                <div className="recovery-strip__detail">{home.guidance.recovery.detail}</div>
+              </div>
+            </div>
+          ) : null}
+
+          {home.guidance.weeklyChallenge ? (() => {
+            const wc = home.guidance.weeklyChallenge;
+            return (
+              <Link
+                to="/habits"
+                className={`challenge-card${wc.status === "behind" ? " challenge-card--behind" : ""}`}
+              >
+                <ChallengeProgressRing completions={wc.weekCompletions} target={wc.weekTarget} />
+                <div className="challenge-card__body">
+                  <div className="challenge-card__label">Weekly focus</div>
+                  <div className="challenge-card__title">{wc.title}</div>
+                  <div className="challenge-card__meta">
+                    {wc.weekCompletions}/{wc.weekTarget} this week
+                    {wc.streakCount > 0 ? ` · ${wc.streakCount} day streak` : ""}
+                  </div>
+                </div>
+                <span className="challenge-card__status">
+                  <span className={`tag ${wc.status === "on_track" ? "tag--positive" : wc.status === "due_today" ? "tag--warning" : "tag--negative"}`}>
+                    {wc.status === "on_track" ? "on track" : wc.status === "due_today" ? "due today" : "behind"}
+                  </span>
+                </span>
+              </Link>
+            );
+          })() : null}
+
+          {home.guidance.recommendations.length > 0 ? (
+            <div className="rec-stack">
+              {home.guidance.recommendations.map((rec) => {
+                const action = rec.action;
+                return (
+                  <div key={rec.id} className="rec-item">
+                    <span className={`rec-item__kind rec-item__kind--${rec.kind}`} />
+                    <div className="rec-item__body">
+                      <div className="rec-item__title">{rec.title}</div>
+                      <div className="rec-item__detail">{rec.detail}</div>
+                    </div>
+                    <span className="rec-item__impact">{rec.impactLabel}</span>
+                    <div className="rec-item__action">
+                      {action.type === "complete_task" ? (
+                        <button
+                          className="button button--ghost button--small"
+                          type="button"
+                          disabled={updateTaskMutation.isPending}
+                          onClick={() =>
+                            updateTaskMutation.mutate({
+                              taskId: action.entityId,
+                              status: "completed",
+                            })
+                          }
+                        >
+                          {updateTaskMutation.isPending ? "Saving..." : "Done"}
+                        </button>
+                      ) : action.type === "complete_habit" ? (
+                        <button
+                          className="button button--ghost button--small"
+                          type="button"
+                          disabled={habitCheckinMutation.isPending}
+                          onClick={() => habitCheckinMutation.mutate(action.entityId)}
+                        >
+                          {habitCheckinMutation.isPending ? "Saving..." : "Done"}
+                        </button>
+                      ) : (
+                        <button
+                          className="button button--ghost button--small"
+                          type="button"
+                          onClick={() => navigate(action.route)}
+                        >
+                          Open
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : null}
+        </div>
+      ) : null}
 
       <div className="dashboard-grid stagger">
         <SectionCard

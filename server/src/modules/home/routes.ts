@@ -13,9 +13,23 @@ import type { GoalDomain as PrismaGoalDomain, GoalStatus as PrismaGoalStatus } f
 import { z } from "zod";
 
 import { requireAuthenticatedUser } from "../../lib/auth/require-auth.js";
-import { isHabitDueOnIsoDate, normalizeHabitScheduleRule } from "../../lib/habits/schedule.js";
+import {
+  calculateHabitActiveStreak,
+  calculateHabitRisk,
+  calculateWeeklyHabitChallenge,
+} from "../../lib/habits/guidance.js";
+import {
+  isHabitDueOnIsoDate,
+  normalizeHabitScheduleRule,
+} from "../../lib/habits/schedule.js";
 import { withGeneratedAt } from "../../lib/http/response.js";
-import { getMonthStartIsoDate, parseIsoDate } from "../../lib/time/cycle.js";
+import {
+  addIsoDays,
+  getMonthStartIsoDate,
+  getWeekEndDate,
+  getWeekStartIsoDate,
+  parseIsoDate,
+} from "../../lib/time/cycle.js";
 import { toIsoDateString } from "../../lib/time/date.js";
 import {
   getDayWindowUtc,
@@ -24,6 +38,7 @@ import {
   getUserLocalHour,
 } from "../../lib/time/user-time.js";
 import { parseOrThrow } from "../../lib/validation/parse.js";
+import { buildHomeGuidance } from "./guidance.js";
 import { calculateDailyScore, ensureCycle, getWeeklyMomentum } from "../scoring/service.js";
 
 const isoDateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/) as unknown as z.ZodType<IsoDateString>;
@@ -101,13 +116,21 @@ async function buildHomeOverview(
     },
   });
   const dayWindow = getDayWindowUtc(targetIsoDate, preferences?.timezone);
-  const [dayCycle, score, momentum, tasks, habits, habitCheckins, routines, routineCheckins, waterLogs, mealLogs, workoutDay, expenses, adminItems, notifications] =
+  const weekStartIsoDate = getWeekStartIsoDate(targetIsoDate, preferences?.weekStartsOn ?? 1);
+  const weekStartDate = parseIsoDate(weekStartIsoDate);
+  const [dayCycle, weekCycle, score, momentum, tasks, habits, recentHabitCheckins, routines, routineCheckins, waterLogs, mealLogs, workoutDay, expenses, adminItems, notifications] =
     await Promise.all([
       ensureCycle(app.prisma, {
         userId,
         cycleType: "DAY",
         cycleStartDate: targetDate,
         cycleEndDate: targetDate,
+      }),
+      ensureCycle(app.prisma, {
+        userId,
+        cycleType: "WEEK",
+        cycleStartDate: weekStartDate,
+        cycleEndDate: getWeekEndDate(weekStartDate),
       }),
       calculateDailyScore(app.prisma, userId, targetDate),
       getWeeklyMomentum(app.prisma, userId, targetDate),
@@ -130,7 +153,10 @@ async function buildHomeOverview(
       }),
       app.prisma.habitCheckin.findMany({
         where: {
-          occurredOn: targetDate,
+          occurredOn: {
+            gte: parseIsoDate(addIsoDays(targetIsoDate, -30)),
+            lte: targetDate,
+          },
           habit: {
             userId,
           },
@@ -218,10 +244,30 @@ async function buildHomeOverview(
     isHabitDueOnIsoDate(normalizeHabitScheduleRule(habit.scheduleRuleJson), targetIsoDate),
   );
   const completedHabits = dueHabits.filter((habit) =>
-    habitCheckins.some(
+    recentHabitCheckins.some(
       (checkin) => checkin.habitId === habit.id && checkin.status === "COMPLETED",
     ),
   );
+  const habitItems = habits.map((habit) => {
+    const habitCheckins = recentHabitCheckins.filter((checkin) => checkin.habitId === habit.id);
+    const scheduleRule = normalizeHabitScheduleRule(habit.scheduleRuleJson);
+    const risk = calculateHabitRisk(habitCheckins, scheduleRule, targetIsoDate);
+    const completedToday = habitCheckins.some(
+      (checkin) =>
+        toIsoDateString(checkin.occurredOn) === targetIsoDate && checkin.status === "COMPLETED",
+    );
+
+    return {
+      id: habit.id,
+      title: habit.title,
+      dueToday: isHabitDueOnIsoDate(scheduleRule, targetIsoDate),
+      completedToday,
+      streakCount: calculateHabitActiveStreak(habitCheckins, scheduleRule, targetIsoDate),
+      risk,
+      scheduleRule,
+      checkins: habitCheckins,
+    };
+  });
 
   const habitSummary: HabitSummary = {
     completedToday: completedHabits.length,
@@ -271,7 +317,8 @@ async function buildHomeOverview(
     });
   }
   const missedHabit = dueHabits.find(
-    (habit) => !habitCheckins.some((checkin) => checkin.habitId === habit.id && checkin.status === "COMPLETED"),
+    (habit) =>
+      !recentHabitCheckins.some((checkin) => checkin.habitId === habit.id && checkin.status === "COMPLETED"),
   );
   if (missedHabit) {
     attentionItems.push({
@@ -320,6 +367,66 @@ async function buildHomeOverview(
     read: Boolean(notification.readAt),
     createdAt: notification.createdAt.toISOString(),
   }));
+  const weeklyChallengeHabit = weekCycle.weeklyReview?.focusHabitId
+    ? habitItems.find((habit) => habit.id === weekCycle.weeklyReview?.focusHabitId)
+    : null;
+  const weeklyChallenge =
+    weeklyChallengeHabit &&
+    weeklyChallengeHabit.checkins &&
+    weeklyChallengeHabit.scheduleRule
+      ? calculateWeeklyHabitChallenge({
+          habit: {
+            id: weeklyChallengeHabit.id,
+            title: weeklyChallengeHabit.title,
+          },
+          checkins: weeklyChallengeHabit.checkins,
+          scheduleRule: weeklyChallengeHabit.scheduleRule,
+          weekStartIsoDate,
+          targetIsoDate,
+        })
+      : null;
+  const guidance = buildHomeGuidance({
+    score: {
+      label: score.label,
+      value: score.value,
+      topReasons: score.topReasons,
+    },
+    momentum: {
+      strongDayStreak: momentum.strongDayStreak,
+    },
+    habits: habitItems.map((habit) => ({
+      id: habit.id,
+      title: habit.title,
+      dueToday: habit.dueToday,
+      completedToday: habit.completedToday,
+      streakCount: habit.streakCount,
+      risk: habit.risk,
+    })),
+    priorities: dayCycle.priorities.map((priority) => ({
+      id: priority.id,
+      title: priority.title,
+      slot: priority.slot as 1 | 2 | 3,
+      status:
+        priority.status === "COMPLETED"
+          ? "completed"
+          : priority.status === "DROPPED"
+            ? "dropped"
+            : "pending",
+    })),
+    tasks: tasks.map((task) => ({
+      id: task.id,
+      title: task.title,
+      status:
+        task.status === "COMPLETED" ? "completed" : task.status === "DROPPED" ? "dropped" : "pending",
+    })),
+    weeklyChallenge,
+    dayReviewCompleted: Boolean(dayCycle.dailyReview),
+    currentHour: targetIsoDate === currentIsoDate ? getUserLocalHour(new Date(), preferences?.timezone) : 12,
+    health: {
+      waterMl: healthSummary.waterMl,
+      waterTargetMl: healthSummary.waterTargetMl,
+    },
+  });
 
   return withGeneratedAt({
     date: targetIsoDate,
@@ -363,6 +470,7 @@ async function buildHomeOverview(
     },
     attentionItems: attentionItems.slice(0, 6),
     notifications: homeNotifications,
+    guidance,
   });
 }
 

@@ -2186,3 +2186,294 @@ img { max-width: 100%; display: block; }
     grid-template-columns: 1fr;
   }
 }
+
+/* ═══════════════════════════════════════════════
+   Phase 4 — Guidance, Risk, Challenge
+   ═══════════════════════════════════════════════ */
+
+/* --- Guidance rail (Home) --- */
+
+.guidance-rail {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-bottom: 1.25rem;
+}
+
+/* Recovery strip */
+.recovery-strip {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.7rem 1rem;
+  border-radius: var(--r-sm);
+  border: 1px solid rgba(217, 153, 58, 0.12);
+  background: rgba(217, 153, 58, 0.04);
+  transition: border-color var(--dur) var(--ease);
+}
+
+.recovery-strip--recovery {
+  border-color: rgba(201, 85, 76, 0.18);
+  background: rgba(201, 85, 76, 0.05);
+}
+
+.recovery-strip__indicator {
+  flex-shrink: 0;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+.recovery-strip--recovery .recovery-strip__indicator {
+  background: var(--negative);
+  box-shadow: 0 0 6px rgba(201, 85, 76, 0.3);
+}
+
+.recovery-strip__body {
+  flex: 1;
+  min-width: 0;
+}
+
+.recovery-strip__title {
+  font-size: var(--fs-body);
+  font-weight: 650;
+  color: var(--text);
+}
+
+.recovery-strip__detail {
+  font-size: var(--fs-small);
+  color: var(--text-secondary);
+  margin-top: 0.1rem;
+}
+
+/* Weekly challenge card */
+.challenge-card {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  padding: 0.75rem 1rem;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--border);
+  background: linear-gradient(135deg, var(--panel-elevated) 0%, var(--panel) 100%);
+  cursor: pointer;
+  transition: all var(--dur) var(--ease);
+}
+
+.challenge-card:hover {
+  border-color: var(--border-active);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-sm);
+}
+
+.challenge-card__progress-ring {
+  flex-shrink: 0;
+  width: 40px;
+  height: 40px;
+}
+
+.challenge-card__progress-ring circle {
+  fill: none;
+  stroke-width: 3;
+}
+
+.challenge-card__progress-ring .ring-bg {
+  stroke: rgba(255, 255, 255, 0.06);
+}
+
+.challenge-card__progress-ring .ring-fill {
+  stroke: var(--positive);
+  stroke-linecap: round;
+  transition: stroke-dashoffset 0.6s var(--ease);
+}
+
+.challenge-card--behind .challenge-card__progress-ring .ring-fill {
+  stroke: var(--accent);
+}
+
+.challenge-card__body {
+  flex: 1;
+  min-width: 0;
+}
+
+.challenge-card__label {
+  font-size: var(--fs-micro);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+}
+
+.challenge-card__title {
+  font-size: var(--fs-body);
+  font-weight: 650;
+  color: var(--text);
+  margin-top: 0.05rem;
+}
+
+.challenge-card__meta {
+  font-size: var(--fs-small);
+  color: var(--text-secondary);
+  margin-top: 0.1rem;
+}
+
+.challenge-card__status {
+  flex-shrink: 0;
+}
+
+/* Recommendation stack */
+.rec-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.rec-item {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.55rem 0.75rem;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--border);
+  background: var(--panel);
+  transition: all var(--dur) var(--ease);
+}
+
+.rec-item:hover {
+  border-color: var(--border-active);
+  background: var(--panel-elevated);
+}
+
+.rec-item__kind {
+  flex-shrink: 0;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+.rec-item__kind--habit { background: var(--positive); }
+.rec-item__kind--health { background: #5db8b0; }
+.rec-item__kind--review { background: var(--accent-bright); }
+
+.rec-item__body {
+  flex: 1;
+  min-width: 0;
+}
+
+.rec-item__title {
+  font-size: var(--fs-body);
+  font-weight: 600;
+}
+
+.rec-item__detail {
+  font-size: var(--fs-small);
+  color: var(--text-secondary);
+  margin-top: 0.05rem;
+}
+
+.rec-item__impact {
+  flex-shrink: 0;
+  font-size: var(--fs-micro);
+  font-weight: 700;
+  padding: 0.15rem 0.45rem;
+  border-radius: var(--r-xs);
+  background: var(--accent-soft);
+  color: var(--accent-bright);
+}
+
+.rec-item__action {
+  flex-shrink: 0;
+}
+
+/* --- Habit risk indicators --- */
+
+.habit-item--at-risk {
+  border-left: 3px solid var(--accent);
+  padding-left: 0.55rem;
+}
+
+.habit-item--drifting {
+  border-left: 3px solid var(--text-tertiary);
+  padding-left: 0.55rem;
+}
+
+.risk-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  padding: 0.1rem 0.4rem;
+  border-radius: var(--r-xs);
+  font-size: var(--fs-micro);
+  font-weight: 600;
+}
+
+.risk-badge--at-risk {
+  background: rgba(217, 153, 58, 0.12);
+  color: var(--accent-bright);
+}
+
+.risk-badge--drifting {
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-tertiary);
+}
+
+.habit-item__risk-msg {
+  font-size: var(--fs-micro);
+  color: var(--text-secondary);
+  margin-top: 0.15rem;
+}
+
+.habit-item__stats {
+  font-size: var(--fs-micro);
+  color: var(--text-tertiary);
+}
+
+/* --- Focus habit selector (Reviews) --- */
+
+.focus-habit-field {
+  margin-top: 0.75rem;
+}
+
+.focus-habit-field select {
+  width: 100%;
+  padding: 0.5rem 0.75rem;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--text);
+  font-size: var(--fs-body);
+  font-family: var(--font-body);
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' fill='%23a0957e'%3E%3Cpath d='M6 8L0 0h12z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.75rem center;
+  cursor: pointer;
+  transition: border-color var(--dur) var(--ease);
+}
+
+.focus-habit-field select:focus {
+  outline: none;
+  border-color: var(--border-focus);
+}
+
+.focus-habit-field select:hover {
+  border-color: var(--border-active);
+}
+
+/* --- Responsive adjustments for guidance --- */
+
+@media (max-width: 640px) {
+  .guidance-rail {
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+  }
+
+  .challenge-card {
+    padding: 0.6rem 0.75rem;
+  }
+
+  .recovery-strip {
+    padding: 0.55rem 0.75rem;
+  }
+}

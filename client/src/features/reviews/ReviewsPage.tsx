@@ -7,6 +7,7 @@ import {
   toIsoDate,
   splitEntries,
   toPriorityInputs,
+  useHabitsQuery,
   useReviewDataQuery,
   useSubmitDailyReviewMutation,
   useSubmitMonthlyReviewMutation,
@@ -133,6 +134,8 @@ export function ReviewsPage() {
     { title: "" },
     { title: "" },
   ]);
+  const [focusHabitId, setFocusHabitId] = useState<string | null>(null);
+  const habitsQuery = useHabitsQuery();
 
   const requiredCount = "prompts" in config ? config.prompts.length : 0;
   const completedCount = responses.filter((response) => response.trim().length > 0).length;
@@ -223,6 +226,7 @@ export function ReviewsPage() {
         existing?.keepText ?? "",
         existing?.improveText ?? "",
       ]);
+      setFocusHabitId(existing?.focusHabitId ?? null);
       return;
     }
 
@@ -307,6 +311,7 @@ export function ReviewsPage() {
         keepText: responses[3] || "Protect the existing routine",
         improveText: responses[4] || "Clarify next week's priorities",
         nextWeekPriorities,
+        focusHabitId: focusHabitId || null,
         notes: responses.join("\n\n"),
       });
       return;
@@ -797,6 +802,39 @@ export function ReviewsPage() {
                 ))}
               </div>
             </SectionCard>
+
+            {cadenceKey === "weekly" ? (
+              <SectionCard
+                title="Focus habit for next week"
+                subtitle="Choose one habit to commit to — this seeds the weekly challenge"
+              >
+                {habitsQuery.data ? (() => {
+                  const activeHabits = habitsQuery.data.habits.filter((h) => h.status === "active");
+                  return activeHabits.length > 0 ? (
+                    <div className="focus-habit-field">
+                      <select
+                        value={focusHabitId ?? ""}
+                        onChange={(event) => setFocusHabitId(event.target.value || null)}
+                      >
+                        <option value="">No focus habit</option>
+                        {activeHabits.map((habit) => (
+                          <option key={habit.id} value={habit.id}>
+                            {habit.title}{habit.category ? ` (${habit.category})` : ""}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  ) : (
+                    <EmptyState
+                      title="No active habits"
+                      description="Create an active habit first to set a weekly focus."
+                    />
+                  );
+                })() : (
+                  <p className="support-copy">Loading habits…</p>
+                )}
+              </SectionCard>
+            ) : null}
           </div>
 
           <div className="button-row" style={{ paddingTop: "0.5rem" }}>

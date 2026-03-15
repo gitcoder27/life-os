@@ -236,11 +236,62 @@ describe("module route smoke tests", () => {
   });
 
   it("serves habits list", async () => {
-    prisma.habit = { findMany: vi.fn().mockResolvedValue([]) } as any;
+    scoringMock.ensureCycle.mockImplementation(async (_prisma: unknown, input: { cycleType: string }) => {
+      if (input.cycleType === "WEEK") {
+        return {
+          id: "week-cycle",
+          weeklyReview: {
+            focusHabitId: "habit-1",
+          },
+        };
+      }
+
+      return {
+        id: "day-cycle",
+        priorities: [],
+        dailyReview: null,
+        dailyScore: null,
+        weeklyReview: null,
+        plan: [],
+      };
+    });
+    prisma.habit = {
+      findMany: vi.fn().mockResolvedValue([
+        {
+          id: "habit-1",
+          userId: "user-1",
+          title: "Hydrate",
+          category: "Health",
+          scheduleRuleJson: {},
+          targetPerDay: 1,
+          status: "ACTIVE",
+          archivedAt: null,
+          checkins: [
+            { habitId: "habit-1", occurredOn: new Date("2026-03-10T00:00:00.000Z"), status: "COMPLETED" },
+            { habitId: "habit-1", occurredOn: new Date("2026-03-11T00:00:00.000Z"), status: "COMPLETED" },
+          ],
+        },
+      ]),
+    } as any;
     prisma.routine = { findMany: vi.fn().mockResolvedValue([]) } as any;
+    prisma.userPreference = {
+      findUnique: vi.fn().mockResolvedValue({ timezone: "UTC", weekStartsOn: 1 }),
+    } as any;
 
     const response = await app!.inject({ method: "GET", url: "/api/habits" });
     expect(response.statusCode).toBe(200);
+    const payload = JSON.parse(response.body);
+    expect(payload.habits[0].risk).toEqual(
+      expect.objectContaining({
+        level: expect.any(String),
+        dueCount7d: expect.any(Number),
+      }),
+    );
+    expect(payload.weeklyChallenge).toEqual(
+      expect.objectContaining({
+        habitId: "habit-1",
+      }),
+    );
   });
 
   it("serves notifications", async () => {
@@ -346,27 +397,39 @@ describe("module route smoke tests", () => {
   });
 
   it("serves home overview", async () => {
-    scoringMock.ensureCycle.mockResolvedValue({
-      id: "cycle-id",
-      priorities: [
-        {
-          id: "priority-1",
-          slot: 1,
-          title: "Protect gym slot",
-          status: "PENDING",
-          goalId: "goal-1",
-          goal: {
-            id: "goal-1",
-            title: "Build lifting consistency",
-            domain: "HEALTH",
-            status: "ACTIVE",
+    scoringMock.ensureCycle.mockImplementation(async (_prisma: unknown, input: { cycleType: string }) => {
+      if (input.cycleType === "WEEK") {
+        return {
+          id: "week-cycle",
+          weeklyReview: {
+            focusHabitId: "habit-1",
           },
-        },
-      ],
-      dailyReview: null,
-      dailyScore: null,
-      plan: [],
-    } as any);
+        };
+      }
+
+      return {
+        id: "cycle-id",
+        priorities: [
+          {
+            id: "priority-1",
+            slot: 1,
+            title: "Protect gym slot",
+            status: "PENDING",
+            goalId: "goal-1",
+            goal: {
+              id: "goal-1",
+              title: "Build lifting consistency",
+              domain: "HEALTH",
+              status: "ACTIVE",
+            },
+          },
+        ],
+        dailyReview: null,
+        dailyScore: null,
+        weeklyReview: null,
+        plan: [],
+      };
+    });
     prisma.task = {
       findMany: vi.fn().mockResolvedValue([
         {
@@ -427,12 +490,27 @@ describe("module route smoke tests", () => {
         },
       ]),
     } as any;
-    prisma.habitCheckin = { findMany: vi.fn().mockResolvedValue([]) } as any;
+    prisma.habitCheckin = {
+      findMany: vi.fn().mockResolvedValue([
+        {
+          habitId: "habit-1",
+          occurredOn: new Date("2026-03-12T00:00:00.000Z"),
+          status: "COMPLETED",
+        },
+        {
+          habitId: "habit-1",
+          occurredOn: new Date("2026-03-13T00:00:00.000Z"),
+          status: "COMPLETED",
+        },
+      ]),
+    } as any;
     prisma.routine = { findMany: vi.fn().mockResolvedValue([{ id: "routine-1", items: [] }]) } as any;
     prisma.routineItemCheckin = { findMany: vi.fn().mockResolvedValue([]) } as any;
     prisma.expense = { findMany: vi.fn().mockResolvedValue([]) } as any;
     prisma.notification = { findMany: vi.fn().mockResolvedValue([]) } as any;
-    prisma.userPreference = { findUnique: vi.fn().mockResolvedValue({ dailyWaterTargetMl: 2500 }) } as any;
+    prisma.userPreference = {
+      findUnique: vi.fn().mockResolvedValue({ dailyWaterTargetMl: 2500, timezone: "UTC", weekStartsOn: 1 }),
+    } as any;
     prisma.workoutDay = { findUnique: vi.fn().mockResolvedValue(null) } as any;
     prisma.routineItem = { findMany: vi.fn().mockResolvedValue([]) } as any;
 
@@ -466,6 +544,16 @@ describe("module route smoke tests", () => {
           type: "complete_task",
           entityId: "task-1",
         },
+      }),
+    );
+    expect(payload.guidance.weeklyChallenge).toEqual(
+      expect.objectContaining({
+        habitId: "habit-1",
+      }),
+    );
+    expect(payload.guidance.recommendations[0]).toEqual(
+      expect.objectContaining({
+        kind: "habit",
       }),
     );
   });

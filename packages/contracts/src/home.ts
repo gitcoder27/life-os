@@ -1,5 +1,6 @@
 import type { ApiMeta, EntityId, IsoDateString } from "./common.js";
 import type { GoalSummary } from "./goals.js";
+import type { WeeklyHabitChallenge } from "./habits.js";
 
 export interface DailyScoreSnapshot {
   value: number;
@@ -84,6 +85,27 @@ export interface HomeNotificationItem {
   createdAt: string;
 }
 
+export interface HomeRecoveryGuidance {
+  tone: "steady" | "recovery";
+  title: string;
+  detail: string;
+}
+
+export interface HomeGuidanceRecommendation {
+  id: EntityId;
+  kind: "habit" | "priority" | "task" | "review" | "health";
+  title: string;
+  detail: string;
+  impactLabel: string;
+  action: AttentionItem["action"];
+}
+
+export interface HomeGuidance {
+  recovery: HomeRecoveryGuidance | null;
+  weeklyChallenge: WeeklyHabitChallenge | null;
+  recommendations: HomeGuidanceRecommendation[];
+}
+
 export interface HomeOverviewResponse extends ApiMeta {
   date: IsoDateString;
   greeting: string;
@@ -97,4 +119,5 @@ export interface HomeOverviewResponse extends ApiMeta {
   financeSummary: FinanceSummary;
   attentionItems: AttentionItem[];
   notifications: HomeNotificationItem[];
+  guidance: HomeGuidance;
 }
