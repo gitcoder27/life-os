@@ -4,6 +4,7 @@ import { NavLink, useParams } from "react-router-dom";
 import {
   type DailyFrictionTag,
   getTodayDate,
+  toIsoDate,
   splitEntries,
   toPriorityInputs,
   useReviewDataQuery,
@@ -13,6 +14,7 @@ import {
 } from "../../shared/lib/api";
 import { PageHeader } from "../../shared/ui/PageHeader";
 import {
+  EmptyState,
   InlineErrorState,
   PageErrorState,
   PageLoadingState,
@@ -25,13 +27,6 @@ const reviewCadences = {
     title: "Close the day and seed tomorrow",
     description:
       "The daily review should stay short, practical, and tied to carry-forward decisions.",
-    prompts: [
-      "What went well today?",
-      "What created the most friction?",
-      "How was your energy?",
-      "What moves to tomorrow?",
-      "What are tomorrow's top 3?",
-    ],
   },
   weekly: {
     label: "Weekly",
@@ -61,6 +56,18 @@ const reviewCadences = {
   },
 } as const;
 
+type DailyTaskDecision = {
+  type: "carry_forward" | "drop" | "reschedule";
+  targetDate?: string;
+};
+
+type DailyPriorityDraft = {
+  id?: string;
+  title: string;
+};
+
+const prioritySlots: Array<1 | 2 | 3> = [1, 2, 3];
+
 function detectFrictionTag(value: string): DailyFrictionTag {
   const normalized = value.toLowerCase();
   if (normalized.includes("energy")) return "low energy";
@@ -82,9 +89,25 @@ function parseEnergyRating(value: string) {
   return Math.min(5, Math.max(1, number));
 }
 
+function getTomorrowDate(isoDate: string) {
+  const tomorrow = new Date(`${isoDate}T12:00:00`);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  return toIsoDate(tomorrow);
+}
+
+function fillThreePriorityDraft(values: DailyPriorityDraft[]) {
+  const next = values.slice(0, 3);
+  while (next.length < 3) {
+    next.push({ title: "" });
+  }
+
+  return next;
+}
+
 export function ReviewsPage() {
   const { cadence = "daily" } = useParams();
   const today = getTodayDate();
+  const tomorrow = getTomorrowDate(today);
   const cadenceKey =
     cadence === "daily" || cadence === "weekly" || cadence === "monthly"
       ? cadence
@@ -94,13 +117,24 @@ export function ReviewsPage() {
   const submitDailyReviewMutation = useSubmitDailyReviewMutation(today);
   const submitWeeklyReviewMutation = useSubmitWeeklyReviewMutation(today);
   const submitMonthlyReviewMutation = useSubmitMonthlyReviewMutation(today);
-  const [responses, setResponses] = useState<string[]>(
-    config.prompts.map(() => ""),
-  );
+  const [responses, setResponses] = useState<string[]>([]);
+  const [dailyInputs, setDailyInputs] = useState({
+    biggestWin: "",
+    frictionNote: "",
+    energyRating: "3",
+    optionalNote: "",
+  });
+  const [dailyTaskDecisions, setDailyTaskDecisions] = useState<Record<string, DailyTaskDecision>>({});
+  const [dailyTomorrowPriorities, setDailyTomorrowPriorities] = useState<DailyPriorityDraft[]>([
+    { title: "" },
+    { title: "" },
+    { title: "" },
+  ]);
 
-  const requiredCount = config.prompts.length;
+  const requiredCount = "prompts" in config ? config.prompts.length : 0;
   const completedCount = responses.filter((response) => response.trim().length > 0).length;
   const activeStep = responses.findIndex((response) => response.trim().length === 0);
+
   const summaryItems = useMemo(() => {
     if (!reviewQuery.data) {
       return [];
@@ -147,14 +181,33 @@ export function ReviewsPage() {
     }
 
     if (reviewQuery.data.cadence === "daily") {
-      const existing = reviewQuery.data.review.existingReview;
-      setResponses([
-        existing?.biggestWin ?? "",
-        existing?.frictionNote ?? "",
-        existing?.energyRating ? String(existing.energyRating) : "",
-        existing?.optionalNote ?? "",
-        "",
-      ]);
+      const review = reviewQuery.data.review;
+      const existing = review.existingReview;
+
+      setDailyInputs({
+        biggestWin: existing?.biggestWin ?? "",
+        frictionNote: existing?.frictionNote ?? "",
+        energyRating: existing?.energyRating ? String(existing.energyRating) : "3",
+        optionalNote: existing?.optionalNote ?? "",
+      });
+
+      const seededPriorities = [...review.seededTomorrowPriorities]
+        .sort((left, right) => left.slot - right.slot)
+        .map((priority) => ({
+          id: priority.id,
+          title: priority.title,
+        }));
+      const fallbackTaskTitles = review.incompleteTasks
+        .filter((task) => task.status === "pending")
+        .slice(0, 3)
+        .map((task) => ({ title: task.title }));
+
+      setDailyTomorrowPriorities(
+        fillThreePriorityDraft(
+          seededPriorities.length > 0 ? seededPriorities : fallbackTaskTitles,
+        ),
+      );
+      setDailyTaskDecisions({});
       return;
     }
 
@@ -186,21 +239,54 @@ export function ReviewsPage() {
     }
 
     if (reviewQuery.data.cadence === "daily") {
-      const fallbackPriorities = reviewQuery.data.review.incompleteTasks
-        .slice(0, 3)
-        .map((task) => task.title);
+      const pendingTasks = reviewQuery.data.review.incompleteTasks.filter(
+        (task) => task.status === "pending",
+      );
+
+      const carryForwardTaskIds: string[] = [];
+      const droppedTaskIds: string[] = [];
+      const rescheduledTasks: Array<{ taskId: string; targetDate: string }> = [];
+
+      for (const task of pendingTasks) {
+        const decision = dailyTaskDecisions[task.id];
+        if (!decision) {
+          return;
+        }
+
+        if (decision.type === "carry_forward") {
+          carryForwardTaskIds.push(task.id);
+          continue;
+        }
+
+        if (decision.type === "drop") {
+          droppedTaskIds.push(task.id);
+          continue;
+        }
+
+        if (!decision.targetDate) {
+          return;
+        }
+
+        rescheduledTasks.push({
+          taskId: task.id,
+          targetDate: decision.targetDate,
+        });
+      }
+
       await submitDailyReviewMutation.mutateAsync({
-        biggestWin: responses[0] || "Closed the loop",
-        frictionTag: detectFrictionTag(responses[1]),
-        frictionNote: responses[1] || null,
-        energyRating: parseEnergyRating(responses[2]),
-        optionalNote: responses[3] || null,
-        carryForwardTaskIds: [],
-        droppedTaskIds: [],
-        rescheduledTasks: [],
-        tomorrowPriorities: toPriorityInputs(
-          splitEntries(responses[4]).length ? splitEntries(responses[4]) : fallbackPriorities,
-        ),
+        biggestWin: dailyInputs.biggestWin.trim() || "Closed the loop",
+        frictionTag: detectFrictionTag(dailyInputs.frictionNote),
+        frictionNote: dailyInputs.frictionNote.trim() || null,
+        energyRating: parseEnergyRating(dailyInputs.energyRating),
+        optionalNote: dailyInputs.optionalNote.trim() || null,
+        carryForwardTaskIds,
+        droppedTaskIds,
+        rescheduledTasks,
+        tomorrowPriorities: dailyTomorrowPriorities.map((priority, index) => ({
+          id: priority.id,
+          slot: prioritySlots[index],
+          title: priority.title.trim(),
+        })),
       });
       return;
     }
@@ -269,6 +355,38 @@ export function ReviewsPage() {
     submitDailyReviewMutation.data ??
     submitWeeklyReviewMutation.data ??
     submitMonthlyReviewMutation.data;
+  const dailyReview = reviewQuery.data.cadence === "daily" ? reviewQuery.data.review : null;
+  const isDailyCompleted = dailyReview?.isCompleted ?? false;
+
+  const dailyPendingTasks =
+    dailyReview?.incompleteTasks.filter((task) => task.status === "pending") ?? [];
+  const hasDecisionForEveryPendingTask =
+    reviewQuery.data.cadence === "daily"
+      ? dailyPendingTasks.every((task) => {
+          const decision = dailyTaskDecisions[task.id];
+          if (!decision) {
+            return false;
+          }
+
+          if (decision.type === "reschedule") {
+            return Boolean(decision.targetDate);
+          }
+
+          return true;
+        })
+      : false;
+  const hasThreeTomorrowPriorities =
+    reviewQuery.data.cadence === "daily"
+      ? dailyTomorrowPriorities.length === 3 &&
+        dailyTomorrowPriorities.every((priority) => priority.title.trim().length > 0)
+      : false;
+
+  const canSubmitDaily =
+    reviewQuery.data.cadence === "daily" &&
+    !isDailyCompleted &&
+    hasDecisionForEveryPendingTask &&
+    hasThreeTomorrowPriorities &&
+    !isSubmitting;
 
   return (
     <div className="page">
@@ -290,97 +408,421 @@ export function ReviewsPage() {
         description={config.description}
       />
 
-      <div className="review-progress">
-        {config.prompts.map((_, index) => (
-          <div
-            key={index}
-            className={`review-progress__step${
-              index < completedCount ? " review-progress__step--complete" : ""
-            }${
-              index === (activeStep === -1 ? completedCount - 1 : activeStep)
-                ? " review-progress__step--active"
-                : ""
-            }`}
-          />
-        ))}
-      </div>
-      <p className="support-copy" style={{ marginTop: "0.75rem" }}>
-        {completedCount} of {requiredCount} prompts currently answered.
-      </p>
+      {reviewQuery.data.cadence === "daily" ? (
+        <>
+          <div className="two-column-grid stagger">
+            <SectionCard
+              title="Generated summary"
+              subtitle="System-generated overview"
+            >
+              <ul className="list">
+                {summaryItems.map((item) => (
+                  <li key={item}>
+                    <span>{item}</span>
+                    <span className="tag tag--neutral">auto</span>
+                  </li>
+                ))}
+              </ul>
+              <p className="support-copy" style={{ marginTop: "0.7rem" }}>
+                Score band: {reviewQuery.data.review.score.label} ({reviewQuery.data.review.score.value})
+              </p>
+            </SectionCard>
 
-      <div className="two-column-grid stagger">
-        <SectionCard
-          title="Prefilled summary"
-          subtitle="System-generated overview"
-        >
-          {"momentumError" in reviewQuery.data && reviewQuery.data.momentumError ? (
-            <InlineErrorState
-              message={reviewQuery.data.momentumError.message}
-              onRetry={() => void reviewQuery.refetch()}
-            />
-          ) : (
-            <ul className="list">
-              {summaryItems.map((item) => (
-                <li key={item}>
-                  <span>{item}</span>
-                  <span className="tag tag--neutral">auto</span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </SectionCard>
-
-        <SectionCard
-          title="Required prompts"
-          subtitle={`${requiredCount} sections to complete`}
-        >
-          <div className="stack-form">
-            {config.prompts.map((prompt, index) => (
-              <label key={prompt} className="field">
-                <span>{prompt}</span>
-                <textarea
-                  placeholder="Type your response..."
-                  rows={2}
-                  value={responses[index] ?? ""}
-                  onChange={(event) =>
-                    setResponses((current) =>
-                      current.map((value, currentIndex) =>
-                        currentIndex === index ? event.target.value : value,
-                      ),
-                    )
-                  }
+            <SectionCard
+              title="Pending tasks"
+              subtitle={isDailyCompleted ? "Review closed" : "Choose one decision per task"}
+            >
+              {dailyPendingTasks.length > 0 ? (
+                <div className="review-decision-list">
+                  {dailyPendingTasks.map((task) => {
+                    const decision = dailyTaskDecisions[task.id];
+                    const isCarry = decision?.type === "carry_forward";
+                    const isDrop = decision?.type === "drop";
+                    const isReschedule = decision?.type === "reschedule";
+                    return (
+                      <div key={task.id} className="review-decision-item">
+                        <div>
+                          <strong>{task.title}</strong>
+                          <div className="list__subtle">{task.notes ?? task.originType}</div>
+                        </div>
+                        {isDailyCompleted ? (
+                          <span className="tag tag--neutral">closed</span>
+                        ) : (
+                          <>
+                            <div className="button-row button-row--tight button-row--wrap">
+                              <button
+                                className={`button ${isCarry ? "button--primary" : "button--ghost"} button--small`}
+                                type="button"
+                                onClick={() =>
+                                  setDailyTaskDecisions((current) => ({
+                                    ...current,
+                                    [task.id]: {
+                                      type: "carry_forward",
+                                    },
+                                  }))
+                                }
+                              >
+                                Carry forward
+                              </button>
+                              <button
+                                className={`button ${isDrop ? "button--primary" : "button--ghost"} button--small`}
+                                type="button"
+                                onClick={() =>
+                                  setDailyTaskDecisions((current) => ({
+                                    ...current,
+                                    [task.id]: {
+                                      type: "drop",
+                                    },
+                                  }))
+                                }
+                              >
+                                Drop
+                              </button>
+                              <button
+                                className={`button ${isReschedule ? "button--primary" : "button--ghost"} button--small`}
+                                type="button"
+                                onClick={() =>
+                                  setDailyTaskDecisions((current) => ({
+                                    ...current,
+                                    [task.id]: {
+                                      type: "reschedule",
+                                      targetDate:
+                                        current[task.id]?.targetDate ?? tomorrow,
+                                    },
+                                  }))
+                                }
+                              >
+                                Reschedule
+                              </button>
+                            </div>
+                            {isReschedule ? (
+                              <label className="field" style={{ marginTop: "0.5rem" }}>
+                                <span>Target date</span>
+                                <input
+                                  type="date"
+                                  value={decision.targetDate ?? tomorrow}
+                                  onChange={(event) =>
+                                    setDailyTaskDecisions((current) => ({
+                                      ...current,
+                                      [task.id]: {
+                                        type: "reschedule",
+                                        targetDate: event.target.value,
+                                      },
+                                    }))
+                                  }
+                                />
+                              </label>
+                            ) : null}
+                          </>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <EmptyState
+                  title="No pending tasks"
+                  description="All day tasks are already resolved."
                 />
-              </label>
+              )}
+            </SectionCard>
+
+            {isDailyCompleted ? (
+              <>
+                <SectionCard
+                  title="Submitted daily reflection"
+                  subtitle="Read-only closed state"
+                >
+                  {reviewQuery.data.review.existingReview ? (
+                    <ul className="list">
+                      <li>
+                        <strong>Biggest win</strong>
+                        <span className="list__subtle">{reviewQuery.data.review.existingReview.biggestWin}</span>
+                      </li>
+                      <li>
+                        <strong>Friction tag</strong>
+                        <span className="list__subtle">{reviewQuery.data.review.existingReview.frictionTag}</span>
+                      </li>
+                      <li>
+                        <strong>Friction note</strong>
+                        <span className="list__subtle">{reviewQuery.data.review.existingReview.frictionNote ?? "None"}</span>
+                      </li>
+                      <li>
+                        <strong>Energy</strong>
+                        <span className="list__subtle">{reviewQuery.data.review.existingReview.energyRating}/5</span>
+                      </li>
+                      <li>
+                        <strong>Optional note</strong>
+                        <span className="list__subtle">{reviewQuery.data.review.existingReview.optionalNote ?? "None"}</span>
+                      </li>
+                    </ul>
+                  ) : (
+                    <EmptyState
+                      title="No reflection captured"
+                      description="The review is closed but no reflection details were returned."
+                    />
+                  )}
+                </SectionCard>
+
+                <SectionCard
+                  title="Seeded tomorrow priorities"
+                  subtitle="Submitted output"
+                >
+                  {reviewQuery.data.review.seededTomorrowPriorities.length > 0 ? (
+                    <ol className="priority-list">
+                      {[...reviewQuery.data.review.seededTomorrowPriorities]
+                        .sort((left, right) => left.slot - right.slot)
+                        .map((priority, index) => (
+                          <li key={priority.id} className="priority-list__item">
+                            <span>
+                              <span className="tag tag--neutral" style={{ marginRight: "0.5rem" }}>
+                                P{index + 1}
+                              </span>
+                              {priority.title}
+                            </span>
+                          </li>
+                        ))}
+                    </ol>
+                  ) : (
+                    <EmptyState
+                      title="No priorities seeded"
+                      description="No tomorrow priorities were returned with this closed review."
+                    />
+                  )}
+                </SectionCard>
+              </>
+            ) : (
+              <>
+                <SectionCard
+                  title="Daily reflection"
+                  subtitle="Short and practical"
+                >
+                  <div className="stack-form">
+                    <label className="field">
+                      <span>Biggest win</span>
+                      <textarea
+                        rows={2}
+                        placeholder="What moved the day forward?"
+                        value={dailyInputs.biggestWin}
+                        onChange={(event) =>
+                          setDailyInputs((current) => ({
+                            ...current,
+                            biggestWin: event.target.value,
+                          }))
+                        }
+                      />
+                    </label>
+                    <label className="field">
+                      <span>Main friction note</span>
+                      <textarea
+                        rows={2}
+                        placeholder="What created the most friction?"
+                        value={dailyInputs.frictionNote}
+                        onChange={(event) =>
+                          setDailyInputs((current) => ({
+                            ...current,
+                            frictionNote: event.target.value,
+                          }))
+                        }
+                      />
+                    </label>
+                    <label className="field">
+                      <span>Energy rating (1-5)</span>
+                      <input
+                        type="number"
+                        min={1}
+                        max={5}
+                        value={dailyInputs.energyRating}
+                        onChange={(event) =>
+                          setDailyInputs((current) => ({
+                            ...current,
+                            energyRating: event.target.value,
+                          }))
+                        }
+                      />
+                    </label>
+                    <label className="field">
+                      <span>Optional note</span>
+                      <textarea
+                        rows={2}
+                        placeholder="Anything else worth capturing?"
+                        value={dailyInputs.optionalNote}
+                        onChange={(event) =>
+                          setDailyInputs((current) => ({
+                            ...current,
+                            optionalNote: event.target.value,
+                          }))
+                        }
+                      />
+                    </label>
+                  </div>
+                </SectionCard>
+
+                <SectionCard
+                  title="Tomorrow priorities"
+                  subtitle="Exactly 3 priorities required"
+                >
+                  <div className="stack-form">
+                    {dailyTomorrowPriorities.map((priority, index) => (
+                      <label key={`tomorrow-priority-${index}`} className="field">
+                        <span>Priority {index + 1}</span>
+                        <input
+                          type="text"
+                          value={priority.title}
+                          placeholder="Enter tomorrow's priority"
+                          onChange={(event) =>
+                            setDailyTomorrowPriorities((current) =>
+                              current.map((entry, entryIndex) =>
+                                entryIndex === index
+                                  ? {
+                                      ...entry,
+                                      title: event.target.value,
+                                    }
+                                  : entry,
+                              ),
+                            )
+                          }
+                        />
+                      </label>
+                    ))}
+                  </div>
+                </SectionCard>
+              </>
+            )}
+          </div>
+
+          {isDailyCompleted ? (
+            <div className="inline-state inline-state--success" style={{ marginTop: "0.75rem" }}>
+              Daily review is already closed for {dailyReview?.date}.
+            </div>
+            ) : (
+            <>
+              <div className="button-row" style={{ paddingTop: "0.5rem" }}>
+                <span className="support-copy">
+                  {hasDecisionForEveryPendingTask
+                    ? "All pending tasks have decisions."
+                    : "Choose carry forward, drop, or reschedule for every pending task."}{" "}
+                  {hasThreeTomorrowPriorities
+                    ? "Three tomorrow priorities are set."
+                    : "Fill all three tomorrow priorities to submit."}
+                </span>
+                <button
+                  className="button button--primary"
+                  type="button"
+                  onClick={() => void handleSubmit()}
+                  disabled={!canSubmitDaily}
+                >
+                  {isSubmitting ? "Submitting..." : "Submit daily review"}
+                </button>
+              </div>
+              {submitError ? (
+                <div className="inline-state inline-state--error" style={{ marginTop: "0.75rem" }}>
+                  {submitError instanceof Error ? submitError.message : "Review submission failed."}
+                </div>
+              ) : null}
+              {submitResult && "score" in submitResult ? (
+                <div className="inline-state inline-state--success" style={{ marginTop: "0.75rem" }}>
+                  Daily review closed. {submitResult.tomorrowPriorities.length} priorities seeded for tomorrow.
+                </div>
+              ) : null}
+            </>
+          )}
+        </>
+      ) : (
+        <>
+          <div className="review-progress">
+            {("prompts" in config ? config.prompts : []).map((_, index) => (
+              <div
+                key={index}
+                className={`review-progress__step${
+                  index < completedCount ? " review-progress__step--complete" : ""
+                }${
+                  index === (activeStep === -1 ? completedCount - 1 : activeStep)
+                    ? " review-progress__step--active"
+                    : ""
+                }`}
+              />
             ))}
           </div>
-        </SectionCard>
-      </div>
+          <p className="support-copy" style={{ marginTop: "0.75rem" }}>
+            {completedCount} of {requiredCount} prompts currently answered.
+          </p>
 
-      <div className="button-row" style={{ paddingTop: "0.5rem" }}>
-        <span className="support-copy">Draft saving is not live yet, so this form only supports full submit.</span>
-        <button
-          className="button button--primary"
-          type="button"
-          onClick={() => void handleSubmit()}
-          disabled={isSubmitting}
-        >
-          {isSubmitting ? "Submitting..." : "Submit review"}
-        </button>
-      </div>
-      {submitError ? (
-        <div className="inline-state inline-state--error" style={{ marginTop: "0.75rem" }}>
-          {submitError instanceof Error ? submitError.message : "Review submission failed."}
-        </div>
-      ) : null}
-      {submitResult ? (
-        <div className="inline-state inline-state--success" style={{ marginTop: "0.75rem" }}>
-          {"score" in submitResult
-            ? `Daily review closed. ${submitResult.tomorrowPriorities.length} priorities seeded for tomorrow.`
-            : "nextWeekPriorities" in submitResult
-              ? `Weekly review saved. ${submitResult.nextWeekPriorities.length} priorities seeded for next week.`
-              : `Monthly review saved. ${submitResult.nextMonthOutcomes.length} outcomes seeded for next month.`}
-        </div>
-      ) : null}
+          <div className="two-column-grid stagger">
+            <SectionCard
+              title="Prefilled summary"
+              subtitle="System-generated overview"
+            >
+              {"momentumError" in reviewQuery.data && reviewQuery.data.momentumError ? (
+                <InlineErrorState
+                  message={reviewQuery.data.momentumError.message}
+                  onRetry={() => void reviewQuery.refetch()}
+                />
+              ) : (
+                <ul className="list">
+                  {summaryItems.map((item) => (
+                    <li key={item}>
+                      <span>{item}</span>
+                      <span className="tag tag--neutral">auto</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </SectionCard>
+
+            <SectionCard
+              title="Required prompts"
+              subtitle={`${requiredCount} sections to complete`}
+            >
+              <div className="stack-form">
+                {("prompts" in config ? config.prompts : []).map((prompt, index) => (
+                  <label key={prompt} className="field">
+                    <span>{prompt}</span>
+                    <textarea
+                      placeholder="Type your response..."
+                      rows={2}
+                      value={responses[index] ?? ""}
+                      onChange={(event) =>
+                        setResponses((current) =>
+                          current.map((value, currentIndex) =>
+                            currentIndex === index ? event.target.value : value,
+                          ),
+                        )
+                      }
+                    />
+                  </label>
+                ))}
+              </div>
+            </SectionCard>
+          </div>
+
+          <div className="button-row" style={{ paddingTop: "0.5rem" }}>
+            <span className="support-copy">Draft saving is not live yet, so this form only supports full submit.</span>
+            <button
+              className="button button--primary"
+              type="button"
+              onClick={() => void handleSubmit()}
+              disabled={isSubmitting}
+            >
+              {isSubmitting ? "Submitting..." : "Submit review"}
+            </button>
+          </div>
+          {submitError ? (
+            <div className="inline-state inline-state--error" style={{ marginTop: "0.75rem" }}>
+              {submitError instanceof Error ? submitError.message : "Review submission failed."}
+            </div>
+          ) : null}
+          {submitResult ? (
+            <div className="inline-state inline-state--success" style={{ marginTop: "0.75rem" }}>
+              {"score" in submitResult
+                ? `Daily review closed. ${submitResult.tomorrowPriorities.length} priorities seeded for tomorrow.`
+                : "nextWeekPriorities" in submitResult
+                  ? `Weekly review saved. ${submitResult.nextWeekPriorities.length} priorities seeded for next week.`
+                  : `Monthly review saved. ${submitResult.nextMonthOutcomes.length} outcomes seeded for next month.`}
+            </div>
+          ) : null}
+        </>
+      )}
     </div>
   );
 }

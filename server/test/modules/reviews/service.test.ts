@@ -23,7 +23,10 @@ import {
 
 describe("reviews service", () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    calculateDailyScoreMock.mockReset();
+    ensureCycleMock.mockReset();
+    finalizeDailyScoreMock.mockReset();
+    getWeeklyMomentumMock.mockReset();
   });
 
   it("builds daily review model from cycle summary and persisted review", async () => {
@@ -51,6 +54,20 @@ describe("reviews service", () => {
     });
 
     const prisma = {
+      planningCycle: {
+        findUnique: vi.fn().mockResolvedValue({
+          priorities: [
+            {
+              id: "priority-2",
+              slot: 1,
+              title: "Tomorrow priority",
+              status: "PENDING",
+              goalId: null,
+              completedAt: null,
+            },
+          ],
+        }),
+      },
       task: {
         findMany: vi.fn().mockResolvedValue([
           {
@@ -173,6 +190,28 @@ describe("reviews service", () => {
       create: vi.fn().mockResolvedValue({}),
     };
     const prisma = {
+      task: {
+        findMany: vi.fn().mockResolvedValue([
+          {
+            id: "carry-task",
+            userId: "user-1",
+            status: "PENDING",
+            scheduledForDate: new Date("2026-03-14T00:00:00.000Z"),
+          },
+          {
+            id: "drop-task",
+            userId: "user-1",
+            status: "PENDING",
+            scheduledForDate: new Date("2026-03-14T00:00:00.000Z"),
+          },
+          {
+            id: "resched-task",
+            userId: "user-1",
+            status: "PENDING",
+            scheduledForDate: new Date("2026-03-14T00:00:00.000Z"),
+          },
+        ]),
+      },
       $transaction: vi.fn(async (callback: any) =>
         callback({
           dailyReview: { upsert: vi.fn().mockResolvedValue({}) },
@@ -231,6 +270,79 @@ describe("reviews service", () => {
       status: "pending",
     });
     expect(finalizeDailyScoreMock).toHaveBeenCalledWith(prisma, "user-1", new Date("2026-03-14T00:00:00.000Z"));
+  });
+
+  it("rejects daily review resubmission after the day is already closed", async () => {
+    ensureCycleMock.mockResolvedValue({
+      id: "day-cycle",
+      priorities: [],
+      dailyReview: {
+        biggestWin: "Already done",
+        frictionTag: "poor planning",
+        frictionNote: null,
+        energyRating: 3,
+        optionalNote: null,
+        completedAt: new Date("2026-03-14T21:00:00.000Z"),
+      },
+    } as any);
+
+    await expect(
+      submitDailyReview(
+        { task: { findMany: vi.fn().mockResolvedValue([]) } } as any,
+        "user-1",
+        new Date("2026-03-14T00:00:00.000Z"),
+        {
+          biggestWin: "Focus",
+          frictionTag: "poor planning",
+          frictionNote: null,
+          energyRating: 3,
+          optionalNote: null,
+          carryForwardTaskIds: [],
+          droppedTaskIds: [],
+          rescheduledTasks: [],
+          tomorrowPriorities: [{ slot: 1, title: "tomorrow 1" }],
+        },
+      ),
+    ).rejects.toThrow("Daily review has already been completed for this date");
+  });
+
+  it("requires all pending tasks for the review date to be resolved", async () => {
+    ensureCycleMock.mockResolvedValue({
+      id: "day-cycle",
+      priorities: [],
+      dailyReview: null,
+      dailyScore: null,
+    } as any);
+
+    await expect(
+      submitDailyReview(
+        {
+          task: {
+            findMany: vi.fn().mockResolvedValue([
+              {
+                id: "task-1",
+                userId: "user-1",
+                status: "PENDING",
+                scheduledForDate: new Date("2026-03-14T00:00:00.000Z"),
+              },
+            ]),
+          },
+        } as any,
+        "user-1",
+        new Date("2026-03-14T00:00:00.000Z"),
+        {
+          biggestWin: "Focus",
+          frictionTag: "poor planning",
+          frictionNote: null,
+          energyRating: 3,
+          optionalNote: null,
+          carryForwardTaskIds: [],
+          droppedTaskIds: [],
+          rescheduledTasks: [],
+          tomorrowPriorities: [{ slot: 1, title: "tomorrow 1" }],
+        },
+      ),
+    ).rejects.toThrow("Every pending task for the review date must be resolved before submission");
   });
 
   it("builds weekly review summaries from activity and friction data", async () => {

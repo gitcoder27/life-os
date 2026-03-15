@@ -48,6 +48,8 @@ export interface DailyReviewResponse extends ApiMeta {
   score: DailyScoreBreakdownResponse;
   incompleteTasks: PlanningTaskItem[];
   existingReview: ExistingDailyReview | null;
+  isCompleted: boolean;
+  seededTomorrowPriorities: PlanningPriorityItem[];
 }
 
 export interface SubmitDailyReviewRequest {

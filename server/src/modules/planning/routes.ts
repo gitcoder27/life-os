@@ -14,12 +14,14 @@ import type {
   PlanningPriorityInput,
   PlanningPriorityItem,
   PlanningPriorityMutationResponse,
+  PriorityMutationResponse,
   PlanningTaskItem,
   TasksResponse,
   TaskMutationResponse,
   UpdateDayPrioritiesRequest,
   UpdateGoalRequest,
   UpdateMonthFocusRequest,
+  UpdatePriorityRequest,
   UpdateTaskRequest,
   UpdateWeekPrioritiesRequest,
   WeekPlanResponse,
@@ -57,6 +59,7 @@ const goalDomainSchema = z.enum([
   "other",
 ]);
 const goalStatusSchema = z.enum(["active", "paused", "completed", "archived"]);
+const priorityStatusSchema = z.enum(["pending", "completed", "dropped"]);
 const taskStatusSchema = z.enum(["pending", "completed", "dropped"]);
 const taskOriginSchema = z.enum([
   "manual",
@@ -66,6 +69,7 @@ const taskOriginSchema = z.enum([
   "recurring",
 ]);
 const priorityInputSchema = z.object({
+  id: z.string().uuid().optional(),
   slot: z.union([z.literal(1), z.literal(2), z.literal(3)]),
   title: z.string().min(1).max(200),
   goalId: z.string().uuid().nullable().optional(),
@@ -100,6 +104,13 @@ const updateMonthFocusSchema = z.object({
   theme: z.string().max(200).nullable(),
   topOutcomes: z.array(priorityInputSchema).max(3),
 });
+
+const updatePrioritySchema = z
+  .object({
+    title: z.string().min(1).max(200).optional(),
+    status: priorityStatusSchema.optional(),
+  })
+  .refine((value) => Object.keys(value).length > 0, "At least one field must be updated");
 
 const createTaskSchema = z.object({
   title: z.string().min(1).max(200),
@@ -346,39 +357,112 @@ async function replaceCyclePriorities(
   cycle: PlanningCycle,
   priorities: PlanningPriorityInput[],
 ) {
-  await app.prisma.$transaction(async (tx) => {
-    await tx.cyclePriority.deleteMany({
-      where: {
-        planningCycleId: cycle.id,
-      },
-    });
+  const existing = await app.prisma.cyclePriority.findMany({
+    where: {
+      planningCycleId: cycle.id,
+    },
+    orderBy: {
+      slot: "asc",
+    },
+  });
+  const existingById = new Map(existing.map((priority) => [priority.id, priority]));
+  const inputIds = priorities.flatMap((priority) => (priority.id ? [priority.id] : []));
+  const uniqueInputIds = new Set(inputIds);
+  const uniqueSlots = new Set(priorities.map((priority) => priority.slot));
 
-    if (priorities.length > 0) {
-      await tx.cyclePriority.createMany({
-        data: priorities.map((priority) => ({
+  if (uniqueInputIds.size !== inputIds.length) {
+    throw new AppError({
+      statusCode: 400,
+      code: "BAD_REQUEST",
+      message: "Priority IDs must be unique",
+    });
+  }
+
+  if (uniqueSlots.size !== priorities.length) {
+    throw new AppError({
+      statusCode: 400,
+      code: "BAD_REQUEST",
+      message: "Priority slots must be unique",
+    });
+  }
+
+  for (const priorityId of inputIds) {
+    if (!existingById.has(priorityId)) {
+      throw new AppError({
+        statusCode: 404,
+        code: "NOT_FOUND",
+        message: "Priority not found",
+      });
+    }
+  }
+
+  await app.prisma.$transaction(async (tx) => {
+    const keptIds = new Set(inputIds);
+    const priorityIdsToDelete = existing
+      .filter((priority) => !keptIds.has(priority.id))
+      .map((priority) => priority.id);
+
+    if (priorityIdsToDelete.length > 0) {
+      await tx.cyclePriority.deleteMany({
+        where: {
+          id: {
+            in: priorityIdsToDelete,
+          },
+        },
+      });
+    }
+
+    const referencedPriorities = priorities.filter(
+      (priority): priority is PlanningPriorityInput & { id: string } => Boolean(priority.id),
+    );
+
+    for (const [index, priority] of referencedPriorities.entries()) {
+      await tx.cyclePriority.update({
+        where: {
+          id: priority.id,
+        },
+        data: {
+          slot: 100 + index,
+        },
+      });
+    }
+
+    for (const priority of priorities) {
+      if (priority.id) {
+        await tx.cyclePriority.update({
+          where: {
+            id: priority.id,
+          },
+          data: {
+            slot: priority.slot,
+            title: priority.title,
+            goalId: priority.goalId ?? null,
+          },
+        });
+        continue;
+      }
+
+      await tx.cyclePriority.create({
+        data: {
           planningCycleId: cycle.id,
           slot: priority.slot,
           title: priority.title,
           goalId: priority.goalId ?? null,
-        })),
+        },
       });
     }
   });
 
-  const refreshed = await app.prisma.planningCycle.findUniqueOrThrow({
+  const refreshed = await app.prisma.cyclePriority.findMany({
     where: {
-      id: cycle.id,
+      planningCycleId: cycle.id,
     },
-    include: {
-      priorities: {
-        orderBy: {
-          slot: "asc",
-        },
-      },
+    orderBy: {
+      slot: "asc",
     },
   });
 
-  return refreshed.priorities.map(serializePriority);
+  return refreshed.map(serializePriority);
 }
 
 async function findOwnedGoal(app: Parameters<FastifyPluginAsync>[0], userId: string, goalId: string) {
@@ -417,6 +501,31 @@ async function findOwnedTask(app: Parameters<FastifyPluginAsync>[0], userId: str
   }
 
   return task;
+}
+
+async function findOwnedPriority(
+  app: Parameters<FastifyPluginAsync>[0],
+  userId: string,
+  priorityId: string,
+) {
+  const priority = await app.prisma.cyclePriority.findFirst({
+    where: {
+      id: priorityId,
+      planningCycle: {
+        userId,
+      },
+    },
+  });
+
+  if (!priority) {
+    throw new AppError({
+      statusCode: 404,
+      code: "NOT_FOUND",
+      message: "Priority not found",
+    });
+  }
+
+  return priority;
 }
 
 export const registerPlanningRoutes: FastifyPluginAsync = async (app) => {
@@ -537,6 +646,43 @@ export const registerPlanningRoutes: FastifyPluginAsync = async (app) => {
 
     const response: PlanningPriorityMutationResponse = withGeneratedAt({
       priorities,
+    });
+
+    return reply.send(response);
+  });
+
+  app.patch("/planning/priorities/:priorityId", async (request, reply) => {
+    const user = requireAuthenticatedUser(request);
+    const { priorityId } = request.params as { priorityId: string };
+    const payload = parseOrThrow(updatePrioritySchema, request.body as UpdatePriorityRequest);
+
+    await findOwnedPriority(app, user.id, priorityId);
+
+    const priority = await app.prisma.cyclePriority.update({
+      where: {
+        id: priorityId,
+      },
+      data: {
+        title: payload.title,
+        status:
+          payload.status === undefined
+            ? undefined
+            : payload.status === "completed"
+              ? "COMPLETED"
+              : payload.status === "dropped"
+                ? "DROPPED"
+                : "PENDING",
+        completedAt:
+          payload.status === "completed"
+            ? new Date()
+            : payload.status === "pending" || payload.status === "dropped"
+              ? null
+              : undefined,
+      },
+    });
+
+    const response: PriorityMutationResponse = withGeneratedAt({
+      priority: serializePriority(priority),
     });
 
     return reply.send(response);

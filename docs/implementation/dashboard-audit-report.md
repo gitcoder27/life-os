@@ -658,12 +658,14 @@ Status: implemented.
 
 Make planning, execution, and daily review work end-to-end.
 
+Status: implemented.
+
 ### Tasks
 
-- [ ] Add priority completion/drop/update support in backend and frontend.
-- [ ] Make Today fully operational.
-- [ ] Make Home attention items actionable.
-- [ ] Implement real daily review task decisions.
+- [x] Add priority completion/drop/update support in backend and frontend.
+- [x] Make Today fully operational.
+- [x] Make Home attention items actionable.
+- [x] Implement real daily review task decisions.
 - [x] Show real review submission outputs.
 
 ### Exit criteria
@@ -729,7 +731,7 @@ Make the system more engaging without making it noisy or childish.
 
 ## Backend backlog
 
-- [ ] Add priority status mutation endpoints.
+- [x] Add priority status mutation endpoints.
 - [ ] Audit entity ownership validation on all write paths.
 - [x] Make time calculations timezone-aware.
 - [x] Correct scoring and review summary calculations.
@@ -740,8 +742,8 @@ Make the system more engaging without making it noisy or childish.
 ## Frontend backlog
 
 - [ ] Add notifications UI.
-- [ ] Add operational priority UI on Today and Home.
-- [ ] Add real review workflow UI.
+- [x] Add operational priority UI on Today and Home.
+- [x] Add real review workflow UI.
 - [ ] Add management UIs for goals, weekly plan, monthly focus.
 - [ ] Add recurring expense and category management.
 - [ ] Replace prompts with forms.

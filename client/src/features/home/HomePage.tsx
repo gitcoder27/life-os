@@ -3,10 +3,13 @@ import {
   formatWorkoutStatus,
   getTodayDate,
   useDailyScoreQuery,
+  useHabitCheckinMutation,
   useHomeOverviewQuery,
+  useUpdatePriorityMutation,
   useTaskStatusMutation,
   useWeeklyMomentumQuery,
 } from "../../shared/lib/api";
+import { useNavigate } from "react-router-dom";
 import { MetricPill } from "../../shared/ui/MetricPill";
 import {
   EmptyState,
@@ -19,10 +22,13 @@ import { SectionCard } from "../../shared/ui/SectionCard";
 
 export function HomePage() {
   const today = getTodayDate();
+  const navigate = useNavigate();
   const homeQuery = useHomeOverviewQuery(today);
   const scoreQuery = useDailyScoreQuery(today);
   const weeklyMomentumQuery = useWeeklyMomentumQuery(today);
   const updateTaskMutation = useTaskStatusMutation(today);
+  const habitCheckinMutation = useHabitCheckinMutation(today);
+  const updatePriorityMutation = useUpdatePriorityMutation(today);
   const retryAll = () => {
     void homeQuery.refetch();
     void scoreQuery.refetch();
@@ -64,10 +70,7 @@ export function HomePage() {
       value: scoreQuery.data?.finalizedAt ? "Daily closed" : "Daily open",
     },
   ];
-  const attentionItems = (home?.attentionItems ?? []).map((item) => ({
-    title: item.title,
-    detail: `${item.kind.replace(/_/g, " ")} • ${item.tone}`,
-  }));
+  const attentionItems = home?.attentionItems ?? [];
   const routines = home
     ? [
         {
@@ -111,7 +114,13 @@ export function HomePage() {
   const scoreBuckets =
     scoreQuery.data?.buckets?.filter((bucket) => bucket.applicablePoints > 0) ?? [];
   const taskMutationError =
-    updateTaskMutation.error instanceof Error ? updateTaskMutation.error.message : null;
+    updateTaskMutation.error instanceof Error
+      ? updateTaskMutation.error.message
+      : habitCheckinMutation.error instanceof Error
+        ? habitCheckinMutation.error.message
+        : updatePriorityMutation.error instanceof Error
+          ? updatePriorityMutation.error.message
+          : null;
 
   return (
     <div className="page">
@@ -199,15 +208,52 @@ export function HomePage() {
         >
           {attentionItems.length > 0 ? (
             <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
-              {attentionItems.map((item) => (
-                <div key={item.title} className="attention-item">
-                  <span className="attention-item__icon" />
-                  <div>
-                    <div className="attention-item__title">{item.title}</div>
-                    <div className="attention-item__detail">{item.detail}</div>
+              {attentionItems.map((item) => {
+                const action = item.action;
+                return (
+                  <div key={item.id} className="attention-item">
+                    <span className="attention-item__icon" />
+                    <div className="attention-item__content">
+                      <div className="attention-item__title">{item.title}</div>
+                      <div className="attention-item__detail">
+                        {item.detail ?? `${item.kind.replace(/_/g, " ")} • ${item.tone}`}
+                      </div>
+                    </div>
+                    {action.type === "complete_task" ? (
+                      <button
+                        className="button button--ghost button--small"
+                        type="button"
+                        disabled={updateTaskMutation.isPending}
+                        onClick={() =>
+                          updateTaskMutation.mutate({
+                            taskId: action.entityId,
+                            status: "completed",
+                          })
+                        }
+                      >
+                        {updateTaskMutation.isPending ? "Saving..." : "Done task"}
+                      </button>
+                    ) : action.type === "complete_habit" ? (
+                      <button
+                        className="button button--ghost button--small"
+                        type="button"
+                        disabled={habitCheckinMutation.isPending}
+                        onClick={() => habitCheckinMutation.mutate(action.entityId)}
+                      >
+                        {habitCheckinMutation.isPending ? "Saving..." : "Done habit"}
+                      </button>
+                    ) : (
+                      <button
+                        className="button button--ghost button--small"
+                        type="button"
+                        onClick={() => navigate(action.route)}
+                      >
+                        {action.type === "open_review" ? "Open review" : "Open"}
+                      </button>
+                    )}
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           ) : (
             <EmptyState
@@ -219,7 +265,7 @@ export function HomePage() {
 
         <SectionCard
           title="Top priorities"
-          subtitle="Ordered by importance. Editing stays read-only in Phase 0."
+          subtitle="Ordered by importance with quick status updates."
         >
           {home.topPriorities.length > 0 ? (
             <ol className="priority-list">
@@ -229,20 +275,58 @@ export function HomePage() {
                   className={
                     priority.status === "completed"
                       ? "priority-list__item priority-list__item--done"
-                      : "priority-list__item"
+                      : priority.status === "dropped"
+                        ? "priority-list__item priority-list__item--dropped"
+                        : "priority-list__item"
                   }
                 >
                   <span>{priority.title}</span>
-                  <span
-                    className={
-                      priority.status === "completed" ? "tag tag--positive" : "tag tag--warning"
-                    }
-                  >
-                    {priority.status === "completed" ? "done" : "open"}
-                  </span>
-                </li>
-              ))}
-            </ol>
+                  <div className="button-row button-row--tight">
+                    <span
+                      className={
+                        priority.status === "completed"
+                          ? "tag tag--positive"
+                          : priority.status === "dropped"
+                            ? "tag tag--negative"
+                            : "tag tag--warning"
+                      }
+                    >
+                      {priority.status === "completed"
+                        ? "done"
+                        : priority.status === "dropped"
+                          ? "dropped"
+                          : "open"}
+                    </span>
+                    <button
+                      className="button button--ghost button--small"
+                      type="button"
+                      disabled={priority.status === "completed" || updatePriorityMutation.isPending}
+                      onClick={() =>
+                        updatePriorityMutation.mutate({
+                          priorityId: priority.id,
+                          status: "completed",
+                        })
+                      }
+                    >
+                      Done
+                    </button>
+                    <button
+                      className="button button--ghost button--small"
+                      type="button"
+                      disabled={priority.status === "dropped" || updatePriorityMutation.isPending}
+                      onClick={() =>
+                        updatePriorityMutation.mutate({
+                          priorityId: priority.id,
+                          status: "dropped",
+                        })
+                      }
+                    >
+                      Drop
+                    </button>
+                  </div>
+                  </li>
+                ))}
+              </ol>
           ) : (
             <EmptyState
               title="No priorities yet"

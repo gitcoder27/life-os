@@ -32,7 +32,7 @@ export async function registerRequestContext(
   app: FastifyInstance,
   options: RequestContextPluginOptions,
 ) {
-  app.decorateRequest("auth", null as unknown as RequestAuthContext);
+  app.decorateRequest("auth");
 
   app.addHook("onRequest", async (request) => {
     const sessionToken = request.cookies[options.env.SESSION_COOKIE_NAME] ?? null;

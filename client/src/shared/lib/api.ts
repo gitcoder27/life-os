@@ -146,6 +146,24 @@ type HomeOverviewResponse = {
     title: string;
     kind: "task" | "habit" | "routine" | "finance" | "admin" | "review" | "notification";
     tone: "info" | "warning" | "urgent";
+    detail?: string;
+    action:
+      | {
+          type: "complete_task";
+          entityId: string;
+        }
+      | {
+          type: "complete_habit";
+          entityId: string;
+        }
+      | {
+          type: "open_review";
+          route: string;
+        }
+      | {
+          type: "open_route";
+          route: string;
+        };
   }>;
   notifications: Array<{
     id: string;
@@ -218,6 +236,23 @@ type DayPlanResponse = {
     createdAt: string;
     updatedAt: string;
   }>;
+};
+
+export type DayPriorityInput = {
+  id?: string;
+  slot: 1 | 2 | 3;
+  title: string;
+  goalId?: string | null;
+};
+
+type DayPrioritiesMutationResponse = {
+  generatedAt: string;
+  priorities: DayPlanResponse["priorities"];
+};
+
+type PriorityMutationResponse = {
+  generatedAt: string;
+  priority: DayPlanResponse["priorities"][number];
 };
 
 type TaskMutationResponse = {
@@ -542,6 +577,8 @@ type DailyReviewResponse = {
     optionalNote: string | null;
     completedAt: string;
   } | null;
+  isCompleted: boolean;
+  seededTomorrowPriorities: DayPlanResponse["priorities"];
 };
 
 type WeeklyReviewResponse = {
@@ -1303,6 +1340,65 @@ export function useTaskStatusMutation(date: string) {
   });
 }
 
+export function useCarryForwardTaskMutation(date: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ taskId, targetDate }: { taskId: string; targetDate: string }) =>
+      apiRequest<TaskMutationResponse>(`/api/tasks/${taskId}/carry-forward`, {
+        method: "POST",
+        body: { targetDate },
+      }),
+    meta: {
+      successMessage: "Task rescheduled.",
+      errorMessage: "Task reschedule failed.",
+    },
+    onSuccess: () => invalidateCoreData(queryClient, date),
+  });
+}
+
+export function useUpdatePriorityMutation(date: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      priorityId,
+      title,
+      status,
+    }: {
+      priorityId: string;
+      title?: string;
+      status?: "pending" | "completed" | "dropped";
+    }) =>
+      apiRequest<PriorityMutationResponse>(`/api/planning/priorities/${priorityId}`, {
+        method: "PATCH",
+        body: { title, status },
+      }),
+    meta: {
+      successMessage: "Priority updated.",
+      errorMessage: "Priority update failed.",
+    },
+    onSuccess: () => invalidateCoreData(queryClient, date),
+  });
+}
+
+export function useUpdateDayPrioritiesMutation(date: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (payload: { priorities: DayPriorityInput[] }) =>
+      apiRequest<DayPrioritiesMutationResponse>(`/api/planning/days/${date}/priorities`, {
+        method: "PUT",
+        body: payload,
+      }),
+    meta: {
+      successMessage: "Priorities updated.",
+      errorMessage: "Priority update failed.",
+    },
+    onSuccess: () => invalidateCoreData(queryClient, date),
+  });
+}
+
 export function useCreateTaskMutation(date: string) {
   const queryClient = useQueryClient();
 
@@ -1487,8 +1583,10 @@ export function useSubmitDailyReviewMutation(date: string) {
         targetDate: string;
       }>;
       tomorrowPriorities: Array<{
+        id?: string;
         slot: 1 | 2 | 3;
         title: string;
+        goalId?: string | null;
       }>;
     }) =>
       apiRequest<DailyReviewMutationResponse>(`/api/reviews/daily/${date}`, {

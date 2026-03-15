@@ -301,11 +301,60 @@ describe("module route smoke tests", () => {
   });
 
   it("serves home overview", async () => {
-    prisma.task = { findMany: vi.fn().mockResolvedValue([]) } as any;
-    prisma.habit = { findMany: vi.fn().mockResolvedValue([]) } as any;
+    prisma.task = {
+      findMany: vi.fn().mockResolvedValue([
+        {
+          id: "task-1",
+          userId: "user-1",
+          title: "Open task",
+          notes: null,
+          status: "PENDING",
+          scheduledForDate: new Date("2026-03-14T00:00:00.000Z"),
+          dueAt: null,
+          goalId: null,
+          originType: "MANUAL",
+          carriedFromTaskId: null,
+          completedAt: null,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      ]),
+    } as any;
+    prisma.habit = {
+      findMany: vi.fn().mockResolvedValue([
+        {
+          id: "habit-1",
+          userId: "user-1",
+          title: "Hydrate",
+          category: "Health",
+          scheduleRuleJson: {},
+          targetPerDay: 1,
+          status: "ACTIVE",
+          archivedAt: null,
+        },
+      ]),
+    } as any;
     prisma.waterLog = { findMany: vi.fn().mockResolvedValue([]) } as any;
     prisma.mealLog = { findMany: vi.fn().mockResolvedValue([]) } as any;
-    prisma.adminItem = { findMany: vi.fn().mockResolvedValue([]) } as any;
+    prisma.adminItem = {
+      findMany: vi.fn().mockResolvedValue([
+        {
+          id: "admin-1",
+          userId: "user-1",
+          title: "Pay utilities",
+          itemType: "BILL",
+          dueOn: new Date("2026-03-14T00:00:00.000Z"),
+          status: "PENDING",
+          relatedTaskId: null,
+          recurringExpenseTemplateId: null,
+          amountMinor: 12000,
+          note: null,
+          completedAt: null,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      ]),
+    } as any;
     prisma.habitCheckin = { findMany: vi.fn().mockResolvedValue([]) } as any;
     prisma.routine = { findMany: vi.fn().mockResolvedValue([{ id: "routine-1", items: [] }]) } as any;
     prisma.routineItemCheckin = { findMany: vi.fn().mockResolvedValue([]) } as any;
@@ -317,6 +366,15 @@ describe("module route smoke tests", () => {
 
     const response = await app!.inject({ method: "GET", url: "/api/home/overview" });
     expect(response.statusCode).toBe(200);
+    expect(JSON.parse(response.body).attentionItems[0]).toEqual(
+      expect.objectContaining({
+        kind: "task",
+        action: {
+          type: "complete_task",
+          entityId: "task-1",
+        },
+      }),
+    );
   });
 
   it("serves auth session status", async () => {
@@ -614,8 +672,42 @@ describe("module route smoke tests", () => {
       upsert: vi.fn().mockResolvedValue({}),
     } as any;
     prisma.cyclePriority = {
+      findMany: vi.fn().mockResolvedValue([
+        {
+          id: "priority-1",
+          slot: 1,
+          title: "Priority",
+          status: "PENDING",
+          goalId: null,
+          completedAt: null,
+        },
+      ]),
+      findFirst: vi.fn().mockResolvedValue({
+        id: "priority-1",
+        planningCycleId: "cycle-1",
+        slot: 1,
+        title: "Priority",
+        status: "PENDING",
+        goalId: null,
+        completedAt: null,
+      }),
       deleteMany: vi.fn().mockResolvedValue({}),
-      createMany: vi.fn().mockResolvedValue({}),
+      create: vi.fn().mockResolvedValue({
+        id: "priority-1",
+        slot: 1,
+        title: "Priority",
+        status: "PENDING",
+        goalId: null,
+        completedAt: null,
+      }),
+      update: vi.fn().mockResolvedValue({
+        id: "priority-1",
+        slot: 1,
+        title: "Priority",
+        status: "COMPLETED",
+        goalId: null,
+        completedAt: new Date(),
+      }),
     } as any;
     prisma.$transaction = vi.fn(async (callback: any) => {
       return callback(prisma);
@@ -971,8 +1063,42 @@ describe("module route smoke tests", () => {
       update: vi.fn().mockResolvedValue({ id: "cycle-1", theme: "Focus" }),
     } as any;
     prisma.cyclePriority = {
+      findMany: vi.fn().mockResolvedValue([
+        {
+          id: "priority-1",
+          slot: 1,
+          title: "Priority",
+          status: "PENDING",
+          goalId: null,
+          completedAt: null,
+        },
+      ]),
+      findFirst: vi.fn().mockResolvedValue({
+        id: "priority-1",
+        planningCycleId: "cycle-1",
+        slot: 1,
+        title: "Priority",
+        status: "PENDING",
+        goalId: null,
+        completedAt: null,
+      }),
       deleteMany: vi.fn().mockResolvedValue({}),
-      createMany: vi.fn().mockResolvedValue({}),
+      create: vi.fn().mockResolvedValue({
+        id: "priority-1",
+        slot: 1,
+        title: "Priority",
+        status: "PENDING",
+        goalId: null,
+        completedAt: null,
+      }),
+      update: vi.fn().mockResolvedValue({
+        id: "priority-1",
+        slot: 1,
+        title: "Priority",
+        status: "COMPLETED",
+        goalId: null,
+        completedAt: new Date(),
+      }),
     } as any;
     prisma.task = {
       findMany: vi.fn().mockResolvedValue([
@@ -1101,6 +1227,13 @@ describe("module route smoke tests", () => {
         status: "completed",
       },
     });
+    const priorityPatch = await app!.inject({
+      method: "PATCH",
+      url: "/api/planning/priorities/priority-1",
+      payload: {
+        status: "completed",
+      },
+    });
     const taskCarryForward = await app!.inject({
       method: "POST",
       url: "/api/tasks/task-1/carry-forward",
@@ -1118,6 +1251,7 @@ describe("module route smoke tests", () => {
     expect(tasksList.statusCode).toBe(200);
     expect(taskCreate.statusCode).toBe(201);
     expect(taskPatch.statusCode).toBe(200);
+    expect(priorityPatch.statusCode).toBe(200);
     expect(taskCarryForward.statusCode).toBe(201);
   });
 });

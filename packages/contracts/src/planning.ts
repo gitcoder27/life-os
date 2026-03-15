@@ -14,6 +14,7 @@ export interface PlanningPriorityItem {
 }
 
 export interface PlanningPriorityInput {
+  id?: EntityId;
   slot: 1 | 2 | 3;
   title: string;
   goalId?: EntityId | null;
@@ -68,6 +69,15 @@ export interface UpdateMonthFocusRequest {
 
 export interface PlanningPriorityMutationResponse extends ApiMeta {
   priorities: PlanningPriorityItem[];
+}
+
+export interface UpdatePriorityRequest {
+  title?: string;
+  status?: PriorityStatus;
+}
+
+export interface PriorityMutationResponse extends ApiMeta {
+  priority: PlanningPriorityItem;
 }
 
 export interface MonthFocusMutationResponse extends ApiMeta {

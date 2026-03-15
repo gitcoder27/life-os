@@ -61,7 +61,7 @@ interface LogEntry {
 }
 
 interface LoggerStreamDestination {
-  write(message: string): void;
+  write(message: string): boolean | void;
 }
 
 export function createLoggerOptions(env: AppEnv) {

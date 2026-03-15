@@ -43,19 +43,6 @@ function currentRoutinePeriod(date: Date, timezone?: string | null): RoutineSumm
   return "none";
 }
 
-function severityToTone(
-  severity: "INFO" | "WARNING" | "CRITICAL",
-): AttentionItem["tone"] {
-  switch (severity) {
-    case "INFO":
-      return "info";
-    case "WARNING":
-      return "warning";
-    case "CRITICAL":
-      return "urgent";
-  }
-}
-
 async function buildHomeOverview(
   app: Parameters<FastifyPluginAsync>[0],
   userId: string,
@@ -227,6 +214,11 @@ async function buildHomeOverview(
       title: `Task still open: ${incompleteTask.title}`,
       kind: "task",
       tone: "warning",
+      detail: "Mark it done from Home or move it from Today.",
+      action: {
+        type: "complete_task",
+        entityId: incompleteTask.id,
+      },
     });
   }
   const missedHabit = dueHabits.find(
@@ -238,6 +230,11 @@ async function buildHomeOverview(
       title: `Habit due: ${missedHabit.title}`,
       kind: "habit",
       tone: "warning",
+      detail: "Complete it directly from Home.",
+      action: {
+        type: "complete_habit",
+        entityId: missedHabit.id,
+      },
     });
   }
   if (!dayCycle.dailyReview) {
@@ -246,6 +243,11 @@ async function buildHomeOverview(
       title: "Complete your daily review",
       kind: "review",
       tone: "warning",
+      detail: "Close the day and seed tomorrow's priorities.",
+      action: {
+        type: "open_review",
+        route: "/reviews/daily",
+      },
     });
   }
   for (const item of adminItems.slice(0, 2)) {
@@ -254,14 +256,11 @@ async function buildHomeOverview(
       title: item.title,
       kind: "admin",
       tone: "urgent",
-    });
-  }
-  for (const notification of notifications.slice(0, 1)) {
-    attentionItems.push({
-      id: notification.id,
-      title: notification.title,
-      kind: "notification",
-      tone: severityToTone(notification.severity),
+      detail: "Open Finance to handle the bill or admin item.",
+      action: {
+        type: "open_route",
+        route: "/finance",
+      },
     });
   }
 

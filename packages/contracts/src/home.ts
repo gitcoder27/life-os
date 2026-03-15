@@ -51,6 +51,24 @@ export interface AttentionItem {
   title: string;
   kind: "task" | "habit" | "routine" | "finance" | "admin" | "review" | "notification";
   tone: "info" | "warning" | "urgent";
+  detail?: string;
+  action:
+    | {
+        type: "complete_task";
+        entityId: EntityId;
+      }
+    | {
+        type: "complete_habit";
+        entityId: EntityId;
+      }
+    | {
+        type: "open_review";
+        route: string;
+      }
+    | {
+        type: "open_route";
+        route: string;
+      };
 }
 
 export interface HomeNotificationItem {
