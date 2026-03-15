@@ -10,8 +10,10 @@ import {
   useCreateCategoryMutation,
   useCreateExpenseMutation,
   useCreateRecurringExpenseMutation,
+  useDeleteExpenseMutation,
   useFinanceDataQuery,
   useUpdateCategoryMutation,
+  useUpdateExpenseMutation,
   useUpdateRecurringExpenseMutation,
 } from "../../shared/lib/api";
 import { PageHeader } from "../../shared/ui/PageHeader";
@@ -33,6 +35,13 @@ type RecurringForm = {
   remindDaysBefore: string;
 };
 
+type ExpenseForm = {
+  amount: string;
+  description: string;
+  categoryId: string;
+  spentOn: string;
+};
+
 const emptyCategory: CategoryForm = { name: "", color: "" };
 const emptyRecurring: RecurringForm = {
   title: "",
@@ -47,10 +56,22 @@ export function FinancePage() {
   const today = getTodayDate();
   const financeQuery = useFinanceDataQuery(today);
   const createExpenseMutation = useCreateExpenseMutation(today);
+  const updateExpenseMutation = useUpdateExpenseMutation(today);
+  const deleteExpenseMutation = useDeleteExpenseMutation(today);
   const createCategoryMutation = useCreateCategoryMutation();
   const updateCategoryMutation = useUpdateCategoryMutation();
   const createRecurringMutation = useCreateRecurringExpenseMutation();
   const updateRecurringMutation = useUpdateRecurringExpenseMutation();
+
+  // Expense form
+  const [showExpenseForm, setShowExpenseForm] = useState(false);
+  const emptyExpense: ExpenseForm = { amount: "", description: "", categoryId: "", spentOn: today };
+  const [expenseForm, setExpenseForm] = useState<ExpenseForm>(emptyExpense);
+
+  // Expense editing
+  const [editingExpenseId, setEditingExpenseId] = useState<string | null>(null);
+  const [editExpenseForm, setEditExpenseForm] = useState<ExpenseForm>(emptyExpense);
+  const [deletingExpenseId, setDeletingExpenseId] = useState<string | null>(null);
 
   // Category management
   const [showCatForm, setShowCatForm] = useState(false);
@@ -89,19 +110,47 @@ export function FinancePage() {
   const categoryNameById = new Map(categories.map((category) => [category.id, category.name]));
   const topCategory = summary?.categoryTotals[0];
 
+  // Expense creation
   async function handleAddExpense() {
-    const amountInput = window.prompt("Enter expense amount");
-    const amountMinor = amountInput ? parseAmountToMinor(amountInput) : null;
+    const amountMinor = parseAmountToMinor(expenseForm.amount);
     if (!amountMinor) return;
 
-    const description = window.prompt("Enter expense description") ?? "Quick expense";
     await createExpenseMutation.mutateAsync({
-      spentOn: today,
+      spentOn: expenseForm.spentOn || today,
       amountMinor,
       currencyCode: summary?.currencyCode ?? "USD",
-      description,
-      source: "quick_capture",
+      description: expenseForm.description || "Quick expense",
+      expenseCategoryId: expenseForm.categoryId || null,
+      source: "manual",
     });
+    setExpenseForm(emptyExpense);
+    setShowExpenseForm(false);
+  }
+
+  // Expense editing
+  function openEditExpense(expense: typeof expenses[number]) {
+    setEditingExpenseId(expense.id);
+    setEditExpenseForm({
+      amount: String(expense.amountMinor / 100),
+      description: expense.description ?? "",
+      categoryId: expense.expenseCategoryId ?? "",
+      spentOn: expense.spentOn,
+    });
+    setDeletingExpenseId(null);
+  }
+
+  async function handleUpdateExpense(expenseId: string) {
+    const amountMinor = parseAmountToMinor(editExpenseForm.amount);
+    if (!amountMinor) return;
+
+    await updateExpenseMutation.mutateAsync({
+      expenseId,
+      amountMinor,
+      description: editExpenseForm.description || null,
+      expenseCategoryId: editExpenseForm.categoryId || null,
+      spentOn: editExpenseForm.spentOn,
+    });
+    setEditingExpenseId(null);
   }
 
   // Category CRUD
@@ -227,14 +276,73 @@ export function FinancePage() {
                 </li>
               ))}
             </ul>
-            <button
-              className="button button--primary button--small"
-              type="button"
-              onClick={() => void handleAddExpense()}
-              style={{ alignSelf: "flex-start" }}
-            >
-              Add expense
-            </button>
+
+            {/* Inline expense creation form */}
+            {showExpenseForm ? (
+              <div className="inline-editor">
+                <div className="stack-form">
+                  <div style={{ display: "flex", gap: "0.5rem" }}>
+                    <label className="field" style={{ flex: 1 }}>
+                      <span>Amount</span>
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        placeholder="0.00"
+                        value={expenseForm.amount}
+                        autoFocus
+                        onChange={(e) => setExpenseForm((f) => ({ ...f, amount: e.target.value }))}
+                        onKeyDown={(e) => { if (e.key === "Enter") void handleAddExpense(); if (e.key === "Escape") setShowExpenseForm(false); }}
+                      />
+                    </label>
+                    <label className="field" style={{ flex: 1 }}>
+                      <span>Date</span>
+                      <input
+                        type="date"
+                        value={expenseForm.spentOn}
+                        onChange={(e) => setExpenseForm((f) => ({ ...f, spentOn: e.target.value }))}
+                      />
+                    </label>
+                  </div>
+                  <label className="field">
+                    <span>Description</span>
+                    <input
+                      type="text"
+                      placeholder="What was it for?"
+                      value={expenseForm.description}
+                      onChange={(e) => setExpenseForm((f) => ({ ...f, description: e.target.value }))}
+                      onKeyDown={(e) => { if (e.key === "Enter") void handleAddExpense(); }}
+                    />
+                  </label>
+                  <label className="field">
+                    <span>Category</span>
+                    <select
+                      value={expenseForm.categoryId}
+                      onChange={(e) => setExpenseForm((f) => ({ ...f, categoryId: e.target.value }))}
+                    >
+                      <option value="">Uncategorized</option>
+                      {activeCategories.map((c) => (
+                        <option key={c.id} value={c.id}>{c.name}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <div className="button-row button-row--tight">
+                    <button className="button button--primary button--small" type="button" disabled={createExpenseMutation.isPending} onClick={() => void handleAddExpense()}>
+                      {createExpenseMutation.isPending ? "Saving…" : "Add expense"}
+                    </button>
+                    <button className="button button--ghost button--small" type="button" onClick={() => setShowExpenseForm(false)}>Cancel</button>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <button
+                className="button button--primary button--small"
+                type="button"
+                onClick={() => setShowExpenseForm(true)}
+                style={{ alignSelf: "flex-start" }}
+              >
+                Add expense
+              </button>
+            )}
           </div>
         </SectionCard>
 
@@ -306,7 +414,7 @@ export function FinancePage() {
           )}
         </SectionCard>
 
-        {/* ── Recent expenses ── */}
+        {/* ── Recent expenses with edit/delete ── */}
         <SectionCard title="Recent expenses" subtitle="Last 7 days">
           {financeQuery.data.sectionErrors.expenses ? (
             <InlineErrorState
@@ -318,18 +426,70 @@ export function FinancePage() {
               {expenses
                 .slice()
                 .sort((left, right) => right.spentOn.localeCompare(left.spentOn))
-                .slice(0, 7)
+                .slice(0, 10)
                 .map((expense) => (
-                  <div key={expense.id} className="expense-row">
-                    <div className="expense-row__info">
-                      <div className="expense-row__title">{expense.description ?? "Expense"}</div>
-                      <div className="expense-row__meta">
-                        {categoryNameById.get(expense.expenseCategoryId ?? "") ?? "Uncategorized"} &middot; {formatRelativeDate(expense.spentOn)}
+                  <div key={expense.id}>
+                    <div className="log-row">
+                      <div className="log-row__info">
+                        <span className="log-row__primary">{expense.description ?? "Expense"}</span>
+                        <span className="log-row__secondary">
+                          {categoryNameById.get(expense.expenseCategoryId ?? "") ?? "Uncategorized"} · {formatRelativeDate(expense.spentOn)}
+                        </span>
+                      </div>
+                      <span className="log-row__value">
+                        {formatMinorCurrency(expense.amountMinor, expense.currencyCode)}
+                      </span>
+                      <div className="log-row__actions">
+                        <button className="button button--ghost button--small" type="button" onClick={() => openEditExpense(expense)} aria-label="Edit expense">Edit</button>
+                        <button className="button button--ghost button--small" type="button" onClick={() => { setDeletingExpenseId(expense.id); setEditingExpenseId(null); }} aria-label="Delete expense">Delete</button>
                       </div>
                     </div>
-                    <span className="expense-row__amount">
-                      {formatMinorCurrency(expense.amountMinor, expense.currencyCode)}
-                    </span>
+
+                    {/* Inline expense editor */}
+                    {editingExpenseId === expense.id && (
+                      <div className="inline-editor">
+                        <div className="stack-form">
+                          <div style={{ display: "flex", gap: "0.5rem" }}>
+                            <label className="field" style={{ flex: 1 }}>
+                              <span>Amount</span>
+                              <input type="text" inputMode="decimal" value={editExpenseForm.amount} autoFocus onChange={(e) => setEditExpenseForm((f) => ({ ...f, amount: e.target.value }))} onKeyDown={(e) => { if (e.key === "Enter") void handleUpdateExpense(expense.id); if (e.key === "Escape") setEditingExpenseId(null); }} />
+                            </label>
+                            <label className="field" style={{ flex: 1 }}>
+                              <span>Date</span>
+                              <input type="date" value={editExpenseForm.spentOn} onChange={(e) => setEditExpenseForm((f) => ({ ...f, spentOn: e.target.value }))} />
+                            </label>
+                          </div>
+                          <label className="field">
+                            <span>Description</span>
+                            <input type="text" value={editExpenseForm.description} onChange={(e) => setEditExpenseForm((f) => ({ ...f, description: e.target.value }))} onKeyDown={(e) => { if (e.key === "Enter") void handleUpdateExpense(expense.id); }} />
+                          </label>
+                          <label className="field">
+                            <span>Category</span>
+                            <select value={editExpenseForm.categoryId} onChange={(e) => setEditExpenseForm((f) => ({ ...f, categoryId: e.target.value }))}>
+                              <option value="">Uncategorized</option>
+                              {activeCategories.map((c) => (<option key={c.id} value={c.id}>{c.name}</option>))}
+                            </select>
+                          </label>
+                          <div className="button-row button-row--tight">
+                            <button className="button button--primary button--small" type="button" disabled={updateExpenseMutation.isPending} onClick={() => void handleUpdateExpense(expense.id)}>
+                              {updateExpenseMutation.isPending ? "Saving…" : "Save"}
+                            </button>
+                            <button className="button button--ghost button--small" type="button" onClick={() => setEditingExpenseId(null)}>Cancel</button>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Delete confirmation */}
+                    {deletingExpenseId === expense.id && (
+                      <div className="confirm-bar">
+                        <span className="confirm-bar__text">Delete &ldquo;{expense.description ?? "expense"}&rdquo;?</span>
+                        <button className="button button--ghost button--small" type="button" disabled={deleteExpenseMutation.isPending} onClick={() => void deleteExpenseMutation.mutateAsync(expense.id).then(() => setDeletingExpenseId(null))}>
+                          {deleteExpenseMutation.isPending ? "Deleting…" : "Confirm"}
+                        </button>
+                        <button className="button button--ghost button--small" type="button" onClick={() => setDeletingExpenseId(null)}>Cancel</button>
+                      </div>
+                    )}
                   </div>
                 ))}
             </div>

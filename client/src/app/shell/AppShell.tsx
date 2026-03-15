@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 
 import { QuickCaptureSheet } from "../../features/capture/QuickCaptureSheet";
@@ -45,6 +45,19 @@ export function AppShell() {
     }
   }, [settingsQuery.data]);
 
+  // Global keyboard shortcut: Ctrl+K / Cmd+K to toggle Quick Capture
+  const handleGlobalKeyDown = useCallback((e: KeyboardEvent) => {
+    if ((e.ctrlKey || e.metaKey) && e.key === "k") {
+      e.preventDefault();
+      setCaptureOpen((prev) => !prev);
+    }
+  }, []);
+
+  useEffect(() => {
+    document.addEventListener("keydown", handleGlobalKeyDown);
+    return () => document.removeEventListener("keydown", handleGlobalKeyDown);
+  }, [handleGlobalKeyDown]);
+
   return (
     <div className="shell">
       <aside className="shell-sidebar">
@@ -81,6 +94,7 @@ export function AppShell() {
             type="button"
           >
             Quick capture
+            <span className="kbd" style={{ marginLeft: "0.5rem", fontSize: "0.7rem" }}>⌘K</span>
           </button>
           <div className="account-chip">
             <span className="account-chip__dot" />
