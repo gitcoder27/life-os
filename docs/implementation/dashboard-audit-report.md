@@ -763,10 +763,10 @@ Make the system more engaging without making it noisy or childish.
 ### Tasks
 
 - [x] Add score delta explanations on Home.
-- [ ] Add streak rescue and recovery framing.
-- [ ] Add weekly focus challenge or quest.
-- [ ] Add habit-risk and drift indicators.
-- [ ] Add “what to do next” recommendations based on existing rules.
+- [x] Add streak rescue and recovery framing.
+- [x] Add weekly focus challenge or quest.
+- [x] Add habit-risk and drift indicators.
+- [x] Add “what to do next” recommendations based on existing rules.
 
 ### Exit criteria
 
