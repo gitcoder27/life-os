@@ -744,10 +744,10 @@ Reduce friction and improve recoverability.
 
 ### Tasks
 
-- [ ] Replace prompt-based inputs with proper forms.
-- [ ] Add edit/delete for health and finance logs.
-- [ ] Improve quick capture defaults and templates.
-- [ ] Add keyboard-friendly quick capture on desktop.
+- [x] Replace prompt-based inputs with proper forms.
+- [x] Add edit/delete for health and finance logs.
+- [x] Improve quick capture defaults and templates.
+- [x] Add keyboard-friendly quick capture on desktop.
 
 ### Exit criteria
 
@@ -791,7 +791,7 @@ Make the system more engaging without making it noisy or childish.
 - [x] Add real review workflow UI.
 - [x] Add management UIs for goals, weekly plan, monthly focus.
 - [x] Add recurring expense and category management.
-- [ ] Replace prompts with forms.
+- [x] Replace prompts with forms.
 - [x] Improve loading, empty, and error states.
 - [x] Improve mutation feedback and reduce stale UI risk.
 
