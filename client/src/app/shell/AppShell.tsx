@@ -2,7 +2,22 @@ import { useState } from "react";
 import { NavLink, Outlet } from "react-router-dom";
 
 import { QuickCaptureSheet } from "../../features/capture/QuickCaptureSheet";
-import { navItems } from "../../shared/lib/demo-data";
+import {
+  formatLongDate,
+  getTodayDate,
+  useHomeOverviewQuery,
+  useSessionQuery,
+} from "../../shared/lib/api";
+
+const navItems = [
+  { to: "/", label: "Home", hint: "daily command center" },
+  { to: "/today", label: "Today", hint: "execution lane" },
+  { to: "/habits", label: "Habits", hint: "consistency system" },
+  { to: "/health", label: "Health", hint: "body basics" },
+  { to: "/finance", label: "Finance", hint: "spend visibility" },
+  { to: "/goals", label: "Goals", hint: "weekly and monthly direction" },
+  { to: "/reviews/daily", label: "Reviews", hint: "reflection loop" },
+] as const;
 
 function navClass(isActive: boolean) {
   return `shell-nav__link${isActive ? " shell-nav__link--active" : ""}`;
@@ -10,6 +25,11 @@ function navClass(isActive: boolean) {
 
 export function AppShell() {
   const [captureOpen, setCaptureOpen] = useState(false);
+  const today = getTodayDate();
+  const sessionQuery = useSessionQuery();
+  const homeQuery = useHomeOverviewQuery(today);
+  const userEmail = sessionQuery.data?.user?.email ?? "owner@life-os";
+  const greeting = homeQuery.data?.greeting ?? "Good day";
 
   return (
     <div className="shell">
@@ -50,7 +70,7 @@ export function AppShell() {
           </button>
           <div className="account-chip">
             <span className="account-chip__dot" />
-            owner@life-os
+            {userEmail}
           </div>
         </div>
       </aside>
@@ -58,8 +78,8 @@ export function AppShell() {
       <div className="shell-main">
         <header className="shell-header">
           <div>
-            <p className="shell-header__eyebrow">Saturday, March 14</p>
-            <h2 className="shell-header__title">Good evening</h2>
+            <p className="shell-header__eyebrow">{formatLongDate(today)}</p>
+            <h2 className="shell-header__title">{greeting}</h2>
           </div>
           <div className="shell-header__actions">
             <button

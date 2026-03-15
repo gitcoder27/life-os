@@ -1,4 +1,4 @@
-import { createBrowserRouter } from "react-router-dom";
+import { Navigate, createBrowserRouter } from "react-router-dom";
 
 import { LoginPage } from "../features/auth/LoginPage";
 import { FinancePage } from "../features/finance/FinancePage";
@@ -9,20 +9,112 @@ import { HomePage } from "../features/home/HomePage";
 import { OnboardingPage } from "../features/onboarding/OnboardingPage";
 import { ReviewsPage } from "../features/reviews/ReviewsPage";
 import { TodayPage } from "../features/today/TodayPage";
+import {
+  useOnboardingStateQuery,
+  useSessionQuery,
+} from "../shared/lib/api";
 import { AppShell } from "./shell/AppShell";
+
+function RouteLoading() {
+  return (
+    <div className="auth-layout">
+      <div className="auth-layout__panel">
+        <span className="page-eyebrow">Connecting</span>
+        <h1 className="auth-layout__title">Checking your session</h1>
+        <p className="auth-layout__copy">
+          Syncing frontend state with the backend.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function GuestRoute({ children }: { children: JSX.Element }) {
+  const sessionQuery = useSessionQuery();
+  const onboardingQuery = useOnboardingStateQuery(
+    Boolean(sessionQuery.data?.authenticated),
+  );
+
+  if (sessionQuery.isLoading) {
+    return <RouteLoading />;
+  }
+
+  if (!sessionQuery.data?.authenticated) {
+    return children;
+  }
+
+  if (onboardingQuery.isLoading) {
+    return <RouteLoading />;
+  }
+
+  if (onboardingQuery.data && !onboardingQuery.data.isComplete) {
+    return <Navigate to="/onboarding" replace />;
+  }
+
+  return <Navigate to="/" replace />;
+}
+
+function ProtectedRoute({
+  children,
+  allowIncompleteOnboarding = false,
+}: {
+  children: JSX.Element;
+  allowIncompleteOnboarding?: boolean;
+}) {
+  const sessionQuery = useSessionQuery();
+  const onboardingQuery = useOnboardingStateQuery(
+    Boolean(sessionQuery.data?.authenticated),
+  );
+
+  if (sessionQuery.isLoading) {
+    return <RouteLoading />;
+  }
+
+  if (!sessionQuery.data?.authenticated) {
+    return <Navigate to="/login" replace />;
+  }
+
+  if (onboardingQuery.isLoading) {
+    return <RouteLoading />;
+  }
+
+  if (onboardingQuery.data) {
+    if (!allowIncompleteOnboarding && !onboardingQuery.data.isComplete) {
+      return <Navigate to="/onboarding" replace />;
+    }
+
+    if (allowIncompleteOnboarding && onboardingQuery.data.isComplete) {
+      return <Navigate to="/" replace />;
+    }
+  }
+
+  return children;
+}
 
 export const router = createBrowserRouter([
   {
     path: "/login",
-    element: <LoginPage />,
+    element: (
+      <GuestRoute>
+        <LoginPage />
+      </GuestRoute>
+    ),
   },
   {
     path: "/onboarding",
-    element: <OnboardingPage />,
+    element: (
+      <ProtectedRoute allowIncompleteOnboarding>
+        <OnboardingPage />
+      </ProtectedRoute>
+    ),
   },
   {
     path: "/",
-    element: <AppShell />,
+    element: (
+      <ProtectedRoute>
+        <AppShell />
+      </ProtectedRoute>
+    ),
     children: [
       {
         index: true,

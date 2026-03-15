@@ -1,26 +1,25 @@
-import { useState } from "react";
-
-import { habits, morningRoutine, eveningRoutine } from "../../shared/lib/demo-data";
+import {
+  getTodayDate,
+  useHabitCheckinMutation,
+  useHabitsQuery,
+  useRoutineCheckinMutation,
+  useWeeklyMomentumQuery,
+} from "../../shared/lib/api";
 import { PageHeader } from "../../shared/ui/PageHeader";
 import { SectionCard } from "../../shared/ui/SectionCard";
 
 export function HabitsPage() {
-  const [checkedHabits, setCheckedHabits] = useState<Set<string>>(
-    new Set(habits.filter((h) => h.state === "Complete").map((h) => h.title)),
-  );
-  const [checkedMorning, setCheckedMorning] = useState<Set<string>>(
-    new Set(morningRoutine.filter((r) => r.done).map((r) => r.title)),
-  );
-  const [checkedEvening, setCheckedEvening] = useState<Set<string>>(
-    new Set(eveningRoutine.filter((r) => r.done).map((r) => r.title)),
-  );
-
-  function toggleItem(set: Set<string>, setFn: (s: Set<string>) => void, key: string) {
-    const next = new Set(set);
-    if (next.has(key)) next.delete(key);
-    else next.add(key);
-    setFn(next);
-  }
+  const today = getTodayDate();
+  const habitsQuery = useHabitsQuery();
+  const weeklyMomentumQuery = useWeeklyMomentumQuery(today);
+  const habitCheckinMutation = useHabitCheckinMutation(today);
+  const routineCheckinMutation = useRoutineCheckinMutation(today);
+  const dueHabits = habitsQuery.data?.dueHabits ?? [];
+  const morningRoutine =
+    habitsQuery.data?.routines.find((routine) => routine.period === "morning")?.items ?? [];
+  const eveningRoutine =
+    habitsQuery.data?.routines.find((routine) => routine.period === "evening")?.items ?? [];
+  const consistencyBars = weeklyMomentumQuery.data?.dailyScores ?? [];
 
   return (
     <div className="page">
@@ -31,39 +30,47 @@ export function HabitsPage() {
       />
 
       <div className="dashboard-grid stagger">
-        <SectionCard title="Due today" subtitle={`${checkedHabits.size} of ${habits.length} complete`}>
+        <SectionCard title="Due today" subtitle={`${dueHabits.filter((habit) => habit.completedToday).length} of ${dueHabits.length} complete`}>
           <div>
-            {habits.map((habit) => (
-              <div key={habit.title} className="habit-item">
+            {dueHabits.map((habit) => (
+              <div key={habit.id} className="habit-item">
                 <button
-                  className={`habit-item__check${checkedHabits.has(habit.title) ? " habit-item__check--done" : ""}`}
+                  className={`habit-item__check${habit.completedToday ? " habit-item__check--done" : ""}`}
                   type="button"
-                  onClick={() => toggleItem(checkedHabits, setCheckedHabits, habit.title)}
-                  aria-label={`Mark ${habit.title} ${checkedHabits.has(habit.title) ? "incomplete" : "complete"}`}
+                  onClick={() => {
+                    if (!habit.completedToday) {
+                      habitCheckinMutation.mutate(habit.id);
+                    }
+                  }}
+                  aria-label={`Mark ${habit.title} ${habit.completedToday ? "complete" : "incomplete"}`}
                 >
-                  {checkedHabits.has(habit.title) ? "\u2713" : ""}
+                  {habit.completedToday ? "\u2713" : ""}
                 </button>
                 <div className="habit-item__info">
                   <div className="habit-item__title">{habit.title}</div>
-                  <div className="habit-item__detail">{habit.detail}</div>
+                  <div className="habit-item__detail">{habit.category ?? "General"} • target {habit.targetPerDay}</div>
                 </div>
-                <span className="streak-badge">{habit.detail.split(" ")[1]} {habit.detail.split(" ")[0].toLowerCase()}</span>
+                <span className="streak-badge">{habit.streakCount} streak</span>
               </div>
             ))}
           </div>
         </SectionCard>
 
-        <SectionCard title="Morning routine" subtitle={`${checkedMorning.size} of ${morningRoutine.length}`}>
+        <SectionCard title="Morning routine" subtitle={`${morningRoutine.filter((item) => item.completedToday).length} of ${morningRoutine.length}`}>
           <div>
             {morningRoutine.map((item) => (
-              <div key={item.title} className="habit-item">
+              <div key={item.id} className="habit-item">
                 <button
-                  className={`habit-item__check${checkedMorning.has(item.title) ? " habit-item__check--done" : ""}`}
+                  className={`habit-item__check${item.completedToday ? " habit-item__check--done" : ""}`}
                   type="button"
-                  onClick={() => toggleItem(checkedMorning, setCheckedMorning, item.title)}
+                  onClick={() => {
+                    if (!item.completedToday) {
+                      routineCheckinMutation.mutate(item.id);
+                    }
+                  }}
                   aria-label={`Mark ${item.title}`}
                 >
-                  {checkedMorning.has(item.title) ? "\u2713" : ""}
+                  {item.completedToday ? "\u2713" : ""}
                 </button>
                 <div className="habit-item__info">
                   <div className="habit-item__title">{item.title}</div>
@@ -73,17 +80,21 @@ export function HabitsPage() {
           </div>
         </SectionCard>
 
-        <SectionCard title="Evening routine" subtitle={`${checkedEvening.size} of ${eveningRoutine.length}`}>
+        <SectionCard title="Evening routine" subtitle={`${eveningRoutine.filter((item) => item.completedToday).length} of ${eveningRoutine.length}`}>
           <div>
             {eveningRoutine.map((item) => (
-              <div key={item.title} className="habit-item">
+              <div key={item.id} className="habit-item">
                 <button
-                  className={`habit-item__check${checkedEvening.has(item.title) ? " habit-item__check--done" : ""}`}
+                  className={`habit-item__check${item.completedToday ? " habit-item__check--done" : ""}`}
                   type="button"
-                  onClick={() => toggleItem(checkedEvening, setCheckedEvening, item.title)}
+                  onClick={() => {
+                    if (!item.completedToday) {
+                      routineCheckinMutation.mutate(item.id);
+                    }
+                  }}
                   aria-label={`Mark ${item.title}`}
                 >
-                  {checkedEvening.has(item.title) ? "\u2713" : ""}
+                  {item.completedToday ? "\u2713" : ""}
                 </button>
                 <div className="habit-item__info">
                   <div className="habit-item__title">{item.title}</div>
@@ -95,14 +106,14 @@ export function HabitsPage() {
 
         <SectionCard title="Consistency" subtitle="Last 7 days">
           <div style={{ display: "flex", gap: "0.5rem", alignItems: "end", height: "3rem" }}>
-            {[85, 90, 70, 100, 65, 80, 78].map((v, i) => (
+            {consistencyBars.map((day) => (
               <div
-                key={i}
+                key={day.date}
                 style={{
                   flex: 1,
-                  height: `${v}%`,
+                  height: `${day.value}%`,
                   borderRadius: "var(--r-xs)",
-                  background: v >= 70
+                  background: day.value >= 70
                     ? "linear-gradient(180deg, var(--accent), rgba(217,153,58,0.3))"
                     : "rgba(255,255,255,0.06)",
                   transition: "height 0.6s var(--ease)",

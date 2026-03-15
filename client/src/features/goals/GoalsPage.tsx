@@ -1,4 +1,8 @@
-import { goals, weeklyPriorities } from "../../shared/lib/demo-data";
+import {
+  formatMonthLabel,
+  getTodayDate,
+  useGoalsDataQuery,
+} from "../../shared/lib/api";
 import { PageHeader } from "../../shared/ui/PageHeader";
 import { SectionCard } from "../../shared/ui/SectionCard";
 
@@ -6,9 +10,18 @@ const domainLabels: Record<string, string> = {
   health: "Health",
   money: "Money",
   work_growth: "Work & Growth",
+  home_admin: "Home admin",
+  discipline: "Discipline",
+  other: "Other",
 };
 
 export function GoalsPage() {
+  const today = getTodayDate();
+  const goalsQuery = useGoalsDataQuery(today);
+  const goals = goalsQuery.data?.goals.goals ?? [];
+  const weeklyPriorities = goalsQuery.data?.weekPlan.priorities ?? [];
+  const monthPlan = goalsQuery.data?.monthPlan;
+
   return (
     <div className="page">
       <PageHeader
@@ -20,14 +33,15 @@ export function GoalsPage() {
       <div className="dashboard-grid stagger">
         <SectionCard
           title="Monthly focus"
-          subtitle="March 2026"
+          subtitle={formatMonthLabel(monthPlan?.startDate.slice(0, 7) ?? today.slice(0, 7))}
         >
           <div style={{ display: "flex", flexDirection: "column", gap: "0.6rem" }}>
             <div style={{ fontFamily: "var(--font-display)", fontSize: "1.25rem", fontWeight: 500 }}>
-              Build consistency before adding complexity
+              {monthPlan?.theme ?? "Set the current monthly theme in planning"}
             </div>
             <p className="support-copy">
-              Focus on the daily loop: morning routine, priorities, health basics, and closing the day with a review.
+              {monthPlan?.topOutcomes[0]?.title ??
+                "Live planning data will surface your top monthly outcomes here."}
             </p>
           </div>
         </SectionCard>
@@ -37,11 +51,11 @@ export function GoalsPage() {
           subtitle="This week"
         >
           <ol className="priority-list">
-            {weeklyPriorities.map((item, i) => (
-              <li key={item} className="priority-list__item">
+            {weeklyPriorities.map((item, index) => (
+              <li key={item.id} className="priority-list__item">
                 <span>
-                  <span className="tag tag--neutral" style={{ marginRight: "0.5rem" }}>W{i + 1}</span>
-                  {item}
+                  <span className="tag tag--neutral" style={{ marginRight: "0.5rem" }}>W{index + 1}</span>
+                  {item.title}
                 </span>
               </li>
             ))}
@@ -54,7 +68,7 @@ export function GoalsPage() {
         >
           <div style={{ display: "flex", flexDirection: "column", gap: "0.6rem" }}>
             {goals.map((goal) => (
-              <div key={goal.title} className="goal-card">
+              <div key={goal.id} className="goal-card">
                 <div className="goal-card__domain">{domainLabels[goal.domain] || goal.domain}</div>
                 <div className="goal-card__title">{goal.title}</div>
               </div>
@@ -64,21 +78,17 @@ export function GoalsPage() {
 
         <SectionCard
           title="Three monthly outcomes"
-          subtitle="March targets"
+          subtitle="Current month"
         >
           <ol className="priority-list">
-            <li className="priority-list__item">
-              <span>Complete Life OS MVP with all core screens</span>
-              <span className="tag tag--warning">in progress</span>
-            </li>
-            <li className="priority-list__item">
-              <span>7-day strong-day streak at least once</span>
-              <span className="tag tag--positive">achieved</span>
-            </li>
-            <li className="priority-list__item">
-              <span>Monthly spend under $1,400</span>
-              <span className="tag tag--warning">tracking</span>
-            </li>
+            {(monthPlan?.topOutcomes ?? []).map((outcome) => (
+              <li key={outcome.id} className="priority-list__item">
+                <span>{outcome.title}</span>
+                <span className={outcome.status === "completed" ? "tag tag--positive" : "tag tag--warning"}>
+                  {outcome.status === "completed" ? "achieved" : "tracking"}
+                </span>
+              </li>
+            ))}
           </ol>
         </SectionCard>
       </div>
