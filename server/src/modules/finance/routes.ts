@@ -1,6 +1,7 @@
 import type { FastifyPluginAsync } from "fastify";
 import type {
   CreateExpenseCategoryRequest,
+  DeleteExpenseResponse,
   ExpenseCategoryItem,
   ExpenseCategoryMutationResponse,
   ExpensesResponse,
@@ -686,6 +687,25 @@ export const registerFinanceRoutes: FastifyPluginAsync = async (app) => {
 
     const response: ExpenseMutationResponse = withGeneratedAt({
       expense: serializeExpense(expense),
+    });
+
+    return reply.send(response);
+  });
+
+  app.delete("/expenses/:expenseId", async (request, reply) => {
+    const user = requireAuthenticatedUser(request);
+    const { expenseId } = request.params as { expenseId: string };
+
+    await findOwnedExpense(app, user.id, expenseId);
+    await app.prisma.expense.delete({
+      where: {
+        id: expenseId,
+      },
+    });
+
+    const response: DeleteExpenseResponse = withGeneratedAt({
+      deleted: true,
+      expenseId,
     });
 
     return reply.send(response);

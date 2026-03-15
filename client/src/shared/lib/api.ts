@@ -421,9 +421,21 @@ type WaterLogMutationResponse = {
   waterLog: WaterLogsResponse["waterLogs"][number];
 };
 
+type DeleteWaterLogMutationResponse = {
+  generatedAt: string;
+  deleted: true;
+  waterLogId: string;
+};
+
 type MealLogMutationResponse = {
   generatedAt: string;
   mealLog: MealLogsResponse["mealLogs"][number];
+};
+
+type DeleteMealLogMutationResponse = {
+  generatedAt: string;
+  deleted: true;
+  mealLogId: string;
 };
 
 type WorkoutDayMutationResponse = {
@@ -434,6 +446,12 @@ type WorkoutDayMutationResponse = {
 type WeightLogMutationResponse = {
   generatedAt: string;
   weightLog: NonNullable<HealthSummaryResponse["currentDay"]["latestWeight"]>;
+};
+
+type DeleteWeightLogMutationResponse = {
+  generatedAt: string;
+  deleted: true;
+  weightLogId: string;
 };
 
 type FinanceSummaryResponse = {
@@ -506,6 +524,12 @@ type FinanceCategoriesResponse = {
 type ExpenseMutationResponse = {
   generatedAt: string;
   expense: ExpensesResponse["expenses"][number];
+};
+
+type DeleteExpenseMutationResponse = {
+  generatedAt: string;
+  deleted: true;
+  expenseId: string;
 };
 
 type NotificationsResponse = {
@@ -1565,6 +1589,47 @@ export function useAddWaterMutation(date: string) {
   });
 }
 
+export function useUpdateWaterLogMutation(date: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      waterLogId,
+      ...payload
+    }: {
+      waterLogId: string;
+      occurredAt?: string;
+      amountMl?: number;
+      source?: "tap" | "quick_capture" | "manual";
+    }) =>
+      apiRequest<WaterLogMutationResponse>(`/api/health/water-logs/${waterLogId}`, {
+        method: "PATCH",
+        body: payload,
+      }),
+    meta: {
+      successMessage: "Water log updated.",
+      errorMessage: "Water log update failed.",
+    },
+    onSuccess: () => invalidateCoreData(queryClient, date),
+  });
+}
+
+export function useDeleteWaterLogMutation(date: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (waterLogId: string) =>
+      apiRequest<DeleteWaterLogMutationResponse>(`/api/health/water-logs/${waterLogId}`, {
+        method: "DELETE",
+      }),
+    meta: {
+      successMessage: "Water log deleted.",
+      errorMessage: "Water log deletion failed.",
+    },
+    onSuccess: () => invalidateCoreData(queryClient, date),
+  });
+}
+
 export function useAddMealMutation(date: string) {
   const queryClient = useQueryClient();
 
@@ -1582,6 +1647,49 @@ export function useAddMealMutation(date: string) {
     meta: {
       successMessage: "Meal logged.",
       errorMessage: "Meal log failed.",
+    },
+    onSuccess: () => invalidateCoreData(queryClient, date),
+  });
+}
+
+export function useUpdateMealLogMutation(date: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      mealLogId,
+      ...payload
+    }: {
+      mealLogId: string;
+      occurredAt?: string;
+      mealSlot?: "breakfast" | "lunch" | "dinner" | "snack" | null;
+      mealTemplateId?: string | null;
+      description?: string;
+      loggingQuality?: "partial" | "meaningful" | "full";
+    }) =>
+      apiRequest<MealLogMutationResponse>(`/api/health/meal-logs/${mealLogId}`, {
+        method: "PATCH",
+        body: payload,
+      }),
+    meta: {
+      successMessage: "Meal log updated.",
+      errorMessage: "Meal log update failed.",
+    },
+    onSuccess: () => invalidateCoreData(queryClient, date),
+  });
+}
+
+export function useDeleteMealLogMutation(date: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (mealLogId: string) =>
+      apiRequest<DeleteMealLogMutationResponse>(`/api/health/meal-logs/${mealLogId}`, {
+        method: "DELETE",
+      }),
+    meta: {
+      successMessage: "Meal log deleted.",
+      errorMessage: "Meal log deletion failed.",
     },
     onSuccess: () => invalidateCoreData(queryClient, date),
   });
@@ -1631,6 +1739,48 @@ export function useAddWeightMutation(date: string) {
   });
 }
 
+export function useUpdateWeightLogMutation(date: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      weightLogId,
+      ...payload
+    }: {
+      weightLogId: string;
+      measuredOn?: string;
+      weightValue?: number;
+      unit?: string;
+      note?: string | null;
+    }) =>
+      apiRequest<WeightLogMutationResponse>(`/api/health/weight-logs/${weightLogId}`, {
+        method: "PATCH",
+        body: payload,
+      }),
+    meta: {
+      successMessage: "Weight log updated.",
+      errorMessage: "Weight log update failed.",
+    },
+    onSuccess: () => invalidateCoreData(queryClient, date),
+  });
+}
+
+export function useDeleteWeightLogMutation(date: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (weightLogId: string) =>
+      apiRequest<DeleteWeightLogMutationResponse>(`/api/health/weight-logs/${weightLogId}`, {
+        method: "DELETE",
+      }),
+    meta: {
+      successMessage: "Weight log deleted.",
+      errorMessage: "Weight log deletion failed.",
+    },
+    onSuccess: () => invalidateCoreData(queryClient, date),
+  });
+}
+
 export function useCreateExpenseMutation(date: string) {
   const queryClient = useQueryClient();
 
@@ -1651,6 +1801,49 @@ export function useCreateExpenseMutation(date: string) {
     meta: {
       successMessage: "Expense logged.",
       errorMessage: "Expense log failed.",
+    },
+    onSuccess: () => invalidateCoreData(queryClient, date),
+  });
+}
+
+export function useUpdateExpenseMutation(date: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      expenseId,
+      ...payload
+    }: {
+      expenseId: string;
+      spentOn?: string;
+      amountMinor?: number;
+      currencyCode?: string;
+      description?: string | null;
+      expenseCategoryId?: string | null;
+    }) =>
+      apiRequest<ExpenseMutationResponse>(`/api/finance/expenses/${expenseId}`, {
+        method: "PATCH",
+        body: payload,
+      }),
+    meta: {
+      successMessage: "Expense updated.",
+      errorMessage: "Expense update failed.",
+    },
+    onSuccess: () => invalidateCoreData(queryClient, date),
+  });
+}
+
+export function useDeleteExpenseMutation(date: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (expenseId: string) =>
+      apiRequest<DeleteExpenseMutationResponse>(`/api/finance/expenses/${expenseId}`, {
+        method: "DELETE",
+      }),
+    meta: {
+      successMessage: "Expense deleted.",
+      errorMessage: "Expense deletion failed.",
     },
     onSuccess: () => invalidateCoreData(queryClient, date),
   });

@@ -71,6 +71,12 @@ export interface CreateWaterLogRequest {
   source?: WaterLogSource;
 }
 
+export interface UpdateWaterLogRequest {
+  occurredAt?: string;
+  amountMl?: number;
+  source?: WaterLogSource;
+}
+
 export interface WaterLogMutationResponse extends ApiMeta {
   waterLog: WaterLogItem;
 }
@@ -80,12 +86,25 @@ export interface WaterLogsResponse extends ApiMeta {
   waterLogs: WaterLogItem[];
 }
 
+export interface DeleteWaterLogResponse extends ApiMeta {
+  deleted: true;
+  waterLogId: EntityId;
+}
+
 export interface CreateMealLogRequest {
   occurredAt?: string;
   mealSlot?: MealSlot | null;
   mealTemplateId?: EntityId | null;
   description: string;
   loggingQuality: MealLoggingQuality;
+}
+
+export interface UpdateMealLogRequest {
+  occurredAt?: string;
+  mealSlot?: MealSlot | null;
+  mealTemplateId?: EntityId | null;
+  description?: string;
+  loggingQuality?: MealLoggingQuality;
 }
 
 export interface MealLogMutationResponse extends ApiMeta {
@@ -127,6 +146,11 @@ export interface MealLogsResponse extends ApiMeta {
   mealLogs: MealLogItem[];
 }
 
+export interface DeleteMealLogResponse extends ApiMeta {
+  deleted: true;
+  mealLogId: EntityId;
+}
+
 export interface UpdateWorkoutDayRequest {
   planType?: WorkoutPlanType;
   plannedLabel?: string | null;
@@ -145,6 +169,18 @@ export interface CreateWeightLogRequest {
   note?: string | null;
 }
 
+export interface UpdateWeightLogRequest {
+  measuredOn?: IsoDateString;
+  weightValue?: number;
+  unit?: string;
+  note?: string | null;
+}
+
 export interface WeightLogMutationResponse extends ApiMeta {
   weightLog: WeightLogItem;
+}
+
+export interface DeleteWeightLogResponse extends ApiMeta {
+  deleted: true;
+  weightLogId: EntityId;
 }

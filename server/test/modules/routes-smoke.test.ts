@@ -1612,4 +1612,193 @@ describe("module route smoke tests", () => {
     expect(response.statusCode).toBe(404);
     expect(JSON.parse(response.body).message).toBe("Meal template not found");
   });
+
+  it("supports health log correction endpoints", async () => {
+    prisma.waterLog = {
+      findFirst: vi.fn().mockResolvedValue({
+        id: "water-log-1",
+        userId: "user-1",
+      }),
+      update: vi.fn().mockResolvedValue({
+        id: "water-log-1",
+        userId: "user-1",
+        occurredAt: new Date("2026-03-14T10:00:00.000Z"),
+        amountMl: 500,
+        source: "MANUAL",
+        createdAt: new Date("2026-03-14T09:00:00.000Z"),
+      }),
+      delete: vi.fn().mockResolvedValue({
+        id: "water-log-1",
+      }),
+    } as any;
+    prisma.mealTemplate = {
+      findFirst: vi.fn().mockResolvedValue({
+        id: "11111111-1111-4111-8111-111111111111",
+        userId: "user-1",
+      }),
+    } as any;
+    prisma.mealLog = {
+      findFirst: vi.fn().mockResolvedValue({
+        id: "meal-log-1",
+        userId: "user-1",
+      }),
+      update: vi.fn().mockResolvedValue({
+        id: "meal-log-1",
+        userId: "user-1",
+        occurredAt: new Date("2026-03-14T12:00:00.000Z"),
+        mealSlot: "LUNCH",
+        mealTemplateId: "11111111-1111-4111-8111-111111111111",
+        description: "Chicken bowl",
+        loggingQuality: "FULL",
+        createdAt: new Date("2026-03-14T12:00:00.000Z"),
+      }),
+      delete: vi.fn().mockResolvedValue({
+        id: "meal-log-1",
+      }),
+    } as any;
+    prisma.weightLog = {
+      findFirst: vi.fn().mockResolvedValue({
+        id: "weight-log-1",
+        userId: "user-1",
+      }),
+      update: vi.fn().mockResolvedValue({
+        id: "weight-log-1",
+        userId: "user-1",
+        measuredOn: new Date("2026-03-14T00:00:00.000Z"),
+        weightValue: 82.4,
+        unit: "kg",
+        note: "After workout",
+        createdAt: new Date("2026-03-14T07:00:00.000Z"),
+      }),
+      delete: vi.fn().mockResolvedValue({
+        id: "weight-log-1",
+      }),
+    } as any;
+
+    const waterPatch = await app!.inject({
+      method: "PATCH",
+      url: "/api/health/water-logs/water-log-1",
+      payload: {
+        amountMl: 500,
+        source: "manual",
+      },
+    });
+    const waterDelete = await app!.inject({
+      method: "DELETE",
+      url: "/api/health/water-logs/water-log-1",
+    });
+    const mealPatch = await app!.inject({
+      method: "PATCH",
+      url: "/api/health/meal-logs/meal-log-1",
+      payload: {
+        mealTemplateId: "11111111-1111-4111-8111-111111111111",
+        description: "Chicken bowl",
+        loggingQuality: "full",
+        mealSlot: "lunch",
+      },
+    });
+    const mealDelete = await app!.inject({
+      method: "DELETE",
+      url: "/api/health/meal-logs/meal-log-1",
+    });
+    const weightPatch = await app!.inject({
+      method: "PATCH",
+      url: "/api/health/weight-logs/weight-log-1",
+      payload: {
+        weightValue: 82.4,
+        unit: "kg",
+        note: "After workout",
+      },
+    });
+    const weightDelete = await app!.inject({
+      method: "DELETE",
+      url: "/api/health/weight-logs/weight-log-1",
+    });
+
+    expect(waterPatch.statusCode).toBe(200);
+    expect(JSON.parse(waterPatch.body).waterLog).toEqual(
+      expect.objectContaining({
+        id: "water-log-1",
+        amountMl: 500,
+        source: "manual",
+      }),
+    );
+    expect(waterDelete.statusCode).toBe(200);
+    expect(JSON.parse(waterDelete.body)).toEqual(
+      expect.objectContaining({
+        deleted: true,
+        waterLogId: "water-log-1",
+      }),
+    );
+    expect(mealPatch.statusCode).toBe(200);
+    expect(JSON.parse(mealPatch.body).mealLog).toEqual(
+      expect.objectContaining({
+        id: "meal-log-1",
+        description: "Chicken bowl",
+        loggingQuality: "full",
+        mealSlot: "lunch",
+      }),
+    );
+    expect(mealDelete.statusCode).toBe(200);
+    expect(JSON.parse(mealDelete.body)).toEqual(
+      expect.objectContaining({
+        deleted: true,
+        mealLogId: "meal-log-1",
+      }),
+    );
+    expect(weightPatch.statusCode).toBe(200);
+    expect(JSON.parse(weightPatch.body).weightLog).toEqual(
+      expect.objectContaining({
+        id: "weight-log-1",
+        weightValue: 82.4,
+        note: "After workout",
+      }),
+    );
+    expect(weightDelete.statusCode).toBe(200);
+    expect(JSON.parse(weightDelete.body)).toEqual(
+      expect.objectContaining({
+        deleted: true,
+        weightLogId: "weight-log-1",
+      }),
+    );
+  });
+
+  it("supports expense deletion", async () => {
+    prisma.expense = {
+      findFirst: vi.fn().mockResolvedValue({
+        id: "expense-1",
+        userId: "user-1",
+      }),
+      delete: vi.fn().mockResolvedValue({
+        id: "expense-1",
+      }),
+    } as any;
+
+    const response = await app!.inject({
+      method: "DELETE",
+      url: "/api/finance/expenses/expense-1",
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(JSON.parse(response.body)).toEqual(
+      expect.objectContaining({
+        deleted: true,
+        expenseId: "expense-1",
+      }),
+    );
+  });
+
+  it("rejects deleting a foreign expense", async () => {
+    prisma.expense = {
+      findFirst: vi.fn().mockResolvedValue(null),
+    } as any;
+
+    const response = await app!.inject({
+      method: "DELETE",
+      url: "/api/finance/expenses/expense-1",
+    });
+
+    expect(response.statusCode).toBe(404);
+    expect(JSON.parse(response.body).message).toBe("Expense not found");
+  });
 });

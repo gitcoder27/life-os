@@ -68,6 +68,11 @@ export interface ExpensesResponse extends ApiMeta {
   expenses: ExpenseItem[];
 }
 
+export interface DeleteExpenseResponse extends ApiMeta {
+  deleted: true;
+  expenseId: EntityId;
+}
+
 export interface ExpenseCategoryItem {
   id: EntityId;
   name: string;

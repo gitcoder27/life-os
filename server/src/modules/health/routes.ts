@@ -4,6 +4,9 @@ import type {
   CreateMealLogRequest,
   CreateWaterLogRequest,
   CreateWeightLogRequest,
+  DeleteMealLogResponse,
+  DeleteWaterLogResponse,
+  DeleteWeightLogResponse,
   HealthSummaryResponse,
   IsoDateString,
   MealLogItem,
@@ -14,7 +17,10 @@ import type {
   MealTemplateItem,
   MealTemplatesResponse,
   MealSlot,
+  UpdateMealLogRequest,
   UpdateMealTemplateRequest,
+  UpdateWaterLogRequest,
+  UpdateWeightLogRequest,
   UpdateWorkoutDayRequest,
   WaterLogItem,
   WaterLogsResponse,
@@ -81,6 +87,14 @@ const createWaterLogSchema = z.object({
   source: waterLogSourceSchema.optional(),
 });
 
+const updateWaterLogSchema = z
+  .object({
+    occurredAt: isoDateTimeSchema.optional(),
+    amountMl: z.number().int().positive().max(10000).optional(),
+    source: waterLogSourceSchema.optional(),
+  })
+  .refine((value) => Object.keys(value).length > 0, "At least one field must be updated");
+
 const createMealLogSchema = z.object({
   occurredAt: isoDateTimeSchema.optional(),
   mealSlot: mealSlotSchema.nullable().optional(),
@@ -88,6 +102,16 @@ const createMealLogSchema = z.object({
   description: z.string().min(1).max(4000),
   loggingQuality: mealLoggingQualitySchema,
 });
+
+const updateMealLogSchema = z
+  .object({
+    occurredAt: isoDateTimeSchema.optional(),
+    mealSlot: mealSlotSchema.nullable().optional(),
+    mealTemplateId: z.string().uuid().nullable().optional(),
+    description: z.string().min(1).max(4000).optional(),
+    loggingQuality: mealLoggingQualitySchema.optional(),
+  })
+  .refine((value) => Object.keys(value).length > 0, "At least one field must be updated");
 
 const createMealTemplateSchema = z.object({
   name: z.string().min(1).max(200),
@@ -119,6 +143,15 @@ const createWeightLogSchema = z.object({
   unit: z.string().min(1).max(16).optional(),
   note: z.string().max(4000).nullable().optional(),
 });
+
+const updateWeightLogSchema = z
+  .object({
+    measuredOn: isoDateSchema.optional(),
+    weightValue: z.number().positive().max(1000).optional(),
+    unit: z.string().min(1).max(16).optional(),
+    note: z.string().max(4000).nullable().optional(),
+  })
+  .refine((value) => Object.keys(value).length > 0, "At least one field must be updated");
 
 async function getTodayIsoDate(
   app: Parameters<FastifyPluginAsync>[0],
@@ -390,6 +423,75 @@ async function findOwnedMealTemplate(
   }
 
   return mealTemplate;
+}
+
+async function findOwnedWaterLog(
+  app: Parameters<FastifyPluginAsync>[0],
+  userId: string,
+  waterLogId: string,
+) {
+  const waterLog = await app.prisma.waterLog.findFirst({
+    where: {
+      id: waterLogId,
+      userId,
+    },
+  });
+
+  if (!waterLog) {
+    throw new AppError({
+      statusCode: 404,
+      code: "NOT_FOUND",
+      message: "Water log not found",
+    });
+  }
+
+  return waterLog;
+}
+
+async function findOwnedMealLog(
+  app: Parameters<FastifyPluginAsync>[0],
+  userId: string,
+  mealLogId: string,
+) {
+  const mealLog = await app.prisma.mealLog.findFirst({
+    where: {
+      id: mealLogId,
+      userId,
+    },
+  });
+
+  if (!mealLog) {
+    throw new AppError({
+      statusCode: 404,
+      code: "NOT_FOUND",
+      message: "Meal log not found",
+    });
+  }
+
+  return mealLog;
+}
+
+async function findOwnedWeightLog(
+  app: Parameters<FastifyPluginAsync>[0],
+  userId: string,
+  weightLogId: string,
+) {
+  const weightLog = await app.prisma.weightLog.findFirst({
+    where: {
+      id: weightLogId,
+      userId,
+    },
+  });
+
+  if (!weightLog) {
+    throw new AppError({
+      statusCode: 404,
+      code: "NOT_FOUND",
+      message: "Weight log not found",
+    });
+  }
+
+  return weightLog;
 }
 
 export const registerHealthRoutes: FastifyPluginAsync = async (app) => {
@@ -676,6 +778,49 @@ export const registerHealthRoutes: FastifyPluginAsync = async (app) => {
     return reply.status(201).send(response);
   });
 
+  app.patch("/water-logs/:waterLogId", async (request, reply) => {
+    const user = requireAuthenticatedUser(request);
+    const { waterLogId } = request.params as { waterLogId: string };
+    const payload = parseOrThrow(updateWaterLogSchema, request.body as UpdateWaterLogRequest);
+
+    await findOwnedWaterLog(app, user.id, waterLogId);
+
+    const waterLog = await app.prisma.waterLog.update({
+      where: {
+        id: waterLogId,
+      },
+      data: {
+        occurredAt: payload.occurredAt ? new Date(payload.occurredAt) : undefined,
+        amountMl: payload.amountMl,
+        source: payload.source ? toPrismaWaterLogSource(payload.source) : undefined,
+      },
+    });
+    const response: WaterLogMutationResponse = withGeneratedAt({
+      waterLog: serializeWaterLog(waterLog),
+    });
+
+    return reply.send(response);
+  });
+
+  app.delete("/water-logs/:waterLogId", async (request, reply) => {
+    const user = requireAuthenticatedUser(request);
+    const { waterLogId } = request.params as { waterLogId: string };
+
+    await findOwnedWaterLog(app, user.id, waterLogId);
+    await app.prisma.waterLog.delete({
+      where: {
+        id: waterLogId,
+      },
+    });
+
+    const response: DeleteWaterLogResponse = withGeneratedAt({
+      deleted: true,
+      waterLogId,
+    });
+
+    return reply.send(response);
+  });
+
   app.post("/meal-logs", async (request, reply) => {
     const user = requireAuthenticatedUser(request);
     const payload = parseOrThrow(createMealLogSchema, request.body as CreateMealLogRequest);
@@ -695,6 +840,56 @@ export const registerHealthRoutes: FastifyPluginAsync = async (app) => {
     });
 
     return reply.status(201).send(response);
+  });
+
+  app.patch("/meal-logs/:mealLogId", async (request, reply) => {
+    const user = requireAuthenticatedUser(request);
+    const { mealLogId } = request.params as { mealLogId: string };
+    const payload = parseOrThrow(updateMealLogSchema, request.body as UpdateMealLogRequest);
+
+    await Promise.all([
+      findOwnedMealLog(app, user.id, mealLogId),
+      assertOwnedMealTemplate(app, user.id, payload.mealTemplateId),
+    ]);
+
+    const mealLog = await app.prisma.mealLog.update({
+      where: {
+        id: mealLogId,
+      },
+      data: {
+        occurredAt: payload.occurredAt ? new Date(payload.occurredAt) : undefined,
+        mealSlot: toPrismaMealSlot(payload.mealSlot),
+        mealTemplateId: payload.mealTemplateId,
+        description: payload.description,
+        loggingQuality: payload.loggingQuality
+          ? toPrismaMealLoggingQuality(payload.loggingQuality)
+          : undefined,
+      },
+    });
+    const response: MealLogMutationResponse = withGeneratedAt({
+      mealLog: serializeMealLog(mealLog),
+    });
+
+    return reply.send(response);
+  });
+
+  app.delete("/meal-logs/:mealLogId", async (request, reply) => {
+    const user = requireAuthenticatedUser(request);
+    const { mealLogId } = request.params as { mealLogId: string };
+
+    await findOwnedMealLog(app, user.id, mealLogId);
+    await app.prisma.mealLog.delete({
+      where: {
+        id: mealLogId,
+      },
+    });
+
+    const response: DeleteMealLogResponse = withGeneratedAt({
+      deleted: true,
+      mealLogId,
+    });
+
+    return reply.send(response);
   });
 
   app.put("/workout-days/:date", async (request, reply) => {
@@ -754,5 +949,49 @@ export const registerHealthRoutes: FastifyPluginAsync = async (app) => {
     });
 
     return reply.status(201).send(response);
+  });
+
+  app.patch("/weight-logs/:weightLogId", async (request, reply) => {
+    const user = requireAuthenticatedUser(request);
+    const { weightLogId } = request.params as { weightLogId: string };
+    const payload = parseOrThrow(updateWeightLogSchema, request.body as UpdateWeightLogRequest);
+
+    await findOwnedWeightLog(app, user.id, weightLogId);
+
+    const weightLog = await app.prisma.weightLog.update({
+      where: {
+        id: weightLogId,
+      },
+      data: {
+        measuredOn: payload.measuredOn ? parseIsoDate(payload.measuredOn) : undefined,
+        weightValue: payload.weightValue,
+        unit: payload.unit,
+        note: payload.note,
+      },
+    });
+    const response: WeightLogMutationResponse = withGeneratedAt({
+      weightLog: serializeWeightLog(weightLog),
+    });
+
+    return reply.send(response);
+  });
+
+  app.delete("/weight-logs/:weightLogId", async (request, reply) => {
+    const user = requireAuthenticatedUser(request);
+    const { weightLogId } = request.params as { weightLogId: string };
+
+    await findOwnedWeightLog(app, user.id, weightLogId);
+    await app.prisma.weightLog.delete({
+      where: {
+        id: weightLogId,
+      },
+    });
+
+    const response: DeleteWeightLogResponse = withGeneratedAt({
+      deleted: true,
+      weightLogId,
+    });
+
+    return reply.send(response);
   });
 };
