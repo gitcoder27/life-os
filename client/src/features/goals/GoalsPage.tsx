@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 
 import {
@@ -99,6 +99,15 @@ export function GoalsPage() {
   const [showGoalForm, setShowGoalForm] = useState(false);
   const [editingGoalId, setEditingGoalId] = useState<string | null>(null);
   const [goalForm, setGoalForm] = useState<GoalFormData>(emptyGoalForm);
+  const goalFormRef = useRef<HTMLDivElement>(null);
+  const goalTitleRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (showGoalForm && goalFormRef.current) {
+      goalFormRef.current.scrollIntoView({ behavior: "smooth", block: "center" });
+      goalTitleRef.current?.focus();
+    }
+  }, [showGoalForm]);
 
   // Weekly priorities editing
   const [editingWeek, setEditingWeek] = useState(false);
@@ -519,10 +528,11 @@ export function GoalsPage() {
           ) : null}
 
           {showGoalForm ? (
-            <div className="stack-form">
+            <div className="stack-form" ref={goalFormRef}>
               <label className="field">
                 <span>Title</span>
                 <input
+                  ref={goalTitleRef}
                   type="text"
                   value={goalForm.title}
                   placeholder="What do you want to achieve?"
