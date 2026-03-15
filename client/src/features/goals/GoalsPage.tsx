@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Link } from "react-router-dom";
 
 import {
   formatMonthLabel,
@@ -6,11 +7,14 @@ import {
   getTodayDate,
   getWeekStartDate,
   useCreateGoalMutation,
+  useFilteredGoalsQuery,
   useGoalsDataQuery,
-  useGoalsListQuery,
   useUpdateGoalMutation,
   useUpdateMonthFocusMutation,
   useUpdateWeekPrioritiesMutation,
+  type GoalDomain,
+  type GoalStatus,
+  type LinkedGoal,
 } from "../../shared/lib/api";
 import { PageHeader } from "../../shared/ui/PageHeader";
 import {
@@ -31,7 +35,7 @@ const domainLabels: Record<string, string> = {
 };
 
 const domainOptions = Object.entries(domainLabels).map(([value, label]) => ({
-  value: value as "health" | "money" | "work_growth" | "home_admin" | "discipline" | "other",
+  value: value as GoalDomain,
   label,
 }));
 
@@ -42,9 +46,23 @@ const statusLabels: Record<string, string> = {
   archived: "Archived",
 };
 
+const statusOptions = Object.entries(statusLabels).map(([value, label]) => ({
+  value: value as GoalStatus,
+  label,
+}));
+
+function GoalChip({ goal }: { goal: LinkedGoal }) {
+  return (
+    <Link to="/goals" className="goal-chip">
+      <span className={`goal-chip__dot goal-chip__dot--${goal.domain}`} />
+      <span>{goal.title}</span>
+    </Link>
+  );
+}
+
 type GoalFormData = {
   title: string;
-  domain: "health" | "money" | "work_growth" | "home_admin" | "discipline" | "other";
+  domain: GoalDomain;
   targetDate: string;
   notes: string;
 };
@@ -64,8 +82,14 @@ export function GoalsPage() {
   const weekStart = getWeekStartDate(today);
   const monthStart = getMonthStartDate(today);
 
+  // Filter state
+  const [filterDomain, setFilterDomain] = useState<GoalDomain | undefined>(undefined);
+  const [filterStatus, setFilterStatus] = useState<GoalStatus | undefined>(undefined);
+
   const goalsQuery = useGoalsDataQuery(today);
-  const goalsListQuery = useGoalsListQuery();
+  const filteredGoalsQuery = useFilteredGoalsQuery(
+    filterDomain || filterStatus ? { domain: filterDomain, status: filterStatus } : undefined,
+  );
   const createGoalMutation = useCreateGoalMutation();
   const updateGoalMutation = useUpdateGoalMutation();
   const updateWeekPrioritiesMutation = useUpdateWeekPrioritiesMutation(weekStart);
@@ -112,7 +136,13 @@ export function GoalsPage() {
     );
   }
 
-  const goals = goalsListQuery.data?.goals ?? goalsQuery.data.goals.goals ?? [];
+  const isFiltering = filterDomain !== undefined || filterStatus !== undefined;
+  const allGoals = goalsQuery.data.goals.goals ?? [];
+  const filteredGoals = isFiltering
+    ? (filteredGoalsQuery.data?.goals ?? allGoals)
+    : allGoals;
+
+  const activeGoals = allGoals.filter((g) => g.status === "active");
   const weeklyPriorities = goalsQuery.data.weekPlan?.priorities ?? [];
   const monthPlan = goalsQuery.data.monthPlan;
 
@@ -122,7 +152,7 @@ export function GoalsPage() {
     setShowGoalForm(true);
   }
 
-  function openEditGoal(goal: typeof goals[number]) {
+  function openEditGoal(goal: typeof allGoals[number]) {
     setEditingGoalId(goal.id);
     setGoalForm({
       title: goal.title,
@@ -157,7 +187,7 @@ export function GoalsPage() {
     setGoalForm(emptyGoalForm);
   }
 
-  async function handleGoalStatusChange(goalId: string, status: "active" | "paused" | "completed" | "archived") {
+  async function handleGoalStatusChange(goalId: string, status: GoalStatus) {
     await updateGoalMutation.mutateAsync({ goalId, status });
   }
 
@@ -219,8 +249,9 @@ export function GoalsPage() {
     setEditingMonth(false);
   }
 
-  const activeGoals = goals.filter((g) => g.status === "active");
-  const otherGoals = goals.filter((g) => g.status !== "active");
+  // Split filtered goals for display
+  const displayActiveGoals = filteredGoals.filter((g) => g.status === "active");
+  const displayOtherGoals = filteredGoals.filter((g) => g.status !== "active");
 
   return (
     <div className="page">
@@ -312,7 +343,10 @@ export function GoalsPage() {
                 <ol className="priority-list">
                   {monthPlan.topOutcomes.map((outcome) => (
                     <li key={outcome.id} className="priority-list__item">
-                      <span>{outcome.title}</span>
+                      <span style={{ display: "flex", flexDirection: "column", gap: "0.2rem" }}>
+                        <span>{outcome.title}</span>
+                        {outcome.goal ? <GoalChip goal={outcome.goal} /> : null}
+                      </span>
                       <span className={outcome.status === "completed" ? "tag tag--positive" : "tag tag--warning"}>
                         {outcome.status === "completed" ? "achieved" : "tracking"}
                       </span>
@@ -400,9 +434,12 @@ export function GoalsPage() {
                 <ol className="priority-list">
                   {weeklyPriorities.map((item, index) => (
                     <li key={item.id} className="priority-list__item">
-                      <span>
-                        <span className="tag tag--neutral" style={{ marginRight: "0.5rem" }}>W{index + 1}</span>
-                        {item.title}
+                      <span style={{ display: "flex", flexDirection: "column", gap: "0.2rem" }}>
+                        <span>
+                          <span className="tag tag--neutral" style={{ marginRight: "0.5rem" }}>W{index + 1}</span>
+                          {item.title}
+                        </span>
+                        {item.goal ? <GoalChip goal={item.goal} /> : null}
                       </span>
                     </li>
                   ))}
@@ -428,8 +465,59 @@ export function GoalsPage() {
         {/* ── Life-area goals ── */}
         <SectionCard
           title="Life-area goals"
-          subtitle={`${activeGoals.length} active`}
+          subtitle={isFiltering
+            ? `${filteredGoals.length} matching`
+            : `${activeGoals.length} active`
+          }
         >
+          {/* Filter bar */}
+          <div className="filter-bar">
+            <div className="filter-bar__group">
+              <span className="filter-bar__label">Domain</span>
+              <button
+                className={`filter-chip ${filterDomain === undefined ? "filter-chip--active" : ""}`}
+                type="button"
+                onClick={() => setFilterDomain(undefined)}
+              >
+                All
+              </button>
+              {domainOptions.map((opt) => (
+                <button
+                  key={opt.value}
+                  className={`filter-chip ${filterDomain === opt.value ? "filter-chip--active" : ""}`}
+                  type="button"
+                  onClick={() => setFilterDomain(filterDomain === opt.value ? undefined : opt.value)}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+            <div className="filter-bar__group">
+              <span className="filter-bar__label">Status</span>
+              <button
+                className={`filter-chip ${filterStatus === undefined ? "filter-chip--active" : ""}`}
+                type="button"
+                onClick={() => setFilterStatus(undefined)}
+              >
+                All
+              </button>
+              {statusOptions.map((opt) => (
+                <button
+                  key={opt.value}
+                  className={`filter-chip ${filterStatus === opt.value ? "filter-chip--active" : ""}`}
+                  type="button"
+                  onClick={() => setFilterStatus(filterStatus === opt.value ? undefined : opt.value)}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {filteredGoalsQuery.isFetching && isFiltering ? (
+            <p className="support-copy">Filtering…</p>
+          ) : null}
+
           {showGoalForm ? (
             <div className="stack-form">
               <label className="field">
@@ -492,11 +580,14 @@ export function GoalsPage() {
             </div>
           ) : (
             <>
-              {activeGoals.length > 0 ? (
+              {displayActiveGoals.length > 0 ? (
                 <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
-                  {activeGoals.map((goal) => (
+                  {displayActiveGoals.map((goal) => (
                     <div key={goal.id} className="goal-card goal-card--interactive">
-                      <div className="goal-card__domain">{domainLabels[goal.domain] || goal.domain}</div>
+                      <div className="goal-card__domain">
+                        <span className={`goal-chip__dot goal-chip__dot--${goal.domain}`} style={{ display: "inline-block", marginRight: "0.35rem", verticalAlign: "middle" }} />
+                        {domainLabels[goal.domain] || goal.domain}
+                      </div>
                       <div className="goal-card__title">{goal.title}</div>
                       {goal.notes && <div className="goal-card__notes">{goal.notes}</div>}
                       <div className="button-row button-row--tight" style={{ marginTop: "0.4rem" }}>
@@ -508,12 +599,37 @@ export function GoalsPage() {
                     </div>
                   ))}
                 </div>
-              ) : (
+              ) : displayOtherGoals.length === 0 ? (
                 <EmptyState
-                  title="No active goals"
-                  description="Create your first goal to start planning with purpose."
+                  title={isFiltering ? "No matching goals" : "No active goals"}
+                  description={isFiltering ? "Try adjusting the filters above." : "Create your first goal to start planning with purpose."}
                 />
-              )}
+              ) : null}
+
+              {displayOtherGoals.length > 0 ? (
+                <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem", marginTop: displayActiveGoals.length > 0 ? "0.75rem" : undefined }}>
+                  {displayOtherGoals.map((goal) => (
+                    <div key={goal.id} className="goal-card">
+                      <div className="goal-card__domain">
+                        <span className={`goal-chip__dot goal-chip__dot--${goal.domain}`} style={{ display: "inline-block", marginRight: "0.35rem", verticalAlign: "middle" }} />
+                        {domainLabels[goal.domain] || goal.domain}
+                      </div>
+                      <div className="goal-card__title">{goal.title}</div>
+                      <div className="button-row button-row--tight" style={{ marginTop: "0.35rem" }}>
+                        <span className={`tag ${goal.status === "completed" ? "tag--positive" : goal.status === "paused" ? "tag--warning" : "tag--neutral"}`}>
+                          {statusLabels[goal.status] ?? goal.status}
+                        </span>
+                        {goal.status !== "active" && (
+                          <button className="button button--ghost button--small" type="button" onClick={() => void handleGoalStatusChange(goal.id, "active")}>
+                            Reactivate
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+
               <button
                 className="button button--primary button--small"
                 type="button"
@@ -525,33 +641,6 @@ export function GoalsPage() {
             </>
           )}
         </SectionCard>
-
-        {/* ── Other goals ── */}
-        {otherGoals.length > 0 && (
-          <SectionCard
-            title="Paused, completed, and archived"
-            subtitle={`${otherGoals.length} goals`}
-          >
-            <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
-              {otherGoals.map((goal) => (
-                <div key={goal.id} className="goal-card">
-                  <div className="goal-card__domain">{domainLabels[goal.domain] || goal.domain}</div>
-                  <div className="goal-card__title">{goal.title}</div>
-                  <div className="button-row button-row--tight" style={{ marginTop: "0.35rem" }}>
-                    <span className={`tag ${goal.status === "completed" ? "tag--positive" : goal.status === "paused" ? "tag--warning" : "tag--neutral"}`}>
-                      {statusLabels[goal.status] ?? goal.status}
-                    </span>
-                    {goal.status !== "active" && (
-                      <button className="button button--ghost button--small" type="button" onClick={() => void handleGoalStatusChange(goal.id, "active")}>
-                        Reactivate
-                      </button>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </SectionCard>
-        )}
       </div>
     </div>
   );

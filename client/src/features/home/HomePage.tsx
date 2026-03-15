@@ -1,3 +1,5 @@
+import { Link, useNavigate } from "react-router-dom";
+
 import {
   formatMajorCurrency,
   formatWorkoutStatus,
@@ -8,8 +10,8 @@ import {
   useUpdatePriorityMutation,
   useTaskStatusMutation,
   useWeeklyMomentumQuery,
+  type LinkedGoal,
 } from "../../shared/lib/api";
-import { useNavigate } from "react-router-dom";
 import { MetricPill } from "../../shared/ui/MetricPill";
 import {
   EmptyState,
@@ -19,6 +21,15 @@ import {
 } from "../../shared/ui/PageState";
 import { ScoreRing } from "../../shared/ui/ScoreRing";
 import { SectionCard } from "../../shared/ui/SectionCard";
+
+function GoalChip({ goal }: { goal: LinkedGoal }) {
+  return (
+    <Link to="/goals" className="goal-chip">
+      <span className={`goal-chip__dot goal-chip__dot--${goal.domain}`} />
+      <span>{goal.title}</span>
+    </Link>
+  );
+}
 
 export function HomePage() {
   const today = getTodayDate();
@@ -280,7 +291,14 @@ export function HomePage() {
                         : "priority-list__item"
                   }
                 >
-                  <span>{priority.title}</span>
+                  <div>
+                    <span>{priority.title}</span>
+                    {priority.goal ? (
+                      <div style={{ marginTop: "0.2rem" }}>
+                        <GoalChip goal={priority.goal} />
+                      </div>
+                    ) : null}
+                  </div>
                   <div className="button-row button-row--tight">
                     <span
                       className={
@@ -352,6 +370,11 @@ export function HomePage() {
                       {task.status === "completed"
                         ? "Completed"
                         : task.scheduledForDate ?? "Scheduled today"}
+                      {task.goal ? (
+                        <span style={{ marginLeft: "0.5rem" }}>
+                          <GoalChip goal={task.goal} />
+                        </span>
+                      ) : null}
                     </div>
                   </div>
                   <button

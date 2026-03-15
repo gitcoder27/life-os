@@ -97,6 +97,13 @@ type OnboardingCompleteRequest = {
   firstMonthStartDate?: string;
 };
 
+export type LinkedGoal = {
+  id: string;
+  title: string;
+  domain: "health" | "money" | "work_growth" | "home_admin" | "discipline" | "other";
+  status: "active" | "paused" | "completed" | "archived";
+};
+
 type HomeOverviewResponse = {
   date: string;
   generatedAt: string;
@@ -113,12 +120,16 @@ type HomeOverviewResponse = {
     title: string;
     slot: 1 | 2 | 3;
     status: "pending" | "completed" | "dropped";
+    goalId: string | null;
+    goal: LinkedGoal | null;
   }>;
   tasks: Array<{
     id: string;
     title: string;
     status: "pending" | "completed" | "dropped";
     scheduledForDate: string | null;
+    goalId: string | null;
+    goal: LinkedGoal | null;
   }>;
   routineSummary: {
     completedItems: number;
@@ -220,6 +231,7 @@ type DayPlanResponse = {
     title: string;
     status: "pending" | "completed" | "dropped";
     goalId: string | null;
+    goal: LinkedGoal | null;
     completedAt: string | null;
   }>;
   tasks: Array<{
@@ -230,6 +242,7 @@ type DayPlanResponse = {
     scheduledForDate: string | null;
     dueAt: string | null;
     goalId: string | null;
+    goal: LinkedGoal | null;
     originType: string;
     carriedFromTaskId: string | null;
     completedAt: string | null;
@@ -586,6 +599,7 @@ type WeekPlanResponse = {
     title: string;
     status: "pending" | "completed" | "dropped";
     goalId: string | null;
+    goal: LinkedGoal | null;
     completedAt: string | null;
   }>;
 };
@@ -601,6 +615,7 @@ type MonthPlanResponse = {
     title: string;
     status: "pending" | "completed" | "dropped";
     goalId: string | null;
+    goal: LinkedGoal | null;
     completedAt: string | null;
   }>;
 };
@@ -805,6 +820,8 @@ const queryKeys = {
   financeRecurring: ["finance", "recurring"] as const,
   goals: (weekStart: string, monthStart: string) => ["goals", weekStart, monthStart] as const,
   goalsAll: ["goals", "all"] as const,
+  goalsFiltered: (domain?: string, status?: string) =>
+    ["goals", "filtered", domain ?? "all", status ?? "all"] as const,
   review: (cadence: ReviewCadence, dateKey: string) => ["review", cadence, dateKey] as const,
   notifications: ["notifications"] as const,
   settings: ["settings"] as const,
@@ -1818,6 +1835,26 @@ export function useGoalsListQuery() {
   return useQuery({
     queryKey: queryKeys.goalsAll,
     queryFn: () => apiRequest<GoalsResponse>("/api/goals"),
+    retry: false,
+  });
+}
+
+export type GoalDomain = "health" | "money" | "work_growth" | "home_admin" | "discipline" | "other";
+export type GoalStatus = "active" | "paused" | "completed" | "archived";
+
+export function useFilteredGoalsQuery(filters?: { domain?: GoalDomain; status?: GoalStatus }) {
+  const domain = filters?.domain;
+  const status = filters?.status;
+
+  return useQuery({
+    queryKey: queryKeys.goalsFiltered(domain, status),
+    queryFn: () =>
+      apiRequest<GoalsResponse>("/api/goals", {
+        query: {
+          domain,
+          status,
+        },
+      }),
     retry: false,
   });
 }

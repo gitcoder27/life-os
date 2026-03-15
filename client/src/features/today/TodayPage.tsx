@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 
 import {
   formatTimeLabel,
@@ -7,10 +8,12 @@ import {
   toIsoDate,
   useCarryForwardTaskMutation,
   useDayPlanQuery,
+  useGoalsListQuery,
   useHealthDataQuery,
   useTaskStatusMutation,
   useUpdateDayPrioritiesMutation,
   useUpdatePriorityMutation,
+  type LinkedGoal,
 } from "../../shared/lib/api";
 import { PageHeader } from "../../shared/ui/PageHeader";
 import {
@@ -36,17 +39,32 @@ function getTomorrowDate(fromDate: string) {
   return toIsoDate(tomorrow);
 }
 
+function GoalChip({ goal }: { goal: LinkedGoal }) {
+  return (
+    <Link to="/goals" className="goal-chip">
+      <span className={`goal-chip__dot goal-chip__dot--${goal.domain}`} />
+      <span>{goal.title}</span>
+    </Link>
+  );
+}
+
 export function TodayPage() {
   const today = getTodayDate();
   const tomorrow = getTomorrowDate(today);
   const dayPlanQuery = useDayPlanQuery(today);
   const healthQuery = useHealthDataQuery(today);
+  const goalsListQuery = useGoalsListQuery();
   const updateTaskMutation = useTaskStatusMutation(today);
   const carryForwardTaskMutation = useCarryForwardTaskMutation(today);
   const updatePriorityMutation = useUpdatePriorityMutation(today);
   const updateDayPrioritiesMutation = useUpdateDayPrioritiesMutation(today);
   const [priorityDraft, setPriorityDraft] = useState<EditablePriority[]>([]);
   const [rescheduleDates, setRescheduleDates] = useState<Record<string, string>>({});
+
+  const activeGoals = useMemo(
+    () => (goalsListQuery.data?.goals ?? []).filter((g) => g.status === "active"),
+    [goalsListQuery.data],
+  );
 
   const retryAll = () => {
     void dayPlanQuery.refetch();
@@ -133,6 +151,16 @@ export function TodayPage() {
     );
   }
 
+  function updateDraftPriorityGoal(index: number, goalId: string) {
+    setPriorityDraft((current) =>
+      current.map((item, currentIndex) =>
+        currentIndex === index
+          ? { ...item, goalId: goalId || null }
+          : item,
+      ),
+    );
+  }
+
   function addDraftPriority() {
     setPriorityDraft((current) => {
       if (current.length >= 3) {
@@ -178,6 +206,13 @@ export function TodayPage() {
     return rescheduleDates[taskId] ?? tomorrow;
   }
 
+  // Look up the linked goal from the server data for display
+  function getServerPriorityGoal(priorityId?: string): LinkedGoal | null {
+    if (!priorityId) return null;
+    const serverP = priorities.find((p) => p.id === priorityId);
+    return serverP?.goal ?? null;
+  }
+
   if (dayPlanQuery.isLoading && !dayPlanQuery.data) {
     return (
       <PageLoadingState
@@ -216,99 +251,118 @@ export function TodayPage() {
         >
           {priorityDraft.length > 0 ? (
             <ol className="priority-list priority-list--editable">
-              {priorityDraft.map((item, index) => (
-                <li
-                  key={item.id ?? `draft-priority-${index}`}
-                  className={
-                    item.status === "completed"
-                      ? "priority-list__item priority-list__item--done"
-                      : item.status === "dropped"
-                        ? "priority-list__item priority-list__item--dropped"
-                        : "priority-list__item"
-                  }
-                >
-                  <div className="priority-edit-row">
-                    <span className="tag tag--neutral">P{index + 1}</span>
-                    <input
-                      className="priority-inline-input"
-                      type="text"
-                      value={item.title}
-                      placeholder="Priority title"
-                      onChange={(event) => updateDraftPriority(index, event.target.value)}
-                      aria-label={`Priority ${index + 1}`}
-                    />
-                  </div>
-                  <div className="button-row button-row--tight button-row--wrap">
-                    <button
-                      className="button button--ghost button--small"
-                      type="button"
-                      onClick={() => moveDraftPriority(index, -1)}
-                      disabled={index === 0 || updateDayPrioritiesMutation.isPending}
-                    >
-                      Up
-                    </button>
-                    <button
-                      className="button button--ghost button--small"
-                      type="button"
-                      onClick={() => moveDraftPriority(index, 1)}
-                      disabled={index === priorityDraft.length - 1 || updateDayPrioritiesMutation.isPending}
-                    >
-                      Down
-                    </button>
-                    <button
-                      className="button button--ghost button--small"
-                      type="button"
-                      onClick={() => removeDraftPriority(index)}
-                      disabled={updateDayPrioritiesMutation.isPending}
-                    >
-                      Remove
-                    </button>
-                    {item.id ? (
-                      <>
-                        <button
-                          className="button button--ghost button--small"
-                          type="button"
-                          onClick={() =>
-                            updatePriorityMutation.mutate({
-                              priorityId: item.id!,
-                              status: "completed",
-                            })
-                          }
-                          disabled={item.status === "completed" || updatePriorityMutation.isPending}
-                        >
-                          Done
-                        </button>
-                        <button
-                          className="button button--ghost button--small"
-                          type="button"
-                          onClick={() =>
-                            updatePriorityMutation.mutate({
-                              priorityId: item.id!,
-                              status: "dropped",
-                            })
-                          }
-                          disabled={item.status === "dropped" || updatePriorityMutation.isPending}
-                        >
-                          Drop
-                        </button>
-                        <button
-                          className="button button--ghost button--small"
-                          type="button"
-                          onClick={() =>
-                            updatePriorityMutation.mutate({
-                              priorityId: item.id!,
-                              status: "pending",
-                            })
-                          }
-                          disabled={item.status === "pending" || updatePriorityMutation.isPending}
-                        >
-                          Reopen
-                        </button>
-                      </>
+              {priorityDraft.map((item, index) => {
+                const linkedGoal = getServerPriorityGoal(item.id);
+                return (
+                  <li
+                    key={item.id ?? `draft-priority-${index}`}
+                    className={
+                      item.status === "completed"
+                        ? "priority-list__item priority-list__item--done"
+                        : item.status === "dropped"
+                          ? "priority-list__item priority-list__item--dropped"
+                          : "priority-list__item"
+                    }
+                  >
+                    <div className="priority-edit-row">
+                      <span className="tag tag--neutral">P{index + 1}</span>
+                      <input
+                        className="priority-inline-input"
+                        type="text"
+                        value={item.title}
+                        placeholder="Priority title"
+                        onChange={(event) => updateDraftPriority(index, event.target.value)}
+                        aria-label={`Priority ${index + 1}`}
+                      />
+                      <select
+                        className="goal-select"
+                        value={item.goalId ?? ""}
+                        onChange={(e) => updateDraftPriorityGoal(index, e.target.value)}
+                        aria-label={`Goal for priority ${index + 1}`}
+                      >
+                        <option value="">No goal</option>
+                        {activeGoals.map((g) => (
+                          <option key={g.id} value={g.id}>{g.title}</option>
+                        ))}
+                      </select>
+                    </div>
+                    {linkedGoal && item.status !== "dropped" ? (
+                      <div style={{ paddingLeft: "2.5rem", paddingTop: "0.2rem" }}>
+                        <GoalChip goal={linkedGoal} />
+                      </div>
                     ) : null}
-                  </div>
-                </li>
-              ))}
+                    <div className="button-row button-row--tight button-row--wrap">
+                      <button
+                        className="button button--ghost button--small"
+                        type="button"
+                        onClick={() => moveDraftPriority(index, -1)}
+                        disabled={index === 0 || updateDayPrioritiesMutation.isPending}
+                      >
+                        Up
+                      </button>
+                      <button
+                        className="button button--ghost button--small"
+                        type="button"
+                        onClick={() => moveDraftPriority(index, 1)}
+                        disabled={index === priorityDraft.length - 1 || updateDayPrioritiesMutation.isPending}
+                      >
+                        Down
+                      </button>
+                      <button
+                        className="button button--ghost button--small"
+                        type="button"
+                        onClick={() => removeDraftPriority(index)}
+                        disabled={updateDayPrioritiesMutation.isPending}
+                      >
+                        Remove
+                      </button>
+                      {item.id ? (
+                        <>
+                          <button
+                            className="button button--ghost button--small"
+                            type="button"
+                            onClick={() =>
+                              updatePriorityMutation.mutate({
+                                priorityId: item.id!,
+                                status: "completed",
+                              })
+                            }
+                            disabled={item.status === "completed" || updatePriorityMutation.isPending}
+                          >
+                            Done
+                          </button>
+                          <button
+                            className="button button--ghost button--small"
+                            type="button"
+                            onClick={() =>
+                              updatePriorityMutation.mutate({
+                                priorityId: item.id!,
+                                status: "dropped",
+                              })
+                            }
+                            disabled={item.status === "dropped" || updatePriorityMutation.isPending}
+                          >
+                            Drop
+                          </button>
+                          <button
+                            className="button button--ghost button--small"
+                            type="button"
+                            onClick={() =>
+                              updatePriorityMutation.mutate({
+                                priorityId: item.id!,
+                                status: "pending",
+                              })
+                            }
+                            disabled={item.status === "pending" || updatePriorityMutation.isPending}
+                          >
+                            Reopen
+                          </button>
+                        </>
+                      ) : null}
+                    </div>
+                  </li>
+                );
+              })}
             </ol>
           ) : (
             <EmptyState
@@ -352,7 +406,14 @@ export function TodayPage() {
                 <li key={item.id} className="task-list__item">
                   <div className="task-list__main">
                     <strong>{item.title}</strong>
-                    <div className="list__subtle">{item.notes ?? item.originType}</div>
+                    <div className="list__subtle">
+                      {item.notes ?? item.originType}
+                      {item.goal ? (
+                        <span style={{ marginLeft: "0.5rem" }}>
+                          <GoalChip goal={item.goal} />
+                        </span>
+                      ) : null}
+                    </div>
                     <div className="button-row button-row--tight button-row--wrap" style={{ marginTop: "0.45rem" }}>
                       <button
                         className="button button--ghost button--small"

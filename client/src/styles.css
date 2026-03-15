@@ -1652,6 +1652,156 @@ img { max-width: 100%; display: block; }
   }
 }
 
+/* ── Goal Chip ── */
+
+.goal-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.15rem 0.5rem;
+  border-radius: var(--r-pill);
+  font-size: var(--fs-micro);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  background: var(--accent-soft);
+  color: var(--accent);
+  border: 1px solid rgba(217, 153, 58, 0.15);
+  max-width: 14rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: all var(--dur-fast) var(--ease);
+  text-decoration: none;
+}
+
+.goal-chip:hover {
+  border-color: rgba(217, 153, 58, 0.3);
+  background: rgba(217, 153, 58, 0.18);
+}
+
+.goal-chip__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.goal-chip__dot--health       { background: var(--positive); }
+.goal-chip__dot--money        { background: #e0a832; }
+.goal-chip__dot--work_growth  { background: #7e9cd8; }
+.goal-chip__dot--home_admin   { background: #c4842f; }
+.goal-chip__dot--discipline   { background: #b48ead; }
+.goal-chip__dot--other        { background: var(--text-secondary); }
+
+/* ── Filter Bar ── */
+
+.filter-bar {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  align-items: center;
+  padding: 0.5rem 0;
+}
+
+.filter-bar__group {
+  display: flex;
+  gap: 0.3rem;
+  align-items: center;
+}
+
+.filter-bar__label {
+  font-size: var(--fs-micro);
+  font-weight: 600;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-right: 0.25rem;
+}
+
+.filter-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.25rem 0.55rem;
+  border-radius: var(--r-pill);
+  font-size: var(--fs-micro);
+  font-weight: 600;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all var(--dur-fast) var(--ease);
+}
+
+.filter-chip:hover {
+  border-color: var(--border-active);
+  color: var(--text);
+}
+
+.filter-chip--active {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent-bright);
+}
+
+/* ── Goal Select (inline in priority rows) ── */
+
+.goal-select {
+  padding: 0.35rem 0.5rem;
+  border-radius: var(--r-xs);
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--text-secondary);
+  font-size: var(--fs-small);
+  min-width: 8rem;
+  max-width: 12rem;
+  transition: all var(--dur) var(--ease);
+}
+
+.goal-select:focus {
+  outline: none;
+  border-color: var(--border-focus);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+  color: var(--text);
+}
+
+/* ── Goal Card Enhancement ── */
+
+.goal-card__status {
+  display: inline-flex;
+  margin-left: 0.5rem;
+}
+
+.goal-card__notes {
+  font-size: var(--fs-small);
+  color: var(--text-secondary);
+  margin-top: 0.2rem;
+  line-height: 1.5;
+}
+
+.goal-card--interactive {
+  cursor: default;
+}
+
+/* ── Management Row ── */
+
+.management-row {
+  display: flex;
+  gap: 0.75rem;
+  align-items: flex-end;
+}
+
+@media (max-width: 960px) {
+  .management-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .management-row .field {
+    width: 100% !important;
+  }
+}
+
 /* ── Notification feed ───────────────────────── */
 
 .notification-feed {
