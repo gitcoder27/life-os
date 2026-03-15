@@ -87,6 +87,13 @@ export interface CreateExpenseCategoryRequest {
   sortOrder?: number;
 }
 
+export interface UpdateExpenseCategoryRequest {
+  name?: string;
+  color?: string | null;
+  sortOrder?: number;
+  archived?: boolean;
+}
+
 export interface ExpenseCategoryMutationResponse extends ApiMeta {
   category: ExpenseCategoryItem;
 }
@@ -116,6 +123,17 @@ export interface CreateRecurringExpenseRequest {
   currencyCode?: string;
   recurrenceRule: string;
   nextDueOn: IsoDateString;
+  remindDaysBefore?: number;
+  status?: RecurringExpenseStatus;
+}
+
+export interface UpdateRecurringExpenseRequest {
+  title?: string;
+  expenseCategoryId?: EntityId | null;
+  defaultAmountMinor?: number | null;
+  currencyCode?: string;
+  recurrenceRule?: string;
+  nextDueOn?: IsoDateString;
   remindDaysBefore?: number;
   status?: RecurringExpenseStatus;
 }

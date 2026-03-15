@@ -105,6 +105,23 @@ export interface MealTemplatesResponse extends ApiMeta {
   mealTemplates: MealTemplateItem[];
 }
 
+export interface CreateMealTemplateRequest {
+  name: string;
+  mealSlot?: MealSlot | null;
+  description?: string | null;
+}
+
+export interface UpdateMealTemplateRequest {
+  name?: string;
+  mealSlot?: MealSlot | null;
+  description?: string | null;
+  archived?: boolean;
+}
+
+export interface MealTemplateMutationResponse extends ApiMeta {
+  mealTemplate: MealTemplateItem;
+}
+
 export interface MealLogsResponse extends ApiMeta {
   date: IsoDateString;
   mealLogs: MealLogItem[];

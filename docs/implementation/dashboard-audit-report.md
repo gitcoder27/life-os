@@ -680,12 +680,12 @@ Bring frontend capability closer to backend capability.
 
 ### Tasks
 
-- [ ] Add notifications UI.
-- [ ] Add goal create/edit/status flows.
-- [ ] Add weekly and monthly planning editors.
-- [ ] Add category and recurring expense management.
-- [ ] Add meal template management.
-- [ ] Add settings/preferences UI.
+- [x] Add notifications UI.
+- [x] Add goal create/edit/status flows.
+- [x] Add weekly and monthly planning editors.
+- [x] Add category and recurring expense management.
+- [x] Add meal template management.
+- [x] Add settings/preferences UI.
 
 ### Exit criteria
 
@@ -735,17 +735,17 @@ Make the system more engaging without making it noisy or childish.
 - [ ] Audit entity ownership validation on all write paths.
 - [x] Make time calculations timezone-aware.
 - [x] Correct scoring and review summary calculations.
-- [ ] Add settings/preferences endpoints.
-- [ ] Expand CRUD where persisted entities already exist but are not manageable.
+- [x] Add settings/preferences endpoints.
+- [x] Expand CRUD where persisted entities already exist but are not manageable.
 - [ ] Consolidate request/response types around shared contracts.
 
 ## Frontend backlog
 
-- [ ] Add notifications UI.
+- [x] Add notifications UI.
 - [x] Add operational priority UI on Today and Home.
 - [x] Add real review workflow UI.
-- [ ] Add management UIs for goals, weekly plan, monthly focus.
-- [ ] Add recurring expense and category management.
+- [x] Add management UIs for goals, weekly plan, monthly focus.
+- [x] Add recurring expense and category management.
 - [ ] Replace prompts with forms.
 - [x] Improve loading, empty, and error states.
 - [x] Improve mutation feedback and reduce stale UI risk.

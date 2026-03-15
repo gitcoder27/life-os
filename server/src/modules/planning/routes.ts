@@ -354,6 +354,7 @@ async function ensurePlanningCycle(
 
 async function replaceCyclePriorities(
   app: Parameters<FastifyPluginAsync>[0],
+  userId: string,
   cycle: PlanningCycle,
   priorities: PlanningPriorityInput[],
 ) {
@@ -395,6 +396,8 @@ async function replaceCyclePriorities(
       });
     }
   }
+
+  await Promise.all(priorities.map((priority) => assertOwnedGoalReference(app, userId, priority.goalId)));
 
   await app.prisma.$transaction(async (tx) => {
     const keptIds = new Set(inputIds);
@@ -482,6 +485,18 @@ async function findOwnedGoal(app: Parameters<FastifyPluginAsync>[0], userId: str
   }
 
   return goal;
+}
+
+async function assertOwnedGoalReference(
+  app: Parameters<FastifyPluginAsync>[0],
+  userId: string,
+  goalId: string | null | undefined,
+) {
+  if (!goalId) {
+    return;
+  }
+
+  await findOwnedGoal(app, userId, goalId);
 }
 
 async function findOwnedTask(app: Parameters<FastifyPluginAsync>[0], userId: string, taskId: string) {
@@ -642,7 +657,7 @@ export const registerPlanningRoutes: FastifyPluginAsync = async (app) => {
       cycleStartDate,
       cycleEndDate: cycleStartDate,
     });
-    const priorities = await replaceCyclePriorities(app, cycle, payload.priorities);
+    const priorities = await replaceCyclePriorities(app, user.id, cycle, payload.priorities);
 
     const response: PlanningPriorityMutationResponse = withGeneratedAt({
       priorities,
@@ -721,7 +736,7 @@ export const registerPlanningRoutes: FastifyPluginAsync = async (app) => {
       cycleStartDate,
       cycleEndDate: getWeekEndDate(cycleStartDate),
     });
-    const priorities = await replaceCyclePriorities(app, cycle, payload.priorities);
+    const priorities = await replaceCyclePriorities(app, user.id, cycle, payload.priorities);
 
     const response: PlanningPriorityMutationResponse = withGeneratedAt({
       priorities,
@@ -774,7 +789,7 @@ export const registerPlanningRoutes: FastifyPluginAsync = async (app) => {
       },
     });
 
-    const topOutcomes = await replaceCyclePriorities(app, cycle, payload.topOutcomes);
+    const topOutcomes = await replaceCyclePriorities(app, user.id, cycle, payload.topOutcomes);
 
     const response: MonthFocusMutationResponse = withGeneratedAt({
       theme: payload.theme,
@@ -816,6 +831,7 @@ export const registerPlanningRoutes: FastifyPluginAsync = async (app) => {
   app.post("/tasks", async (request, reply) => {
     const user = requireAuthenticatedUser(request);
     const payload = parseOrThrow(createTaskSchema, request.body as CreateTaskRequest);
+    await assertOwnedGoalReference(app, user.id, payload.goalId);
     const task = await app.prisma.task.create({
       data: {
         userId: user.id,
@@ -840,6 +856,7 @@ export const registerPlanningRoutes: FastifyPluginAsync = async (app) => {
     const payload = parseOrThrow(updateTaskSchema, request.body as UpdateTaskRequest);
     const { taskId } = request.params as { taskId: string };
     await findOwnedTask(app, user.id, taskId);
+    await assertOwnedGoalReference(app, user.id, payload.goalId);
     const task = await app.prisma.task.update({
       where: {
         id: taskId,

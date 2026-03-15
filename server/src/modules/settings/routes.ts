@@ -1,0 +1,165 @@
+import type { FastifyPluginAsync } from "fastify";
+import type {
+  SettingsProfileMutationResponse,
+  SettingsProfileResponse,
+  UpdateSettingsProfileRequest,
+} from "@life-os/contracts";
+import { z } from "zod";
+
+import { requireAuthenticatedUser } from "../../lib/auth/require-auth.js";
+import { withGeneratedAt } from "../../lib/http/response.js";
+import { parseOrThrow } from "../../lib/validation/parse.js";
+
+const reviewTimeSchema = z
+  .string()
+  .regex(/^\d{2}:\d{2}$/)
+  .nullable();
+
+const updateSettingsProfileSchema = z
+  .object({
+    displayName: z.string().min(1).max(200).nullable().optional(),
+    timezone: z.string().min(1).max(120).optional(),
+    currencyCode: z.string().length(3).optional(),
+    weekStartsOn: z.number().int().min(0).max(6).optional(),
+    dailyWaterTargetMl: z.number().int().positive().max(20000).optional(),
+    dailyReviewStartTime: reviewTimeSchema.optional(),
+    dailyReviewEndTime: reviewTimeSchema.optional(),
+  })
+  .refine((value) => Object.keys(value).length > 0, "At least one field must be updated");
+
+function toSettingsProfileResponse(input: {
+  user: {
+    id: string;
+    email: string;
+    displayName: string | null;
+  };
+  preferences: {
+    timezone: string | null;
+    currencyCode: string | null;
+    weekStartsOn: number | null;
+    dailyWaterTargetMl: number | null;
+    dailyReviewStartTime: string | null;
+    dailyReviewEndTime: string | null;
+  } | null;
+}): SettingsProfileResponse {
+  return withGeneratedAt({
+    user: input.user,
+    preferences: {
+      timezone: input.preferences?.timezone ?? "UTC",
+      currencyCode: input.preferences?.currencyCode ?? "USD",
+      weekStartsOn: input.preferences?.weekStartsOn ?? 1,
+      dailyWaterTargetMl: input.preferences?.dailyWaterTargetMl ?? 2500,
+      dailyReviewStartTime: input.preferences?.dailyReviewStartTime ?? null,
+      dailyReviewEndTime: input.preferences?.dailyReviewEndTime ?? null,
+    },
+  });
+}
+
+export const registerSettingsRoutes: FastifyPluginAsync = async (app) => {
+  app.get("/profile", async (request, reply) => {
+    const user = requireAuthenticatedUser(request);
+
+    const [userRecord, preferences] = await Promise.all([
+      app.prisma.user.findUniqueOrThrow({
+        where: {
+          id: user.id,
+        },
+        select: {
+          id: true,
+          email: true,
+          displayName: true,
+        },
+      }),
+      app.prisma.userPreference.findUnique({
+        where: {
+          userId: user.id,
+        },
+        select: {
+          timezone: true,
+          currencyCode: true,
+          weekStartsOn: true,
+          dailyWaterTargetMl: true,
+          dailyReviewStartTime: true,
+          dailyReviewEndTime: true,
+        },
+      }),
+    ]);
+
+    return reply.send(
+      toSettingsProfileResponse({
+        user: userRecord,
+        preferences,
+      }),
+    );
+  });
+
+  app.put("/profile", async (request, reply) => {
+    const user = requireAuthenticatedUser(request);
+    const payload = parseOrThrow(updateSettingsProfileSchema, request.body as UpdateSettingsProfileRequest);
+
+    const { updatedUser, updatedPreferences } = await app.prisma.$transaction(async (tx) => {
+      const nextUser = await tx.user.update({
+        where: {
+          id: user.id,
+        },
+        data: {
+          displayName: payload.displayName,
+        },
+        select: {
+          id: true,
+          email: true,
+          displayName: true,
+        },
+      });
+      const nextPreferences = await tx.userPreference.upsert({
+        where: {
+          userId: user.id,
+        },
+        create: {
+          userId: user.id,
+          timezone: payload.timezone ?? "UTC",
+          currencyCode: payload.currencyCode ?? "USD",
+          weekStartsOn: payload.weekStartsOn ?? 1,
+          dailyWaterTargetMl: payload.dailyWaterTargetMl ?? 2500,
+          dailyReviewStartTime: payload.dailyReviewStartTime ?? null,
+          dailyReviewEndTime: payload.dailyReviewEndTime ?? null,
+        },
+        update: {
+          timezone: payload.timezone,
+          currencyCode: payload.currencyCode,
+          weekStartsOn: payload.weekStartsOn,
+          dailyWaterTargetMl: payload.dailyWaterTargetMl,
+          dailyReviewStartTime: payload.dailyReviewStartTime,
+          dailyReviewEndTime: payload.dailyReviewEndTime,
+        },
+        select: {
+          timezone: true,
+          currencyCode: true,
+          weekStartsOn: true,
+          dailyWaterTargetMl: true,
+          dailyReviewStartTime: true,
+          dailyReviewEndTime: true,
+        },
+      });
+
+      return {
+        updatedUser: nextUser,
+        updatedPreferences: nextPreferences,
+      };
+    });
+
+    const response: SettingsProfileMutationResponse = withGeneratedAt({
+      user: updatedUser,
+      preferences: {
+        timezone: updatedPreferences.timezone,
+        currencyCode: updatedPreferences.currencyCode,
+        weekStartsOn: updatedPreferences.weekStartsOn,
+        dailyWaterTargetMl: updatedPreferences.dailyWaterTargetMl,
+        dailyReviewStartTime: updatedPreferences.dailyReviewStartTime,
+        dailyReviewEndTime: updatedPreferences.dailyReviewEndTime,
+      },
+    });
+
+    return reply.send(response);
+  });
+};

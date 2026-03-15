@@ -250,6 +250,42 @@ describe("module route smoke tests", () => {
     expect(response.statusCode).toBe(200);
   });
 
+  it("serves settings profile", async () => {
+    prisma.user = {
+      findUniqueOrThrow: vi.fn().mockResolvedValue({
+        id: "user-1",
+        email: "owner@example.com",
+        displayName: "Owner",
+      }),
+    } as any;
+    prisma.userPreference = {
+      findUnique: vi.fn().mockResolvedValue({
+        timezone: "America/New_York",
+        currencyCode: "USD",
+        weekStartsOn: 1,
+        dailyWaterTargetMl: 2800,
+        dailyReviewStartTime: "20:00",
+        dailyReviewEndTime: "23:00",
+      }),
+    } as any;
+
+    const response = await app!.inject({ method: "GET", url: "/api/settings/profile" });
+
+    expect(response.statusCode).toBe(200);
+    expect(JSON.parse(response.body)).toEqual(
+      expect.objectContaining({
+        user: expect.objectContaining({
+          id: "user-1",
+          email: "owner@example.com",
+        }),
+        preferences: expect.objectContaining({
+          timezone: "America/New_York",
+          dailyWaterTargetMl: 2800,
+        }),
+      }),
+    );
+  });
+
   it("serves onboarding state", async () => {
     prisma.userPreference = { findUnique: vi.fn().mockResolvedValue({}) } as any;
     prisma.user = { findUniqueOrThrow: vi.fn().mockResolvedValue({ onboardedAt: null }) } as any;
@@ -450,6 +486,15 @@ describe("module route smoke tests", () => {
         archivedAt: null,
       }),
       findFirst: vi.fn().mockResolvedValue({ id: "cat-1", userId: "user-1", archivedAt: null }),
+      update: vi.fn().mockResolvedValue({
+        id: "cat-1",
+        userId: "user-1",
+        name: "Utilities & Bills",
+        color: "#ff0000",
+        sortOrder: 3,
+        createdAt: new Date("2026-03-14T00:00:00.000Z"),
+        archivedAt: null,
+      }),
     } as any;
     prisma.expense = {
       findMany: vi.fn().mockResolvedValue([]),
@@ -501,7 +546,10 @@ describe("module route smoke tests", () => {
           updatedAt: new Date(),
         },
       ]),
-      findFirst: vi.fn().mockResolvedValue(null),
+      findFirst: vi.fn().mockResolvedValue({
+        id: "template-1",
+        userId: "user-1",
+      }),
       create: vi.fn().mockResolvedValue({
         id: "template-2",
         userId: "user-1",
@@ -513,6 +561,20 @@ describe("module route smoke tests", () => {
         nextDueOn: new Date("2026-03-20T00:00:00.000Z"),
         remindDaysBefore: 2,
         status: "ACTIVE",
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      }),
+      update: vi.fn().mockResolvedValue({
+        id: "template-1",
+        userId: "user-1",
+        title: "Rent updated",
+        expenseCategoryId: "cat-1",
+        defaultAmountMinor: 10500,
+        currencyCode: "USD",
+        recurrenceRule: "monthly",
+        nextDueOn: new Date("2026-03-22T00:00:00.000Z"),
+        remindDaysBefore: 2,
+        status: "PAUSED",
         createdAt: new Date(),
         updatedAt: new Date(),
       }),
@@ -530,6 +592,14 @@ describe("module route smoke tests", () => {
         name: "Subscriptions",
         color: "#0000ff",
         sortOrder: 2,
+      },
+    });
+    const financePatchCategory = await app!.inject({
+      method: "PATCH",
+      url: "/api/finance/categories/cat-1",
+      payload: {
+        name: "Utilities & Bills",
+        sortOrder: 3,
       },
     });
     const financeCreateExpense = await app!.inject({
@@ -562,14 +632,26 @@ describe("module route smoke tests", () => {
         remindDaysBefore: 3,
       },
     });
+    const recurringExpensePatch = await app!.inject({
+      method: "PATCH",
+      url: "/api/finance/recurring-expenses/template-1",
+      payload: {
+        title: "Rent updated",
+        defaultAmountMinor: 10500,
+        nextDueOn: "2026-03-22",
+        status: "paused",
+      },
+    });
 
     expect(financeCategories.statusCode).toBe(200);
     expect(financeExpenses.statusCode).toBe(200);
     expect(financeCreateCategory.statusCode).toBe(201);
+    expect(financePatchCategory.statusCode).toBe(200);
     expect(financeCreateExpense.statusCode).toBe(201);
     expect(financePatchExpense.statusCode).toBe(200);
     expect(recurringExpenses.statusCode).toBe(200);
     expect(recurringExpenseCreate.statusCode).toBe(201);
+    expect(recurringExpensePatch.statusCode).toBe(200);
   });
 
   it("serves habit write paths", async () => {
@@ -794,6 +876,26 @@ describe("module route smoke tests", () => {
         updatedAt: new Date(),
         archivedAt: null,
       }),
+      findFirst: vi.fn().mockResolvedValue({
+        id: "meal-template-1",
+        userId: "user-1",
+        name: "Breakfast",
+        mealSlot: "BREAKFAST",
+        templatePayloadJson: { description: "Protein" },
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        archivedAt: null,
+      }),
+      update: vi.fn().mockResolvedValue({
+        id: "meal-template-1",
+        userId: "user-1",
+        name: "Breakfast upgrade",
+        mealSlot: "BREAKFAST",
+        templatePayloadJson: { description: "Eggs" },
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        archivedAt: null,
+      }),
       deleteMany: vi.fn().mockResolvedValue({}),
       createMany: vi.fn().mockResolvedValue({}),
     } as any;
@@ -841,6 +943,23 @@ describe("module route smoke tests", () => {
     const getWaterLogs = await app!.inject({ method: "GET", url: "/api/health/water-logs?date=2026-03-14" });
     const getMealTemplates = await app!.inject({ method: "GET", url: "/api/health/meal-templates" });
     const getMealLogs = await app!.inject({ method: "GET", url: "/api/health/meal-logs?date=2026-03-14" });
+    const createMealTemplate = await app!.inject({
+      method: "POST",
+      url: "/api/health/meal-templates",
+      payload: {
+        name: "Dinner",
+        mealSlot: "dinner",
+        description: "Rice bowl",
+      },
+    });
+    const patchMealTemplate = await app!.inject({
+      method: "PATCH",
+      url: "/api/health/meal-templates/meal-template-1",
+      payload: {
+        name: "Breakfast upgrade",
+        description: "Eggs",
+      },
+    });
     const postWaterLog = await app!.inject({
       method: "POST",
       url: "/api/health/water-logs",
@@ -869,6 +988,8 @@ describe("module route smoke tests", () => {
     expect(getWaterLogs.statusCode).toBe(200);
     expect(getMealTemplates.statusCode).toBe(200);
     expect(getMealLogs.statusCode).toBe(200);
+    expect(createMealTemplate.statusCode).toBe(201);
+    expect(patchMealTemplate.statusCode).toBe(200);
     expect(postWaterLog.statusCode).toBe(201);
     expect(postMealLog.statusCode).toBe(201);
     expect(upsertWorkout.statusCode).toBe(200);
@@ -1253,5 +1374,117 @@ describe("module route smoke tests", () => {
     expect(taskPatch.statusCode).toBe(200);
     expect(priorityPatch.statusCode).toBe(200);
     expect(taskCarryForward.statusCode).toBe(201);
+  });
+
+  it("updates settings profile", async () => {
+    prisma.user = {
+      update: vi.fn().mockResolvedValue({
+        id: "user-1",
+        email: "owner@example.com",
+        displayName: "Owner Prime",
+      }),
+    } as any;
+    prisma.userPreference = {
+      upsert: vi.fn().mockResolvedValue({
+        timezone: "America/Chicago",
+        currencyCode: "USD",
+        weekStartsOn: 0,
+        dailyWaterTargetMl: 3000,
+        dailyReviewStartTime: "19:00",
+        dailyReviewEndTime: "22:00",
+      }),
+    } as any;
+
+    const response = await app!.inject({
+      method: "PUT",
+      url: "/api/settings/profile",
+      payload: {
+        displayName: "Owner Prime",
+        timezone: "America/Chicago",
+        weekStartsOn: 0,
+        dailyWaterTargetMl: 3000,
+        dailyReviewStartTime: "19:00",
+        dailyReviewEndTime: "22:00",
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(JSON.parse(response.body)).toEqual(
+      expect.objectContaining({
+        user: expect.objectContaining({ displayName: "Owner Prime" }),
+        preferences: expect.objectContaining({ timezone: "America/Chicago", weekStartsOn: 0 }),
+      }),
+    );
+  });
+
+  it("rejects foreign goal references on task creation", async () => {
+    prisma.goal = {
+      findFirst: vi.fn().mockResolvedValue(null),
+    } as any;
+
+    const response = await app!.inject({
+      method: "POST",
+      url: "/api/tasks",
+      payload: {
+        title: "Linked task",
+        goalId: "11111111-1111-4111-8111-111111111111",
+      },
+    });
+
+    expect(response.statusCode).toBe(404);
+    expect(JSON.parse(response.body).message).toBe("Goal not found");
+  });
+
+  it("rejects foreign goal references on day priority updates", async () => {
+    prisma.goal = {
+      findFirst: vi.fn().mockResolvedValue(null),
+    } as any;
+    prisma.planningCycle = {
+      upsert: vi.fn().mockResolvedValue({
+        id: "cycle-1",
+        cycleEndDate: new Date("2026-03-14T00:00:00.000Z"),
+        theme: null,
+        priorities: [],
+      }),
+    } as any;
+    prisma.cyclePriority = {
+      findMany: vi.fn().mockResolvedValue([]),
+    } as any;
+
+    const response = await app!.inject({
+      method: "PUT",
+      url: "/api/planning/days/2026-03-14/priorities",
+      payload: {
+        priorities: [
+          {
+            slot: 1,
+            title: "Linked priority",
+            goalId: "11111111-1111-4111-8111-111111111111",
+          },
+        ],
+      },
+    });
+
+    expect(response.statusCode).toBe(404);
+    expect(JSON.parse(response.body).message).toBe("Goal not found");
+  });
+
+  it("rejects foreign meal template references on meal log creation", async () => {
+    prisma.mealTemplate = {
+      findFirst: vi.fn().mockResolvedValue(null),
+    } as any;
+
+    const response = await app!.inject({
+      method: "POST",
+      url: "/api/health/meal-logs",
+      payload: {
+        mealTemplateId: "11111111-1111-4111-8111-111111111111",
+        description: "Lunch",
+        loggingQuality: "meaningful",
+      },
+    });
+
+    expect(response.statusCode).toBe(404);
+    expect(JSON.parse(response.body).message).toBe("Meal template not found");
   });
 });

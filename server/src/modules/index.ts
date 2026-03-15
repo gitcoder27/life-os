@@ -12,6 +12,7 @@ import { registerOnboardingRoutes } from "./onboarding/routes.js";
 import { registerPlanningRoutes } from "./planning/routes.js";
 import { registerReviewRoutes } from "./reviews/routes.js";
 import { registerScoringRoutes } from "./scoring/routes.js";
+import { registerSettingsRoutes } from "./settings/routes.js";
 
 export interface ModuleRegistrationOptions {
   env: AppEnv;
@@ -34,5 +35,6 @@ export const registerModules: FastifyPluginAsync<ModuleRegistrationOptions> = as
   await app.register(registerPlanningRoutes);
   await app.register(registerReviewRoutes);
   await app.register(registerScoringRoutes);
+  await app.register(registerSettingsRoutes, { prefix: "/settings" });
   await app.register(registerHomeRoutes, { prefix: "/home" });
 };

@@ -7,6 +7,9 @@ import type {
   FinanceCategoriesResponse,
   IsoDateString,
   IsoMonthString,
+  RecurringExpenseMutationResponse,
+  UpdateExpenseCategoryRequest,
+  UpdateRecurringExpenseRequest,
 } from "@life-os/contracts";
 import type {
   ExpenseCategory,
@@ -115,11 +118,6 @@ interface CreateRecurringExpenseRequest {
   status?: RecurringExpenseStatus;
 }
 
-interface RecurringExpenseMutationResponse {
-  generatedAt: string;
-  recurringExpense: RecurringExpenseItem;
-}
-
 const isoDateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/) as unknown as z.ZodType<IsoDateString>;
 const isoMonthSchema = z.string().regex(/^\d{4}-\d{2}$/) as unknown as z.ZodType<IsoMonthString>;
 
@@ -162,6 +160,28 @@ const createExpenseCategorySchema = z.object({
   color: z.string().max(32).nullable().optional(),
   sortOrder: z.number().int().min(0).max(1000).optional(),
 });
+
+const updateExpenseCategorySchema = z
+  .object({
+    name: z.string().min(1).max(120).optional(),
+    color: z.string().max(32).nullable().optional(),
+    sortOrder: z.number().int().min(0).max(1000).optional(),
+    archived: z.boolean().optional(),
+  })
+  .refine((value) => Object.keys(value).length > 0, "At least one field must be updated");
+
+const updateRecurringExpenseSchema = z
+  .object({
+    title: z.string().min(1).max(200).optional(),
+    expenseCategoryId: z.string().uuid().nullable().optional(),
+    defaultAmountMinor: z.number().int().positive().nullable().optional(),
+    currencyCode: z.string().length(3).optional(),
+    recurrenceRule: z.string().min(1).max(100).optional(),
+    nextDueOn: isoDateSchema.optional(),
+    remindDaysBefore: z.number().int().min(0).max(365).optional(),
+    status: recurringExpenseStatusSchema.optional(),
+  })
+  .refine((value) => Object.keys(value).length > 0, "At least one field must be updated");
 
 const expenseRangeQuerySchema = z.object({
   from: isoDateSchema,
@@ -333,6 +353,29 @@ async function assertOwnedExpenseCategory(
   }
 }
 
+async function findOwnedExpenseCategory(
+  app: Parameters<FastifyPluginAsync>[0],
+  userId: string,
+  expenseCategoryId: string,
+) {
+  const category = await app.prisma.expenseCategory.findFirst({
+    where: {
+      id: expenseCategoryId,
+      userId,
+    },
+  });
+
+  if (!category) {
+    throw new AppError({
+      statusCode: 404,
+      code: "NOT_FOUND",
+      message: "Expense category not found",
+    });
+  }
+
+  return category;
+}
+
 async function assertOwnedRecurringExpenseTemplate(
   app: Parameters<FastifyPluginAsync>[0],
   userId: string,
@@ -356,6 +399,29 @@ async function assertOwnedRecurringExpenseTemplate(
       message: "Recurring expense not found",
     });
   }
+}
+
+async function findOwnedRecurringExpenseTemplate(
+  app: Parameters<FastifyPluginAsync>[0],
+  userId: string,
+  recurringExpenseTemplateId: string,
+) {
+  const recurringExpense = await app.prisma.recurringExpenseTemplate.findFirst({
+    where: {
+      id: recurringExpenseTemplateId,
+      userId,
+    },
+  });
+
+  if (!recurringExpense) {
+    throw new AppError({
+      statusCode: 404,
+      code: "NOT_FOUND",
+      message: "Recurring expense not found",
+    });
+  }
+
+  return recurringExpense;
 }
 
 async function findOwnedExpense(
@@ -419,6 +485,40 @@ export const registerFinanceRoutes: FastifyPluginAsync = async (app) => {
     });
 
     return reply.status(201).send(response);
+  });
+
+  app.patch("/categories/:categoryId", async (request, reply) => {
+    const user = requireAuthenticatedUser(request);
+    const { categoryId } = request.params as { categoryId: string };
+    const payload = parseOrThrow(
+      updateExpenseCategorySchema,
+      request.body as UpdateExpenseCategoryRequest,
+    );
+
+    await findOwnedExpenseCategory(app, user.id, categoryId);
+
+    const category = await app.prisma.expenseCategory.update({
+      where: {
+        id: categoryId,
+      },
+      data: {
+        name: payload.name,
+        color: payload.color,
+        sortOrder: payload.sortOrder,
+        archivedAt:
+          payload.archived === undefined
+            ? undefined
+            : payload.archived
+              ? new Date()
+              : null,
+      },
+    });
+
+    const response: ExpenseCategoryMutationResponse = withGeneratedAt({
+      category: serializeExpenseCategory(category),
+    });
+
+    return reply.send(response);
   });
 
   app.get("/expenses", async (request, reply) => {
@@ -639,5 +739,39 @@ export const registerFinanceRoutes: FastifyPluginAsync = async (app) => {
     });
 
     return reply.status(201).send(response);
+  });
+
+  app.patch("/recurring-expenses/:recurringExpenseId", async (request, reply) => {
+    const user = requireAuthenticatedUser(request);
+    const { recurringExpenseId } = request.params as { recurringExpenseId: string };
+    const payload = parseOrThrow(
+      updateRecurringExpenseSchema,
+      request.body as UpdateRecurringExpenseRequest,
+    );
+
+    await findOwnedRecurringExpenseTemplate(app, user.id, recurringExpenseId);
+    await assertOwnedExpenseCategory(app, user.id, payload.expenseCategoryId);
+
+    const recurringExpense = await app.prisma.recurringExpenseTemplate.update({
+      where: {
+        id: recurringExpenseId,
+      },
+      data: {
+        title: payload.title,
+        expenseCategoryId: payload.expenseCategoryId,
+        defaultAmountMinor: payload.defaultAmountMinor,
+        currencyCode: payload.currencyCode,
+        recurrenceRule: payload.recurrenceRule,
+        nextDueOn: payload.nextDueOn ? parseIsoDate(payload.nextDueOn) : undefined,
+        remindDaysBefore: payload.remindDaysBefore,
+        status: payload.status ? toPrismaRecurringExpenseStatus(payload.status) : undefined,
+      },
+    });
+
+    const response: RecurringExpenseMutationResponse = withGeneratedAt({
+      recurringExpense: serializeRecurringExpense(recurringExpense),
+    });
+
+    return reply.send(response);
   });
 };

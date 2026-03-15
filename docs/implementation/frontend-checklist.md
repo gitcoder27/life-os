@@ -62,22 +62,27 @@
 
 ## Phase 4: Integration and Polish
 
-- [ ] Replace mock data with real API hooks
-- [ ] Loading states for all screens
-- [ ] Error states with retry
-- [ ] Empty states with next-action prompts
+- [x] Replace mock data with real API hooks
+- [x] Loading states for all screens
+- [x] Error states with retry
+- [x] Empty states with next-action prompts
 - [ ] Accessibility pass (keyboard nav, focus management, labels)
 - [ ] Responsive polish pass
 - [ ] Frontend tests for critical flows
 
+## Phase 5: Audit Phase 2 Depth
+
+- [x] Notifications page and inbox actions
+- [x] Settings page and preferences form
+- [x] Goals: create and edit flows
+- [x] Goals: status management
+- [x] Goals: weekly planning editor
+- [x] Goals: monthly planning editor
+- [x] Finance: category management
+- [x] Finance: recurring expense management
+- [x] Health: meal template management
+- [x] Preference-aware date helpers wired from settings
+
 ## Blocked by Backend
 
-- Session and auth endpoints (login guard)
-- Onboarding state and completion endpoints
-- Home overview aggregate payload
-- Today plan aggregate payload
-- Habit completion mutations
-- Health summary and mutation endpoints
-- Expense endpoints
-- Review prefill and submit endpoints
-- Score and momentum endpoints
+- None for current completed phase-2 scope

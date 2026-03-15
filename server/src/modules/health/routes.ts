@@ -1,5 +1,6 @@
 import type { FastifyPluginAsync } from "fastify";
 import type {
+  CreateMealTemplateRequest,
   CreateMealLogRequest,
   CreateWaterLogRequest,
   CreateWeightLogRequest,
@@ -9,9 +10,11 @@ import type {
   MealLogsResponse,
   MealLogMutationResponse,
   MealLoggingQuality,
+  MealTemplateMutationResponse,
   MealTemplateItem,
   MealTemplatesResponse,
   MealSlot,
+  UpdateMealTemplateRequest,
   UpdateWorkoutDayRequest,
   WaterLogItem,
   WaterLogsResponse,
@@ -37,6 +40,7 @@ import type {
 } from "@prisma/client";
 import { z } from "zod";
 
+import { AppError } from "../../lib/errors/app-error.js";
 import { requireAuthenticatedUser } from "../../lib/auth/require-auth.js";
 import { withGeneratedAt } from "../../lib/http/response.js";
 import { parseIsoDate } from "../../lib/time/cycle.js";
@@ -84,6 +88,21 @@ const createMealLogSchema = z.object({
   description: z.string().min(1).max(4000),
   loggingQuality: mealLoggingQualitySchema,
 });
+
+const createMealTemplateSchema = z.object({
+  name: z.string().min(1).max(200),
+  mealSlot: mealSlotSchema.nullable().optional(),
+  description: z.string().max(4000).nullable().optional(),
+});
+
+const updateMealTemplateSchema = z
+  .object({
+    name: z.string().min(1).max(200).optional(),
+    mealSlot: mealSlotSchema.nullable().optional(),
+    description: z.string().max(4000).nullable().optional(),
+    archived: z.boolean().optional(),
+  })
+  .refine((value) => Object.keys(value).length > 0, "At least one field must be updated");
 
 const updateWorkoutDaySchema = z
   .object({
@@ -324,6 +343,55 @@ function serializeWeightLog(weightLog: WeightLog): WeightLogItem {
   };
 }
 
+async function assertOwnedMealTemplate(
+  app: Parameters<FastifyPluginAsync>[0],
+  userId: string,
+  mealTemplateId: string | null | undefined,
+) {
+  if (!mealTemplateId) {
+    return;
+  }
+
+  const mealTemplate = await app.prisma.mealTemplate.findFirst({
+    where: {
+      id: mealTemplateId,
+      userId,
+      archivedAt: null,
+    },
+  });
+
+  if (!mealTemplate) {
+    throw new AppError({
+      statusCode: 404,
+      code: "NOT_FOUND",
+      message: "Meal template not found",
+    });
+  }
+}
+
+async function findOwnedMealTemplate(
+  app: Parameters<FastifyPluginAsync>[0],
+  userId: string,
+  mealTemplateId: string,
+) {
+  const mealTemplate = await app.prisma.mealTemplate.findFirst({
+    where: {
+      id: mealTemplateId,
+      userId,
+    },
+  });
+
+  if (!mealTemplate) {
+    throw new AppError({
+      statusCode: 404,
+      code: "NOT_FOUND",
+      message: "Meal template not found",
+    });
+  }
+
+  return mealTemplate;
+}
+
 export const registerHealthRoutes: FastifyPluginAsync = async (app) => {
   app.get("/water-logs", async (request, reply) => {
     const user = requireAuthenticatedUser(request);
@@ -370,6 +438,68 @@ export const registerHealthRoutes: FastifyPluginAsync = async (app) => {
 
     const response: MealTemplatesResponse = withGeneratedAt({
       mealTemplates: mealTemplates.map(serializeMealTemplate),
+    });
+
+    return reply.send(response);
+  });
+
+  app.post("/meal-templates", async (request, reply) => {
+    const user = requireAuthenticatedUser(request);
+    const payload = parseOrThrow(
+      createMealTemplateSchema,
+      request.body as CreateMealTemplateRequest,
+    );
+    const mealTemplate = await app.prisma.mealTemplate.create({
+      data: {
+        userId: user.id,
+        name: payload.name,
+        mealSlot: toPrismaMealSlot(payload.mealSlot),
+        templatePayloadJson: {
+          description: payload.description ?? null,
+        },
+      },
+    });
+
+    const response: MealTemplateMutationResponse = withGeneratedAt({
+      mealTemplate: serializeMealTemplate(mealTemplate),
+    });
+
+    return reply.status(201).send(response);
+  });
+
+  app.patch("/meal-templates/:mealTemplateId", async (request, reply) => {
+    const user = requireAuthenticatedUser(request);
+    const { mealTemplateId } = request.params as { mealTemplateId: string };
+    const payload = parseOrThrow(
+      updateMealTemplateSchema,
+      request.body as UpdateMealTemplateRequest,
+    );
+
+    const existingTemplate = await findOwnedMealTemplate(app, user.id, mealTemplateId);
+    const mealTemplate = await app.prisma.mealTemplate.update({
+      where: {
+        id: mealTemplateId,
+      },
+      data: {
+        name: payload.name,
+        mealSlot: toPrismaMealSlot(payload.mealSlot),
+        templatePayloadJson:
+          payload.description === undefined
+            ? undefined
+            : {
+                description: payload.description ?? null,
+              },
+        archivedAt:
+          payload.archived === undefined
+            ? undefined
+            : payload.archived
+              ? new Date()
+              : null,
+      },
+    });
+
+    const response: MealTemplateMutationResponse = withGeneratedAt({
+      mealTemplate: serializeMealTemplate(mealTemplate),
     });
 
     return reply.send(response);
@@ -549,6 +679,7 @@ export const registerHealthRoutes: FastifyPluginAsync = async (app) => {
   app.post("/meal-logs", async (request, reply) => {
     const user = requireAuthenticatedUser(request);
     const payload = parseOrThrow(createMealLogSchema, request.body as CreateMealLogRequest);
+    await assertOwnedMealTemplate(app, user.id, payload.mealTemplateId);
     const mealLog = await app.prisma.mealLog.create({
       data: {
         userId: user.id,
