@@ -2,10 +2,10 @@ import cookie from "@fastify/cookie";
 import cors from "@fastify/cors";
 import Fastify from "fastify";
 import type { ApiError, HealthCheckResponse } from "@life-os/contracts";
+import { PrismaClient } from "@prisma/client";
 
 import type { AppEnv } from "./env.js";
-import { registerPrismaPlugin } from "./plugins/prisma.js";
-import { registerRequestContextPlugin } from "./plugins/request-context.js";
+import { registerRequestContext } from "./plugins/request-context.js";
 import { isAppError } from "../lib/errors/app-error.js";
 import { withGeneratedAt } from "../lib/http/response.js";
 import { enforceCsrfProtection } from "../lib/security/csrf.js";
@@ -32,9 +32,15 @@ export async function buildApp(env: AppEnv) {
     secret: env.SESSION_SECRET,
   });
 
-  await app.register(registerPrismaPlugin);
-  await ensureOwnerAccount(app.prisma, env, console);
-  await app.register(registerRequestContextPlugin, { env });
+  const prisma = new PrismaClient();
+  app.decorate("prisma", prisma);
+
+  app.addHook("onClose", async (instance) => {
+    await instance.prisma.$disconnect();
+  });
+
+  await ensureOwnerAccount(prisma, env, app.log);
+  await registerRequestContext(app, { env });
 
   app.addHook("preHandler", async (request) => {
     enforceCsrfProtection(request, env);

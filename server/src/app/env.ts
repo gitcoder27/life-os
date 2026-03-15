@@ -6,8 +6,8 @@ loadEnv();
 const envSchema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
   HOST: z.string().default("0.0.0.0"),
-  PORT: z.coerce.number().int().positive().default(3001),
-  APP_ORIGIN: z.string().default("http://localhost:5173"),
+  PORT: z.coerce.number().int().positive().default(3004),
+  APP_ORIGIN: z.string().default("http://localhost:5174"),
   DATABASE_URL: z
     .string()
     .default("postgresql://postgres:postgres@localhost:5432/life_os"),

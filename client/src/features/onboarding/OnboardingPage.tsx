@@ -14,36 +14,105 @@ import { SectionCard } from "../../shared/ui/SectionCard";
 
 const onboardingSteps = [
   {
+    title: "Owner profile",
+    summary: "Set the identity and baseline settings this workspace will use.",
+  },
+  {
     title: "Life priorities",
-    summary: "Capture the areas that should influence the dashboard first.",
-    items: ["Health", "Work growth", "Money", "Home admin"],
+    summary: "Choose the areas this dashboard should optimize around first.",
   },
   {
     title: "Top goals",
-    summary: "Seed the first meaningful outcomes.",
-    items: ["1 monthly theme", "3 outcomes", "1 focus habit"],
+    summary: "Define the first three outcomes you want this system to track.",
   },
   {
     title: "Routines and habits",
-    summary: "Build the minimum default structure.",
-    items: ["Morning routine", "Evening routine", "3 daily habits"],
+    summary: "Create the minimum recurring structure for your day.",
   },
   {
-    title: "Health defaults",
-    summary: "Set water and workout expectations.",
-    items: ["Water target", "Meal logging mode", "Workout cadence"],
+    title: "Tracking defaults",
+    summary: "Set the defaults for water and expense tracking.",
   },
   {
-    title: "Expense categories",
-    summary: "Create enough visibility to start tracking immediately.",
-    items: ["Food", "Rent", "Utilities", "Subscriptions"],
-  },
-  {
-    title: "Review preferences",
-    summary: "Choose the reflection windows.",
-    items: ["Daily review time", "Week start", "Monthly review window"],
+    title: "Review rhythm",
+    summary: "Choose when your review loop should reset and check in.",
   },
 ] as const;
+
+type OnboardingValues = {
+  displayName: string;
+  lifePriorities: string;
+  monthlyTheme: string;
+  secondGoal: string;
+  thirdGoal: string;
+  morningRoutine: string;
+  eveningRoutine: string;
+  habits: string;
+  waterTargetMl: string;
+  expenseCategories: string;
+  dailyReviewTime: string;
+  weekStartsOn: string;
+};
+
+function normalizeTimeInput(value: string) {
+  const trimmed = value.trim().toLowerCase();
+
+  if (!trimmed) {
+    return "";
+  }
+
+  if (/^\d{2}:\d{2}$/.test(trimmed)) {
+    return trimmed;
+  }
+
+  const match = trimmed.match(/^(\d{1,2})(?::(\d{2}))?\s*(am|pm)$/);
+
+  if (!match) {
+    return value;
+  }
+
+  const hour = Number.parseInt(match[1] ?? "0", 10);
+  const minute = Number.parseInt(match[2] ?? "0", 10);
+
+  if (!Number.isFinite(hour) || !Number.isFinite(minute) || hour < 1 || hour > 12 || minute < 0 || minute > 59) {
+    return value;
+  }
+
+  const normalizedHour =
+    match[3] === "pm"
+      ? hour === 12
+        ? 12
+        : hour + 12
+      : hour === 12
+        ? 0
+        : hour;
+
+  return `${String(normalizedHour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
+}
+
+function readFieldErrors(error: unknown) {
+  if (!error || typeof error !== "object" || !("fieldErrors" in error)) {
+    return [];
+  }
+
+  const fieldErrors = (error as { fieldErrors?: unknown }).fieldErrors;
+
+  if (!Array.isArray(fieldErrors)) {
+    return [];
+  }
+
+  return fieldErrors
+    .map((entry) => {
+      if (!entry || typeof entry !== "object") {
+        return null;
+      }
+
+      const field = "field" in entry && typeof entry.field === "string" ? entry.field : "field";
+      const message = "message" in entry && typeof entry.message === "string" ? entry.message : "Invalid value";
+      return `${field}: ${message}`;
+    })
+    .filter((entry): entry is string => Boolean(entry));
+}
 
 export function OnboardingPage() {
   const navigate = useNavigate();
@@ -52,63 +121,65 @@ export function OnboardingPage() {
   const onboardingQuery = useOnboardingStateQuery(true);
   const completeOnboardingMutation = useCompleteOnboardingMutation();
   const [activeStep, setActiveStep] = useState(0);
-  const [values, setValues] = useState<Record<string, string>>({});
+  const [values, setValues] = useState<OnboardingValues>({
+    displayName: "",
+    lifePriorities: "",
+    monthlyTheme: "",
+    secondGoal: "",
+    thirdGoal: "",
+    morningRoutine: "",
+    eveningRoutine: "",
+    habits: "",
+    waterTargetMl: "",
+    expenseCategories: "",
+    dailyReviewTime: "",
+    weekStartsOn: "",
+  });
   const step = onboardingSteps[activeStep];
   const defaults = onboardingQuery.data?.defaults;
-  const timezone =
-    defaults?.timezone ??
-    Intl.DateTimeFormat().resolvedOptions().timeZone ??
-    "UTC";
+  const timezone = defaults?.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone ?? "UTC";
+  const mutationFieldErrors = readFieldErrors(completeOnboardingMutation.error);
 
-  function keyFor(stepTitle: string, item: string) {
-    return `${stepTitle}:${item}`;
-  }
-
-  function valueFor(stepTitle: string, item: string) {
-    return values[keyFor(stepTitle, item)] ?? "";
-  }
-
-  function setValue(stepTitle: string, item: string, value: string) {
+  function setValue<Key extends keyof OnboardingValues>(key: Key, value: OnboardingValues[Key]) {
     setValues((current) => ({
       ...current,
-      [keyFor(stepTitle, item)]: value,
+      [key]: value,
     }));
   }
 
   function parseWaterTarget(value: string) {
     const normalized = value.trim().toLowerCase();
     if (!normalized) {
-      return defaults?.dailyWaterTargetMl ?? 3500;
+      return defaults?.dailyWaterTargetMl ?? 2500;
     }
 
     const numeric = Number.parseFloat(normalized.replace(/[^0-9.]/g, ""));
     if (!Number.isFinite(numeric)) {
-      return defaults?.dailyWaterTargetMl ?? 3500;
+      return defaults?.dailyWaterTargetMl ?? 2500;
     }
 
-    return normalized.includes("l") ? Math.round(numeric * 1000) : Math.round(numeric);
+    if (normalized.includes(" l") || normalized.endsWith("l")) {
+      return Math.round(numeric * 1000);
+    }
+
+    return Math.round(numeric);
   }
 
   async function handleComplete() {
-    const lifePriorities = onboardingSteps[0].items
-      .map((item) => valueFor(onboardingSteps[0].title, item).trim() || item)
+    const lifePriorities = splitEntries(values.lifePriorities).slice(0, 5);
+    const goalTitles = [values.monthlyTheme, values.secondGoal, values.thirdGoal]
+      .map((value) => value.trim())
       .filter(Boolean);
 
-    const goalTitles = onboardingSteps[1].items.flatMap((item) =>
-      splitEntries(valueFor(onboardingSteps[1].title, item)),
-    );
-
-    const goals = (goalTitles.length ? goalTitles : ["Build the first working Life OS loop"]).map(
-      (title) => ({
-        title,
-        domain: "other" as const,
-      }),
-    );
+    const goals = (goalTitles.length ? goalTitles : ["Build the first working Life OS loop"]).map((title) => ({
+      title,
+      domain: "other" as const,
+    }));
 
     const routineTemplates = defaults?.routineTemplates ?? [];
-    const morningItems = splitEntries(valueFor(onboardingSteps[2].title, "Morning routine"));
-    const eveningItems = splitEntries(valueFor(onboardingSteps[2].title, "Evening routine"));
-    const habitItems = splitEntries(valueFor(onboardingSteps[2].title, "3 daily habits"));
+    const morningItems = splitEntries(values.morningRoutine);
+    const eveningItems = splitEntries(values.eveningRoutine);
+    const habitItems = splitEntries(values.habits);
 
     const routines = [
       {
@@ -117,8 +188,8 @@ export function OnboardingPage() {
         items: (morningItems.length
           ? morningItems
           : routineTemplates.find((template) => template.period === "morning")?.items ?? [
-              "Wake on time",
               "Review priorities",
+              "Drink water",
             ]).map((title) => ({ title })),
       },
       {
@@ -127,7 +198,7 @@ export function OnboardingPage() {
         items: (eveningItems.length
           ? eveningItems
           : routineTemplates.find((template) => template.period === "evening")?.items ?? [
-              "Close the day",
+              "Daily review",
               "Prepare tomorrow",
             ]).map((title) => ({ title })),
       },
@@ -135,33 +206,29 @@ export function OnboardingPage() {
 
     const habits = (habitItems.length
       ? habitItems
-      : defaults?.habitSuggestions?.slice(0, 3) ?? [
-          "Morning sunlight",
-          "Review priorities",
-          "Close the day",
-        ]).map((title) => ({
+      : defaults?.habitSuggestions?.slice(0, 3) ?? ["Morning planning", "Workout", "Hydration"]).map((title) => ({
       title,
       targetPerDay: 1,
     }));
 
-    const expenseCategories = onboardingSteps[4].items
-      .map((item) => valueFor(onboardingSteps[4].title, item).trim() || item)
-      .filter(Boolean)
-      .map((name) => ({ name }));
+    const expenseCategories = (
+      splitEntries(values.expenseCategories).length
+        ? splitEntries(values.expenseCategories)
+        : defaults?.expenseCategorySuggestions?.slice(0, 6) ?? ["Groceries", "Dining", "Transport", "Utilities"]
+    ).map((name) => ({ name }));
 
-    const reviewTime = valueFor(onboardingSteps[5].title, "Daily review time").trim();
+    const reviewTime = normalizeTimeInput(values.dailyReviewTime);
+    const parsedWeekStartsOn = Number.parseInt(values.weekStartsOn || String(defaults?.weekStartsOn ?? 1), 10);
 
     await completeOnboardingMutation.mutateAsync({
-      displayName: sessionQuery.data?.user?.displayName ?? "Owner",
+      displayName: values.displayName.trim() || sessionQuery.data?.user?.displayName || "Owner",
       timezone,
       currencyCode: defaults?.currencyCode ?? "USD",
-      weekStartsOn: defaults?.weekStartsOn ?? 1,
-      dailyWaterTargetMl: parseWaterTarget(
-        valueFor(onboardingSteps[3].title, "Water target"),
-      ),
-      dailyReviewStartTime: reviewTime || defaults?.dailyReviewStartTime ?? "20:30",
+      weekStartsOn: Number.isFinite(parsedWeekStartsOn) ? parsedWeekStartsOn : (defaults?.weekStartsOn ?? 1),
+      dailyWaterTargetMl: parseWaterTarget(values.waterTargetMl),
+      dailyReviewStartTime: (reviewTime || defaults?.dailyReviewStartTime) ?? "20:00",
       dailyReviewEndTime: defaults?.dailyReviewEndTime ?? null,
-      lifePriorities,
+      lifePriorities: lifePriorities.length ? lifePriorities : ["Health", "Work growth", "Money"],
       goals,
       habits,
       routines,
@@ -181,7 +248,7 @@ export function OnboardingPage() {
 
   return (
     <div className="auth-layout" style={{ alignItems: "start", paddingTop: "3rem" }}>
-      <div style={{ width: "min(100%, 44rem)" }}>
+      <div style={{ width: "min(100%, 48rem)" }}>
         <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", marginBottom: "1rem" }}>
           <span
             style={{
@@ -209,6 +276,22 @@ export function OnboardingPage() {
           </div>
         </div>
 
+        <div
+          style={{
+            marginBottom: "1rem",
+            padding: "0.9rem 1rem",
+            borderRadius: "var(--r-md)",
+            border: "1px solid var(--line, rgba(255,255,255,0.08))",
+            background: "rgba(255,255,255,0.03)",
+          }}
+        >
+          <div className="page-eyebrow" style={{ marginBottom: "0.4rem" }}>How to fill this</div>
+          <div style={{ color: "var(--text-secondary)", lineHeight: 1.6 }}>
+            Use short plain-language answers. Every step now maps directly to the setup payload.
+            If you leave routines, habits, or categories blank, the app will create sensible starter defaults.
+          </div>
+        </div>
+
         <div className="onboarding-stepper">
           {onboardingSteps.map((currentStep, index) => (
             <button
@@ -221,31 +304,196 @@ export function OnboardingPage() {
           ))}
         </div>
 
-        <SectionCard
-          title={`${activeStep + 1}. ${step.title}`}
-          subtitle={step.summary}
-        >
-          <div className="stack-form" style={{ paddingTop: "0.5rem" }}>
-            {step.items.map((item) => (
-              <label key={item} className="field">
-                <span>{item}</span>
+        <SectionCard title={`${activeStep + 1}. ${step.title}`} subtitle={step.summary}>
+          {activeStep === 0 ? (
+            <div className="stack-form" style={{ paddingTop: "0.5rem" }}>
+              <label className="field">
+                <span>Display name</span>
                 <input
-                  placeholder={`Enter ${item.toLowerCase()}...`}
+                  placeholder="Owner"
                   type="text"
-                  value={valueFor(step.title, item)}
-                  onChange={(event) => setValue(step.title, item, event.target.value)}
+                  value={values.displayName}
+                  onChange={(event) => setValue("displayName", event.target.value)}
                 />
               </label>
-            ))}
-          </div>
+              <div
+                style={{
+                  padding: "0.95rem 1rem",
+                  borderRadius: "var(--r-md)",
+                  border: "1px solid var(--line, rgba(255,255,255,0.08))",
+                  background: "rgba(255,255,255,0.03)",
+                }}
+              >
+                <div className="page-eyebrow" style={{ marginBottom: "0.4rem" }}>Detected defaults</div>
+                <div style={{ display: "grid", gap: "0.35rem", color: "var(--text-secondary)" }}>
+                  <div><strong style={{ color: "var(--text-primary)" }}>Timezone:</strong> {timezone}</div>
+                  <div><strong style={{ color: "var(--text-primary)" }}>Currency:</strong> {defaults?.currencyCode ?? "USD"}</div>
+                  <div><strong style={{ color: "var(--text-primary)" }}>Today:</strong> {today}</div>
+                </div>
+              </div>
+            </div>
+          ) : null}
+
+          {activeStep === 1 ? (
+            <div className="stack-form" style={{ paddingTop: "0.5rem" }}>
+              <label className="field">
+                <span>Life priorities</span>
+                <textarea
+                  placeholder={"Health\nWork growth\nMoney"}
+                  rows={6}
+                  value={values.lifePriorities}
+                  onChange={(event) => setValue("lifePriorities", event.target.value)}
+                />
+              </label>
+              <p className="list__subtle">Enter 3 to 5 priorities, one per line. Example: `Health`, `Money`, `Family`, `Work growth`.</p>
+            </div>
+          ) : null}
+
+          {activeStep === 2 ? (
+            <div className="stack-form" style={{ paddingTop: "0.5rem" }}>
+              <label className="field">
+                <span>Primary goal</span>
+                <input
+                  placeholder="Build a stable weekly operating rhythm"
+                  type="text"
+                  value={values.monthlyTheme}
+                  onChange={(event) => setValue("monthlyTheme", event.target.value)}
+                />
+              </label>
+              <label className="field">
+                <span>Second goal</span>
+                <input
+                  placeholder="Log all major expenses this month"
+                  type="text"
+                  value={values.secondGoal}
+                  onChange={(event) => setValue("secondGoal", event.target.value)}
+                />
+              </label>
+              <label className="field">
+                <span>Third goal</span>
+                <input
+                  placeholder="Complete morning routine 5 days a week"
+                  type="text"
+                  value={values.thirdGoal}
+                  onChange={(event) => setValue("thirdGoal", event.target.value)}
+                />
+              </label>
+            </div>
+          ) : null}
+
+          {activeStep === 3 ? (
+            <div className="stack-form" style={{ paddingTop: "0.5rem" }}>
+              <label className="field">
+                <span>Morning routine</span>
+                <textarea
+                  placeholder={"Drink water\nReview priorities\nCheck calendar"}
+                  rows={5}
+                  value={values.morningRoutine}
+                  onChange={(event) => setValue("morningRoutine", event.target.value)}
+                />
+              </label>
+              <label className="field">
+                <span>Evening routine</span>
+                <textarea
+                  placeholder={"Daily review\nPrep tomorrow\nTidy desk"}
+                  rows={5}
+                  value={values.eveningRoutine}
+                  onChange={(event) => setValue("eveningRoutine", event.target.value)}
+                />
+              </label>
+              <label className="field">
+                <span>Daily habits</span>
+                <textarea
+                  placeholder={"Workout\nHydration\nEvening reset"}
+                  rows={4}
+                  value={values.habits}
+                  onChange={(event) => setValue("habits", event.target.value)}
+                />
+              </label>
+              <p className="list__subtle">Use one item per line. If you leave this blank, starter defaults will be created automatically.</p>
+            </div>
+          ) : null}
+
+          {activeStep === 4 ? (
+            <div className="stack-form" style={{ paddingTop: "0.5rem" }}>
+              <label className="field">
+                <span>Daily water target</span>
+                <input
+                  placeholder="2500"
+                  type="number"
+                  min="250"
+                  step="50"
+                  value={values.waterTargetMl}
+                  onChange={(event) => setValue("waterTargetMl", event.target.value)}
+                />
+              </label>
+              <p className="list__subtle">Enter milliliters. Example: `2500` means 2.5 liters.</p>
+              <label className="field">
+                <span>Expense categories</span>
+                <textarea
+                  placeholder={"Groceries\nDining\nTransport\nUtilities"}
+                  rows={6}
+                  value={values.expenseCategories}
+                  onChange={(event) => setValue("expenseCategories", event.target.value)}
+                />
+              </label>
+              <p className="list__subtle">One category per line. Leave blank to use the starter category set.</p>
+            </div>
+          ) : null}
+
+          {activeStep === 5 ? (
+            <div className="stack-form" style={{ paddingTop: "0.5rem" }}>
+              <label className="field">
+                <span>Daily review time</span>
+                <input
+                  type="time"
+                  value={values.dailyReviewTime || defaults?.dailyReviewStartTime || "20:00"}
+                  onChange={(event) => setValue("dailyReviewTime", event.target.value)}
+                />
+              </label>
+              <p className="list__subtle">Use 24-hour time. Example: `20:00` for 8:00 PM.</p>
+              <label className="field">
+                <span>Week starts on</span>
+                <select
+                  value={values.weekStartsOn || String(defaults?.weekStartsOn ?? 1)}
+                  onChange={(event) => setValue("weekStartsOn", event.target.value)}
+                >
+                  <option value="0">Sunday</option>
+                  <option value="1">Monday</option>
+                  <option value="2">Tuesday</option>
+                  <option value="3">Wednesday</option>
+                  <option value="4">Thursday</option>
+                  <option value="5">Friday</option>
+                  <option value="6">Saturday</option>
+                </select>
+              </label>
+            </div>
+          ) : null}
         </SectionCard>
 
         {completeOnboardingMutation.error ? (
-          <p className="list__subtle" style={{ color: "var(--danger, #e88f8f)", marginTop: "0.75rem" }}>
-            {completeOnboardingMutation.error instanceof Error
-              ? completeOnboardingMutation.error.message
-              : "Unable to complete onboarding."}
-          </p>
+          <div
+            style={{
+              marginTop: "0.75rem",
+              padding: "0.9rem 1rem",
+              borderRadius: "var(--r-md)",
+              border: "1px solid rgba(232,143,143,0.35)",
+              background: "rgba(128,32,32,0.12)",
+            }}
+          >
+            <p className="list__subtle" style={{ color: "var(--danger, #e88f8f)", marginBottom: mutationFieldErrors.length ? "0.5rem" : 0 }}>
+              {completeOnboardingMutation.error instanceof Error
+                ? completeOnboardingMutation.error.message
+                : "Unable to complete onboarding."}
+            </p>
+            {mutationFieldErrors.length ? (
+              <ul className="list__subtle" style={{ margin: 0, paddingLeft: "1.1rem", color: "var(--danger, #e88f8f)" }}>
+                {mutationFieldErrors.map((message) => (
+                  <li key={message}>{message}</li>
+                ))}
+              </ul>
+            ) : null}
+          </div>
         ) : null}
 
         <div className="button-row" style={{ marginTop: "1rem", justifyContent: "space-between" }}>

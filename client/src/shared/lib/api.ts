@@ -1170,7 +1170,13 @@ export function useLoginMutation() {
         method: "POST",
         body: payload,
       }),
-    onSuccess: () => {
+    onSuccess: (data) => {
+      queryClient.setQueryData<SessionResponse>(queryKeys.session, {
+        authenticated: true,
+        generatedAt: new Date().toISOString(),
+        user: data.user,
+      });
+
       void queryClient.invalidateQueries({ queryKey: queryKeys.session });
       void queryClient.invalidateQueries({ queryKey: queryKeys.onboarding });
     },

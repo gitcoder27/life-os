@@ -1,4 +1,4 @@
-import type { FastifyPluginAsync } from "fastify";
+import type { FastifyInstance } from "fastify";
 
 import type { SessionUser } from "@life-os/contracts";
 import type { AppEnv } from "../env.js";
@@ -21,10 +21,11 @@ interface RequestContextPluginOptions {
   env: AppEnv;
 }
 
-export const registerRequestContextPlugin: FastifyPluginAsync<
-  RequestContextPluginOptions
-> = async (app, options) => {
-  app.decorateRequest("auth", {} as RequestAuthContext);
+export async function registerRequestContext(
+  app: FastifyInstance,
+  options: RequestContextPluginOptions,
+) {
+  app.decorateRequest("auth", null);
 
   app.addHook("onRequest", async (request) => {
     const sessionToken = request.cookies[options.env.SESSION_COOKIE_NAME] ?? null;
@@ -55,4 +56,4 @@ export const registerRequestContextPlugin: FastifyPluginAsync<
 
     await touchSession(app.prisma, options.env, session.id);
   });
-};
+}

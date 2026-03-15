@@ -1,10 +1,9 @@
 import { type FormEvent, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 
 import { useLoginMutation } from "../../shared/lib/api";
 
 export function LoginPage() {
-  const navigate = useNavigate();
   const loginMutation = useLoginMutation();
   const [email, setEmail] = useState("owner@example.com");
   const [password, setPassword] = useState("");
@@ -12,7 +11,6 @@ export function LoginPage() {
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     await loginMutation.mutateAsync({ email, password });
-    navigate("/", { replace: true });
   }
 
   return (

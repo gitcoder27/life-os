@@ -66,14 +66,66 @@ const onboardingMealTemplateSchema = z.object({
   description: z.string().min(1).max(500),
 });
 
+function normalizeClockTime(value: string | null | undefined) {
+  if (value === null || value === undefined) {
+    return value;
+  }
+
+  const trimmed = value.trim().toLowerCase();
+
+  if (!trimmed) {
+    return null;
+  }
+
+  if (/^\d{2}:\d{2}$/.test(trimmed)) {
+    return trimmed;
+  }
+
+  const match = trimmed.match(/^(\d{1,2})(?::(\d{2}))?\s*(am|pm)$/);
+
+  if (!match) {
+    return value;
+  }
+
+  const hour = Number.parseInt(match[1] ?? "0", 10);
+  const minute = Number.parseInt(match[2] ?? "0", 10);
+
+  if (!Number.isFinite(hour) || !Number.isFinite(minute) || hour < 1 || hour > 12 || minute < 0 || minute > 59) {
+    return value;
+  }
+
+  const normalizedHour =
+    match[3] === "pm"
+      ? hour === 12
+        ? 12
+        : hour + 12
+      : hour === 12
+        ? 0
+        : hour;
+
+  return `${String(normalizedHour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
+}
+
 const onboardingCompletionSchema = z.object({
   displayName: z.string().min(1),
   timezone: z.string().min(1),
   currencyCode: z.string().length(3),
   weekStartsOn: z.number().int().min(0).max(6),
   dailyWaterTargetMl: z.number().int().positive(),
-  dailyReviewStartTime: z.string().regex(/^\d{2}:\d{2}$/).nullable().optional(),
-  dailyReviewEndTime: z.string().regex(/^\d{2}:\d{2}$/).nullable().optional(),
+  dailyReviewStartTime: z.preprocess(
+    (value) =>
+      typeof value === "string" || value === null || value === undefined
+        ? normalizeClockTime(value)
+        : value,
+    z.string().regex(/^\d{2}:\d{2}$/).nullable().optional(),
+  ),
+  dailyReviewEndTime: z.preprocess(
+    (value) =>
+      typeof value === "string" || value === null || value === undefined
+        ? normalizeClockTime(value)
+        : value,
+    z.string().regex(/^\d{2}:\d{2}$/).nullable().optional(),
+  ),
   lifePriorities: z.array(z.string().min(1).max(200)).min(1).max(5),
   goals: z.array(onboardingGoalSchema).max(10),
   habits: z.array(onboardingHabitSchema).max(20),
