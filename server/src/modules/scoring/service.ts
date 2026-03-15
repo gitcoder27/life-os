@@ -111,6 +111,9 @@ export async function ensureCycle(
         orderBy: {
           slot: "asc",
         },
+        include: {
+          goal: true,
+        },
       },
       dailyReview: true,
       dailyScore: true,

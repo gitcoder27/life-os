@@ -1,4 +1,5 @@
 import type { ApiMeta, EntityId, IsoDateString } from "./common.js";
+import type { GoalSummary } from "./goals.js";
 
 export type PriorityStatus = "pending" | "completed" | "dropped";
 export type TaskStatus = "pending" | "completed" | "dropped";
@@ -10,6 +11,7 @@ export interface PlanningPriorityItem {
   title: string;
   status: PriorityStatus;
   goalId: EntityId | null;
+  goal: GoalSummary | null;
   completedAt: string | null;
 }
 
@@ -28,6 +30,7 @@ export interface PlanningTaskItem {
   scheduledForDate: IsoDateString | null;
   dueAt: string | null;
   goalId: EntityId | null;
+  goal: GoalSummary | null;
   originType: TaskOriginType;
   carriedFromTaskId: EntityId | null;
   completedAt: string | null;

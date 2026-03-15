@@ -5,7 +5,9 @@ import type {
   DayPlanResponse,
   GoalDomain,
   GoalItem,
+  GoalSummary,
   GoalMutationResponse,
+  GoalsQuery,
   GoalStatus,
   GoalsResponse,
   IsoDateString,
@@ -103,6 +105,11 @@ const updateWeekPrioritiesSchema = z.object({
 const updateMonthFocusSchema = z.object({
   theme: z.string().max(200).nullable(),
   topOutcomes: z.array(priorityInputSchema).max(3),
+});
+
+const goalsQuerySchema = z.object({
+  domain: goalDomainSchema.optional(),
+  status: goalStatusSchema.optional(),
 });
 
 const updatePrioritySchema = z
@@ -286,12 +293,32 @@ function serializeGoal(goal: Goal): GoalItem {
   };
 }
 
+function serializeGoalSummary(goal: {
+  id: string;
+  title: string;
+  domain: PrismaGoalDomain;
+  status: PrismaGoalStatus;
+}): GoalSummary {
+  return {
+    id: goal.id,
+    title: goal.title,
+    domain: fromPrismaGoalDomain(goal.domain),
+    status: fromPrismaGoalStatus(goal.status),
+  };
+}
+
 function serializePriority(priority: {
   id: string;
   slot: number;
   title: string;
   status: PrismaPriorityStatus;
   goalId: string | null;
+  goal?: {
+    id: string;
+    title: string;
+    domain: PrismaGoalDomain;
+    status: PrismaGoalStatus;
+  } | null;
   completedAt: Date | null;
 }): PlanningPriorityItem {
   return {
@@ -300,11 +327,19 @@ function serializePriority(priority: {
     title: priority.title,
     status: fromPrismaPriorityStatus(priority.status),
     goalId: priority.goalId,
+    goal: priority.goal ? serializeGoalSummary(priority.goal) : null,
     completedAt: priority.completedAt?.toISOString() ?? null,
   };
 }
 
-function serializeTask(task: Task): PlanningTaskItem {
+function serializeTask(task: Task & {
+  goal?: {
+    id: string;
+    title: string;
+    domain: PrismaGoalDomain;
+    status: PrismaGoalStatus;
+  } | null;
+}): PlanningTaskItem {
   return {
     id: task.id,
     title: task.title,
@@ -313,6 +348,7 @@ function serializeTask(task: Task): PlanningTaskItem {
     scheduledForDate: task.scheduledForDate ? toIsoDateString(task.scheduledForDate) : null,
     dueAt: task.dueAt?.toISOString() ?? null,
     goalId: task.goalId,
+    goal: task.goal ? serializeGoalSummary(task.goal) : null,
     originType: fromPrismaTaskOriginType(task.originType),
     carriedFromTaskId: task.carriedFromTaskId,
     completedAt: task.completedAt?.toISOString() ?? null,
@@ -346,6 +382,9 @@ async function ensurePlanningCycle(
       priorities: {
         orderBy: {
           slot: "asc",
+        },
+        include: {
+          goal: true,
         },
       },
     },
@@ -463,6 +502,9 @@ async function replaceCyclePriorities(
     orderBy: {
       slot: "asc",
     },
+    include: {
+      goal: true,
+    },
   });
 
   return refreshed.map(serializePriority);
@@ -546,9 +588,12 @@ async function findOwnedPriority(
 export const registerPlanningRoutes: FastifyPluginAsync = async (app) => {
   app.get("/goals", async (request, reply) => {
     const user = requireAuthenticatedUser(request);
+    const query = parseOrThrow(goalsQuerySchema, request.query as GoalsQuery);
     const goals = await app.prisma.goal.findMany({
       where: {
         userId: user.id,
+        domain: query.domain ? toPrismaGoalDomain(query.domain) : undefined,
+        status: query.status ? toPrismaGoalStatus(query.status) : undefined,
       },
       orderBy: [
         { status: "asc" },
@@ -634,6 +679,9 @@ export const registerPlanningRoutes: FastifyPluginAsync = async (app) => {
         { status: "asc" },
         { createdAt: "asc" },
       ],
+      include: {
+        goal: true,
+      },
     });
 
     const response: DayPlanResponse = withGeneratedAt({
@@ -819,6 +867,9 @@ export const registerPlanningRoutes: FastifyPluginAsync = async (app) => {
             : undefined,
       },
       orderBy: [{ scheduledForDate: "asc" }, { createdAt: "asc" }],
+      include: {
+        goal: true,
+      },
     });
 
     const response: TasksResponse = withGeneratedAt({
@@ -841,6 +892,9 @@ export const registerPlanningRoutes: FastifyPluginAsync = async (app) => {
         dueAt: payload.dueAt ? new Date(payload.dueAt) : null,
         goalId: payload.goalId ?? null,
         originType: toPrismaTaskOriginType(payload.originType ?? "manual"),
+      },
+      include: {
+        goal: true,
       },
     });
 
@@ -881,6 +935,9 @@ export const registerPlanningRoutes: FastifyPluginAsync = async (app) => {
               ? null
               : undefined,
       },
+      include: {
+        goal: true,
+      },
     });
 
     const response: TaskMutationResponse = withGeneratedAt({
@@ -916,6 +973,9 @@ export const registerPlanningRoutes: FastifyPluginAsync = async (app) => {
           goalId: existingTask.goalId,
           originType: "CARRY_FORWARD",
           carriedFromTaskId: existingTask.id,
+        },
+        include: {
+          goal: true,
         },
       });
     });

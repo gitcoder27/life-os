@@ -70,10 +70,10 @@ The highest-value work is:
 
 The system is broad, but several critical loops are broken or only half-implemented:
 
-- priorities exist but are not fully actionable
+- priorities and planning are stronger, but some loops are still incomplete
 - reviews exist but do not fully drive planning outcomes in the UI
-- notifications exist but are barely surfaced
-- goals exist but are mostly read-only
+- notifications exist but are still not surfaced strongly enough
+- goals and planning are now editable, but broader planning feedback is still uneven
 - scoring exists but some rules are inaccurate or misleading
 - corrections and edit flows are weak
 
@@ -103,12 +103,12 @@ All future work should be judged against these product principles:
 | --- | --- | --- |
 | Auth | Implemented and sufficient for single-owner private deployment | Good |
 | Onboarding | Deep and useful; seeds real data | Good |
-| Home | Strong summary surface, but some cards are passive | Good but partial |
-| Today | Important page, but priorities are not operational | Partial |
+| Home | Strong summary surface with actionable cards and linked goal context, but notifications/water shortcuts still need more work | Good but partial |
+| Today | Operational execution lane with editable priorities, goal linkage, and task carry-forward/reschedule | Good |
 | Habits | Good one-tap use, but weak management depth | Good but partial |
 | Health | Useful logging, but editing/correction is weak | Good but partial |
 | Finance | Good basic visibility, but entry and maintenance flows are shallow | Partial |
-| Goals/Planning | Data model exists, UI is mostly read-only | Partial |
+| Goals/Planning | Goals, weekly priorities, and monthly focus are now editable and goal-linked from the UI | Good |
 | Reviews | Good structure, weak operational closure | Partial |
 | Notifications | Backend exists, frontend exposure is weak | Partial |
 | Quick Capture | Useful, but some types are fake distinctions | Partial |
@@ -121,7 +121,7 @@ All future work should be judged against these product principles:
 
 ### Problems
 
-- Workspace typecheck is failing even though tests pass.
+- Reliability has improved, but not all trust gaps are closed.
 - Some calculations are incorrect or overly simplified.
 - Timezone data is stored but not properly used.
 - Query behavior is brittle and UI error handling is thin.
@@ -145,13 +145,22 @@ A personal operating system fails if the user doubts the numbers, timing, or sav
 - Day-based summaries reflect the user's timezone.
 - Score changes can be explained by visible actions.
 
+### Implementation checklist
+
+- [x] Fix all typecheck failures and make `npm run typecheck` a hard requirement before shipping changes.
+- [ ] Audit all score and summary calculations before adding more gamification.
+- [ ] Make all day/week/month boundaries timezone-aware using the user's stored timezone.
+- [ ] Add explicit error states, empty states, and retry actions for every primary page.
+- [ ] Improve mutation feedback so saves feel confirmed and recoverable.
+- [x] Typecheck, build, and tests all pass.
+
 ## 2. Home Dashboard
 
 ### Problems
 
-- Home summarizes well but many cards do not lead into action.
-- Notifications exist in data but are not surfaced meaningfully.
-- Attention items are informative, not actionable.
+- Home summarizes well, but some high-value shortcuts still require page changes.
+- Notifications exist in the UI, but are not yet surfaced strongly enough from Home itself.
+- Attention items are actionable now, but the command-center loop is still incomplete.
 
 ### Recommended target behavior
 
@@ -185,13 +194,25 @@ Home should be the command center for the day:
 - Notifications are readable, dismissible, and markable as read from the UI.
 - Attention cards are interactive, not decorative.
 
+### Implementation checklist
+
+- [x] Add an actionable notifications drawer or notifications page.
+- [x] Turn attention cards into direct actions.
+- [x] Show score delta hints.
+- [x] Add quick actions inline on Home.
+- [x] Surface goal linkage on Home priorities and tasks.
+- [ ] Add quick water logging inline on Home.
+- [ ] A user can handle most urgent daily actions from Home without jumping through multiple pages.
+- [x] Notifications are readable, dismissible, and markable as read from the UI.
+- [x] Attention cards are interactive, not decorative.
+
 ## 3. Today Page
 
 ### Problems
 
-- The most important area, priorities, is not operational.
-- Priority buttons are disabled.
-- Today is missing drag/reorder, carry-forward, and realistic execution support.
+- Today is operational now, but still has room to deepen.
+- Reordering works, but only through basic up/down controls.
+- Day-note and richer adjustment support are still missing.
 
 ### Recommended target behavior
 
@@ -221,13 +242,26 @@ The user should be able to:
 - The top 3 priorities are editable, reorderable, and completable.
 - Incomplete tasks can be moved forward without using the review form.
 
+### Implementation checklist
+
+- [x] Add priority completion and drop actions.
+- [x] Add reorder support for top 3 priorities.
+- [x] Add carry-forward and reschedule actions for tasks directly from Today.
+- [x] Show clearer separation between priorities and tasks.
+- [ ] Add lightweight notes for the day if needed.
+- [x] Add real time-block support if due times exist.
+- [x] Surface day-priority goal linkage in the Today UI.
+- [x] A user can fully run their day from Today.
+- [x] The top 3 priorities are editable, reorderable, and completable.
+- [x] Incomplete tasks can be moved forward without using the review form.
+
 ## 4. Goals And Planning
 
 ### Problems
 
-- Goals page is mostly a passive summary.
-- Backend supports more than the UI exposes.
-- Monthly and weekly planning exist but feel read-only.
+- Goals page is no longer read-only, but it remains intentionally lightweight.
+- Backend still supports more planning context than the UI exposes.
+- Monthly and weekly planning are editable now, but long-range planning depth is still modest.
 
 ### Recommended target behavior
 
@@ -254,6 +288,17 @@ The user should be able to:
 - Goals are no longer just display objects.
 - Weekly priorities and monthly focus can be updated entirely from the UI.
 - At least some day priorities can be linked to goals.
+
+### Implementation checklist
+
+- [x] Add create/edit/complete/pause goal actions.
+- [x] Add weekly planning editor.
+- [x] Add monthly theme and outcome editor.
+- [x] Surface goal linkage on Today and Home where relevant.
+- [x] Add simple domain filters for goals.
+- [x] Goals are no longer just display objects.
+- [x] Weekly priorities and monthly focus can be updated entirely from the UI.
+- [x] At least some day priorities can be linked to goals.
 
 ## 5. Reviews
 

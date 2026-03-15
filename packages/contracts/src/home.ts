@@ -1,4 +1,5 @@
 import type { ApiMeta, EntityId, IsoDateString } from "./common.js";
+import type { GoalSummary } from "./goals.js";
 
 export interface DailyScoreSnapshot {
   value: number;
@@ -12,6 +13,8 @@ export interface PriorityItem {
   title: string;
   slot: 1 | 2 | 3;
   status: "pending" | "completed" | "dropped";
+  goalId: EntityId | null;
+  goal: GoalSummary | null;
 }
 
 export interface TaskItem {
@@ -19,6 +22,8 @@ export interface TaskItem {
   title: string;
   status: "pending" | "completed" | "dropped";
   scheduledForDate: IsoDateString | null;
+  goalId: EntityId | null;
+  goal: GoalSummary | null;
 }
 
 export interface RoutineSummary {

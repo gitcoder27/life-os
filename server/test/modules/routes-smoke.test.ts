@@ -298,8 +298,17 @@ describe("module route smoke tests", () => {
   it("serves planning goals", async () => {
     prisma.goal = { findMany: vi.fn().mockResolvedValue([]) } as any;
 
-    const response = await app!.inject({ method: "GET", url: "/api/goals" });
+    const response = await app!.inject({ method: "GET", url: "/api/goals?domain=health&status=active" });
     expect(response.statusCode).toBe(200);
+    expect(prisma.goal.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          userId: "user-1",
+          domain: "HEALTH",
+          status: "ACTIVE",
+        }),
+      }),
+    );
   });
 
   it("serves reviews endpoint from mocked service", async () => {
@@ -337,6 +346,27 @@ describe("module route smoke tests", () => {
   });
 
   it("serves home overview", async () => {
+    scoringMock.ensureCycle.mockResolvedValue({
+      id: "cycle-id",
+      priorities: [
+        {
+          id: "priority-1",
+          slot: 1,
+          title: "Protect gym slot",
+          status: "PENDING",
+          goalId: "goal-1",
+          goal: {
+            id: "goal-1",
+            title: "Build lifting consistency",
+            domain: "HEALTH",
+            status: "ACTIVE",
+          },
+        },
+      ],
+      dailyReview: null,
+      dailyScore: null,
+      plan: [],
+    } as any);
     prisma.task = {
       findMany: vi.fn().mockResolvedValue([
         {
@@ -347,7 +377,13 @@ describe("module route smoke tests", () => {
           status: "PENDING",
           scheduledForDate: new Date("2026-03-14T00:00:00.000Z"),
           dueAt: null,
-          goalId: null,
+          goalId: "goal-1",
+          goal: {
+            id: "goal-1",
+            title: "Build lifting consistency",
+            domain: "HEALTH",
+            status: "ACTIVE",
+          },
           originType: "MANUAL",
           carriedFromTaskId: null,
           completedAt: null,
@@ -402,7 +438,28 @@ describe("module route smoke tests", () => {
 
     const response = await app!.inject({ method: "GET", url: "/api/home/overview" });
     expect(response.statusCode).toBe(200);
-    expect(JSON.parse(response.body).attentionItems[0]).toEqual(
+    const payload = JSON.parse(response.body);
+    expect(payload.topPriorities[0]).toEqual(
+      expect.objectContaining({
+        goalId: "goal-1",
+        goal: expect.objectContaining({
+          id: "goal-1",
+          title: "Build lifting consistency",
+          domain: "health",
+          status: "active",
+        }),
+      }),
+    );
+    expect(payload.tasks[0]).toEqual(
+      expect.objectContaining({
+        goalId: "goal-1",
+        goal: expect.objectContaining({
+          id: "goal-1",
+          title: "Build lifting consistency",
+        }),
+      }),
+    );
+    expect(payload.attentionItems[0]).toEqual(
       expect.objectContaining({
         kind: "task",
         action: {
@@ -1132,7 +1189,13 @@ describe("module route smoke tests", () => {
           slot: 1,
           title: "Focus",
           status: "PENDING",
-          goalId: null,
+          goalId: "goal-1",
+          goal: {
+            id: "goal-1",
+            title: "Stay on track",
+            domain: "HEALTH",
+            status: "ACTIVE",
+          },
           completedAt: null,
         },
       ],
@@ -1190,7 +1253,13 @@ describe("module route smoke tests", () => {
           slot: 1,
           title: "Priority",
           status: "PENDING",
-          goalId: null,
+          goalId: "goal-1",
+          goal: {
+            id: "goal-1",
+            title: "Stay on track",
+            domain: "HEALTH",
+            status: "ACTIVE",
+          },
           completedAt: null,
         },
       ]),
@@ -1200,7 +1269,13 @@ describe("module route smoke tests", () => {
         slot: 1,
         title: "Priority",
         status: "PENDING",
-        goalId: null,
+        goalId: "goal-1",
+        goal: {
+          id: "goal-1",
+          title: "Stay on track",
+          domain: "HEALTH",
+          status: "ACTIVE",
+        },
         completedAt: null,
       }),
       deleteMany: vi.fn().mockResolvedValue({}),
@@ -1217,7 +1292,13 @@ describe("module route smoke tests", () => {
         slot: 1,
         title: "Priority",
         status: "COMPLETED",
-        goalId: null,
+        goalId: "goal-1",
+        goal: {
+          id: "goal-1",
+          title: "Stay on track",
+          domain: "HEALTH",
+          status: "ACTIVE",
+        },
         completedAt: new Date(),
       }),
     } as any;
@@ -1232,6 +1313,12 @@ describe("module route smoke tests", () => {
           scheduledForDate: new Date("2026-03-14T00:00:00.000Z"),
           dueAt: null,
           goalId: "goal-1",
+          goal: {
+            id: "goal-1",
+            title: "Stay on track",
+            domain: "HEALTH",
+            status: "ACTIVE",
+          },
           originType: "MANUAL",
           carriedFromTaskId: null,
           completedAt: null,
@@ -1248,6 +1335,12 @@ describe("module route smoke tests", () => {
         scheduledForDate: new Date("2026-03-14T00:00:00.000Z"),
         dueAt: null,
         goalId: "goal-1",
+        goal: {
+          id: "goal-1",
+          title: "Stay on track",
+          domain: "HEALTH",
+          status: "ACTIVE",
+        },
         originType: "MANUAL",
         carriedFromTaskId: null,
         completedAt: null,
@@ -1261,6 +1354,12 @@ describe("module route smoke tests", () => {
         scheduledForDate: new Date("2026-03-15T00:00:00.000Z"),
         dueAt: null,
         goalId: "goal-1",
+        goal: {
+          id: "goal-1",
+          title: "Stay on track",
+          domain: "HEALTH",
+          status: "ACTIVE",
+        },
         originType: "MANUAL",
         carriedFromTaskId: null,
         completedAt: null,
@@ -1276,6 +1375,12 @@ describe("module route smoke tests", () => {
         scheduledForDate: new Date("2026-03-14T00:00:00.000Z"),
         dueAt: null,
         goalId: "goal-1",
+        goal: {
+          id: "goal-1",
+          title: "Stay on track",
+          domain: "HEALTH",
+          status: "ACTIVE",
+        },
         originType: "MANUAL",
         carriedFromTaskId: null,
         completedAt: new Date(),
@@ -1374,6 +1479,26 @@ describe("module route smoke tests", () => {
     expect(taskPatch.statusCode).toBe(200);
     expect(priorityPatch.statusCode).toBe(200);
     expect(taskCarryForward.statusCode).toBe(201);
+    expect(JSON.parse(planningDay.body).priorities[0]).toEqual(
+      expect.objectContaining({
+        goalId: "goal-1",
+        goal: expect.objectContaining({
+          id: "goal-1",
+          title: "Stay on track",
+          domain: "health",
+          status: "active",
+        }),
+      }),
+    );
+    expect(JSON.parse(planningDay.body).tasks[0]).toEqual(
+      expect.objectContaining({
+        goalId: "goal-1",
+        goal: expect.objectContaining({
+          id: "goal-1",
+          title: "Stay on track",
+        }),
+      }),
+    );
   });
 
   it("updates settings profile", async () => {

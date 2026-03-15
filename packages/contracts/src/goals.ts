@@ -3,6 +3,13 @@ import type { ApiMeta, EntityId, IsoDateString } from "./common.js";
 export type GoalDomain = "health" | "money" | "work_growth" | "home_admin" | "discipline" | "other";
 export type GoalStatus = "active" | "paused" | "completed" | "archived";
 
+export interface GoalSummary {
+  id: EntityId;
+  title: string;
+  domain: GoalDomain;
+  status: GoalStatus;
+}
+
 export interface GoalItem {
   id: EntityId;
   title: string;
@@ -16,6 +23,11 @@ export interface GoalItem {
 
 export interface GoalsResponse extends ApiMeta {
   goals: GoalItem[];
+}
+
+export interface GoalsQuery {
+  domain?: GoalDomain;
+  status?: GoalStatus;
 }
 
 export interface CreateGoalRequest {

@@ -1,6 +1,7 @@
 import type { FastifyPluginAsync } from "fastify";
 import type {
   AttentionItem,
+  GoalSummary,
   HabitSummary,
   HealthSummary,
   HomeNotificationItem,
@@ -8,6 +9,7 @@ import type {
   IsoDateString,
   RoutineSummary,
 } from "@life-os/contracts";
+import type { GoalDomain as PrismaGoalDomain, GoalStatus as PrismaGoalStatus } from "@prisma/client";
 import { z } from "zod";
 
 import { requireAuthenticatedUser } from "../../lib/auth/require-auth.js";
@@ -43,6 +45,50 @@ function currentRoutinePeriod(date: Date, timezone?: string | null): RoutineSumm
   return "none";
 }
 
+function fromPrismaGoalDomain(domain: PrismaGoalDomain) {
+  switch (domain) {
+    case "HEALTH":
+      return "health";
+    case "MONEY":
+      return "money";
+    case "WORK_GROWTH":
+      return "work_growth";
+    case "HOME_ADMIN":
+      return "home_admin";
+    case "DISCIPLINE":
+      return "discipline";
+    case "OTHER":
+      return "other";
+  }
+}
+
+function fromPrismaGoalStatus(status: PrismaGoalStatus) {
+  switch (status) {
+    case "ACTIVE":
+      return "active";
+    case "PAUSED":
+      return "paused";
+    case "COMPLETED":
+      return "completed";
+    case "ARCHIVED":
+      return "archived";
+  }
+}
+
+function serializeGoalSummary(goal: {
+  id: string;
+  title: string;
+  domain: PrismaGoalDomain;
+  status: PrismaGoalStatus;
+}): GoalSummary {
+  return {
+    id: goal.id,
+    title: goal.title,
+    domain: fromPrismaGoalDomain(goal.domain),
+    status: fromPrismaGoalStatus(goal.status),
+  };
+}
+
 async function buildHomeOverview(
   app: Parameters<FastifyPluginAsync>[0],
   userId: string,
@@ -71,6 +117,9 @@ async function buildHomeOverview(
           scheduledForDate: targetDate,
         },
         orderBy: [{ createdAt: "asc" }],
+        include: {
+          goal: true,
+        },
       }),
       app.prisma.habit.findMany({
         where: {
@@ -292,6 +341,8 @@ async function buildHomeOverview(
           : priority.status === "DROPPED"
             ? "dropped"
             : "pending",
+      goalId: priority.goalId,
+      goal: priority.goal ? serializeGoalSummary(priority.goal) : null,
     })),
     tasks: tasks.map((task) => ({
       id: task.id,
@@ -299,6 +350,8 @@ async function buildHomeOverview(
       status:
         task.status === "COMPLETED" ? "completed" : task.status === "DROPPED" ? "dropped" : "pending",
       scheduledForDate: task.scheduledForDate ? toIsoDateString(task.scheduledForDate) : null,
+      goalId: task.goalId,
+      goal: task.goal ? serializeGoalSummary(task.goal) : null,
     })),
     routineSummary,
     habitSummary,
