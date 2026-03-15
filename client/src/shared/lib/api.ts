@@ -130,6 +130,8 @@ type HomeOverviewResponse = {
     scheduledForDate: string | null;
     goalId: string | null;
     goal: LinkedGoal | null;
+    notes: string | null;
+    originType: string;
   }>;
   routineSummary: {
     completedItems: number;
@@ -1022,8 +1024,35 @@ export function toIsoDate(date: Date) {
   return `${date.getFullYear()}-${padNumber(date.getMonth() + 1)}-${padNumber(date.getDate())}`;
 }
 
+function getResolvedTimezone() {
+  const preferredTimezone = getPreferredTimezone();
+
+  if (!preferredTimezone) {
+    return undefined;
+  }
+
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone: preferredTimezone });
+    return preferredTimezone;
+  } catch {
+    return undefined;
+  }
+}
+
+function formatIsoDateInTimezone(date: Date, timezone?: string) {
+  const formatter = new Intl.DateTimeFormat("en-CA", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    timeZone: timezone,
+  });
+
+  return formatter.format(date);
+}
+
 export function getTodayDate() {
-  return toIsoDate(new Date());
+  const timezone = getResolvedTimezone();
+  return formatIsoDateInTimezone(new Date(), timezone);
 }
 
 export function getMonthString(isoDate: string) {
@@ -1031,11 +1060,7 @@ export function getMonthString(isoDate: string) {
 }
 
 export function getWeekStartDate(isoDate: string) {
-  const date = new Date(`${isoDate}T12:00:00`);
-  const day = date.getDay();
-  const diff = day === 0 ? -6 : 1 - day;
-  date.setDate(date.getDate() + diff);
-  return toIsoDate(date);
+  return getPreferenceAwareWeekStartDate(isoDate);
 }
 
 export function getWeekEndDate(isoDate: string) {
@@ -1057,10 +1082,13 @@ export function getMonthEndDate(isoDate: string) {
 }
 
 export function formatLongDate(isoDate: string) {
-  return new Date(`${isoDate}T12:00:00`).toLocaleDateString(undefined, {
+  const timezone = getResolvedTimezone();
+
+  return new Date(`${isoDate}T12:00:00Z`).toLocaleDateString(undefined, {
     weekday: "long",
     month: "long",
     day: "numeric",
+    ...(timezone ? { timeZone: timezone } : {}),
   });
 }
 

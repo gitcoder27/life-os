@@ -13,6 +13,7 @@ import {
   useSubmitMonthlyReviewMutation,
   useSubmitWeeklyReviewMutation,
 } from "../../shared/lib/api";
+import { getQuickCaptureDisplayText, parseQuickCaptureNotes } from "../../shared/lib/quickCapture";
 import { PageHeader } from "../../shared/ui/PageHeader";
 import {
   EmptyState,
@@ -94,6 +95,10 @@ function getTomorrowDate(isoDate: string) {
   const tomorrow = new Date(`${isoDate}T12:00:00`);
   tomorrow.setDate(tomorrow.getDate() + 1);
   return toIsoDate(tomorrow);
+}
+
+function isQuickCaptureMetadataTask(task: { originType: string; notes: string | null }) {
+  return task.originType === "quick_capture" && parseQuickCaptureNotes(task.notes) !== null;
 }
 
 function fillThreePriorityDraft(values: DailyPriorityDraft[]) {
@@ -367,7 +372,9 @@ export function ReviewsPage() {
   const isDailyCompleted = dailyReview?.isCompleted ?? false;
 
   const dailyPendingTasks =
-    dailyReview?.incompleteTasks.filter((task) => task.status === "pending") ?? [];
+    dailyReview?.incompleteTasks
+      .filter((task) => task.status === "pending")
+      .filter((task) => !isQuickCaptureMetadataTask(task)) ?? [];
   const hasDecisionForEveryPendingTask =
     reviewQuery.data.cadence === "daily"
       ? dailyPendingTasks.every((task) => {
@@ -451,7 +458,7 @@ export function ReviewsPage() {
                       <div key={task.id} className="review-decision-item">
                         <div>
                           <strong>{task.title}</strong>
-                          <div className="list__subtle">{task.notes ?? task.originType}</div>
+                          <div className="list__subtle">{getQuickCaptureDisplayText(task.notes, task.title)}</div>
                         </div>
                         {isDailyCompleted ? (
                           <span className="tag tag--neutral">closed</span>

@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   formatMealSlotLabel,
   getTodayDate,
+  toIsoDate,
   parseAmountToMinor,
   parseNumberValue,
   useAddMealMutation,
@@ -14,6 +15,7 @@ import {
   useMealTemplatesQuery,
   useWorkoutMutation,
 } from "../../shared/lib/api";
+import { stringifyQuickCaptureNotes } from "../../shared/lib/quickCapture";
 
 const LAST_EXPENSE_CATEGORY_KEY = "lifeos_last_expense_category";
 
@@ -28,6 +30,12 @@ const captureTypes = [
   "Reminder",
 ] as const;
 
+function getTomorrowDate(isoDate: string) {
+  const tomorrow = new Date(`${isoDate}T12:00:00`);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  return toIsoDate(tomorrow);
+}
+
 type CaptureType = (typeof captureTypes)[number];
 
 type QuickCaptureSheetProps = {
@@ -40,6 +48,7 @@ export function QuickCaptureSheet({
   onClose,
 }: QuickCaptureSheetProps) {
   const today = getTodayDate();
+  const defaultReminderDate = getTomorrowDate(today);
   const [activeType, setActiveType] = useState<CaptureType>("Task");
   const [textValue, setTextValue] = useState("");
   const [descriptionValue, setDescriptionValue] = useState("");
@@ -54,6 +63,7 @@ export function QuickCaptureSheet({
   const [selectedTemplateId, setSelectedTemplateId] = useState("");
   const [mealSlot, setMealSlot] = useState<"breakfast" | "lunch" | "dinner" | "snack">("breakfast");
   const [workoutStatus, setWorkoutStatus] = useState<"completed" | "recovery_respected">("completed");
+  const [reminderDate, setReminderDate] = useState(defaultReminderDate);
 
   const panelRef = useRef<HTMLElement>(null);
   const firstInputRef = useRef<HTMLInputElement | HTMLTextAreaElement | null>(null);
@@ -81,6 +91,10 @@ export function QuickCaptureSheet({
   // Focus management: focus first input when sheet opens
   useEffect(() => {
     if (open) {
+      if (activeType === "Reminder") {
+        setReminderDate((current) => current || defaultReminderDate);
+      }
+
       requestAnimationFrame(() => {
         firstInputRef.current?.focus();
       });
@@ -107,6 +121,7 @@ export function QuickCaptureSheet({
     setAmountValue("");
     setDetailValue("");
     setWeightValue("");
+    setReminderDate(defaultReminderDate);
     onClose();
   }
 
@@ -116,6 +131,20 @@ export function QuickCaptureSheet({
   }
 
   async function handleSave() {
+    if (activeType === "Task") {
+      const title = textValue.trim();
+      if (!title) return;
+
+      await createTaskMutation.mutateAsync({
+        title: title.split("\n")[0],
+        notes: title,
+        scheduledForDate: today,
+        originType: "quick_capture",
+      });
+      resetAndClose();
+      return;
+    }
+
     if (activeType === "Expense") {
       const amountMinor = parseAmountToMinor(amountValue);
       if (!amountMinor) return;
@@ -136,15 +165,22 @@ export function QuickCaptureSheet({
       return;
     }
 
-    if (activeType === "Task" || activeType === "Note" || activeType === "Reminder") {
+    if (activeType === "Note" || activeType === "Reminder") {
       const title = textValue.trim();
       if (!title) return;
 
-      const prefix = activeType === "Note" ? "[Note] " : activeType === "Reminder" ? "[Reminder] " : "";
+      if (activeType === "Reminder" && !reminderDate) {
+        return;
+      }
+
       await createTaskMutation.mutateAsync({
-        title: prefix + title.split("\n")[0],
-        notes: title,
-        scheduledForDate: today,
+        title: title.split("\n")[0].trim() || (activeType === "Reminder" ? "Reminder" : "Note"),
+        notes: stringifyQuickCaptureNotes({
+          kind: activeType === "Reminder" ? "reminder" : "note",
+          text: title,
+          reminderDate: activeType === "Reminder" ? reminderDate : undefined,
+        }),
+        scheduledForDate: activeType === "Reminder" ? reminderDate : today,
         originType: "quick_capture",
       });
       resetAndClose();
@@ -204,8 +240,8 @@ export function QuickCaptureSheet({
   }
 
   const typeHints: Partial<Record<CaptureType, string>> = {
-    Note: "Saved as a task with [Note] prefix",
-    Reminder: "Saved as a task with [Reminder] prefix",
+    Note: "Saved as a day note, separate from executable tasks.",
+    Reminder: "Saved as a reminder note with a due date.",
   };
 
   return (
@@ -308,6 +344,19 @@ export function QuickCaptureSheet({
                 rows={3}
                 value={textValue}
                 onChange={(event) => setTextValue(event.target.value)}
+              />
+            </label>
+          )}
+
+          {activeType === "Reminder" && (
+            <label className="field">
+              <span>Reminder date</span>
+              <input
+                type="date"
+                value={reminderDate}
+                min={today}
+                onChange={(event) => setReminderDate(event.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") void handleSave(); }}
               />
             </label>
           )}

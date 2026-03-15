@@ -9,7 +9,11 @@ import type {
   IsoDateString,
   RoutineSummary,
 } from "@life-os/contracts";
-import type { GoalDomain as PrismaGoalDomain, GoalStatus as PrismaGoalStatus } from "@prisma/client";
+import type {
+  GoalDomain as PrismaGoalDomain,
+  GoalStatus as PrismaGoalStatus,
+  TaskOriginType as PrismaTaskOriginType,
+} from "@prisma/client";
 import { z } from "zod";
 
 import { requireAuthenticatedUser } from "../../lib/auth/require-auth.js";
@@ -87,6 +91,21 @@ function fromPrismaGoalStatus(status: PrismaGoalStatus) {
       return "completed";
     case "ARCHIVED":
       return "archived";
+  }
+}
+
+function fromPrismaTaskOriginType(originType: PrismaTaskOriginType) {
+  switch (originType) {
+    case "MANUAL":
+      return "manual";
+    case "QUICK_CAPTURE":
+      return "quick_capture";
+    case "CARRY_FORWARD":
+      return "carry_forward";
+    case "REVIEW_SEED":
+      return "review_seed";
+    case "RECURRING":
+      return "recurring";
   }
 }
 
@@ -459,6 +478,8 @@ async function buildHomeOverview(
       scheduledForDate: task.scheduledForDate ? toIsoDateString(task.scheduledForDate) : null,
       goalId: task.goalId,
       goal: task.goal ? serializeGoalSummary(task.goal) : null,
+      notes: task.notes,
+      originType: fromPrismaTaskOriginType(task.originType),
     })),
     routineSummary,
     habitSummary,

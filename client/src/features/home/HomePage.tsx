@@ -7,11 +7,16 @@ import {
   useDailyScoreQuery,
   useHabitCheckinMutation,
   useHomeOverviewQuery,
+  useAddWaterMutation,
   useUpdatePriorityMutation,
   useTaskStatusMutation,
   useWeeklyMomentumQuery,
   type LinkedGoal,
 } from "../../shared/lib/api";
+import {
+  getQuickCaptureDisplayText,
+  parseQuickCaptureNotes,
+} from "../../shared/lib/quickCapture";
 import { MetricPill } from "../../shared/ui/MetricPill";
 import {
   EmptyState,
@@ -53,6 +58,20 @@ function ChallengeProgressRing({ completions, target }: { completions: number; t
   );
 }
 
+type HomeTaskLike = {
+  originType: string;
+  notes: string | null;
+  title: string;
+};
+
+function isQuickCaptureMetadataTask(task: HomeTaskLike) {
+  return task.originType === "quick_capture" && parseQuickCaptureNotes(task.notes) !== null;
+}
+
+function getHomeTaskMeta(task: HomeTaskLike, fallback: string) {
+  return getQuickCaptureDisplayText(task.notes, fallback);
+}
+
 export function HomePage() {
   const today = getTodayDate();
   const navigate = useNavigate();
@@ -61,6 +80,7 @@ export function HomePage() {
   const weeklyMomentumQuery = useWeeklyMomentumQuery(today);
   const updateTaskMutation = useTaskStatusMutation(today);
   const habitCheckinMutation = useHabitCheckinMutation(today);
+  const addWaterMutation = useAddWaterMutation(today);
   const updatePriorityMutation = useUpdatePriorityMutation(today);
   const retryAll = () => {
     void homeQuery.refetch();
@@ -146,6 +166,9 @@ export function HomePage() {
   const scoreReasons = scoreQuery.data?.topReasons ?? [];
   const scoreBuckets =
     scoreQuery.data?.buckets?.filter((bucket) => bucket.applicablePoints > 0) ?? [];
+  const allTasks = home?.tasks ?? [];
+  const quickCaptureTasks = allTasks.filter(isQuickCaptureMetadataTask);
+  const taskLaneTasks = allTasks.filter((task) => !isQuickCaptureMetadataTask(task));
   const taskMutationError =
     updateTaskMutation.error instanceof Error
       ? updateTaskMutation.error.message
@@ -153,7 +176,13 @@ export function HomePage() {
         ? habitCheckinMutation.error.message
         : updatePriorityMutation.error instanceof Error
           ? updatePriorityMutation.error.message
-          : null;
+          : addWaterMutation.error instanceof Error
+            ? addWaterMutation.error.message
+            : null;
+
+  function handleQuickWater(amountMl: number) {
+    addWaterMutation.mutate(amountMl);
+  }
 
   return (
     <div className="page">
@@ -474,16 +503,16 @@ export function HomePage() {
           {taskMutationError ? (
             <InlineErrorState message={taskMutationError} onRetry={retryAll} />
           ) : null}
-          {home.tasks.length > 0 ? (
+          {taskLaneTasks.length > 0 ? (
             <ul className="list">
-              {home.tasks.map((task) => (
+              {taskLaneTasks.map((task) => (
                 <li key={task.id}>
                   <div>
                     <strong>{task.title}</strong>
                     <div className="list__subtle">
                       {task.status === "completed"
                         ? "Completed"
-                        : task.scheduledForDate ?? "Scheduled today"}
+                        : getHomeTaskMeta(task, task.scheduledForDate ?? "Scheduled today")}
                       {task.goal ? (
                         <span style={{ marginLeft: "0.5rem" }}>
                           <GoalChip goal={task.goal} />
@@ -543,12 +572,53 @@ export function HomePage() {
           <ul className="list">
             {healthSnapshot.map((item) => (
               <li key={item.label}>
-                <strong>{item.label}</strong>
-                <span className="list__subtle">{item.value}</span>
-              </li>
+                  <strong>{item.label}</strong>
+                  <span className="list__subtle">{item.value}</span>
+                </li>
             ))}
           </ul>
+          <div className="button-row" style={{ marginTop: "0.75rem", flexWrap: "wrap" }}>
+            <button
+              className="button button--ghost button--small"
+              type="button"
+              disabled={addWaterMutation.isPending}
+              onClick={() => handleQuickWater(250)}
+            >
+              {addWaterMutation.isPending ? "Logging..." : "+250ml"}
+            </button>
+            <button
+              className="button button--ghost button--small"
+              type="button"
+              disabled={addWaterMutation.isPending}
+              onClick={() => handleQuickWater(500)}
+            >
+              {addWaterMutation.isPending ? "Logging..." : "+500ml"}
+            </button>
+            <button
+              className="button button--primary button--small"
+              type="button"
+              disabled={addWaterMutation.isPending}
+              onClick={() => handleQuickWater(1000)}
+            >
+              {addWaterMutation.isPending ? "Logging..." : "+1L"}
+            </button>
+          </div>
         </SectionCard>
+
+        {quickCaptureTasks.length > 0 ? (
+          <SectionCard title="Quick capture notes" subtitle="Today’s notes and reminders">
+            <ul className="list">
+              {quickCaptureTasks.map((task) => (
+                <li key={task.id}>
+                  <strong>{getHomeTaskMeta(task, task.title)}</strong>
+                  <span className="list__subtle">
+                    {task.scheduledForDate ?? "Scheduled today"}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </SectionCard>
+        ) : null}
 
         <SectionCard
           title="Finance snapshot"

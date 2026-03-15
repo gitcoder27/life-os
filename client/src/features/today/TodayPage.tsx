@@ -15,6 +15,7 @@ import {
   useUpdatePriorityMutation,
   type LinkedGoal,
 } from "../../shared/lib/api";
+import { getQuickCaptureDisplayText, parseQuickCaptureNotes } from "../../shared/lib/quickCapture";
 import { PageHeader } from "../../shared/ui/PageHeader";
 import {
   EmptyState,
@@ -37,6 +38,19 @@ function getTomorrowDate(fromDate: string) {
   const tomorrow = new Date(`${fromDate}T12:00:00`);
   tomorrow.setDate(tomorrow.getDate() + 1);
   return toIsoDate(tomorrow);
+}
+
+type DayPlanTaskLike = {
+  originType: string;
+  notes: string | null;
+};
+
+function isQuickCaptureMetadataTask(task: DayPlanTaskLike) {
+  return task.originType === "quick_capture" && parseQuickCaptureNotes(task.notes) !== null;
+}
+
+function getTaskDayMetaText(notes: string | null, fallback: string) {
+  return getQuickCaptureDisplayText(notes, fallback);
 }
 
 function GoalChip({ goal }: { goal: LinkedGoal }) {
@@ -73,7 +87,11 @@ export function TodayPage() {
 
   const priorities = dayPlanQuery.data?.priorities ?? [];
   const tasks = dayPlanQuery.data?.tasks ?? [];
-  const timedTasks = tasks.filter((task) => task.dueAt);
+  const timedTasks = tasks
+    .filter((task) => !isQuickCaptureMetadataTask(task))
+    .filter((task) => task.dueAt);
+  const executionTasks = tasks.filter((task) => !isQuickCaptureMetadataTask(task));
+  const quickCaptureTasks = tasks.filter(isQuickCaptureMetadataTask);
   const currentDay = healthQuery.data?.summary.currentDay;
 
   useEffect(() => {
@@ -400,14 +418,14 @@ export function TodayPage() {
           title="Task lane"
           subtitle="Resolve or move every open task"
         >
-          {tasks.length > 0 ? (
+          {executionTasks.length > 0 ? (
             <ul className="list task-list">
-              {tasks.map((item) => (
+              {executionTasks.map((item) => (
                 <li key={item.id} className="task-list__item">
                   <div className="task-list__main">
                     <strong>{item.title}</strong>
                     <div className="list__subtle">
-                      {item.notes ?? item.originType}
+                      {getTaskDayMetaText(item.notes, item.scheduledForDate ?? "Scheduled today")}
                       {item.goal ? (
                         <span style={{ marginLeft: "0.5rem" }}>
                           <GoalChip goal={item.goal} />
@@ -522,6 +540,26 @@ export function TodayPage() {
             />
           )}
         </SectionCard>
+
+        {quickCaptureTasks.length > 0 ? (
+          <SectionCard
+            title="Day notes"
+            subtitle="Quick capture notes and reminders for today"
+          >
+            <ul className="list">
+              {quickCaptureTasks.map((noteTask) => (
+                <li key={noteTask.id}>
+                  <div>
+                    <strong>{getTaskDayMetaText(noteTask.notes, noteTask.title)}</strong>
+                    <span className="list__subtle">
+                      {noteTask.status === "completed" ? "Completed" : "Open"}
+                    </span>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </SectionCard>
+        ) : null}
 
         <SectionCard
           title="Time blocks"

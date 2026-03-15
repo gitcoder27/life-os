@@ -1,6 +1,7 @@
 import type { ApiMeta, EntityId, IsoDateString } from "./common.js";
 import type { GoalSummary } from "./goals.js";
 import type { WeeklyHabitChallenge } from "./habits.js";
+import type { TaskOriginType } from "./planning.js";
 
 export interface DailyScoreSnapshot {
   value: number;
@@ -25,6 +26,8 @@ export interface TaskItem {
   scheduledForDate: IsoDateString | null;
   goalId: EntityId | null;
   goal: GoalSummary | null;
+  notes: string | null;
+  originType: TaskOriginType;
 }
 
 export interface RoutineSummary {

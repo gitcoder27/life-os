@@ -201,7 +201,7 @@ Home should be the command center for the day:
 - [x] Show score delta hints.
 - [x] Add quick actions inline on Home.
 - [x] Surface goal linkage on Home priorities and tasks.
-- [ ] Add quick water logging inline on Home.
+- [x] Add quick water logging inline on Home.
 - [ ] A user can handle most urgent daily actions from Home without jumping through multiple pages.
 - [x] Notifications are readable, dismissible, and markable as read from the UI.
 - [x] Attention cards are interactive, not decorative.
@@ -248,7 +248,7 @@ The user should be able to:
 - [x] Add reorder support for top 3 priorities.
 - [x] Add carry-forward and reschedule actions for tasks directly from Today.
 - [x] Show clearer separation between priorities and tasks.
-- [ ] Add lightweight notes for the day if needed.
+- [x] Add lightweight notes for the day if needed.
 - [x] Add real time-block support if due times exist.
 - [x] Surface day-priority goal linkage in the Today UI.
 - [x] A user can fully run their day from Today.
@@ -506,6 +506,12 @@ But each type should either be meaningfully distinct or removed.
   - common expense categories
   - favorite meals
   - common workouts
+
+### Implementation checklist
+
+- [x] Distinguish Quick Capture `Note` and `Reminder` entries from executable quick-captured tasks in Home and Today using typed metadata.
+- [x] Route Quick Capture notes/reminders to a lightweight day-notes surface so they don’t block execution lane task actions.
+- [ ] Finalize whether notes/reminders should remain task-typed metadata or become first-class entities with dedicated action behavior.
 
 ### Acceptance criteria
 
@@ -797,7 +803,7 @@ Make the system more engaging without making it noisy or childish.
 
 ## Product backlog
 
-- [ ] Clarify whether notes and reminders are distinct product entities.
+- [x] Clarify whether notes and reminders are distinct product entities (metadata split implemented; finalize downstream behavior).
 - [ ] Decide how much planning depth belongs in MVP vs later.
 - [ ] Define the final score explanation model shown to the user.
 - [ ] Define the minimum actionable notification set.
