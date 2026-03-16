@@ -1,8 +1,12 @@
 import { buildApp } from "./app/build-app.js";
-import { getEnv } from "./app/env.js";
+import { assertDatabaseSeparation, getEnv } from "./app/env.js";
+import { ensureDatabaseExists, ensureDatabaseMigrations } from "./app/db-bootstrap.js";
 
 async function start() {
   const env = getEnv();
+  await ensureDatabaseExists(env);
+  await ensureDatabaseMigrations(env);
+  assertDatabaseSeparation(env);
 
   try {
     const app = await buildApp(env);
@@ -19,6 +23,18 @@ async function start() {
         `[server] Prisma connection failed. Start Postgres first and confirm DATABASE_URL in ${process.cwd()}/server/.env`,
       );
       console.error(`Current DATABASE_URL: ${process.env.DATABASE_URL}`);
+    }
+
+    if (error instanceof Error && /database .* does not exist/i.test(error.message)) {
+      console.error(
+        "[server] Database is missing. Either set AUTO_CREATE_DATABASE=true in server/.env or create the DB manually.",
+      );
+    }
+
+    if (error instanceof Error && /table .* does not exist/i.test(error.message)) {
+      console.error(
+        "[server] Database tables are missing. Run migrations (for example: `cd server && npx prisma migrate deploy`) or set AUTO_APPLY_MIGRATIONS=true.",
+      );
     }
 
     console.error(error);

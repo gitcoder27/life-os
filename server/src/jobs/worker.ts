@@ -1,10 +1,14 @@
 import { PrismaClient } from "@prisma/client";
 
-import { getEnv } from "../app/env.js";
+import { assertDatabaseSeparation, getEnv } from "../app/env.js";
+import { ensureDatabaseExists, ensureDatabaseMigrations } from "../app/db-bootstrap.js";
 import { getRegisteredJobs } from "./registry.js";
 
 async function startWorker() {
   const env = getEnv();
+  await ensureDatabaseExists(env);
+  await ensureDatabaseMigrations(env);
+  assertDatabaseSeparation(env);
   const prisma = new PrismaClient({
     datasources: {
       db: {
