@@ -67,6 +67,7 @@ export interface OnboardingDefaults {
 }
 
 export interface OnboardingStateResponse extends ApiMeta {
+  isRequired: boolean;
   isComplete: boolean;
   completedAt: string | null;
   nextStep: OnboardingStep | null;

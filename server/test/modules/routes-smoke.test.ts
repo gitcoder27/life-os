@@ -343,7 +343,12 @@ describe("module route smoke tests", () => {
 
     const response = await app!.inject({ method: "GET", url: "/api/onboarding/state" });
     expect(response.statusCode).toBe(200);
-    expect(JSON.parse(response.body).isComplete).toBe(false);
+    expect(JSON.parse(response.body)).toEqual(
+      expect.objectContaining({
+        isRequired: false,
+        isComplete: false,
+      }),
+    );
   });
 
   it("serves planning goals", async () => {

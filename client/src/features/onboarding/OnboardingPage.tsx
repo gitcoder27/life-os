@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 
 import {
   getMonthStartDate,
@@ -269,9 +269,9 @@ export function OnboardingPage() {
             L
           </span>
           <div>
-            <span className="page-eyebrow">First-run setup</span>
+            <span className="page-eyebrow">Optional setup</span>
             <div style={{ fontFamily: "var(--font-display)", fontSize: "1.5rem", fontWeight: 500, marginTop: "0.15rem" }}>
-              Create your Life OS
+              Starter setup
             </div>
           </div>
         </div>
@@ -285,9 +285,10 @@ export function OnboardingPage() {
             background: "rgba(255,255,255,0.03)",
           }}
         >
-          <div className="page-eyebrow" style={{ marginBottom: "0.4rem" }}>How to fill this</div>
+          <div className="page-eyebrow" style={{ marginBottom: "0.4rem" }}>How this works</div>
           <div style={{ color: "var(--text-secondary)", lineHeight: 1.6 }}>
-            Use short plain-language answers. Every step now maps directly to the setup payload.
+            This optional wizard sets up your habits, routines, goals, and tracking defaults in one pass.
+            You can skip this entirely — everything here can be configured later from Settings and the Habits page.
             If you leave routines, habits, or categories blank, the app will create sensible starter defaults.
           </div>
         </div>
@@ -497,14 +498,23 @@ export function OnboardingPage() {
         ) : null}
 
         <div className="button-row" style={{ marginTop: "1rem", justifyContent: "space-between" }}>
-          <button
-            className="button button--ghost"
-            type="button"
-            disabled={activeStep === 0}
-            onClick={() => setActiveStep((currentStep) => Math.max(0, currentStep - 1))}
-          >
-            Back
-          </button>
+          <div className="button-row">
+            <button
+              className="button button--ghost"
+              type="button"
+              disabled={activeStep === 0}
+              onClick={() => setActiveStep((currentStep) => Math.max(0, currentStep - 1))}
+            >
+              Back
+            </button>
+            <Link
+              className="button button--ghost"
+              to="/"
+              style={{ color: "var(--text-tertiary)" }}
+            >
+              Skip, go to app
+            </Link>
+          </div>
           <div className="button-row">
             <span className="list__subtle" style={{ alignSelf: "center" }}>
               Step {activeStep + 1} of {onboardingSteps.length}

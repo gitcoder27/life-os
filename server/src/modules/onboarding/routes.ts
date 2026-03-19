@@ -225,6 +225,7 @@ export const registerOnboardingRoutes: FastifyPluginAsync = async (app) => {
     const defaults = getOnboardingDefaults();
 
     const response: OnboardingStateResponse = withGeneratedAt({
+      isRequired: false,
       isComplete: Boolean(dbUser.onboardedAt),
       completedAt: dbUser.onboardedAt ? dbUser.onboardedAt.toISOString() : null,
       nextStep: dbUser.onboardedAt ? null : "account",

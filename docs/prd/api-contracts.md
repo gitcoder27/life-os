@@ -49,7 +49,7 @@ Purpose: return current session user and auth status.
 
 ### `GET /api/onboarding/state`
 
-Purpose: return whether onboarding is complete and any existing first-run defaults.
+Purpose: return whether optional onboarding has been completed, whether it is required for entry, and any existing first-run defaults.
 
 ### `POST /api/onboarding/complete`
 

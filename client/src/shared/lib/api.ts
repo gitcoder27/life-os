@@ -49,6 +49,7 @@ type OnboardingDefaults = {
 
 type OnboardingStateResponse = {
   generatedAt: string;
+  isRequired: boolean;
   isComplete: boolean;
   completedAt: string | null;
   nextStep: string | null;
@@ -1649,6 +1650,113 @@ export function useRoutineCheckinMutation(date: string) {
       errorMessage: "Routine update failed.",
     },
     onSuccess: () => invalidateCoreData(queryClient, date),
+  });
+}
+
+/* ── Habits CRUD ────────────────────────────── */
+
+export function useCreateHabitMutation() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (payload: {
+      title: string;
+      category?: string | null;
+      scheduleRule?: { daysOfWeek?: number[] };
+      targetPerDay?: number;
+    }) =>
+      apiRequest<HabitMutationResponse>("/api/habits/habits", {
+        method: "POST",
+        body: payload,
+      }),
+    meta: {
+      successMessage: "Habit created.",
+      errorMessage: "Habit creation failed.",
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.habits });
+    },
+  });
+}
+
+export function useUpdateHabitMutation() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      habitId,
+      ...payload
+    }: {
+      habitId: string;
+      title?: string;
+      category?: string | null;
+      scheduleRule?: { daysOfWeek?: number[] };
+      targetPerDay?: number;
+      status?: "active" | "paused" | "archived";
+    }) =>
+      apiRequest<HabitMutationResponse>(`/api/habits/habits/${habitId}`, {
+        method: "PATCH",
+        body: payload,
+      }),
+    meta: {
+      successMessage: "Habit updated.",
+      errorMessage: "Habit update failed.",
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.habits });
+    },
+  });
+}
+
+/* ── Routines CRUD ─────────────────────────── */
+
+export function useCreateRoutineMutation() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (payload: {
+      name: string;
+      period: "morning" | "evening";
+      items: Array<{ title: string; sortOrder: number; isRequired?: boolean }>;
+    }) =>
+      apiRequest<RoutineMutationResponse>("/api/habits/routines", {
+        method: "POST",
+        body: payload,
+      }),
+    meta: {
+      successMessage: "Routine created.",
+      errorMessage: "Routine creation failed.",
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.habits });
+    },
+  });
+}
+
+export function useUpdateRoutineMutation() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      routineId,
+      ...payload
+    }: {
+      routineId: string;
+      name?: string;
+      status?: "active" | "archived";
+      items?: Array<{ title: string; sortOrder: number; isRequired?: boolean }>;
+    }) =>
+      apiRequest<RoutineMutationResponse>(`/api/habits/routines/${routineId}`, {
+        method: "PATCH",
+        body: payload,
+      }),
+    meta: {
+      successMessage: "Routine updated.",
+      errorMessage: "Routine update failed.",
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.habits });
+    },
   });
 }
 

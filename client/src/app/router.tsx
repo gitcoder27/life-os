@@ -33,9 +33,6 @@ function RouteLoading() {
 
 function GuestRoute({ children }: { children: JSX.Element }) {
   const sessionQuery = useSessionQuery();
-  const onboardingQuery = useOnboardingStateQuery(
-    Boolean(sessionQuery.data?.authenticated),
-  );
 
   if (sessionQuery.isLoading) {
     return <RouteLoading />;
@@ -43,14 +40,6 @@ function GuestRoute({ children }: { children: JSX.Element }) {
 
   if (!sessionQuery.data?.authenticated) {
     return children;
-  }
-
-  if (onboardingQuery.isLoading) {
-    return <RouteLoading />;
-  }
-
-  if (onboardingQuery.data && !onboardingQuery.data.isComplete) {
-    return <Navigate to="/onboarding" replace />;
   }
 
   return <Navigate to="/" replace />;
@@ -65,7 +54,7 @@ function ProtectedRoute({
 }) {
   const sessionQuery = useSessionQuery();
   const onboardingQuery = useOnboardingStateQuery(
-    Boolean(sessionQuery.data?.authenticated),
+    allowIncompleteOnboarding && Boolean(sessionQuery.data?.authenticated),
   );
 
   if (sessionQuery.isLoading) {
@@ -76,16 +65,12 @@ function ProtectedRoute({
     return <Navigate to="/login" replace />;
   }
 
-  if (onboardingQuery.isLoading) {
-    return <RouteLoading />;
-  }
-
-  if (onboardingQuery.data) {
-    if (!allowIncompleteOnboarding && !onboardingQuery.data.isComplete) {
-      return <Navigate to="/onboarding" replace />;
+  if (allowIncompleteOnboarding) {
+    if (onboardingQuery.isLoading) {
+      return <RouteLoading />;
     }
 
-    if (allowIncompleteOnboarding && onboardingQuery.data.isComplete) {
+    if (onboardingQuery.data?.isComplete) {
       return <Navigate to="/" replace />;
     }
   }

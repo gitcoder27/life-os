@@ -1,8 +1,10 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 
 import {
   setPreferredTimezone,
   setPreferredWeekStart,
+  useOnboardingStateQuery,
   useSettingsProfileQuery,
   useUpdateSettingsProfileMutation,
 } from "../../shared/lib/api";
@@ -26,6 +28,7 @@ const weekDayOptions = [
 export function SettingsPage() {
   const settingsQuery = useSettingsProfileQuery();
   const updateMutation = useUpdateSettingsProfileMutation();
+  const onboardingQuery = useOnboardingStateQuery();
 
   const [form, setForm] = useState({
     displayName: "",
@@ -115,6 +118,23 @@ export function SettingsPage() {
       />
 
       <div className="settings-layout stagger">
+        {onboardingQuery.data && !onboardingQuery.data.isComplete ? (
+          <div className="settings-onboarding-cta">
+            <div className="settings-onboarding-cta__content">
+              <div className="settings-onboarding-cta__icon">✦</div>
+              <div>
+                <div className="settings-onboarding-cta__title">Starter setup available</div>
+                <div className="settings-onboarding-cta__copy">
+                  Import habits, routines, goals, and tracking defaults in one pass — or keep configuring things manually.
+                </div>
+              </div>
+            </div>
+            <Link className="button button--ghost button--small" to="/onboarding">
+              Open setup wizard
+            </Link>
+          </div>
+        ) : null}
+
         <SectionCard title="Account" subtitle="Read-only email and display name">
           <div className="stack-form">
             <label className="field">

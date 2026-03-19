@@ -1,5 +1,4 @@
 import { type FormEvent, useState } from "react";
-import { Link } from "react-router-dom";
 
 import { useLoginMutation } from "../../shared/lib/api";
 
@@ -81,12 +80,6 @@ export function LoginPage() {
             >
               {loginMutation.isPending ? "Signing in..." : "Sign in"}
             </button>
-            <Link
-              className="button button--ghost"
-              to="/onboarding"
-            >
-              First-time setup
-            </Link>
           </div>
         </form>
       </div>
