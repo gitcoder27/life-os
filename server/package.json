@@ -6,9 +6,12 @@
   "scripts": {
     "dev": "NODE_ENV=development tsx watch src/index.ts",
     "dev:worker": "NODE_ENV=development tsx watch src/jobs/worker.ts",
+    "prebuild": "npm run prisma:generate",
     "build": "tsc -p tsconfig.json",
+    "prestart": "npm run prisma:generate",
     "start": "NODE_ENV=production node dist/index.js",
     "worker": "NODE_ENV=production node dist/jobs/worker.js",
+    "pretypecheck": "npm run prisma:generate",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",

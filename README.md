@@ -26,5 +26,13 @@ Start with:
 - `npm install`
 - `npm run typecheck`
 - `npm run build`
+- `npm run dev`
 - `npm run dev:client`
 - `npm run dev:server`
+
+`npm run dev` starts both the frontend and backend in one terminal.
+
+Default local ports:
+
+- client dev server: `5174`
+- server API: `3004`
