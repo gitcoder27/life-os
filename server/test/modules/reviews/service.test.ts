@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const calculateDailyScoreMock = vi.fn();
 const ensureCycleMock = vi.fn();
@@ -27,6 +27,10 @@ describe("reviews service", () => {
     ensureCycleMock.mockReset();
     finalizeDailyScoreMock.mockReset();
     getWeeklyMomentumMock.mockReset();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it("builds daily review model from cycle summary and persisted review", async () => {
@@ -487,8 +491,11 @@ describe("reviews service", () => {
   });
 
   it("allows month and week submit operations to resolve", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-03-18T14:00:00.000Z"));
     ensureCycleMock.mockResolvedValue({ id: "cycle", cycleEndDate: new Date("2026-03-20T00:00:00.000Z") } as any);
     const prisma = {
+      userPreference: { findUnique: vi.fn().mockResolvedValue({ timezone: "UTC", weekStartsOn: 1 }) },
       weeklyReview: { upsert: vi.fn().mockResolvedValue({}) },
       monthlyReview: { upsert: vi.fn().mockResolvedValue({}) },
       planningCycle: { update: vi.fn().mockResolvedValue({}) },
@@ -501,7 +508,7 @@ describe("reviews service", () => {
       },
     } as any;
 
-    await submitWeeklyReview(prisma, "user-1", new Date("2026-03-14T00:00:00.000Z"), {
+    await submitWeeklyReview(prisma, "user-1", new Date("2026-03-09T00:00:00.000Z"), {
       biggestWin: "X",
       biggestMiss: "Y",
       mainLesson: "Lesson",
@@ -516,7 +523,7 @@ describe("reviews service", () => {
     await submitMonthlyReview(
       prisma,
       "user-1",
-      new Date("2026-03-01T00:00:00.000Z"),
+      new Date("2026-02-01T00:00:00.000Z"),
       {
         monthVerdict: "Great",
         biggestWin: "Big win",
@@ -529,5 +536,129 @@ describe("reviews service", () => {
         notes: "Okay",
       },
     );
+  });
+
+  it("returns the daily submission window in the review model", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-03-15T08:30:00.000Z"));
+
+    ensureCycleMock.mockResolvedValue({
+      priorities: [],
+      dailyReview: null,
+    } as any);
+    calculateDailyScoreMock.mockResolvedValue({
+      date: "2026-03-14",
+      value: 80,
+      label: "Solid Day",
+      earnedPoints: 0,
+      possiblePoints: 0,
+      buckets: [],
+      topReasons: [],
+      finalizedAt: null,
+      generatedAt: new Date().toISOString(),
+    });
+
+    const prisma = {
+      planningCycle: {
+        findUnique: vi.fn().mockResolvedValue({ priorities: [] }),
+      },
+      task: { findMany: vi.fn().mockResolvedValue([]) },
+      routine: { findMany: vi.fn().mockResolvedValue([]) },
+      routineItemCheckin: { findMany: vi.fn().mockResolvedValue([]) },
+      habit: { findMany: vi.fn().mockResolvedValue([]) },
+      habitCheckin: { findMany: vi.fn().mockResolvedValue([]) },
+      waterLog: { findMany: vi.fn().mockResolvedValue([]) },
+      mealLog: { findMany: vi.fn().mockResolvedValue([]) },
+      workoutDay: { findUnique: vi.fn().mockResolvedValue(null) },
+      expense: { findMany: vi.fn().mockResolvedValue([]) },
+      userPreference: {
+        findUnique: vi.fn().mockResolvedValue({
+          timezone: "UTC",
+          dailyWaterTargetMl: 2500,
+          dailyReviewStartTime: "20:00",
+          dailyReviewEndTime: "10:00",
+        }),
+      },
+    } as any;
+
+    const response = await getDailyReviewModel(prisma, "user-1", new Date("2026-03-14T00:00:00.000Z"));
+
+    expect(response.submissionWindow).toEqual(
+      expect.objectContaining({
+        isOpen: true,
+        status: "open",
+        requestedDate: "2026-03-14",
+        allowedDate: "2026-03-14",
+        timezone: "UTC",
+      }),
+    );
+  });
+
+  it("rejects daily review submission outside the active window", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-03-15T12:00:00.000Z"));
+
+    const prisma = {
+      userPreference: {
+        findUnique: vi.fn().mockResolvedValue({
+          timezone: "UTC",
+          dailyReviewStartTime: "20:00",
+          dailyReviewEndTime: "10:00",
+        }),
+      },
+    } as any;
+
+    await expect(
+      submitDailyReview(
+        prisma,
+        "user-1",
+        new Date("2026-03-14T00:00:00.000Z"),
+        {
+          biggestWin: "Focus",
+          frictionTag: "poor planning",
+          frictionNote: null,
+          energyRating: 3,
+          optionalNote: null,
+          carryForwardTaskIds: [],
+          droppedTaskIds: [],
+          rescheduledTasks: [],
+          tomorrowPriorities: [{ slot: 1, title: "tomorrow 1" }],
+        },
+      ),
+    ).rejects.toThrow("Daily review is closed right now");
+  });
+
+  it("rejects weekly and monthly submissions outside their allowed period", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-03-18T14:00:00.000Z"));
+
+    const prisma = {
+      userPreference: { findUnique: vi.fn().mockResolvedValue({ timezone: "UTC", weekStartsOn: 1 }) },
+    } as any;
+
+    await expect(
+      submitWeeklyReview(prisma, "user-1", new Date("2026-03-16T00:00:00.000Z"), {
+        biggestWin: "X",
+        biggestMiss: "Y",
+        mainLesson: "Lesson",
+        keepText: "Keep",
+        improveText: "Improve",
+        nextWeekPriorities: [{ slot: 1, title: "Next 1" }],
+      }),
+    ).rejects.toThrow("Weekly review can only be submitted for 2026-03-09 right now");
+
+    await expect(
+      submitMonthlyReview(prisma, "user-1", new Date("2026-03-01T00:00:00.000Z"), {
+        monthVerdict: "Great",
+        biggestWin: "Big win",
+        biggestLeak: "Big leak",
+        ratings: { energy: 4 },
+        nextMonthTheme: "Next",
+        threeOutcomes: ["One", "Two", "Three"],
+        habitChanges: ["Change A"],
+        simplifyText: "Less",
+        notes: "Okay",
+      }),
+    ).rejects.toThrow("Monthly review can only be submitted for 2026-02-01 right now");
   });
 });

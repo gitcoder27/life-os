@@ -43,6 +43,7 @@ import {
 } from "../../lib/time/user-time.js";
 import { parseOrThrow } from "../../lib/validation/parse.js";
 import { buildHomeGuidance } from "./guidance.js";
+import { getOpenDailyReviewRoute } from "../reviews/submission-window.js";
 import { calculateDailyScore, ensureCycle, getWeeklyMomentum } from "../scoring/service.js";
 
 const isoDateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/) as unknown as z.ZodType<IsoDateString>;
@@ -352,16 +353,32 @@ async function buildHomeOverview(
       },
     });
   }
-  if (!dayCycle.dailyReview) {
+  const now = new Date();
+  const openDailyReviewRoute =
+    targetIsoDate === currentIsoDate ? getOpenDailyReviewRoute(now, preferences) : null;
+  const openDailyReviewDate = openDailyReviewRoute?.split("date=")[1] ?? null;
+  const openDailyReviewCycle = openDailyReviewDate
+    ? openDailyReviewDate === targetIsoDate
+      ? dayCycle
+      : await ensureCycle(app.prisma, {
+          userId: user.id,
+          cycleType: "DAY",
+          cycleStartDate: parseIsoDate(openDailyReviewDate as IsoDateString),
+          cycleEndDate: parseIsoDate(openDailyReviewDate as IsoDateString),
+        })
+    : null;
+  const dailyReviewAvailable = Boolean(openDailyReviewRoute && openDailyReviewCycle && !openDailyReviewCycle.dailyReview);
+
+  if (dailyReviewAvailable && openDailyReviewRoute) {
     attentionItems.push({
-      id: `review-${toIsoDateString(targetDate)}`,
+      id: `review-${openDailyReviewDate}`,
       title: "Complete your daily review",
       kind: "review",
       tone: "warning",
       detail: "Close the day and seed tomorrow's priorities.",
       action: {
         type: "open_review",
-        route: "/reviews/daily",
+        route: openDailyReviewRoute,
       },
     });
   }
@@ -439,8 +456,9 @@ async function buildHomeOverview(
         task.status === "COMPLETED" ? "completed" : task.status === "DROPPED" ? "dropped" : "pending",
     })),
     weeklyChallenge,
-    dayReviewCompleted: Boolean(dayCycle.dailyReview),
-    currentHour: targetIsoDate === currentIsoDate ? getUserLocalHour(new Date(), preferences?.timezone) : 12,
+    dailyReviewAvailable,
+    dailyReviewRoute: dailyReviewAvailable ? openDailyReviewRoute : null,
+    currentHour: targetIsoDate === currentIsoDate ? getUserLocalHour(now, preferences?.timezone) : 12,
     health: {
       waterMl: healthSummary.waterMl,
       waterTargetMl: healthSummary.waterTargetMl,
@@ -449,7 +467,7 @@ async function buildHomeOverview(
 
   return withGeneratedAt({
     date: targetIsoDate,
-    greeting: getLocalGreeting(new Date(), preferences?.timezone),
+    greeting: getLocalGreeting(now, preferences?.timezone),
     dailyScore: {
       value: score.value,
       label: score.label,

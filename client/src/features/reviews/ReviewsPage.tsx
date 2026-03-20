@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { NavLink, useParams, useSearchParams } from "react-router-dom";
+import { NavLink, useNavigate, useParams, useSearchParams } from "react-router-dom";
 
 import {
   type DailyFrictionTag,
@@ -22,6 +22,8 @@ import {
   PageLoadingState,
 } from "../../shared/ui/PageState";
 import { SectionCard } from "../../shared/ui/SectionCard";
+import { ReviewWindowBanner } from "./ReviewWindowBanner";
+import { deriveReviewWindowPresentation, isOutOfWindowError } from "./reviewWindowModel";
 
 const reviewCadences = {
   daily: {
@@ -141,6 +143,26 @@ export function ReviewsPage() {
   ]);
   const [focusHabitId, setFocusHabitId] = useState<string | null>(null);
   const habitsQuery = useHabitsQuery();
+  const navigate = useNavigate();
+
+  const submissionWindow = reviewQuery.data?.review.submissionWindow ?? null;
+  const windowPresentation = submissionWindow
+    ? deriveReviewWindowPresentation(submissionWindow, cadenceKey)
+    : null;
+  const isWindowOpen = submissionWindow?.isOpen ?? false;
+
+  // Auto-redirect: if no explicit ?date= and the backend says a different date is allowed
+  useEffect(() => {
+    if (
+      !dateParam &&
+      submissionWindow?.allowedDate &&
+      submissionWindow.allowedDate !== reviewQuery.data?.keyDate
+    ) {
+      navigate(`/reviews/${cadenceKey}?date=${submissionWindow.allowedDate}`, {
+        replace: true,
+      });
+    }
+  }, [dateParam, submissionWindow, reviewQuery.data?.keyDate, cadenceKey, navigate]);
 
   const requiredCount = "prompts" in config ? config.prompts.length : 0;
   const completedCount = responses.filter((response) => response.trim().length > 0).length;
@@ -399,9 +421,28 @@ export function ReviewsPage() {
   const canSubmitDaily =
     reviewQuery.data.cadence === "daily" &&
     !isDailyCompleted &&
+    isWindowOpen &&
     hasDecisionForEveryPendingTask &&
     hasThreeTomorrowPriorities &&
     !isSubmitting;
+
+  function handleNavigateToAllowed() {
+    if (submissionWindow?.allowedDate) {
+      navigate(`/reviews/${cadenceKey}?date=${submissionWindow.allowedDate}`);
+    }
+  }
+
+  function formatSubmitError(error: unknown): string {
+    if (isOutOfWindowError(error)) {
+      return windowPresentation
+        ? `Submission blocked: ${windowPresentation.headline.toLowerCase()}. ${windowPresentation.description}`
+        : "This review cannot be submitted outside its allowed time window.";
+    }
+    if (error instanceof Error) {
+      return error.message;
+    }
+    return "Review submission failed.";
+  }
 
   return (
     <div className="page">
@@ -422,6 +463,14 @@ export function ReviewsPage() {
         title={config.title}
         description={config.description}
       />
+
+      {windowPresentation && (
+        <ReviewWindowBanner
+          presentation={windowPresentation}
+          cadence={cadenceKey}
+          onNavigateToAllowed={handleNavigateToAllowed}
+        />
+      )}
 
       {reviewQuery.data.cadence === "daily" ? (
         <>
@@ -714,12 +763,15 @@ export function ReviewsPage() {
             <>
               <div className="button-row" style={{ paddingTop: "0.5rem" }}>
                 <span className="support-copy">
-                  {hasDecisionForEveryPendingTask
-                    ? "All pending tasks have decisions."
-                    : "Choose carry forward, drop, or reschedule for every pending task."}{" "}
-                  {hasThreeTomorrowPriorities
-                    ? "Three tomorrow priorities are set."
-                    : "Fill all three tomorrow priorities to submit."}
+                  {!isWindowOpen
+                    ? "Submission is currently disabled — the review window is not open."
+                    : hasDecisionForEveryPendingTask
+                      ? "All pending tasks have decisions."
+                      : "Choose carry forward, drop, or reschedule for every pending task."}{" "}
+                  {isWindowOpen &&
+                    (hasThreeTomorrowPriorities
+                      ? "Three tomorrow priorities are set."
+                      : "Fill all three tomorrow priorities to submit.")}
                 </span>
                 <button
                   className="button button--primary"
@@ -731,8 +783,11 @@ export function ReviewsPage() {
                 </button>
               </div>
               {submitError ? (
-                <div className="inline-state inline-state--error" style={{ marginTop: "0.75rem" }}>
-                  {submitError instanceof Error ? submitError.message : "Review submission failed."}
+                <div
+                  className={`inline-state ${isOutOfWindowError(submitError) ? "inline-state--out-of-window" : "inline-state--error"}`}
+                  style={{ marginTop: "0.75rem" }}
+                >
+                  {formatSubmitError(submitError)}
                 </div>
               ) : null}
               {submitResult && "score" in submitResult ? (
@@ -845,19 +900,26 @@ export function ReviewsPage() {
           </div>
 
           <div className="button-row" style={{ paddingTop: "0.5rem" }}>
-            <span className="support-copy">Draft saving is not live yet, so this form only supports full submit.</span>
+            <span className="support-copy">
+              {!isWindowOpen
+                ? "Submission is currently disabled — the review window is not open."
+                : "Draft saving is not live yet, so this form only supports full submit."}
+            </span>
             <button
               className="button button--primary"
               type="button"
               onClick={() => void handleSubmit()}
-              disabled={isSubmitting}
+              disabled={isSubmitting || !isWindowOpen}
             >
               {isSubmitting ? "Submitting..." : "Submit review"}
             </button>
           </div>
           {submitError ? (
-            <div className="inline-state inline-state--error" style={{ marginTop: "0.75rem" }}>
-              {submitError instanceof Error ? submitError.message : "Review submission failed."}
+            <div
+              className={`inline-state ${isOutOfWindowError(submitError) ? "inline-state--out-of-window" : "inline-state--error"}`}
+              style={{ marginTop: "0.75rem" }}
+            >
+              {formatSubmitError(submitError)}
             </div>
           ) : null}
           {submitResult ? (

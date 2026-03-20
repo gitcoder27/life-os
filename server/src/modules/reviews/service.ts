@@ -1,3 +1,4 @@
+import type { ReviewSubmissionWindow } from "@life-os/contracts";
 import type { Prisma, PrismaClient } from "@prisma/client";
 
 import { AppError } from "../../lib/errors/app-error.js";
@@ -11,6 +12,11 @@ import { addDays, addIsoDays, getMonthEndDate, getWeekEndDate, parseIsoDate } fr
 import { toIsoDateString } from "../../lib/time/date.js";
 import { getDateRangeWindowUtc, getDayWindowUtc, normalizeTimezone } from "../../lib/time/user-time.js";
 import { calculateDailyScore, ensureCycle, finalizeDailyScore, getWeeklyMomentum } from "../scoring/service.js";
+import {
+  resolveDailyReviewSubmissionWindow,
+  resolveMonthlyReviewSubmissionWindow,
+  resolveWeeklyReviewSubmissionWindow,
+} from "./submission-window.js";
 
 type ReviewFrictionTag =
   | "low energy"
@@ -143,6 +149,7 @@ interface DailyReviewResponse {
   incompleteTasks: PlanningTaskItem[];
   existingReview: ExistingDailyReview | null;
   isCompleted: boolean;
+  submissionWindow: ReviewSubmissionWindow;
   seededTomorrowPriorities: Array<{
     id: string;
     slot: 1 | 2 | 3;
@@ -171,6 +178,7 @@ interface WeeklyReviewResponse {
     topFrictionTags: Array<{ tag: ReviewFrictionTag; count: number }>;
   };
   existingReview: ExistingWeeklyReview | null;
+  submissionWindow: ReviewSubmissionWindow;
   generatedAt: string;
 }
 
@@ -188,6 +196,7 @@ interface MonthlyReviewResponse {
     commonFrictionTags: Array<{ tag: ReviewFrictionTag; count: number }>;
   };
   existingReview: ExistingMonthlyReview | null;
+  submissionWindow: ReviewSubmissionWindow;
   generatedAt: string;
 }
 
@@ -244,6 +253,22 @@ async function getUserPreferences(prisma: PrismaClient, userId: string) {
         },
       })
     : null;
+}
+
+function assertReviewSubmissionWindow(reviewLabel: string, submissionWindow: ReviewSubmissionWindow) {
+  if (submissionWindow.isOpen) {
+    return;
+  }
+
+  const message = submissionWindow.allowedDate
+    ? `${reviewLabel} can only be submitted for ${submissionWindow.allowedDate} right now. Active window: ${submissionWindow.opensAt ?? "unknown"} to ${submissionWindow.closesAt ?? "unknown"} (${submissionWindow.timezone}).`
+    : `${reviewLabel} is closed right now. The next window opens at ${submissionWindow.opensAt ?? "unknown"} and closes at ${submissionWindow.closesAt ?? "unknown"} (${submissionWindow.timezone}).`;
+
+  throw new AppError({
+    statusCode: 409,
+    code: "REVIEW_OUT_OF_WINDOW",
+    message,
+  });
 }
 
 function listIsoDates(startDate: string, endDate: string) {
@@ -421,7 +446,8 @@ export async function getDailyReviewModel(
   date: Date,
 ): Promise<DailyReviewResponse> {
   const tomorrowDate = addDays(date, 1);
-  const [{ cycle, summary, incompleteTasks }, score, tomorrowCycle] = await Promise.all([
+  const [preferences, { cycle, summary, incompleteTasks }, score, tomorrowCycle] = await Promise.all([
+    getUserPreferences(prisma, userId),
     getDailySummary(prisma, userId, date),
     calculateDailyScore(prisma, userId, date),
     prisma.planningCycle.findUnique({
@@ -452,6 +478,7 @@ export async function getDailyReviewModel(
         completedAt: cycle.dailyReview.completedAt.toISOString(),
       }
     : null;
+  const submissionWindow = resolveDailyReviewSubmissionWindow(toIsoDateString(date), new Date(), preferences);
 
   return {
     date: toIsoDateString(date),
@@ -460,6 +487,7 @@ export async function getDailyReviewModel(
     incompleteTasks,
     existingReview,
     isCompleted: Boolean(existingReview),
+    submissionWindow,
     seededTomorrowPriorities: tomorrowCycle?.priorities.map(serializePriority) ?? [],
     generatedAt: new Date().toISOString(),
   };
@@ -568,6 +596,11 @@ export async function submitDailyReview(
   payload: SubmitDailyReviewRequest,
 ) {
   dedupeTaskIds(payload);
+  const preferences = await getUserPreferences(prisma, userId);
+  assertReviewSubmissionWindow(
+    "Daily review",
+    resolveDailyReviewSubmissionWindow(toIsoDateString(date), new Date(), preferences),
+  );
   const cycle = await ensureCycle(prisma, {
     userId,
     cycleType: "DAY",
@@ -728,6 +761,7 @@ export async function getWeeklyReviewModel(
   const waterTargetMl = preferences?.dailyWaterTargetMl ?? 2500;
   const effectiveEndDate = cycle.cycleEndDate;
   const effectiveEndIsoDate = toIsoDateString(effectiveEndDate);
+  const submissionWindow = resolveWeeklyReviewSubmissionWindow(startIsoDate, new Date(), preferences);
   const rangeWindow = getDateRangeWindowUtc(startIsoDate, effectiveEndIsoDate, timezone);
   const scopedIsoDates = listIsoDates(startIsoDate, effectiveEndIsoDate);
   const [scores, habits, routineCheckins, routines, workoutDays, waterLogs, mealLogs, expenses, dailyReviews] =
@@ -914,6 +948,7 @@ export async function getWeeklyReviewModel(
         .map(([tag, count]) => ({ tag: tag as ReviewFrictionTag, count })),
     },
     existingReview,
+    submissionWindow,
     generatedAt: new Date().toISOString(),
   };
 }
@@ -928,6 +963,11 @@ export async function submitWeeklyReview(
   startDate: Date,
   payload: SubmitWeeklyReviewRequest,
 ) {
+  const preferences = await getUserPreferences(prisma, userId);
+  assertReviewSubmissionWindow(
+    "Weekly review",
+    resolveWeeklyReviewSubmissionWindow(toIsoDateString(startDate), new Date(), preferences),
+  );
   const cycle = await ensureCycle(prisma, {
     userId,
     cycleType: "WEEK",
@@ -1005,6 +1045,7 @@ export async function getMonthlyReviewModel(
   const waterTargetMl = preferences?.dailyWaterTargetMl ?? 2500;
   const effectiveEndDate = cycle.cycleEndDate;
   const effectiveEndIsoDate = toIsoDateString(effectiveEndDate);
+  const submissionWindow = resolveMonthlyReviewSubmissionWindow(startIsoDate, new Date(), preferences);
   const rangeWindow = getDateRangeWindowUtc(startIsoDate, effectiveEndIsoDate, timezone);
   const scopedIsoDates = listIsoDates(startIsoDate, effectiveEndIsoDate);
   const [scores, habits, workoutDays, waterLogs, expenses, dailyReviews] = await Promise.all([
@@ -1155,6 +1196,7 @@ export async function getMonthlyReviewModel(
         .map(([tag, count]) => ({ tag: tag as ReviewFrictionTag, count })),
     },
     existingReview,
+    submissionWindow,
     generatedAt: new Date().toISOString(),
   };
 }
@@ -1165,6 +1207,11 @@ export async function submitMonthlyReview(
   startDate: Date,
   payload: SubmitMonthlyReviewRequest,
 ) {
+  const preferences = await getUserPreferences(prisma, userId);
+  assertReviewSubmissionWindow(
+    "Monthly review",
+    resolveMonthlyReviewSubmissionWindow(toIsoDateString(startDate), new Date(), preferences),
+  );
   const cycle = await ensureCycle(prisma, {
     userId,
     cycleType: "MONTH",

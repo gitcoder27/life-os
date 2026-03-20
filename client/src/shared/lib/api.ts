@@ -713,6 +713,16 @@ export type DailyFrictionTag =
   | "unclear task"
   | "travel or schedule disruption";
 
+type ReviewSubmissionWindow = {
+  isOpen: boolean;
+  status: "open" | "too_early" | "too_late" | "wrong_period" | "no_open_window";
+  requestedDate: string;
+  allowedDate: string | null;
+  opensAt: string | null;
+  closesAt: string | null;
+  timezone: string;
+};
+
 type DailyReviewResponse = {
   generatedAt: string;
   date: string;
@@ -742,6 +752,7 @@ type DailyReviewResponse = {
     completedAt: string;
   } | null;
   isCompleted: boolean;
+  submissionWindow: ReviewSubmissionWindow;
   seededTomorrowPriorities: DayPlanResponse["priorities"];
 };
 
@@ -777,6 +788,7 @@ type WeeklyReviewResponse = {
     notes: string | null;
     completedAt: string;
   } | null;
+  submissionWindow: ReviewSubmissionWindow;
 };
 
 type MonthlyReviewResponse = {
@@ -815,6 +827,7 @@ type MonthlyReviewResponse = {
     notes: string | null;
     completedAt: string;
   } | null;
+  submissionWindow: ReviewSubmissionWindow;
 };
 
 type DailyReviewMutationResponse = {

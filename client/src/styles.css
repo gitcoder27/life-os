@@ -1289,6 +1289,162 @@ img { max-width: 100%; display: block; }
 .review-progress__step--complete { background: var(--accent); }
 .review-progress__step--active   { background: var(--accent-soft); box-shadow: 0 0 8px var(--accent-soft); }
 
+/* ── Review Window Banner ── */
+
+.review-window {
+  display: flex;
+  gap: 0.85rem;
+  padding: 0.9rem 1rem;
+  border-radius: var(--r);
+  border: 1px solid var(--border);
+  background: linear-gradient(135deg, var(--panel-elevated) 0%, var(--panel) 100%);
+  margin-bottom: 1rem;
+  animation: fadeIn var(--dur-slow) var(--ease);
+}
+
+.review-window__rail {
+  display: flex;
+  align-items: stretch;
+  padding: 0.15rem 0;
+  flex-shrink: 0;
+}
+
+.review-window__indicator {
+  width: 3px;
+  border-radius: var(--r-pill);
+  background: var(--text-tertiary);
+  transition: background var(--dur) var(--ease);
+}
+
+.review-window--open .review-window__indicator {
+  background: var(--positive);
+  box-shadow: 0 0 8px rgba(93, 184, 106, 0.25);
+}
+
+.review-window--too-early .review-window__indicator {
+  background: var(--accent);
+  box-shadow: 0 0 8px rgba(217, 153, 58, 0.2);
+}
+
+.review-window--too-late .review-window__indicator {
+  background: var(--negative);
+  box-shadow: 0 0 8px rgba(201, 85, 76, 0.2);
+}
+
+.review-window--wrong-period .review-window__indicator {
+  background: var(--accent);
+}
+
+.review-window--no-open-window .review-window__indicator {
+  background: var(--text-tertiary);
+}
+
+.review-window__body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  min-width: 0;
+  flex: 1;
+}
+
+.review-window__top-row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.review-window__tz {
+  font-size: var(--fs-micro);
+  color: var(--text-tertiary);
+  letter-spacing: 0.03em;
+  font-weight: 500;
+}
+
+.review-window__headline {
+  font-size: var(--fs-h3);
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  margin: 0;
+}
+
+.review-window__description {
+  font-size: var(--fs-small);
+  color: var(--text-secondary);
+  line-height: 1.45;
+  margin: 0;
+}
+
+.review-window__timestamps {
+  display: flex;
+  gap: 1.2rem;
+  margin-top: 0.35rem;
+}
+
+.review-window__ts {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: var(--fs-micro);
+}
+
+.review-window__ts-label {
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-weight: 600;
+}
+
+.review-window__ts-value {
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.review-window__navigate {
+  margin-top: 0.4rem;
+  align-self: flex-start;
+}
+
+/* Open state border glow */
+.review-window--open {
+  border-color: rgba(93, 184, 106, 0.18);
+  background: linear-gradient(135deg, rgba(93, 184, 106, 0.04) 0%, var(--panel) 100%);
+}
+
+/* Warning states */
+.review-window--too-early,
+.review-window--wrong-period {
+  border-color: rgba(217, 153, 58, 0.15);
+  background: linear-gradient(135deg, rgba(217, 153, 58, 0.03) 0%, var(--panel) 100%);
+}
+
+/* Closed/late state */
+.review-window--too-late {
+  border-color: rgba(201, 85, 76, 0.15);
+  background: linear-gradient(135deg, rgba(201, 85, 76, 0.03) 0%, var(--panel) 100%);
+}
+
+/* Muted no-window state */
+.review-window--no-open-window {
+  border-color: var(--border);
+  opacity: 0.85;
+}
+
+/* Out-of-window error inline state */
+.inline-state--out-of-window {
+  border-color: rgba(217, 153, 58, 0.22);
+  background: var(--accent-soft);
+  color: var(--accent-bright);
+}
+
+/* Disabled submit state */
+.button--primary:disabled,
+.button--primary[disabled] {
+  opacity: 0.45;
+  cursor: not-allowed;
+  pointer-events: none;
+  box-shadow: none;
+}
+
 .score-reasons {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));

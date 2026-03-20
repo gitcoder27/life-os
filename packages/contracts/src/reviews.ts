@@ -42,6 +42,23 @@ export interface ExistingDailyReview {
   completedAt: string;
 }
 
+export type ReviewSubmissionWindowStatus =
+  | "open"
+  | "too_early"
+  | "too_late"
+  | "wrong_period"
+  | "no_open_window";
+
+export interface ReviewSubmissionWindow {
+  isOpen: boolean;
+  status: ReviewSubmissionWindowStatus;
+  requestedDate: IsoDateString;
+  allowedDate: IsoDateString | null;
+  opensAt: string | null;
+  closesAt: string | null;
+  timezone: string;
+}
+
 export interface DailyReviewResponse extends ApiMeta {
   date: IsoDateString;
   summary: DailyReviewSummary;
@@ -49,6 +66,7 @@ export interface DailyReviewResponse extends ApiMeta {
   incompleteTasks: PlanningTaskItem[];
   existingReview: ExistingDailyReview | null;
   isCompleted: boolean;
+  submissionWindow: ReviewSubmissionWindow;
   seededTomorrowPriorities: PlanningPriorityItem[];
 }
 
@@ -102,6 +120,7 @@ export interface WeeklyReviewResponse extends ApiMeta {
   endDate: IsoDateString;
   summary: WeeklyReviewSummary;
   existingReview: ExistingWeeklyReview | null;
+  submissionWindow: ReviewSubmissionWindow;
 }
 
 export interface SubmitWeeklyReviewRequest {
@@ -151,6 +170,7 @@ export interface MonthlyReviewResponse extends ApiMeta {
   endDate: IsoDateString;
   summary: MonthlyReviewSummary;
   existingReview: ExistingMonthlyReview | null;
+  submissionWindow: ReviewSubmissionWindow;
 }
 
 export interface SubmitMonthlyReviewRequest {

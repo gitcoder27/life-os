@@ -43,7 +43,8 @@ interface GuidanceInput {
   priorities: GuidancePriority[];
   tasks: GuidanceTask[];
   weeklyChallenge: WeeklyHabitChallenge | null;
-  dayReviewCompleted: boolean;
+  dailyReviewAvailable: boolean;
+  dailyReviewRoute: string | null;
   currentHour: number;
   health: {
     waterMl: number;
@@ -160,7 +161,7 @@ function buildRecommendations(input: GuidanceInput): HomeGuidanceRecommendation[
     });
   }
 
-  if (!input.dayReviewCompleted && input.currentHour >= 18) {
+  if (input.dailyReviewAvailable && input.dailyReviewRoute) {
     addRecommendation({
       id: "review:daily",
       kind: "review",
@@ -169,7 +170,7 @@ function buildRecommendations(input: GuidanceInput): HomeGuidanceRecommendation[
       impactLabel: "Seed tomorrow",
       action: {
         type: "open_review",
-        route: "/reviews/daily",
+        route: input.dailyReviewRoute,
       },
     });
   }

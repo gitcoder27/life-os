@@ -15,6 +15,7 @@ import {
   normalizeTimezone,
 } from "../../lib/time/user-time.js";
 import { ensureCycle } from "../scoring/service.js";
+import { resolveDailyReviewSubmissionWindow } from "../reviews/submission-window.js";
 
 interface NotificationGenerationResult {
   created: number;
@@ -104,6 +105,12 @@ export async function generateRuleNotifications(
     const dayWindow = getDayWindowUtc(todayIso, timezone);
     const lateEvening = getUserLocalHour(now, timezone) >= 20;
     const lateAfternoon = getUserLocalHour(now, timezone) >= 18;
+    const reviewPreferences = {
+      timezone,
+      weekStartsOn,
+      dailyReviewStartTime: user.preferences?.dailyReviewStartTime,
+      dailyReviewEndTime: user.preferences?.dailyReviewEndTime,
+    };
 
     const [
       dueAdminItems,
@@ -332,7 +339,8 @@ export async function generateRuleNotifications(
       cycleStartDate: today,
       cycleEndDate: today,
     });
-    if (lateEvening && !todayCycle.dailyReview) {
+    const todayReviewWindow = resolveDailyReviewSubmissionWindow(todayIso, now, reviewPreferences);
+    if (todayReviewWindow.isOpen && todayReviewWindow.allowedDate === todayIso && !todayCycle.dailyReview) {
       const createdNotification = await ensureGeneratedNotification(prisma, {
         userId: user.id,
         notificationType: "review",
@@ -342,8 +350,8 @@ export async function generateRuleNotifications(
         entityType: "daily_review",
         entityId: `daily-review:${todayIso}`,
         ruleKey: "daily_review_due",
-        visibleFrom: getTimeWindowUtc(todayIso, "20:00", timezone),
-        expiresAt: dayWindow.end,
+        visibleFrom: todayReviewWindow.opensAt ? new Date(todayReviewWindow.opensAt) : getTimeWindowUtc(todayIso, "20:00", timezone),
+        expiresAt: todayReviewWindow.closesAt ? new Date(todayReviewWindow.closesAt) : dayWindow.end,
       });
 
       if (createdNotification) {
@@ -354,13 +362,15 @@ export async function generateRuleNotifications(
     }
 
     const yesterday = parseIsoDate(addIsoDays(todayIso, -1));
+    const yesterdayIso = toIsoDateString(yesterday);
     const yesterdayCycle = await ensureCycle(prisma, {
       userId: user.id,
       cycleType: "DAY",
       cycleStartDate: yesterday,
       cycleEndDate: yesterday,
     });
-    if (!yesterdayCycle.dailyReview) {
+    const yesterdayReviewWindow = resolveDailyReviewSubmissionWindow(yesterdayIso, now, reviewPreferences);
+    if (yesterdayReviewWindow.isOpen && yesterdayReviewWindow.allowedDate === yesterdayIso && !yesterdayCycle.dailyReview) {
       const createdNotification = await ensureGeneratedNotification(prisma, {
         userId: user.id,
         notificationType: "review",
@@ -370,7 +380,7 @@ export async function generateRuleNotifications(
         entityType: "daily_review",
         entityId: `daily-review-overdue:${toIsoDateString(yesterday)}`,
         ruleKey: "daily_review_overdue",
-        expiresAt: dayWindow.end,
+        expiresAt: yesterdayReviewWindow.closesAt ? new Date(yesterdayReviewWindow.closesAt) : dayWindow.end,
       });
 
       if (createdNotification) {
