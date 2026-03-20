@@ -358,10 +358,10 @@ async function buildHomeOverview(
     targetIsoDate === currentIsoDate ? getOpenDailyReviewRoute(now, preferences) : null;
   const openDailyReviewDate = openDailyReviewRoute?.split("date=")[1] ?? null;
   const openDailyReviewCycle = openDailyReviewDate
-    ? openDailyReviewDate === targetIsoDate
+      ? openDailyReviewDate === targetIsoDate
       ? dayCycle
       : await ensureCycle(app.prisma, {
-          userId: user.id,
+          userId,
           cycleType: "DAY",
           cycleStartDate: parseIsoDate(openDailyReviewDate as IsoDateString),
           cycleEndDate: parseIsoDate(openDailyReviewDate as IsoDateString),

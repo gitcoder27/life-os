@@ -174,3 +174,15 @@ export function isOutOfWindowError(error: unknown): boolean {
   }
   return false;
 }
+
+export function isAlreadySubmittedError(error: unknown): boolean {
+  if (
+    error &&
+    typeof error === "object" &&
+    "code" in error &&
+    (error as { code: string }).code === "REVIEW_ALREADY_SUBMITTED"
+  ) {
+    return true;
+  }
+  return false;
+}

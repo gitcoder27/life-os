@@ -1436,6 +1436,85 @@ img { max-width: 100%; display: block; }
   color: var(--accent-bright);
 }
 
+/* Already-submitted inline error */
+.inline-state--already-submitted {
+  border-color: rgba(217, 153, 58, 0.22);
+  background: var(--accent-soft);
+  color: var(--accent-bright);
+}
+
+/* ── Locked Review Banner ── */
+
+.locked-review-banner {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.65rem 1rem;
+  border-radius: var(--r);
+  border: 1px solid rgba(93, 184, 106, 0.18);
+  background: linear-gradient(135deg, rgba(93, 184, 106, 0.04) 0%, var(--panel) 100%);
+  margin-bottom: 1rem;
+  animation: fadeIn var(--dur-slow) var(--ease);
+}
+
+.locked-review-banner__text {
+  font-size: var(--fs-small);
+  color: var(--text-secondary);
+}
+
+/* ── Snapshot List (read-only review data) ── */
+
+.snapshot-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  margin: 0;
+  padding: 0;
+}
+
+.snapshot-list__row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  padding: 0.55rem 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.snapshot-list__row:last-child {
+  border-bottom: none;
+}
+
+.snapshot-list dt {
+  font-size: var(--fs-micro);
+  font-weight: 600;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.snapshot-list dd {
+  margin: 0;
+  font-size: var(--fs-body);
+  color: var(--text);
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+
+/* Outcomes sub-list inside snapshot */
+.snapshot-outcomes {
+  margin: 0;
+  padding-left: 1.2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.snapshot-outcomes li {
+  font-size: var(--fs-body);
+  color: var(--text);
+  line-height: 1.45;
+}
+
 /* Disabled submit state */
 .button--primary:disabled,
 .button--primary[disabled] {

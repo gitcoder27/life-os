@@ -10,6 +10,7 @@ export type ApiErrorCode =
   | "FORBIDDEN"
   | "NOT_FOUND"
   | "CONFLICT"
+  | "REVIEW_ALREADY_SUBMITTED"
   | "REVIEW_OUT_OF_WINDOW"
   | "RATE_LIMITED"
   | "INTERNAL_ERROR";

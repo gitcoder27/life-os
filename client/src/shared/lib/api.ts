@@ -788,6 +788,14 @@ type WeeklyReviewResponse = {
     notes: string | null;
     completedAt: string;
   } | null;
+  seededNextWeekPriorities?: Array<{
+    id: string;
+    slot: 1 | 2 | 3;
+    title: string;
+    status: "pending" | "completed" | "dropped";
+    goalId: string | null;
+    completedAt: string | null;
+  }>;
   submissionWindow: ReviewSubmissionWindow;
 };
 
@@ -827,6 +835,15 @@ type MonthlyReviewResponse = {
     notes: string | null;
     completedAt: string;
   } | null;
+  seededNextMonthTheme?: string | null;
+  seededNextMonthOutcomes?: Array<{
+    id: string;
+    slot: 1 | 2 | 3;
+    title: string;
+    status: "pending" | "completed" | "dropped";
+    goalId: string | null;
+    completedAt: string | null;
+  }>;
   submissionWindow: ReviewSubmissionWindow;
 };
 

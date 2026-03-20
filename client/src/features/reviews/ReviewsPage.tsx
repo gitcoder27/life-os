@@ -23,7 +23,7 @@ import {
 } from "../../shared/ui/PageState";
 import { SectionCard } from "../../shared/ui/SectionCard";
 import { ReviewWindowBanner } from "./ReviewWindowBanner";
-import { deriveReviewWindowPresentation, isOutOfWindowError } from "./reviewWindowModel";
+import { deriveReviewWindowPresentation, isAlreadySubmittedError, isOutOfWindowError } from "./reviewWindowModel";
 
 const reviewCadences = {
   daily: {
@@ -331,32 +331,44 @@ export function ReviewsPage() {
           ? splitEntries(responses[4])
           : [responses[3] || "Protect momentum"],
       );
-      await submitWeeklyReviewMutation.mutateAsync({
-        biggestWin: responses[0] || "Kept momentum",
-        biggestMiss: responses[1] || "Missed a key follow-through",
-        mainLesson: responses[2] || "Keep the system simple",
-        keepText: responses[3] || "Protect the existing routine",
-        improveText: responses[4] || "Clarify next week's priorities",
-        nextWeekPriorities,
-        focusHabitId: focusHabitId || null,
-        notes: responses.join("\n\n"),
-      });
+      try {
+        await submitWeeklyReviewMutation.mutateAsync({
+          biggestWin: responses[0] || "Kept momentum",
+          biggestMiss: responses[1] || "Missed a key follow-through",
+          mainLesson: responses[2] || "Keep the system simple",
+          keepText: responses[3] || "Protect the existing routine",
+          improveText: responses[4] || "Clarify next week's priorities",
+          nextWeekPriorities,
+          focusHabitId: focusHabitId || null,
+          notes: responses.join("\n\n"),
+        });
+      } catch (error) {
+        if (isAlreadySubmittedError(error)) {
+          void reviewQuery.refetch();
+        }
+      }
       return;
     }
 
-    await submitMonthlyReviewMutation.mutateAsync({
-      monthVerdict: responses[0] || "Steady progress",
-      biggestWin: responses[1] || "Built consistency",
-      biggestLeak: responses[2] || "Lost time on low-value work",
-      ratings: {
-        overall: 3,
-      },
-      nextMonthTheme: responses[3] || "Protect momentum",
-      threeOutcomes: splitEntries(responses[4]),
-      habitChanges: [],
-      simplifyText: responses[2] || "Remove low-signal commitments",
-      notes: responses.join("\n\n"),
-    });
+    try {
+      await submitMonthlyReviewMutation.mutateAsync({
+        monthVerdict: responses[0] || "Steady progress",
+        biggestWin: responses[1] || "Built consistency",
+        biggestLeak: responses[2] || "Lost time on low-value work",
+        ratings: {
+          overall: 3,
+        },
+        nextMonthTheme: responses[3] || "Protect momentum",
+        threeOutcomes: splitEntries(responses[4]),
+        habitChanges: [],
+        simplifyText: responses[2] || "Remove low-signal commitments",
+        notes: responses.join("\n\n"),
+      });
+    } catch (error) {
+      if (isAlreadySubmittedError(error)) {
+        void reviewQuery.refetch();
+      }
+    }
   }
 
   if (reviewQuery.isLoading && !reviewQuery.data) {
@@ -392,6 +404,25 @@ export function ReviewsPage() {
     submitMonthlyReviewMutation.data;
   const dailyReview = reviewQuery.data.cadence === "daily" ? reviewQuery.data.review : null;
   const isDailyCompleted = dailyReview?.isCompleted ?? false;
+
+  const weeklyReview = reviewQuery.data.cadence === "weekly" ? reviewQuery.data.review : null;
+  const isWeeklyLocked = weeklyReview?.existingReview !== null && weeklyReview?.existingReview !== undefined;
+
+  const monthlyReview = reviewQuery.data.cadence === "monthly" ? reviewQuery.data.review : null;
+  const isMonthlyLocked = monthlyReview?.existingReview !== null && monthlyReview?.existingReview !== undefined;
+  const seededNextWeekPriorities = Array.isArray(weeklyReview?.seededNextWeekPriorities)
+    ? weeklyReview.seededNextWeekPriorities
+    : [];
+  const monthlyThreeOutcomes = Array.isArray(monthlyReview?.existingReview?.threeOutcomes)
+    ? monthlyReview.existingReview.threeOutcomes
+    : [];
+  const monthlyHabitChanges = Array.isArray(monthlyReview?.existingReview?.habitChanges)
+    ? monthlyReview.existingReview.habitChanges
+    : [];
+  const seededNextMonthTheme = monthlyReview?.seededNextMonthTheme ?? null;
+  const seededNextMonthOutcomes = Array.isArray(monthlyReview?.seededNextMonthOutcomes)
+    ? monthlyReview.seededNextMonthOutcomes
+    : [];
 
   const dailyPendingTasks =
     dailyReview?.incompleteTasks
@@ -433,6 +464,9 @@ export function ReviewsPage() {
   }
 
   function formatSubmitError(error: unknown): string {
+    if (isAlreadySubmittedError(error)) {
+      return "This review period has already been submitted and is now locked.";
+    }
     if (isOutOfWindowError(error)) {
       return windowPresentation
         ? `Submission blocked: ${windowPresentation.headline.toLowerCase()}. ${windowPresentation.description}`
@@ -798,6 +832,241 @@ export function ReviewsPage() {
             </>
           )}
         </>
+      ) : (isWeeklyLocked && weeklyReview?.existingReview) ? (
+        <>
+          <div className="locked-review-banner" role="status">
+            <span className="tag tag--positive">Submitted</span>
+            <span className="locked-review-banner__text">
+              This weekly review was finalized on{" "}
+              {new Date(weeklyReview.existingReview.completedAt).toLocaleDateString(undefined, {
+                weekday: "long",
+                month: "short",
+                day: "numeric",
+                hour: "numeric",
+                minute: "2-digit",
+              })}
+            </span>
+          </div>
+
+          <div className="two-column-grid stagger">
+            <SectionCard
+              title="Generated summary"
+              subtitle="System-generated overview"
+            >
+              {"momentumError" in reviewQuery.data && reviewQuery.data.momentumError ? (
+                <InlineErrorState
+                  message={reviewQuery.data.momentumError.message}
+                  onRetry={() => void reviewQuery.refetch()}
+                />
+              ) : (
+                <ul className="list">
+                  {summaryItems.map((item) => (
+                    <li key={item}>
+                      <span>{item}</span>
+                      <span className="tag tag--neutral">auto</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </SectionCard>
+
+            <SectionCard
+              title="Submitted weekly reflection"
+              subtitle="Read-only · locked after submission"
+            >
+              <dl className="snapshot-list">
+                <div className="snapshot-list__row">
+                  <dt>Biggest win</dt>
+                  <dd>{weeklyReview.existingReview.biggestWin}</dd>
+                </div>
+                <div className="snapshot-list__row">
+                  <dt>Biggest miss</dt>
+                  <dd>{weeklyReview.existingReview.biggestMiss}</dd>
+                </div>
+                <div className="snapshot-list__row">
+                  <dt>Main lesson</dt>
+                  <dd>{weeklyReview.existingReview.mainLesson}</dd>
+                </div>
+                <div className="snapshot-list__row">
+                  <dt>Keep doing</dt>
+                  <dd>{weeklyReview.existingReview.keepText}</dd>
+                </div>
+                <div className="snapshot-list__row">
+                  <dt>Improve</dt>
+                  <dd>{weeklyReview.existingReview.improveText}</dd>
+                </div>
+                {weeklyReview.existingReview.focusHabitId ? (
+                  <div className="snapshot-list__row">
+                    <dt>Focus habit</dt>
+                    <dd>
+                      {habitsQuery.data?.habits.find(
+                        (h) => h.id === weeklyReview.existingReview!.focusHabitId,
+                      )?.title ?? weeklyReview.existingReview.focusHabitId}
+                    </dd>
+                  </div>
+                ) : null}
+                {weeklyReview.existingReview.notes ? (
+                  <div className="snapshot-list__row">
+                    <dt>Notes</dt>
+                    <dd>{weeklyReview.existingReview.notes}</dd>
+                  </div>
+                ) : null}
+              </dl>
+            </SectionCard>
+
+            <SectionCard
+              title="Seeded next-week priorities"
+              subtitle="Planning outputs from this review"
+            >
+              {seededNextWeekPriorities.length > 0 ? (
+                <ol className="priority-list">
+                  {[...seededNextWeekPriorities]
+                    .sort((left, right) => left.slot - right.slot)
+                    .map((priority, index) => (
+                      <li key={priority.id} className="priority-list__item">
+                        <span>
+                          <span className="tag tag--neutral" style={{ marginRight: "0.5rem" }}>
+                            P{index + 1}
+                          </span>
+                          {priority.title}
+                        </span>
+                        <span className={`tag tag--${priority.status === "completed" ? "positive" : priority.status === "dropped" ? "negative" : "neutral"}`}>
+                          {priority.status}
+                        </span>
+                      </li>
+                    ))}
+                </ol>
+              ) : (
+                <EmptyState
+                  title="No priorities seeded"
+                  description="This review did not produce next-week priorities."
+                />
+              )}
+            </SectionCard>
+          </div>
+        </>
+      ) : (isMonthlyLocked && monthlyReview?.existingReview) ? (
+        <>
+          <div className="locked-review-banner" role="status">
+            <span className="tag tag--positive">Submitted</span>
+            <span className="locked-review-banner__text">
+              This monthly review was finalized on{" "}
+              {new Date(monthlyReview.existingReview.completedAt).toLocaleDateString(undefined, {
+                weekday: "long",
+                month: "short",
+                day: "numeric",
+                hour: "numeric",
+                minute: "2-digit",
+              })}
+            </span>
+          </div>
+
+          <div className="two-column-grid stagger">
+            <SectionCard
+              title="Generated summary"
+              subtitle="System-generated overview"
+            >
+              <ul className="list">
+                {summaryItems.map((item) => (
+                  <li key={item}>
+                    <span>{item}</span>
+                    <span className="tag tag--neutral">auto</span>
+                  </li>
+                ))}
+              </ul>
+            </SectionCard>
+
+            <SectionCard
+              title="Submitted monthly reflection"
+              subtitle="Read-only · locked after submission"
+            >
+              <dl className="snapshot-list">
+                <div className="snapshot-list__row">
+                  <dt>Month verdict</dt>
+                  <dd>{monthlyReview.existingReview.monthVerdict}</dd>
+                </div>
+                <div className="snapshot-list__row">
+                  <dt>Biggest win</dt>
+                  <dd>{monthlyReview.existingReview.biggestWin}</dd>
+                </div>
+                <div className="snapshot-list__row">
+                  <dt>Biggest leak</dt>
+                  <dd>{monthlyReview.existingReview.biggestLeak}</dd>
+                </div>
+                <div className="snapshot-list__row">
+                  <dt>Next month theme</dt>
+                  <dd>{monthlyReview.existingReview.nextMonthTheme}</dd>
+                </div>
+                <div className="snapshot-list__row">
+                  <dt>Three outcomes</dt>
+                  <dd>
+                    {monthlyThreeOutcomes.length > 0 ? (
+                      <ol className="snapshot-outcomes">
+                        {monthlyThreeOutcomes.map((outcome, index) => (
+                          <li key={index}>{outcome}</li>
+                        ))}
+                      </ol>
+                    ) : (
+                      "None specified"
+                    )}
+                  </dd>
+                </div>
+                {monthlyHabitChanges.length > 0 ? (
+                  <div className="snapshot-list__row">
+                    <dt>Habit changes</dt>
+                    <dd>{monthlyHabitChanges.join(", ")}</dd>
+                  </div>
+                ) : null}
+                <div className="snapshot-list__row">
+                  <dt>Simplify</dt>
+                  <dd>{monthlyReview.existingReview.simplifyText}</dd>
+                </div>
+                {monthlyReview.existingReview.notes ? (
+                  <div className="snapshot-list__row">
+                    <dt>Notes</dt>
+                    <dd>{monthlyReview.existingReview.notes}</dd>
+                  </div>
+                ) : null}
+              </dl>
+            </SectionCard>
+
+            <SectionCard
+              title="Seeded next-month planning"
+              subtitle="Planning outputs from this review"
+            >
+              <dl className="snapshot-list">
+                <div className="snapshot-list__row">
+                  <dt>Next month theme</dt>
+                  <dd>{seededNextMonthTheme ?? "No theme set"}</dd>
+                </div>
+              </dl>
+              {seededNextMonthOutcomes.length > 0 ? (
+                <ol className="priority-list" style={{ marginTop: "0.5rem" }}>
+                  {[...seededNextMonthOutcomes]
+                    .sort((left, right) => left.slot - right.slot)
+                    .map((outcome, index) => (
+                      <li key={outcome.id} className="priority-list__item">
+                        <span>
+                          <span className="tag tag--neutral" style={{ marginRight: "0.5rem" }}>
+                            O{index + 1}
+                          </span>
+                          {outcome.title}
+                        </span>
+                        <span className={`tag tag--${outcome.status === "completed" ? "positive" : outcome.status === "dropped" ? "negative" : "neutral"}`}>
+                          {outcome.status}
+                        </span>
+                      </li>
+                    ))}
+                </ol>
+              ) : (
+                <EmptyState
+                  title="No outcomes seeded"
+                  description="This review did not produce next-month outcomes."
+                />
+              )}
+            </SectionCard>
+          </div>
+        </>
       ) : (
         <>
           <div className="review-progress">
@@ -916,7 +1185,7 @@ export function ReviewsPage() {
           </div>
           {submitError ? (
             <div
-              className={`inline-state ${isOutOfWindowError(submitError) ? "inline-state--out-of-window" : "inline-state--error"}`}
+              className={`inline-state ${isAlreadySubmittedError(submitError) ? "inline-state--already-submitted" : isOutOfWindowError(submitError) ? "inline-state--out-of-window" : "inline-state--error"}`}
               style={{ marginTop: "0.75rem" }}
             >
               {formatSubmitError(submitError)}

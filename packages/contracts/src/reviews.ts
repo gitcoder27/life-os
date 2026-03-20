@@ -120,6 +120,7 @@ export interface WeeklyReviewResponse extends ApiMeta {
   endDate: IsoDateString;
   summary: WeeklyReviewSummary;
   existingReview: ExistingWeeklyReview | null;
+  seededNextWeekPriorities: PlanningPriorityItem[];
   submissionWindow: ReviewSubmissionWindow;
 }
 
@@ -170,6 +171,8 @@ export interface MonthlyReviewResponse extends ApiMeta {
   endDate: IsoDateString;
   summary: MonthlyReviewSummary;
   existingReview: ExistingMonthlyReview | null;
+  seededNextMonthTheme: string | null;
+  seededNextMonthOutcomes: PlanningPriorityItem[];
   submissionWindow: ReviewSubmissionWindow;
 }
 

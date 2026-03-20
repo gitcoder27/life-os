@@ -142,6 +142,9 @@ describe("reviews service", () => {
   });
 
   it("submits daily review and replaces tomorrow priorities", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-03-15T08:30:00.000Z"));
+
     const dayCycle = {
       id: "day-cycle",
       priorities: [],
@@ -277,6 +280,9 @@ describe("reviews service", () => {
   });
 
   it("rejects daily review resubmission after the day is already closed", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-03-15T08:30:00.000Z"));
+
     ensureCycleMock.mockResolvedValue({
       id: "day-cycle",
       priorities: [],
@@ -311,6 +317,9 @@ describe("reviews service", () => {
   });
 
   it("requires all pending tasks for the review date to be resolved", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-03-15T08:30:00.000Z"));
+
     ensureCycleMock.mockResolvedValue({
       id: "day-cycle",
       priorities: [],
@@ -368,6 +377,13 @@ describe("reviews service", () => {
     } as any);
 
     const prisma = {
+      planningCycle: {
+        findUnique: vi.fn().mockResolvedValue({
+          priorities: [
+            { id: "pr1", slot: 1, title: "Protect mornings", status: "PENDING", goalId: null, completedAt: null },
+          ],
+        }),
+      },
       dailyScore: {
         findMany: vi.fn().mockResolvedValue([
           { scoreValue: 70, scoreBand: "Solid Day", planningCycle: { cycleStartDate: new Date("2026-03-14") } },
@@ -411,6 +427,9 @@ describe("reviews service", () => {
     expect(response.summary.topFrictionTags).toHaveLength(2);
     expect(response.summary.topFrictionTags[0]).toEqual({ tag: "low energy", count: 1 });
     expect(response.summary.workoutsCompleted).toBe(1);
+    expect(response.seededNextWeekPriorities).toEqual([
+      expect.objectContaining({ id: "pr1", slot: 1, title: "Protect mornings" }),
+    ]);
   });
 
   it("builds monthly reviews from score and activity snapshots", async () => {
@@ -441,6 +460,15 @@ describe("reviews service", () => {
     });
 
     const prisma = {
+      planningCycle: {
+        findUnique: vi.fn().mockResolvedValue({
+          theme: "Protect momentum",
+          priorities: [
+            { id: "pr1", slot: 1, title: "Outcome 1", status: "PENDING", goalId: null, completedAt: null },
+            { id: "pr2", slot: 2, title: "Outcome 2", status: "PENDING", goalId: null, completedAt: null },
+          ],
+        }),
+      },
       dailyScore: {
         findMany: vi.fn().mockResolvedValue([
           { scoreValue: 75, planningCycle: { cycleStartDate: new Date("2026-03-10") } },
@@ -488,16 +516,25 @@ describe("reviews service", () => {
       { habitId: "habit-1", title: "Push-up", completionRate: 22 },
       { habitId: "habit-2", title: "Read", completionRate: 0 },
     ]);
+    expect(response.seededNextMonthTheme).toBe("Protect momentum");
+    expect(response.seededNextMonthOutcomes).toEqual([
+      expect.objectContaining({ id: "pr1", slot: 1, title: "Outcome 1" }),
+      expect.objectContaining({ id: "pr2", slot: 2, title: "Outcome 2" }),
+    ]);
   });
 
   it("allows month and week submit operations to resolve", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-03-18T14:00:00.000Z"));
-    ensureCycleMock.mockResolvedValue({ id: "cycle", cycleEndDate: new Date("2026-03-20T00:00:00.000Z") } as any);
+    ensureCycleMock
+      .mockResolvedValueOnce({ id: "week-cycle", cycleEndDate: new Date("2026-03-15T00:00:00.000Z"), weeklyReview: null } as any)
+      .mockResolvedValueOnce({ id: "next-week-cycle", cycleEndDate: new Date("2026-03-22T00:00:00.000Z") } as any)
+      .mockResolvedValueOnce({ id: "month-cycle", cycleEndDate: new Date("2026-02-28T00:00:00.000Z"), monthlyReview: null } as any)
+      .mockResolvedValueOnce({ id: "next-month-cycle", cycleEndDate: new Date("2026-03-31T00:00:00.000Z") } as any);
     const prisma = {
       userPreference: { findUnique: vi.fn().mockResolvedValue({ timezone: "UTC", weekStartsOn: 1 }) },
-      weeklyReview: { upsert: vi.fn().mockResolvedValue({}) },
-      monthlyReview: { upsert: vi.fn().mockResolvedValue({}) },
+      weeklyReview: { create: vi.fn().mockResolvedValue({}) },
+      monthlyReview: { create: vi.fn().mockResolvedValue({}) },
       planningCycle: { update: vi.fn().mockResolvedValue({}) },
       cyclePriority: {
         deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
@@ -536,6 +573,78 @@ describe("reviews service", () => {
         notes: "Okay",
       },
     );
+
+    expect(prisma.weeklyReview.create).toHaveBeenCalledTimes(1);
+    expect(prisma.monthlyReview.create).toHaveBeenCalledTimes(1);
+  });
+
+  it("rejects weekly review resubmission after the period is already closed", async () => {
+    ensureCycleMock.mockResolvedValue({
+      id: "week-cycle",
+      cycleEndDate: new Date("2026-03-15T00:00:00.000Z"),
+      weeklyReview: {
+        id: "review-1",
+      },
+    } as any);
+
+    const prisma = {
+      weeklyReview: { create: vi.fn() },
+      cyclePriority: { deleteMany: vi.fn(), createMany: vi.fn(), findMany: vi.fn() },
+      userPreference: { findUnique: vi.fn() },
+    } as any;
+
+    await expect(
+      submitWeeklyReview(prisma, "user-1", new Date("2026-03-09T00:00:00.000Z"), {
+        biggestWin: "X",
+        biggestMiss: "Y",
+        mainLesson: "Lesson",
+        keepText: "Keep",
+        improveText: "Improve",
+        nextWeekPriorities: [{ slot: 1, title: "Next 1" }],
+      }),
+    ).rejects.toMatchObject({
+      code: "REVIEW_ALREADY_SUBMITTED",
+      message: "Weekly review has already been completed for this period",
+    });
+
+    expect(prisma.weeklyReview.create).not.toHaveBeenCalled();
+  });
+
+  it("rejects monthly review resubmission after the period is already closed", async () => {
+    ensureCycleMock.mockResolvedValue({
+      id: "month-cycle",
+      cycleEndDate: new Date("2026-02-28T00:00:00.000Z"),
+      monthlyReview: {
+        id: "review-1",
+      },
+    } as any);
+
+    const prisma = {
+      monthlyReview: { create: vi.fn() },
+      planningCycle: { update: vi.fn() },
+      cyclePriority: { deleteMany: vi.fn(), createMany: vi.fn(), findMany: vi.fn() },
+      userPreference: { findUnique: vi.fn() },
+    } as any;
+
+    await expect(
+      submitMonthlyReview(prisma, "user-1", new Date("2026-02-01T00:00:00.000Z"), {
+        monthVerdict: "Great",
+        biggestWin: "Big win",
+        biggestLeak: "Big leak",
+        ratings: { energy: 4 },
+        nextMonthTheme: "Next",
+        threeOutcomes: ["One", "Two", "Three"],
+        habitChanges: ["Change A"],
+        simplifyText: "Less",
+        notes: "Okay",
+      }),
+    ).rejects.toMatchObject({
+      code: "REVIEW_ALREADY_SUBMITTED",
+      message: "Monthly review has already been completed for this period",
+    });
+
+    expect(prisma.monthlyReview.create).not.toHaveBeenCalled();
+    expect(prisma.planningCycle.update).not.toHaveBeenCalled();
   });
 
   it("returns the daily submission window in the review model", async () => {
@@ -631,6 +740,17 @@ describe("reviews service", () => {
   it("rejects weekly and monthly submissions outside their allowed period", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-03-18T14:00:00.000Z"));
+    ensureCycleMock
+      .mockResolvedValueOnce({
+        id: "week-cycle",
+        cycleEndDate: new Date("2026-03-22T00:00:00.000Z"),
+        weeklyReview: null,
+      } as any)
+      .mockResolvedValueOnce({
+        id: "month-cycle",
+        cycleEndDate: new Date("2026-03-31T00:00:00.000Z"),
+        monthlyReview: null,
+      } as any);
 
     const prisma = {
       userPreference: { findUnique: vi.fn().mockResolvedValue({ timezone: "UTC", weekStartsOn: 1 }) },
