@@ -23,6 +23,18 @@ export type StoredRecurrenceRule = PrismaRecurrenceRule & {
   exceptions: PrismaRecurrenceException[];
 };
 
+type SerializableRecurrenceRuleRecord = {
+  id?: string;
+  ruleJson: unknown;
+  exceptions?: Array<{
+    occurrenceDate: Date;
+    action: PrismaRecurrenceExceptionAction | unknown;
+    targetDate: Date | null;
+  }>;
+  carryPolicy?: PrismaRecurrenceCarryPolicy | null | unknown;
+  legacyRuleText?: string | null;
+};
+
 export function toPrismaCarryPolicy(
   policy: RecurringTaskCarryPolicy | null | undefined,
 ): PrismaRecurrenceCarryPolicy | null | undefined {
@@ -85,9 +97,9 @@ export function fromPrismaExceptionAction(
 }
 
 export function serializeRecurrenceDefinition(
-  record: StoredRecurrenceRule | null | undefined,
+  record: SerializableRecurrenceRuleRecord | null | undefined,
 ): RecurrenceDefinition | null {
-  if (!record) {
+  if (!record?.id) {
     return null;
   }
 
@@ -99,12 +111,12 @@ export function serializeRecurrenceDefinition(
   return {
     id: record.id,
     rule,
-    exceptions: record.exceptions.map((exception) => ({
+    exceptions: (record.exceptions ?? []).map((exception) => ({
       occurrenceDate: toIsoDateString(exception.occurrenceDate),
-      action: fromPrismaExceptionAction(exception.action),
+      action: fromPrismaExceptionAction(exception.action as PrismaRecurrenceExceptionAction),
       targetDate: exception.targetDate ? toIsoDateString(exception.targetDate) : null,
     })),
-    carryPolicy: fromPrismaCarryPolicy(record.carryPolicy),
+    carryPolicy: fromPrismaCarryPolicy(record.carryPolicy as PrismaRecurrenceCarryPolicy | null | undefined),
     legacyRuleText: record.legacyRuleText ?? null,
   };
 }
@@ -124,6 +136,7 @@ export async function upsertRecurrenceRuleRecord(
     throw new Error("Invalid recurrence rule payload");
   }
   const normalizedExceptions = normalizeRecurrenceExceptions(input.recurrence.exceptions ?? []);
+  const ruleJson = normalizedRule as unknown as Prisma.InputJsonValue;
 
   const record = await tx.recurrenceRule.upsert({
     where: {
@@ -133,14 +146,14 @@ export async function upsertRecurrenceRuleRecord(
       },
     },
     update: {
-      ruleJson: normalizedRule,
+      ruleJson,
       carryPolicy: toPrismaCarryPolicy(input.carryPolicy),
       legacyRuleText: input.legacyRuleText ?? null,
     },
     create: {
       ownerType: input.ownerType,
       ownerId: input.ownerId,
-      ruleJson: normalizedRule,
+      ruleJson,
       carryPolicy: toPrismaCarryPolicy(input.carryPolicy) ?? null,
       legacyRuleText: input.legacyRuleText ?? null,
     },

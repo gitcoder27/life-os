@@ -218,30 +218,30 @@ export function normalizeRecurrenceExceptions(input: unknown): RecurrenceExcepti
     return [];
   }
 
-  const mapped = input
-    .map((item) => {
-      if (!item || typeof item !== "object" || Array.isArray(item)) {
-        return null;
-      }
-      const candidate = item as Partial<RecurrenceExceptionItem>;
-      if (
-        typeof candidate.occurrenceDate !== "string" ||
-        (candidate.action !== "skip" && candidate.action !== "do_once" && candidate.action !== "reschedule")
-      ) {
-        return null;
-      }
-
-      return {
-        occurrenceDate: candidate.occurrenceDate as IsoDateString,
-        action: candidate.action,
-        targetDate: typeof candidate.targetDate === "string" ? candidate.targetDate as IsoDateString : null,
-      } satisfies RecurrenceExceptionItem;
-    })
-    .filter((value): value is RecurrenceExceptionItem => Boolean(value));
-
   const deduped = new Map<string, RecurrenceExceptionItem>();
-  for (const item of mapped) {
-    deduped.set(item.occurrenceDate, item);
+  for (const item of input) {
+    if (!item || typeof item !== "object" || Array.isArray(item)) {
+      continue;
+    }
+
+    const candidate = item as Partial<RecurrenceExceptionItem>;
+    if (
+      typeof candidate.occurrenceDate !== "string" ||
+      (candidate.action !== "skip" &&
+        candidate.action !== "do_once" &&
+        candidate.action !== "reschedule")
+    ) {
+      continue;
+    }
+
+    deduped.set(candidate.occurrenceDate, {
+      occurrenceDate: candidate.occurrenceDate as IsoDateString,
+      action: candidate.action,
+      targetDate:
+        typeof candidate.targetDate === "string"
+          ? (candidate.targetDate as IsoDateString)
+          : null,
+    });
   }
 
   return [...deduped.values()].sort((left, right) => left.occurrenceDate.localeCompare(right.occurrenceDate));

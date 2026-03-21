@@ -23,7 +23,7 @@ interface HabitRecurrenceCarrier {
   recurrenceRule?: {
     id?: string;
     ruleJson: unknown;
-    exceptions?: Array<{ occurrenceDate: Date; action: string; targetDate: Date | null }>;
+    exceptions?: Array<{ occurrenceDate: Date; action: unknown; targetDate: Date | null }>;
     carryPolicy?: unknown;
     legacyRuleText?: string | null;
   } | null;
@@ -51,7 +51,7 @@ export function normalizeHabitScheduleRule(input: unknown): HabitScheduleRule {
   return daysOfWeek ? ({ ...candidate, daysOfWeek } as HabitScheduleRule) : (candidate as HabitScheduleRule);
 }
 
-function coerceHabitExceptionAction(action: string) {
+function coerceHabitExceptionAction(action: unknown) {
   if (action === "SKIP") {
     return "skip" as const;
   }

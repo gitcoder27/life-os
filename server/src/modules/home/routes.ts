@@ -416,7 +416,7 @@ async function buildHomeOverview(
             title: weeklyChallengeHabit.title,
           },
           checkins: weeklyChallengeHabit.checkins,
-          scheduleRule: weeklyChallengeHabit.scheduleRule,
+          scheduleInput: weeklyChallengeHabit.scheduleRule,
           weekStartIsoDate,
           targetIsoDate,
         })

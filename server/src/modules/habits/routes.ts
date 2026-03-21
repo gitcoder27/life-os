@@ -18,6 +18,7 @@ import type {
   RecurrenceInput,
 } from "@life-os/contracts";
 import type {
+  Prisma,
   CheckinStatus as PrismaCheckinStatus,
   Habit,
   HabitCheckin,
@@ -255,11 +256,19 @@ function serializeRoutine(
 }
 
 async function serializeHabit(
-  habit: Habit,
+  habit: Habit & {
+    recurrenceRule?: {
+      id?: string;
+      ruleJson: unknown;
+      exceptions?: Array<{ occurrenceDate: Date; action: unknown; targetDate: Date | null }>;
+      carryPolicy?: unknown;
+      legacyRuleText?: string | null;
+    } | null;
+  },
   checkins: HabitCheckin[],
   targetIsoDate: IsoDateString,
 ): Promise<HabitItem> {
-  const recurrence = resolveHabitRecurrence(habit as Habit & { recurrenceRule?: unknown }, targetIsoDate);
+  const recurrence = resolveHabitRecurrence(habit, targetIsoDate);
   const scheduleRule = deriveHabitScheduleFromRecurrence(recurrence.rule);
   const dueToday = isHabitDueOnIsoDate(recurrence, targetIsoDate);
   const completedToday = checkins.some(
@@ -272,7 +281,7 @@ async function serializeHabit(
     title: habit.title,
     category: habit.category,
     scheduleRule,
-    recurrence: serializeRecurrenceDefinition((habit as Habit & { recurrenceRule?: any }).recurrenceRule),
+    recurrence: serializeRecurrenceDefinition(habit.recurrenceRule),
     targetPerDay: habit.targetPerDay,
     status: fromPrismaHabitStatus(habit.status),
     dueToday,
@@ -480,7 +489,7 @@ export const registerHabitsRoutes: FastifyPluginAsync = async (app) => {
           userId: user.id,
           title: payload.title,
           category: payload.category ?? null,
-          scheduleRuleJson: recurrence.rule,
+          scheduleRuleJson: recurrence.rule as unknown as Prisma.InputJsonValue,
           targetPerDay: payload.targetPerDay ?? 1,
         },
       });
@@ -544,7 +553,8 @@ export const registerHabitsRoutes: FastifyPluginAsync = async (app) => {
         data: {
           title: payload.title,
           category: payload.category,
-          scheduleRuleJson: recurrence?.rule ?? payload.scheduleRule,
+          scheduleRuleJson:
+            (recurrence?.rule ?? payload.scheduleRule) as unknown as Prisma.InputJsonValue | undefined,
           targetPerDay: payload.targetPerDay,
           status: payload.status ? toPrismaHabitStatus(payload.status) : undefined,
           archivedAt: payload.status === "archived" ? new Date() : undefined,

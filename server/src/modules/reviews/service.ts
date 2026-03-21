@@ -1,4 +1,4 @@
-import type { ReviewSubmissionWindow } from "@life-os/contracts";
+import type { IsoDateString, RecurrenceDefinition, ReviewSubmissionWindow } from "@life-os/contracts";
 import type { Prisma, PrismaClient } from "@prisma/client";
 
 import { AppError } from "../../lib/errors/app-error.js";
@@ -38,7 +38,7 @@ interface PlanningPriorityInput {
 
 interface ReviewTaskDecision {
   taskId: string;
-  targetDate: string;
+  targetDate: IsoDateString;
 }
 
 interface SubmitDailyReviewRequest {
@@ -104,6 +104,7 @@ interface PlanningTaskItem {
   goalId: string | null;
   originType: "manual" | "quick_capture" | "carry_forward" | "review_seed" | "recurring";
   carriedFromTaskId: string | null;
+  recurrence: RecurrenceDefinition | null;
   completedAt: string | null;
   createdAt: string;
   updatedAt: string;
@@ -757,9 +758,7 @@ export async function submitDailyReview(
           id: rescheduledTask.taskId,
         },
       });
-      const targetDate = parseIsoDate(
-        rescheduledTask.targetDate as `${number}-${number}-${number}`,
-      );
+      const targetDate = parseIsoDate(rescheduledTask.targetDate);
 
       if (task.recurrenceRuleId) {
         await applyRecurringTaskCarryForward(tx, userId, task, rescheduledTask.targetDate);

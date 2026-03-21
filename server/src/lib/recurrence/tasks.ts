@@ -1,5 +1,5 @@
 import type { IsoDateString } from "@life-os/contracts";
-import type { PrismaClient, RecurrenceException, RecurrenceRule, Task } from "@prisma/client";
+import type { Prisma, PrismaClient, RecurrenceException, RecurrenceRule, Task } from "@prisma/client";
 
 import { toIsoDateString } from "../time/date.js";
 import { getNextRecurrenceDateAfter, listRecurrenceDatesInRange, normalizeRecurrenceRule } from "./rules.js";
