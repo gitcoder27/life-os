@@ -4,7 +4,9 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
+    "predev": "npm run prisma:generate",
     "dev": "NODE_ENV=development tsx watch src/index.ts",
+    "predev:worker": "npm run prisma:generate",
     "dev:worker": "NODE_ENV=development tsx watch src/jobs/worker.ts",
     "prebuild": "npm run prisma:generate",
     "build": "tsc -p tsconfig.json",

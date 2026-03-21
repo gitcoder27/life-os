@@ -941,7 +941,11 @@ type SectionError = {
 };
 
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? "").replace(/\/$/, "");
-const CSRF_COOKIE_NAME = import.meta.env.VITE_CSRF_COOKIE_NAME ?? "life_os_csrf";
+const CSRF_COOKIE_NAMES = [
+  import.meta.env.VITE_CSRF_COOKIE_NAME,
+  "life_os_csrf_dev",
+  "life_os_csrf",
+].filter((value, index, values): value is string => Boolean(value) && values.indexOf(value) === index);
 const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 
 const queryKeys = {
@@ -989,6 +993,17 @@ function getCookie(name: string) {
   return cookie ? decodeURIComponent(cookie.split("=").slice(1).join("=")) : null;
 }
 
+function getCsrfToken() {
+  for (const cookieName of CSRF_COOKIE_NAMES) {
+    const token = getCookie(cookieName);
+    if (token) {
+      return token;
+    }
+  }
+
+  return null;
+}
+
 async function readErrorPayload(response: Response) {
   try {
     return (await response.json()) as ApiErrorResponse;
@@ -1034,7 +1049,7 @@ export async function apiRequest<TResponse>(
   }
 
   if (!SAFE_METHODS.has(method.toUpperCase()) && path !== "/api/auth/login") {
-    const csrfToken = getCookie(CSRF_COOKIE_NAME);
+    const csrfToken = getCsrfToken();
     if (csrfToken) {
       headers.set("x-csrf-token", csrfToken);
     }

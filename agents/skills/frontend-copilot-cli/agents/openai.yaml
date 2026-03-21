@@ -1,4 +1,0 @@
-interface:
-  display_name: "Frontend Copilot CLI"
-  short_description: "Delegate frontend edits via Copilot CLI"
-  default_prompt: "Use $frontend-copilot-cli to route the client-side changes through GitHub Copilot CLI with a scoped prompt and validation commands."
