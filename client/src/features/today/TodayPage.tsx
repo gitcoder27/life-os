@@ -620,8 +620,8 @@ export function TodayPage() {
   if (dayPlanQuery.isLoading && !dayPlanQuery.data) {
     return (
       <PageLoadingState
-        title="Loading execution lane"
-        description="Pulling in priorities, today-only tasks, and immediate health context."
+        title="Loading execution workspace"
+        description="Pulling in priorities, scheduled tasks, and the immediate context needed to work the day."
       />
     );
   }
@@ -639,9 +639,9 @@ export function TodayPage() {
   return (
     <div className="page">
       <PageHeader
-        eyebrow="Execution view"
+        eyebrow="Execution workspace"
         title="Today"
-        description="Priorities, today-only tasks, and the immediate plan. Focus on what moves the day forward."
+        description="Work the day here. Set the top three, clear scheduled tasks, and move anything that no longer belongs today."
       />
 
       {mutationError ? (
@@ -652,7 +652,7 @@ export function TodayPage() {
         {/* ── Priority Stack ── */}
         <SectionCard
           title="Priority stack"
-          subtitle="Top three for today — drag to reorder"
+          subtitle="Top three for today. Reorder before you start."
         >
           {priorityDraft.length > 0 ? (
             <DndContext
@@ -735,7 +735,7 @@ export function TodayPage() {
         {/* ── Task Lane ── */}
         <SectionCard
           title="Task lane"
-          subtitle="Resolve or move every open task"
+          subtitle="Complete, move, or drop every task scheduled for today"
         >
           {executionTasks.length > 0 ? (
             <div className="task-lane">

@@ -24,6 +24,7 @@ export interface TaskItem {
   title: string;
   status: "pending" | "completed" | "dropped";
   scheduledForDate: IsoDateString | null;
+  dueAt: string | null;
   goalId: EntityId | null;
   goal: GoalSummary | null;
   notes: string | null;
@@ -62,14 +63,6 @@ export interface AttentionItem {
   tone: "info" | "warning" | "urgent";
   detail?: string;
   action:
-    | {
-        type: "complete_task";
-        entityId: EntityId;
-      }
-    | {
-        type: "complete_habit";
-        entityId: EntityId;
-      }
     | {
         type: "open_review";
         route: string;

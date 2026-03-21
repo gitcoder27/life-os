@@ -55,7 +55,8 @@ describe("home guidance builder", () => {
         status: "due_today",
         message: "Hydrate is due today. Keep the weekly focus alive.",
       },
-      dayReviewCompleted: false,
+      dailyReviewAvailable: false,
+      dailyReviewRoute: null,
       currentHour: 19,
       health: {
         waterMl: 600,
@@ -68,6 +69,11 @@ describe("home guidance builder", () => {
       "weekly-challenge:habit-1",
       "habit-risk:habit-1",
       "priority:priority-1",
+    ]);
+    expect(guidance.recommendations.map((item) => item.action.type)).toEqual([
+      "open_route",
+      "open_route",
+      "open_route",
     ]);
   });
 
@@ -85,7 +91,8 @@ describe("home guidance builder", () => {
       priorities: [],
       tasks: [],
       weeklyChallenge: null,
-      dayReviewCompleted: true,
+      dailyReviewAvailable: false,
+      dailyReviewRoute: null,
       currentHour: 14,
       health: {
         waterMl: 1200,

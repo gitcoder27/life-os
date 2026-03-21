@@ -329,10 +329,10 @@ async function buildHomeOverview(
       title: `Task still open: ${incompleteTask.title}`,
       kind: "task",
       tone: "warning",
-      detail: "Mark it done from Home or move it from Today.",
+      detail: "Open Today to finish it, move it, or drop it.",
       action: {
-        type: "complete_task",
-        entityId: incompleteTask.id,
+        type: "open_route",
+        route: "/today",
       },
     });
   }
@@ -346,10 +346,10 @@ async function buildHomeOverview(
       title: `Habit due: ${missedHabit.title}`,
       kind: "habit",
       tone: "warning",
-      detail: "Complete it directly from Home.",
+      detail: "Open Habits to keep the streak alive.",
       action: {
-        type: "complete_habit",
-        entityId: missedHabit.id,
+        type: "open_route",
+        route: "/habits",
       },
     });
   }
@@ -494,6 +494,7 @@ async function buildHomeOverview(
       status:
         task.status === "COMPLETED" ? "completed" : task.status === "DROPPED" ? "dropped" : "pending",
       scheduledForDate: task.scheduledForDate ? toIsoDateString(task.scheduledForDate) : null,
+      dueAt: task.dueAt?.toISOString() ?? null,
       goalId: task.goalId,
       goal: task.goal ? serializeGoalSummary(task.goal) : null,
       notes: task.notes,

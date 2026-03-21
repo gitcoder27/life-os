@@ -737,6 +737,84 @@ img { max-width: 100%; display: block; }
   margin-top: 0.2rem;
 }
 
+.today-focus-card {
+  grid-column: 1 / -1;
+}
+
+.today-focus {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
+  gap: 1rem;
+  align-items: start;
+}
+
+.today-focus__lede {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.today-focus__eyebrow {
+  font-size: var(--fs-micro);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+}
+
+.today-focus__headline {
+  font-family: var(--font-display);
+  font-size: clamp(1.35rem, 2vw, 1.8rem);
+  font-weight: 500;
+  line-height: 1.12;
+  letter-spacing: -0.02em;
+}
+
+.today-focus__copy {
+  max-width: 34rem;
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+
+.today-focus__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.today-focus__metric {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  padding: 0.85rem 0.95rem;
+  border-radius: var(--r-sm);
+  border: 1px solid rgba(255,255,255,0.06);
+  background:
+    linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.015)),
+    radial-gradient(circle at top left, rgba(217,153,58,0.08), transparent 65%);
+}
+
+.today-focus__metric-label {
+  font-size: var(--fs-micro);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+}
+
+.today-focus__metric-value {
+  font-size: var(--fs-h2);
+  font-weight: 600;
+  line-height: 1.05;
+  color: var(--text);
+}
+
+.today-focus__metric-detail {
+  color: var(--text-secondary);
+  font-size: var(--fs-small);
+  line-height: 1.45;
+}
+
 /* ── Lists ── */
 
 .list,
@@ -2895,6 +2973,10 @@ img { max-width: 100%; display: block; }
   .template-grid {
     grid-template-columns: 1fr;
   }
+
+  .today-focus__grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 /* ═══════════════════════════════════════════════
@@ -3177,6 +3259,10 @@ img { max-width: 100%; display: block; }
   .guidance-rail {
     gap: 0.5rem;
     margin-bottom: 1rem;
+  }
+
+  .today-focus {
+    grid-template-columns: 1fr;
   }
 
   .challenge-card {

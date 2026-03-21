@@ -108,8 +108,8 @@ function buildRecommendations(input: GuidanceInput): HomeGuidanceRecommendation[
       detail: input.weeklyChallenge.message,
       impactLabel: "Protect weekly focus",
       action: {
-        type: "complete_habit",
-        entityId: input.weeklyChallenge.habitId,
+        type: "open_route",
+        route: "/habits",
       },
     });
   }
@@ -125,8 +125,8 @@ function buildRecommendations(input: GuidanceInput): HomeGuidanceRecommendation[
       detail: atRiskHabit.risk.message ?? "This habit is due today and needs attention now.",
       impactLabel: "Protect streak",
       action: {
-        type: "complete_habit",
-        entityId: atRiskHabit.id,
+        type: "open_route",
+        route: "/habits",
       },
     });
   }
@@ -155,8 +155,8 @@ function buildRecommendations(input: GuidanceInput): HomeGuidanceRecommendation[
       detail: "One open day-task is still dragging the lane.",
       impactLabel: "Clear task lane",
       action: {
-        type: "complete_task",
-        entityId: openTask.id,
+        type: "open_route",
+        route: "/today",
       },
     });
   }

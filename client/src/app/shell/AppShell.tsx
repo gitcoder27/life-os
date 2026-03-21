@@ -13,9 +13,9 @@ import {
 } from "../../shared/lib/api";
 
 const navItems = [
-  { to: "/", label: "Home", hint: "daily command center" },
+  { to: "/", label: "Home", hint: "dashboard and direction" },
   { to: "/inbox", label: "Inbox", hint: "capture triage" },
-  { to: "/today", label: "Today", hint: "execution lane" },
+  { to: "/today", label: "Today", hint: "daily execution workspace" },
   { to: "/habits", label: "Habits", hint: "consistency system" },
   { to: "/health", label: "Health", hint: "body basics" },
   { to: "/finance", label: "Finance", hint: "spend visibility" },

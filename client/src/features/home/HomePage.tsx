@@ -2,21 +2,16 @@ import { Link, useNavigate } from "react-router-dom";
 
 import {
   formatMajorCurrency,
+  formatTimeLabel,
   formatWorkoutStatus,
   getTodayDate,
   useDailyScoreQuery,
-  useHabitCheckinMutation,
   useInboxQuery,
   useHomeOverviewQuery,
-  useAddWaterMutation,
-  useUpdatePriorityMutation,
-  useTaskStatusMutation,
   useWeeklyMomentumQuery,
   type LinkedGoal,
 } from "../../shared/lib/api";
-import {
-  parseQuickCaptureNotes,
-} from "../../shared/lib/quickCapture";
+import { parseQuickCaptureNotes } from "../../shared/lib/quickCapture";
 import { MetricPill } from "../../shared/ui/MetricPill";
 import {
   EmptyState,
@@ -82,6 +77,27 @@ function getHomeTaskMeta(task: HomeTaskLike, fallback: string) {
   return `Reminder${parsed.reminderDate ? ` for ${parsed.reminderDate}` : ""}: ${parsed.text.trim() || "Reminder"}`;
 }
 
+function getActionLabel(action: { type: "open_review" | "open_route"; route: string }) {
+  if (action.type === "open_review") {
+    return "Open review";
+  }
+
+  switch (action.route) {
+    case "/today":
+      return "Open Today";
+    case "/habits":
+      return "Open Habits";
+    case "/health":
+      return "Open Health";
+    case "/finance":
+      return "Open Finance";
+    case "/inbox":
+      return "Open Inbox";
+    default:
+      return "Open";
+  }
+}
+
 export function HomePage() {
   const today = getTodayDate();
   const navigate = useNavigate();
@@ -89,10 +105,6 @@ export function HomePage() {
   const inboxQuery = useInboxQuery();
   const scoreQuery = useDailyScoreQuery(today);
   const weeklyMomentumQuery = useWeeklyMomentumQuery(today);
-  const updateTaskMutation = useTaskStatusMutation(today);
-  const habitCheckinMutation = useHabitCheckinMutation(today);
-  const addWaterMutation = useAddWaterMutation(today);
-  const updatePriorityMutation = useUpdatePriorityMutation(today);
   const retryAll = () => {
     void homeQuery.refetch();
     void inboxQuery.refetch();
@@ -120,11 +132,11 @@ export function HomePage() {
   }
 
   const home = homeQuery.data;
-  const score = scoreQuery.data ?? home?.dailyScore;
+  const score = scoreQuery.data ?? home.dailyScore;
   const homeMetrics = [
     {
       label: "Weekly momentum",
-      value: String(home?.weeklyMomentum ?? 0),
+      value: String(home.weeklyMomentum),
     },
     {
       label: "Strong day streak",
@@ -135,68 +147,61 @@ export function HomePage() {
       value: scoreQuery.data?.finalizedAt ? "Daily closed" : "Daily open",
     },
   ];
-  const attentionItems = home?.attentionItems ?? [];
-  const routines = home
-    ? [
-        {
-          title:
-            home.routineSummary.currentPeriod === "none"
-              ? "Routines"
-              : `${home.routineSummary.currentPeriod[0].toUpperCase()}${home.routineSummary.currentPeriod.slice(1)} routine`,
-          detail: `${home.routineSummary.completedItems} of ${home.routineSummary.totalItems} complete`,
-        },
-      ]
-    : [];
+  const attentionItems = home.attentionItems;
+  const routines = [
+    {
+      title:
+        home.routineSummary.currentPeriod === "none"
+          ? "Routines"
+          : `${home.routineSummary.currentPeriod[0].toUpperCase()}${home.routineSummary.currentPeriod.slice(1)} routine`,
+      detail: `${home.routineSummary.completedItems} of ${home.routineSummary.totalItems} complete`,
+    },
+  ];
   const healthSnapshot = [
     {
       label: "Water",
-      value: `${((home?.healthSummary.waterMl ?? 0) / 1000).toFixed(1)}L / ${((home?.healthSummary.waterTargetMl ?? 0) / 1000).toFixed(1)}L`,
+      value: `${(home.healthSummary.waterMl / 1000).toFixed(1)}L / ${(home.healthSummary.waterTargetMl / 1000).toFixed(1)}L`,
     },
     {
       label: "Meals",
-      value: `${home?.healthSummary.mealsLogged ?? 0} logged`,
+      value: `${home.healthSummary.mealsLogged} logged`,
     },
     {
       label: "Workout",
-      value: formatWorkoutStatus(home?.healthSummary.workoutStatus),
+      value: formatWorkoutStatus(home.healthSummary.workoutStatus),
     },
   ];
   const financeSnapshot = [
     {
       label: "Month spend",
-      value: formatMajorCurrency(home?.financeSummary.spentThisMonth ?? 0),
+      value: formatMajorCurrency(home.financeSummary.spentThisMonth),
     },
     {
       label: "Budget label",
-      value: home?.financeSummary.budgetLabel ?? "Tracking",
+      value: home.financeSummary.budgetLabel || "Tracking",
     },
     {
       label: "Upcoming bills",
-      value: String(home?.financeSummary.upcomingBills ?? 0),
+      value: String(home.financeSummary.upcomingBills),
     },
   ];
   const scoreReasons = scoreQuery.data?.topReasons ?? [];
   const scoreBuckets =
     scoreQuery.data?.buckets?.filter((bucket) => bucket.applicablePoints > 0) ?? [];
-  const allTasks = home?.tasks ?? [];
-  const taskLaneTasks = allTasks.filter((task) => !isQuickCaptureMetadataTask(task));
+  const allTasks = home.tasks;
+  const executionTasks = allTasks.filter((task) => !isQuickCaptureMetadataTask(task));
+  const openPriorities = [...home.topPriorities]
+    .filter((priority) => priority.status === "pending")
+    .sort((left, right) => left.slot - right.slot);
+  const topOpenPriority = openPriorities[0] ?? null;
+  const openExecutionTasks = executionTasks.filter((task) => task.status === "pending");
+  const nextTimedTask = [...openExecutionTasks]
+    .filter((task) => Boolean(task.dueAt))
+    .sort((left, right) => new Date(left.dueAt ?? "").getTime() - new Date(right.dueAt ?? "").getTime())[0] ?? null;
+  const quickCaptureDayNotes = allTasks.filter(isQuickCaptureMetadataTask);
   const inboxPreviewItems = [...(inboxQuery.data?.tasks ?? [])]
     .sort((left, right) => new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime())
     .slice(0, 3);
-  const taskMutationError =
-    updateTaskMutation.error instanceof Error
-      ? updateTaskMutation.error.message
-      : habitCheckinMutation.error instanceof Error
-        ? habitCheckinMutation.error.message
-        : updatePriorityMutation.error instanceof Error
-          ? updatePriorityMutation.error.message
-          : addWaterMutation.error instanceof Error
-            ? addWaterMutation.error.message
-            : null;
-
-  function handleQuickWater(amountMl: number) {
-    addWaterMutation.mutate(amountMl);
-  }
 
   return (
     <div className="page">
@@ -277,283 +282,172 @@ export function HomePage() {
         </div>
       </section>
 
-      {/* --- Guidance rail --- */}
-      {home.guidance ? (
-        <div className="guidance-rail">
-          {home.guidance.recovery ? (
-            <div className={`recovery-strip${home.guidance.recovery.tone === "recovery" ? " recovery-strip--recovery" : ""}`}>
-              <span className="recovery-strip__indicator" />
-              <div className="recovery-strip__body">
-                <div className="recovery-strip__title">{home.guidance.recovery.title}</div>
-                <div className="recovery-strip__detail">{home.guidance.recovery.detail}</div>
-              </div>
+      <div className="guidance-rail">
+        {home.guidance.recovery ? (
+          <div className={`recovery-strip${home.guidance.recovery.tone === "recovery" ? " recovery-strip--recovery" : ""}`}>
+            <span className="recovery-strip__indicator" />
+            <div className="recovery-strip__body">
+              <div className="recovery-strip__title">{home.guidance.recovery.title}</div>
+              <div className="recovery-strip__detail">{home.guidance.recovery.detail}</div>
             </div>
-          ) : null}
+          </div>
+        ) : null}
 
-          {home.guidance.weeklyChallenge ? (() => {
-            const wc = home.guidance.weeklyChallenge;
-            return (
-              <Link
-                to="/habits"
-                className={`challenge-card${wc.status === "behind" ? " challenge-card--behind" : ""}`}
-              >
-                <ChallengeProgressRing completions={wc.weekCompletions} target={wc.weekTarget} />
-                <div className="challenge-card__body">
-                  <div className="challenge-card__label">Weekly focus</div>
-                  <div className="challenge-card__title">{wc.title}</div>
-                  <div className="challenge-card__meta">
-                    {wc.weekCompletions}/{wc.weekTarget} this week
-                    {wc.streakCount > 0 ? ` · ${wc.streakCount} day streak` : ""}
-                  </div>
+        {home.guidance.weeklyChallenge ? (() => {
+          const weeklyChallenge = home.guidance.weeklyChallenge;
+          return (
+            <Link
+              to="/habits"
+              className={`challenge-card${weeklyChallenge.status === "behind" ? " challenge-card--behind" : ""}`}
+            >
+              <ChallengeProgressRing
+                completions={weeklyChallenge.weekCompletions}
+                target={weeklyChallenge.weekTarget}
+              />
+              <div className="challenge-card__body">
+                <div className="challenge-card__label">Weekly focus</div>
+                <div className="challenge-card__title">{weeklyChallenge.title}</div>
+                <div className="challenge-card__meta">
+                  {weeklyChallenge.weekCompletions}/{weeklyChallenge.weekTarget} this week
+                  {weeklyChallenge.streakCount > 0 ? ` · ${weeklyChallenge.streakCount} day streak` : ""}
                 </div>
-                <span className="challenge-card__status">
-                  <span className={`tag ${wc.status === "on_track" ? "tag--positive" : wc.status === "due_today" ? "tag--warning" : "tag--negative"}`}>
-                    {wc.status === "on_track" ? "on track" : wc.status === "due_today" ? "due today" : "behind"}
-                  </span>
+              </div>
+              <span className="challenge-card__status">
+                <span
+                  className={`tag ${weeklyChallenge.status === "on_track" ? "tag--positive" : weeklyChallenge.status === "due_today" ? "tag--warning" : "tag--negative"}`}
+                >
+                  {weeklyChallenge.status === "on_track"
+                    ? "on track"
+                    : weeklyChallenge.status === "due_today"
+                      ? "due today"
+                      : "behind"}
                 </span>
-              </Link>
-            );
-          })() : null}
+              </span>
+            </Link>
+          );
+        })() : null}
 
-          {home.guidance.recommendations.length > 0 ? (
-            <div className="rec-stack">
-              {home.guidance.recommendations.map((rec) => {
-                const action = rec.action;
-                return (
-                  <div key={rec.id} className="rec-item">
-                    <span className={`rec-item__kind rec-item__kind--${rec.kind}`} />
-                    <div className="rec-item__body">
-                      <div className="rec-item__title">{rec.title}</div>
-                      <div className="rec-item__detail">{rec.detail}</div>
-                    </div>
-                    <span className="rec-item__impact">{rec.impactLabel}</span>
-                    <div className="rec-item__action">
-                      {action.type === "complete_task" ? (
-                        <button
-                          className="button button--ghost button--small"
-                          type="button"
-                          disabled={updateTaskMutation.isPending}
-                          onClick={() =>
-                            updateTaskMutation.mutate({
-                              taskId: action.entityId,
-                              status: "completed",
-                            })
-                          }
-                        >
-                          {updateTaskMutation.isPending ? "Saving..." : "Done"}
-                        </button>
-                      ) : action.type === "complete_habit" ? (
-                        <button
-                          className="button button--ghost button--small"
-                          type="button"
-                          disabled={habitCheckinMutation.isPending}
-                          onClick={() => habitCheckinMutation.mutate(action.entityId)}
-                        >
-                          {habitCheckinMutation.isPending ? "Saving..." : "Done"}
-                        </button>
-                      ) : (
-                        <button
-                          className="button button--ghost button--small"
-                          type="button"
-                          onClick={() => navigate(action.route)}
-                        >
-                          Open
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          ) : null}
-        </div>
-      ) : null}
+        {home.guidance.recommendations.length > 0 ? (
+          <div className="rec-stack">
+            {home.guidance.recommendations.map((recommendation) => (
+              <div key={recommendation.id} className="rec-item">
+                <span className={`rec-item__kind rec-item__kind--${recommendation.kind}`} />
+                <div className="rec-item__body">
+                  <div className="rec-item__title">{recommendation.title}</div>
+                  <div className="rec-item__detail">{recommendation.detail}</div>
+                </div>
+                <span className="rec-item__impact">{recommendation.impactLabel}</span>
+                <div className="rec-item__action">
+                  <button
+                    className="button button--ghost button--small"
+                    type="button"
+                    onClick={() => navigate(recommendation.action.route)}
+                  >
+                    {getActionLabel(recommendation.action)}
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : null}
+      </div>
 
       <div className="dashboard-grid stagger">
         <SectionCard
+          title="Today focus"
+          subtitle="Use Home to decide. Use Today to work."
+          className="today-focus-card"
+        >
+          <div className="today-focus">
+            <div className="today-focus__lede">
+              <div className="today-focus__eyebrow">Execution handoff</div>
+              <div className="today-focus__headline">
+                {topOpenPriority
+                  ? `Start with Priority ${topOpenPriority.slot}: ${topOpenPriority.title}`
+                  : openExecutionTasks.length > 0
+                    ? `${openExecutionTasks.length} open tasks are waiting in Today`
+                    : "Today is clear enough to work from intention, not clutter"}
+              </div>
+              <p className="today-focus__copy">
+                Home keeps the day legible. Move into Today to complete, move, reorder, or drop work.
+              </p>
+              {topOpenPriority?.goal ? <GoalChip goal={topOpenPriority.goal} /> : null}
+            </div>
+
+            <div className="today-focus__grid">
+              <div className="today-focus__metric">
+                <span className="today-focus__metric-label">Open priorities</span>
+                <strong className="today-focus__metric-value">{openPriorities.length}</strong>
+                <span className="today-focus__metric-detail">
+                  {topOpenPriority ? topOpenPriority.title : "No ranked focus yet"}
+                </span>
+              </div>
+              <div className="today-focus__metric">
+                <span className="today-focus__metric-label">Open tasks</span>
+                <strong className="today-focus__metric-value">{openExecutionTasks.length}</strong>
+                <span className="today-focus__metric-detail">
+                  {openExecutionTasks.length > 0 ? "Resolve or move them in Today" : "Execution lane is clear"}
+                </span>
+              </div>
+              <div className="today-focus__metric">
+                <span className="today-focus__metric-label">Next timed block</span>
+                <strong className="today-focus__metric-value">
+                  {nextTimedTask?.dueAt ? formatTimeLabel(nextTimedTask.dueAt) : "None"}
+                </strong>
+                <span className="today-focus__metric-detail">
+                  {nextTimedTask ? nextTimedTask.title : "No timed task scheduled"}
+                </span>
+              </div>
+              <div className="today-focus__metric">
+                <span className="today-focus__metric-label">Day notes</span>
+                <strong className="today-focus__metric-value">{quickCaptureDayNotes.length}</strong>
+                <span className="today-focus__metric-detail">
+                  {quickCaptureDayNotes.length > 0 ? "Quick notes and reminders attached to today" : "No quick-capture notes today"}
+                </span>
+              </div>
+            </div>
+
+            <div className="button-row">
+              <button
+                className="button button--primary"
+                type="button"
+                onClick={() => navigate("/today")}
+              >
+                Open Today
+              </button>
+            </div>
+          </div>
+        </SectionCard>
+
+        <SectionCard
           title="Attention"
-          subtitle="Items needing action now"
+          subtitle="What needs a decision right now"
         >
           {attentionItems.length > 0 ? (
             <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
-              {attentionItems.map((item) => {
-                const action = item.action;
-                return (
-                  <div key={item.id} className="attention-item">
-                    <span className="attention-item__icon" />
-                    <div className="attention-item__content">
-                      <div className="attention-item__title">{item.title}</div>
-                      <div className="attention-item__detail">
-                        {item.detail ?? `${item.kind.replace(/_/g, " ")} • ${item.tone}`}
-                      </div>
-                    </div>
-                    {action.type === "complete_task" ? (
-                      <button
-                        className="button button--ghost button--small"
-                        type="button"
-                        disabled={updateTaskMutation.isPending}
-                        onClick={() =>
-                          updateTaskMutation.mutate({
-                            taskId: action.entityId,
-                            status: "completed",
-                          })
-                        }
-                      >
-                        {updateTaskMutation.isPending ? "Saving..." : "Done task"}
-                      </button>
-                    ) : action.type === "complete_habit" ? (
-                      <button
-                        className="button button--ghost button--small"
-                        type="button"
-                        disabled={habitCheckinMutation.isPending}
-                        onClick={() => habitCheckinMutation.mutate(action.entityId)}
-                      >
-                        {habitCheckinMutation.isPending ? "Saving..." : "Done habit"}
-                      </button>
-                    ) : (
-                      <button
-                        className="button button--ghost button--small"
-                        type="button"
-                        onClick={() => navigate(action.route)}
-                      >
-                        {action.type === "open_review" ? "Open review" : "Open"}
-                      </button>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          ) : (
-            <EmptyState
-              title="Nothing urgent"
-              description="The command center is clear for now. Use Today to push the next important task."
-            />
-          )}
-        </SectionCard>
-
-        <SectionCard
-          title="Top priorities"
-          subtitle="Ordered by importance with quick status updates."
-        >
-          {home.topPriorities.length > 0 ? (
-            <ol className="priority-list">
-              {home.topPriorities.map((priority) => (
-                <li
-                  key={priority.id}
-                  className={
-                    priority.status === "completed"
-                      ? "priority-list__item priority-list__item--done"
-                      : priority.status === "dropped"
-                        ? "priority-list__item priority-list__item--dropped"
-                        : "priority-list__item"
-                  }
-                >
-                  <div>
-                    <span>{priority.title}</span>
-                    {priority.goal ? (
-                      <div style={{ marginTop: "0.2rem" }}>
-                        <GoalChip goal={priority.goal} />
-                      </div>
-                    ) : null}
-                  </div>
-                  <div className="button-row button-row--tight">
-                    <span
-                      className={
-                        priority.status === "completed"
-                          ? "tag tag--positive"
-                          : priority.status === "dropped"
-                            ? "tag tag--negative"
-                            : "tag tag--warning"
-                      }
-                    >
-                      {priority.status === "completed"
-                        ? "done"
-                        : priority.status === "dropped"
-                          ? "dropped"
-                          : "open"}
-                    </span>
-                    <button
-                      className="button button--ghost button--small"
-                      type="button"
-                      disabled={priority.status === "completed" || updatePriorityMutation.isPending}
-                      onClick={() =>
-                        updatePriorityMutation.mutate({
-                          priorityId: priority.id,
-                          status: "completed",
-                        })
-                      }
-                    >
-                      Done
-                    </button>
-                    <button
-                      className="button button--ghost button--small"
-                      type="button"
-                      disabled={priority.status === "dropped" || updatePriorityMutation.isPending}
-                      onClick={() =>
-                        updatePriorityMutation.mutate({
-                          priorityId: priority.id,
-                          status: "dropped",
-                        })
-                      }
-                    >
-                      Drop
-                    </button>
-                  </div>
-                  </li>
-                ))}
-              </ol>
-          ) : (
-            <EmptyState
-              title="No priorities yet"
-              description="Today has no ranked priorities. The daily planning loop is still open."
-            />
-          )}
-        </SectionCard>
-
-        <SectionCard
-          title="Task lane"
-          subtitle="Today only"
-        >
-          {taskMutationError ? (
-            <InlineErrorState message={taskMutationError} onRetry={retryAll} />
-          ) : null}
-          {taskLaneTasks.length > 0 ? (
-            <ul className="list">
-              {taskLaneTasks.map((task) => (
-                <li key={task.id}>
-                  <div>
-                    <strong>{task.title}</strong>
-                    <div className="list__subtle">
-                      {task.status === "completed"
-                        ? "Completed"
-                        : getHomeTaskMeta(task, task.scheduledForDate ?? "Scheduled today")}
-                      {task.goal ? (
-                        <span style={{ marginLeft: "0.5rem" }}>
-                          <GoalChip goal={task.goal} />
-                        </span>
-                      ) : null}
+              {attentionItems.map((item) => (
+                <div key={item.id} className="attention-item">
+                  <span className="attention-item__icon" />
+                  <div className="attention-item__content">
+                    <div className="attention-item__title">{item.title}</div>
+                    <div className="attention-item__detail">
+                      {item.detail ?? `${item.kind.replace(/_/g, " ")} • ${item.tone}`}
                     </div>
                   </div>
                   <button
                     className="button button--ghost button--small"
                     type="button"
-                    disabled={task.status === "completed" || updateTaskMutation.isPending}
-                    onClick={() =>
-                      updateTaskMutation.mutate({
-                        taskId: task.id,
-                        status: "completed",
-                      })
-                    }
+                    onClick={() => navigate(item.action.route)}
                   >
-                    {updateTaskMutation.isPending ? "Saving..." : "Done"}
+                    {getActionLabel(item.action)}
                   </button>
-                </li>
+                </div>
               ))}
-            </ul>
+            </div>
           ) : (
             <EmptyState
-              title="Task lane is clear"
-              description="There are no day-specific tasks scheduled right now."
+              title="Nothing urgent"
+              description="The dashboard is clear. Open Today when you want to work the next meaningful step."
             />
           )}
         </SectionCard>
@@ -562,19 +456,32 @@ export function HomePage() {
           title="Routines"
           subtitle="Morning and evening"
         >
-          {routines.length > 0 ? (
-            <ul className="list">
-              {routines.map((routine) => (
-                <li key={routine.title}>
-                  <strong>{routine.title}</strong>
-                  <span className="list__subtle">{routine.detail}</span>
-                </li>
-              ))}
-            </ul>
+          {home.routineSummary.totalItems > 0 ? (
+            <>
+              <ul className="list">
+                {routines.map((routine) => (
+                  <li key={routine.title}>
+                    <strong>{routine.title}</strong>
+                    <span className="list__subtle">{routine.detail}</span>
+                  </li>
+                ))}
+              </ul>
+              <div className="button-row" style={{ marginTop: "0.75rem" }}>
+                <button
+                  className="button button--ghost button--small"
+                  type="button"
+                  onClick={() => navigate("/habits")}
+                >
+                  Open Habits
+                </button>
+              </div>
+            </>
           ) : (
             <EmptyState
               title="No active routines"
               description="Routine progress will appear here once a morning or evening routine is active."
+              actionLabel="Open Habits"
+              onAction={() => navigate("/habits")}
             />
           )}
         </SectionCard>
@@ -586,35 +493,18 @@ export function HomePage() {
           <ul className="list">
             {healthSnapshot.map((item) => (
               <li key={item.label}>
-                  <strong>{item.label}</strong>
-                  <span className="list__subtle">{item.value}</span>
-                </li>
+                <strong>{item.label}</strong>
+                <span className="list__subtle">{item.value}</span>
+              </li>
             ))}
           </ul>
-          <div className="button-row" style={{ marginTop: "0.75rem", flexWrap: "wrap" }}>
+          <div className="button-row" style={{ marginTop: "0.75rem" }}>
             <button
               className="button button--ghost button--small"
               type="button"
-              disabled={addWaterMutation.isPending}
-              onClick={() => handleQuickWater(250)}
+              onClick={() => navigate("/health")}
             >
-              {addWaterMutation.isPending ? "Logging..." : "+250ml"}
-            </button>
-            <button
-              className="button button--ghost button--small"
-              type="button"
-              disabled={addWaterMutation.isPending}
-              onClick={() => handleQuickWater(500)}
-            >
-              {addWaterMutation.isPending ? "Logging..." : "+500ml"}
-            </button>
-            <button
-              className="button button--primary button--small"
-              type="button"
-              disabled={addWaterMutation.isPending}
-              onClick={() => handleQuickWater(1000)}
-            >
-              {addWaterMutation.isPending ? "Logging..." : "+1L"}
+              Open Health
             </button>
           </div>
         </SectionCard>
@@ -644,7 +534,7 @@ export function HomePage() {
                   type="button"
                   onClick={() => navigate("/inbox")}
                 >
-                  Open inbox
+                  Open Inbox
                 </button>
               </div>
             </>
@@ -652,7 +542,7 @@ export function HomePage() {
             <EmptyState
               title="Inbox is clear"
               description="New captures will wait here until you decide what belongs on the calendar or Today."
-              actionLabel="Open inbox"
+              actionLabel="Open Inbox"
               onAction={() => navigate("/inbox")}
             />
           )}
@@ -670,6 +560,15 @@ export function HomePage() {
               </li>
             ))}
           </ul>
+          <div className="button-row" style={{ marginTop: "0.75rem" }}>
+            <button
+              className="button button--ghost button--small"
+              type="button"
+              onClick={() => navigate("/finance")}
+            >
+              Open Finance
+            </button>
+          </div>
         </SectionCard>
       </div>
     </div>

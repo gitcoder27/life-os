@@ -129,6 +129,7 @@ type HomeOverviewResponse = {
     title: string;
     status: "pending" | "completed" | "dropped";
     scheduledForDate: string | null;
+    dueAt: string | null;
     goalId: string | null;
     goal: LinkedGoal | null;
     notes: string | null;
@@ -162,14 +163,6 @@ type HomeOverviewResponse = {
     tone: "info" | "warning" | "urgent";
     detail?: string;
     action:
-      | {
-          type: "complete_task";
-          entityId: string;
-        }
-      | {
-          type: "complete_habit";
-          entityId: string;
-        }
       | {
           type: "open_review";
           route: string;
@@ -209,8 +202,6 @@ type HomeOverviewResponse = {
       detail: string;
       impactLabel: string;
       action:
-        | { type: "complete_task"; entityId: string }
-        | { type: "complete_habit"; entityId: string }
         | { type: "open_review"; route: string }
         | { type: "open_route"; route: string };
     }>;

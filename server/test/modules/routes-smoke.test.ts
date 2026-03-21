@@ -546,8 +546,8 @@ describe("module route smoke tests", () => {
       expect.objectContaining({
         kind: "task",
         action: {
-          type: "complete_task",
-          entityId: "task-1",
+          type: "open_route",
+          route: "/today",
         },
       }),
     );
