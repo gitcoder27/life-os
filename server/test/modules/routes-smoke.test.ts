@@ -1653,6 +1653,29 @@ describe("module route smoke tests", () => {
     expect(JSON.parse(response.body).message).toBe("Goal not found");
   });
 
+  it("filters task list for inbox-style queries", async () => {
+    prisma.task = {
+      findMany: vi.fn().mockResolvedValue([]),
+    } as any;
+
+    const response = await app!.inject({
+      method: "GET",
+      url: "/api/tasks?status=pending&originType=quick_capture&scheduledState=unscheduled",
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(prisma.task.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          userId: "user-1",
+          status: "PENDING",
+          originType: "QUICK_CAPTURE",
+          scheduledForDate: null,
+        }),
+      }),
+    );
+  });
+
   it("rejects foreign goal references on day priority updates", async () => {
     prisma.goal = {
       findFirst: vi.fn().mockResolvedValue(null),

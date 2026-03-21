@@ -14,6 +14,7 @@ import {
 
 const navItems = [
   { to: "/", label: "Home", hint: "daily command center" },
+  { to: "/inbox", label: "Inbox", hint: "capture triage" },
   { to: "/today", label: "Today", hint: "execution lane" },
   { to: "/habits", label: "Habits", hint: "consistency system" },
   { to: "/health", label: "Health", hint: "body basics" },

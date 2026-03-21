@@ -5,6 +5,7 @@ import type { RecurrenceDefinition, RecurrenceInput, RecurringTaskCarryPolicy } 
 export type PriorityStatus = "pending" | "completed" | "dropped";
 export type TaskStatus = "pending" | "completed" | "dropped";
 export type TaskOriginType = "manual" | "quick_capture" | "carry_forward" | "review_seed" | "recurring";
+export type TaskScheduledState = "all" | "scheduled" | "unscheduled";
 
 export interface PlanningPriorityItem {
   id: EntityId;
@@ -118,6 +119,15 @@ export interface CarryForwardTaskRequest {
 
 export interface TaskMutationResponse extends ApiMeta {
   task: PlanningTaskItem;
+}
+
+export interface TasksQuery {
+  scheduledForDate?: IsoDateString;
+  from?: IsoDateString;
+  to?: IsoDateString;
+  status?: TaskStatus;
+  originType?: TaskOriginType;
+  scheduledState?: TaskScheduledState;
 }
 
 export interface TasksResponse extends ApiMeta {

@@ -114,7 +114,7 @@ export function NotificationsPage() {
   return (
     <div className="page">
       <PageHeader
-        eyebrow="Inbox"
+        eyebrow="Notifications"
         title="Notifications"
         description="System alerts, reminders, and action items. Mark read, dismiss, or navigate to the source."
       />

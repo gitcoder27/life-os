@@ -6,6 +6,7 @@ import {
   getTodayDate,
   useDailyScoreQuery,
   useHabitCheckinMutation,
+  useInboxQuery,
   useHomeOverviewQuery,
   useAddWaterMutation,
   useUpdatePriorityMutation,
@@ -14,7 +15,6 @@ import {
   type LinkedGoal,
 } from "../../shared/lib/api";
 import {
-  getQuickCaptureDisplayText,
   parseQuickCaptureNotes,
 } from "../../shared/lib/quickCapture";
 import { MetricPill } from "../../shared/ui/MetricPill";
@@ -69,13 +69,24 @@ function isQuickCaptureMetadataTask(task: HomeTaskLike) {
 }
 
 function getHomeTaskMeta(task: HomeTaskLike, fallback: string) {
-  return getQuickCaptureDisplayText(task.notes, fallback);
+  const parsed = parseQuickCaptureNotes(task.notes);
+
+  if (!parsed) {
+    return fallback;
+  }
+
+  if (parsed.kind === "note") {
+    return parsed.text.trim() || fallback;
+  }
+
+  return `Reminder${parsed.reminderDate ? ` for ${parsed.reminderDate}` : ""}: ${parsed.text.trim() || "Reminder"}`;
 }
 
 export function HomePage() {
   const today = getTodayDate();
   const navigate = useNavigate();
   const homeQuery = useHomeOverviewQuery(today);
+  const inboxQuery = useInboxQuery();
   const scoreQuery = useDailyScoreQuery(today);
   const weeklyMomentumQuery = useWeeklyMomentumQuery(today);
   const updateTaskMutation = useTaskStatusMutation(today);
@@ -84,6 +95,7 @@ export function HomePage() {
   const updatePriorityMutation = useUpdatePriorityMutation(today);
   const retryAll = () => {
     void homeQuery.refetch();
+    void inboxQuery.refetch();
     void scoreQuery.refetch();
     void weeklyMomentumQuery.refetch();
   };
@@ -167,8 +179,10 @@ export function HomePage() {
   const scoreBuckets =
     scoreQuery.data?.buckets?.filter((bucket) => bucket.applicablePoints > 0) ?? [];
   const allTasks = home?.tasks ?? [];
-  const quickCaptureTasks = allTasks.filter(isQuickCaptureMetadataTask);
   const taskLaneTasks = allTasks.filter((task) => !isQuickCaptureMetadataTask(task));
+  const inboxPreviewItems = [...(inboxQuery.data?.tasks ?? [])]
+    .sort((left, right) => new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime())
+    .slice(0, 3);
   const taskMutationError =
     updateTaskMutation.error instanceof Error
       ? updateTaskMutation.error.message
@@ -605,20 +619,44 @@ export function HomePage() {
           </div>
         </SectionCard>
 
-        {quickCaptureTasks.length > 0 ? (
-          <SectionCard title="Quick capture notes" subtitle="Today’s notes and reminders">
-            <ul className="list">
-              {quickCaptureTasks.map((task) => (
-                <li key={task.id}>
-                  <strong>{getHomeTaskMeta(task, task.title)}</strong>
-                  <span className="list__subtle">
-                    {task.scheduledForDate ?? "Scheduled today"}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          </SectionCard>
-        ) : null}
+        <SectionCard title="Inbox" subtitle="Captured items waiting for triage">
+          {inboxQuery.isError ? (
+            <InlineErrorState
+              message={inboxQuery.error instanceof Error ? inboxQuery.error.message : "Inbox preview could not load."}
+              onRetry={() => void inboxQuery.refetch()}
+            />
+          ) : null}
+          {inboxQuery.isLoading && !inboxQuery.data ? (
+            <p className="support-copy">Loading the capture queue...</p>
+          ) : inboxPreviewItems.length > 0 ? (
+            <>
+              <ul className="list">
+                {inboxPreviewItems.map((task) => (
+                  <li key={task.id}>
+                    <strong>{getHomeTaskMeta(task, task.title)}</strong>
+                    <span className="list__subtle">Captured for triage</span>
+                  </li>
+                ))}
+              </ul>
+              <div className="button-row" style={{ marginTop: "0.75rem" }}>
+                <button
+                  className="button button--ghost button--small"
+                  type="button"
+                  onClick={() => navigate("/inbox")}
+                >
+                  Open inbox
+                </button>
+              </div>
+            </>
+          ) : (
+            <EmptyState
+              title="Inbox is clear"
+              description="New captures will wait here until you decide what belongs on the calendar or Today."
+              actionLabel="Open inbox"
+              onAction={() => navigate("/inbox")}
+            />
+          )}
+        </SectionCard>
 
         <SectionCard
           title="Finance snapshot"

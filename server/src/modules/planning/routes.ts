@@ -191,6 +191,8 @@ const taskListQuerySchema = z
     from: isoDateSchema.optional(),
     to: isoDateSchema.optional(),
     status: taskStatusSchema.optional(),
+    originType: taskOriginSchema.optional(),
+    scheduledState: z.enum(["all", "scheduled", "unscheduled"]).optional(),
   })
   .refine(
     (value) =>
@@ -936,6 +938,19 @@ export const registerPlanningRoutes: FastifyPluginAsync = async (app) => {
     const scheduledForDate = query.scheduledForDate ? parseIsoDate(query.scheduledForDate) : null;
     const fromDate = query.from ? parseIsoDate(query.from) : null;
     const toDateExclusive = query.to ? addDays(parseIsoDate(query.to), 1) : null;
+    const scheduledDateFilter =
+      scheduledForDate
+        ? scheduledForDate
+        : fromDate && toDateExclusive
+          ? {
+              gte: fromDate,
+              lt: toDateExclusive,
+            }
+          : query.scheduledState === "scheduled"
+            ? { not: null }
+            : query.scheduledState === "unscheduled"
+              ? null
+              : undefined;
     if (scheduledForDate) {
       await materializeRecurringTasksInRange(app.prisma, user.id, scheduledForDate, scheduledForDate);
     } else if (fromDate && toDateExclusive) {
@@ -945,14 +960,8 @@ export const registerPlanningRoutes: FastifyPluginAsync = async (app) => {
       where: {
         userId: user.id,
         status: query.status ? toPrismaTaskStatus(query.status) : undefined,
-        scheduledForDate: scheduledForDate
-          ? scheduledForDate
-          : fromDate && toDateExclusive
-            ? {
-                gte: fromDate,
-                lt: toDateExclusive,
-              }
-            : undefined,
+        originType: query.originType ? toPrismaTaskOriginType(query.originType) : undefined,
+        scheduledForDate: scheduledDateFilter,
       },
       orderBy: [{ scheduledForDate: "asc" }, { createdAt: "asc" }],
       include: {

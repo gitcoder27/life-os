@@ -80,3 +80,22 @@ export function isQuickCaptureNote(notes: string | null): boolean {
   const parsed = parseQuickCaptureNotes(notes);
   return parsed?.kind === "note";
 }
+
+export function getQuickCaptureText(notes: string | null, fallback = ""): string {
+  const parsed = parseQuickCaptureNotes(notes);
+  return parsed?.text.trim() || fallback;
+}
+
+export function syncQuickCaptureReminderDate(notes: string | null, reminderDate: string): string | null {
+  const parsed = parseQuickCaptureNotes(notes);
+
+  if (!parsed || parsed.kind !== "reminder") {
+    return notes;
+  }
+
+  return stringifyQuickCaptureNotes({
+    kind: "reminder",
+    text: parsed.text,
+    reminderDate,
+  });
+}

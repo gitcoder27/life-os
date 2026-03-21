@@ -144,7 +144,7 @@ export function QuickCaptureSheet({
       await createTaskMutation.mutateAsync({
         title: title.split("\n")[0],
         notes: title,
-        scheduledForDate: today,
+        scheduledForDate: null,
         originType: "quick_capture",
       });
       resetAndClose();
@@ -186,7 +186,7 @@ export function QuickCaptureSheet({
           text: title,
           reminderDate: activeType === "Reminder" ? reminderDate : undefined,
         }),
-        scheduledForDate: activeType === "Reminder" ? reminderDate : today,
+        scheduledForDate: null,
         originType: "quick_capture",
         recurrence: recurrenceEnabled && recurrenceRule ? buildRecurrenceInput(recurrenceRule) : undefined,
       });
@@ -247,8 +247,9 @@ export function QuickCaptureSheet({
   }
 
   const typeHints: Partial<Record<CaptureType, string>> = {
-    Note: "Saved as a day note, separate from executable tasks.",
-    Reminder: "Saved as a reminder note with a due date.",
+    Task: "Captured into Inbox so you can decide later without polluting Today.",
+    Note: "Captured into Inbox as a note for later triage.",
+    Reminder: "Captured into Inbox with a reminder date preserved for triage.",
   };
 
   return (

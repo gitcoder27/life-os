@@ -276,6 +276,23 @@ type RecurrenceInputPayload = {
   exceptions?: Array<{ occurrenceDate: string; action: "skip" | "do_once" | "reschedule"; targetDate?: string | null }>;
 };
 
+export type TaskItem = {
+  id: string;
+  title: string;
+  notes: string | null;
+  status: "pending" | "completed" | "dropped";
+  scheduledForDate: string | null;
+  dueAt: string | null;
+  goalId: string | null;
+  goal: LinkedGoal | null;
+  originType: "manual" | "quick_capture" | "carry_forward" | "review_seed" | "recurring";
+  carriedFromTaskId: string | null;
+  recurrence: RecurrenceDefinitionResponse | null;
+  completedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
 type DayPlanResponse = {
   generatedAt: string;
   date: string;
@@ -288,22 +305,7 @@ type DayPlanResponse = {
     goal: LinkedGoal | null;
     completedAt: string | null;
   }>;
-  tasks: Array<{
-    id: string;
-    title: string;
-    notes: string | null;
-    status: "pending" | "completed" | "dropped";
-    scheduledForDate: string | null;
-    dueAt: string | null;
-    goalId: string | null;
-    goal: LinkedGoal | null;
-    originType: string;
-    carriedFromTaskId: string | null;
-    recurrence: RecurrenceDefinitionResponse | null;
-    completedAt: string | null;
-    createdAt: string;
-    updatedAt: string;
-  }>;
+  tasks: TaskItem[];
 };
 
 export type DayPriorityInput = {
@@ -325,7 +327,21 @@ type PriorityMutationResponse = {
 
 type TaskMutationResponse = {
   generatedAt: string;
-  task: DayPlanResponse["tasks"][number];
+  task: TaskItem;
+};
+
+type TasksResponse = {
+  generatedAt: string;
+  tasks: TaskItem[];
+};
+
+export type TasksQueryFilters = {
+  scheduledForDate?: string;
+  from?: string;
+  to?: string;
+  status?: "pending" | "completed" | "dropped";
+  originType?: "manual" | "quick_capture" | "carry_forward" | "review_seed" | "recurring";
+  scheduledState?: "all" | "scheduled" | "unscheduled";
 };
 
 type HabitsResponse = {
@@ -955,6 +971,16 @@ const queryKeys = {
   score: (date: string) => ["score", "daily", date] as const,
   weeklyMomentum: (date: string) => ["score", "weekly-momentum", date] as const,
   dayPlan: (date: string) => ["planning", "day", date] as const,
+  tasks: (filters: TasksQueryFilters = {}) =>
+    [
+      "tasks",
+      filters.scheduledForDate ?? "all",
+      filters.from ?? "all",
+      filters.to ?? "all",
+      filters.status ?? "all",
+      filters.originType ?? "all",
+      filters.scheduledState ?? "all",
+    ] as const,
   habits: ["habits"] as const,
   health: (date: string) => ["health", date] as const,
   finance: (month: string) => ["finance", month] as const,
@@ -1075,6 +1101,7 @@ function invalidateCoreData(queryClient: ReturnType<typeof useQueryClient>, date
   const weekStart = getWeekStartDate(date);
   const monthStart = getMonthStartDate(date);
 
+  void queryClient.invalidateQueries({ queryKey: ["tasks"] });
   void queryClient.invalidateQueries({ queryKey: queryKeys.home(date) });
   void queryClient.invalidateQueries({ queryKey: queryKeys.score(date) });
   void queryClient.invalidateQueries({ queryKey: queryKeys.weeklyMomentum(date) });
@@ -1352,6 +1379,32 @@ export function useDayPlanQuery(date: string) {
     queryKey: queryKeys.dayPlan(date),
     queryFn: () => apiRequest<DayPlanResponse>(`/api/planning/days/${date}`),
     retry: false,
+  });
+}
+
+export function useTasksQuery(filters: TasksQueryFilters = {}) {
+  return useQuery({
+    queryKey: queryKeys.tasks(filters),
+    queryFn: () =>
+      apiRequest<TasksResponse>("/api/tasks", {
+        query: {
+          scheduledForDate: filters.scheduledForDate,
+          from: filters.from,
+          to: filters.to,
+          status: filters.status,
+          originType: filters.originType,
+          scheduledState: filters.scheduledState,
+        },
+      }),
+    retry: false,
+  });
+}
+
+export function useInboxQuery() {
+  return useTasksQuery({
+    status: "pending",
+    originType: "quick_capture",
+    scheduledState: "unscheduled",
   });
 }
 
@@ -1668,6 +1721,52 @@ export function useUpdateDayPrioritiesMutation(date: string) {
   });
 }
 
+export function useUpdateTaskMutation(date: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      taskId,
+      title,
+      notes,
+      status,
+      scheduledForDate,
+      goalId,
+      dueAt,
+      recurrence,
+      carryPolicy,
+    }: {
+      taskId: string;
+      title?: string;
+      notes?: string | null;
+      status?: "pending" | "completed" | "dropped";
+      scheduledForDate?: string | null;
+      goalId?: string | null;
+      dueAt?: string | null;
+      recurrence?: RecurrenceInputPayload;
+      carryPolicy?: "complete_and_clone" | "move_due_date" | "cancel" | null;
+    }) =>
+      apiRequest<TaskMutationResponse>(`/api/tasks/${taskId}`, {
+        method: "PATCH",
+        body: {
+          title,
+          notes,
+          status,
+          scheduledForDate,
+          goalId,
+          dueAt,
+          recurrence,
+          carryPolicy,
+        },
+      }),
+    meta: {
+      successMessage: "Task updated.",
+      errorMessage: "Task update failed.",
+    },
+    onSuccess: () => invalidateCoreData(queryClient, date),
+  });
+}
+
 export function useCreateTaskMutation(date: string) {
   const queryClient = useQueryClient();
 
@@ -1677,6 +1776,8 @@ export function useCreateTaskMutation(date: string) {
       notes?: string | null;
       scheduledForDate?: string | null;
       originType?: "manual" | "quick_capture" | "carry_forward" | "review_seed" | "recurring";
+      goalId?: string | null;
+      dueAt?: string | null;
       recurrence?: RecurrenceInputPayload;
       carryPolicy?: "complete_and_clone" | "move_due_date" | "cancel";
     }) =>
@@ -1685,7 +1786,7 @@ export function useCreateTaskMutation(date: string) {
         body: payload,
       }),
     meta: {
-      successMessage: "Task captured.",
+      successMessage: "Captured to inbox.",
       errorMessage: "Task capture failed.",
     },
     onSuccess: () => invalidateCoreData(queryClient, date),
