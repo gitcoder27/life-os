@@ -28,6 +28,11 @@ enum GoalStatus {
   ARCHIVED
 }
 
+enum GoalMilestoneStatus {
+  PENDING
+  COMPLETED
+}
+
 enum PlanningCycleType {
   DAY
   WEEK
@@ -258,7 +263,25 @@ model Goal {
   updatedAt  DateTime    @updatedAt
   user       User        @relation(fields: [userId], references: [id], onDelete: Cascade)
   priorities CyclePriority[]
+  milestones GoalMilestone[]
   tasks      Task[]
+  habits     Habit[]
+}
+
+model GoalMilestone {
+  id          String              @id @default(uuid())
+  goalId      String
+  title       String
+  targetDate  DateTime?
+  status      GoalMilestoneStatus @default(PENDING)
+  completedAt DateTime?
+  sortOrder   Int
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+  goal        Goal                @relation(fields: [goalId], references: [id], onDelete: Cascade)
+
+  @@unique([goalId, sortOrder])
+  @@index([goalId, status, targetDate])
 }
 
 model PlanningCycle {
@@ -330,6 +353,7 @@ model Habit {
   title            String
   category         String?
   scheduleRuleJson Json
+  goalId           String?
   recurrenceRuleId String?
   targetPerDay     Int            @default(1)
   status           HabitStatus    @default(ACTIVE)
@@ -337,9 +361,12 @@ model Habit {
   updatedAt        DateTime       @updatedAt
   archivedAt       DateTime?
   user             User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  goal             Goal?          @relation(fields: [goalId], references: [id], onDelete: SetNull)
   checkins         HabitCheckin[]
   weeklyReviewFocuses WeeklyReview[] @relation("WeeklyReviewFocusHabit")
   recurrenceRule   RecurrenceRule? @relation(fields: [recurrenceRuleId], references: [id], onDelete: SetNull)
+
+  @@index([goalId, status])
 }
 
 model HabitCheckin {

@@ -13,6 +13,7 @@ import {
   useUpdateMonthFocusMutation,
   useUpdateWeekPrioritiesMutation,
   type GoalDomain,
+  type GoalOverviewItem,
   type GoalStatus,
   type LinkedGoal,
 } from "../../shared/lib/api";
@@ -24,6 +25,12 @@ import {
   PageLoadingState,
 } from "../../shared/ui/PageState";
 import { SectionCard } from "../../shared/ui/SectionCard";
+import {
+  GoalDetailPanel,
+  GoalProgressBar,
+  HealthBadge,
+  MomentumSpark,
+} from "./GoalDetailPanel";
 
 const domainLabels: Record<string, string> = {
   health: "Health",
@@ -77,6 +84,88 @@ const emptyGoalForm: GoalFormData = {
 type WeekPriorityDraft = { id?: string; title: string; goalId: string };
 type MonthOutcomeDraft = { id?: string; title: string; goalId: string };
 
+/* ── Active Goal Overview Card ── */
+
+function formatDate(iso: string | null): string {
+  if (!iso) return "";
+  const d = new Date(`${iso}T12:00:00`);
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+}
+
+function ActiveGoalCard({
+  goal,
+  selected,
+  onSelect,
+}: {
+  goal: GoalOverviewItem;
+  selected: boolean;
+  onSelect: () => void;
+}) {
+  const ls = goal.linkedSummary;
+  const linkedTotal = ls.currentDayPriorities + ls.currentWeekPriorities + ls.currentMonthPriorities + ls.pendingTasks + ls.activeHabits;
+
+  return (
+    <div
+      className={`goal-overview-card${selected ? " goal-overview-card--selected" : ""}`}
+      onClick={onSelect}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onSelect(); } }}
+    >
+      <div className="goal-overview-card__top">
+        <div className="goal-overview-card__identity">
+          <div className="goal-overview-card__domain">
+            <span className={`goal-chip__dot goal-chip__dot--${goal.domain}`} />
+            {domainLabels[goal.domain] ?? goal.domain}
+          </div>
+          <div className="goal-overview-card__title">{goal.title}</div>
+          {goal.targetDate && (
+            <div className="goal-overview-card__target">Target: {formatDate(goal.targetDate)}</div>
+          )}
+        </div>
+        <HealthBadge health={goal.health} />
+      </div>
+
+      <GoalProgressBar percent={goal.progressPercent} achieved={goal.health === "achieved"} />
+
+      <div className="goal-metrics">
+        <span className="goal-metric">
+          <span className="goal-metric__value">{goal.milestoneCounts.completed}/{goal.milestoneCounts.total}</span>
+          milestones
+        </span>
+        {goal.milestoneCounts.overdue > 0 && (
+          <span className="goal-metric" style={{ color: "var(--negative)" }}>
+            <span className="goal-metric__value" style={{ color: "var(--negative)" }}>{goal.milestoneCounts.overdue}</span>
+            overdue
+          </span>
+        )}
+        {linkedTotal > 0 && (
+          <span className="goal-metric goal-metric--accent">
+            <span className="goal-metric__value">{linkedTotal}</span>
+            linked items
+          </span>
+        )}
+        {ls.dueHabitsToday > 0 && (
+          <span className="goal-metric">
+            <span className="goal-metric__value">{ls.dueHabitsToday}</span>
+            habits due
+          </span>
+        )}
+        <MomentumSpark momentum={goal.momentum} />
+      </div>
+
+      {goal.nextBestAction && (
+        <div className="goal-nba">
+          <span className="goal-nba__icon">→</span>
+          <span>{goal.nextBestAction}</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ── Main Page ── */
+
 export function GoalsPage() {
   const today = getTodayDate();
   const weekStart = getWeekStartDate(today);
@@ -85,6 +174,9 @@ export function GoalsPage() {
   // Filter state
   const [filterDomain, setFilterDomain] = useState<GoalDomain | undefined>(undefined);
   const [filterStatus, setFilterStatus] = useState<GoalStatus | undefined>(undefined);
+
+  // Detail panel
+  const [selectedGoalId, setSelectedGoalId] = useState<string | null>(null);
 
   const goalsQuery = useGoalsDataQuery(today);
   const filteredGoalsQuery = useFilteredGoalsQuery(
@@ -161,7 +253,7 @@ export function GoalsPage() {
     setShowGoalForm(true);
   }
 
-  function openEditGoal(goal: typeof allGoals[number]) {
+  function openEditGoal(goal: GoalOverviewItem) {
     setEditingGoalId(goal.id);
     setGoalForm({
       title: goal.title,
@@ -198,6 +290,9 @@ export function GoalsPage() {
 
   async function handleGoalStatusChange(goalId: string, status: GoalStatus) {
     await updateGoalMutation.mutateAsync({ goalId, status });
+    if (selectedGoalId === goalId && (status === "archived" || status === "completed" || status === "paused")) {
+      setSelectedGoalId(null);
+    }
   }
 
   function openEditWeek() {
@@ -267,9 +362,10 @@ export function GoalsPage() {
       <PageHeader
         eyebrow="Direction"
         title="Goals and planning"
-        description="Life-area outcomes, weekly priorities, and monthly focus. Intentionally lightweight."
+        description="Life-area goals with health tracking, milestones, and linked work — your operational planning surface."
       />
 
+      {/* ── Planning Context ── */}
       <div className="dashboard-grid stagger">
         {/* ── Monthly focus ── */}
         <SectionCard
@@ -470,187 +566,210 @@ export function GoalsPage() {
             </>
           )}
         </SectionCard>
+      </div>
 
-        {/* ── Life-area goals ── */}
-        <SectionCard
-          title="Life-area goals"
-          subtitle={isFiltering
-            ? `${filteredGoals.length} matching`
-            : `${activeGoals.length} active`
-          }
-        >
-          {/* Filter bar */}
-          <div className="filter-bar">
-            <div className="filter-bar__group">
-              <span className="filter-bar__label">Domain</span>
+      {/* ── Goals Workspace ── */}
+      <div className="goals-workspace" style={{ marginTop: "1.5rem" }}>
+        {/* Filter bar */}
+        <div className="filter-bar">
+          <div className="filter-bar__group">
+            <span className="filter-bar__label">Domain</span>
+            <button
+              className={`filter-chip ${filterDomain === undefined ? "filter-chip--active" : ""}`}
+              type="button"
+              onClick={() => setFilterDomain(undefined)}
+            >
+              All
+            </button>
+            {domainOptions.map((opt) => (
               <button
-                className={`filter-chip ${filterDomain === undefined ? "filter-chip--active" : ""}`}
+                key={opt.value}
+                className={`filter-chip ${filterDomain === opt.value ? "filter-chip--active" : ""}`}
                 type="button"
-                onClick={() => setFilterDomain(undefined)}
+                onClick={() => setFilterDomain(filterDomain === opt.value ? undefined : opt.value)}
               >
-                All
+                {opt.label}
               </button>
-              {domainOptions.map((opt) => (
-                <button
-                  key={opt.value}
-                  className={`filter-chip ${filterDomain === opt.value ? "filter-chip--active" : ""}`}
-                  type="button"
-                  onClick={() => setFilterDomain(filterDomain === opt.value ? undefined : opt.value)}
-                >
-                  {opt.label}
-                </button>
-              ))}
-            </div>
-            <div className="filter-bar__group">
-              <span className="filter-bar__label">Status</span>
-              <button
-                className={`filter-chip ${filterStatus === undefined ? "filter-chip--active" : ""}`}
-                type="button"
-                onClick={() => setFilterStatus(undefined)}
-              >
-                All
-              </button>
-              {statusOptions.map((opt) => (
-                <button
-                  key={opt.value}
-                  className={`filter-chip ${filterStatus === opt.value ? "filter-chip--active" : ""}`}
-                  type="button"
-                  onClick={() => setFilterStatus(filterStatus === opt.value ? undefined : opt.value)}
-                >
-                  {opt.label}
-                </button>
-              ))}
-            </div>
+            ))}
           </div>
+          <div className="filter-bar__group">
+            <span className="filter-bar__label">Status</span>
+            <button
+              className={`filter-chip ${filterStatus === undefined ? "filter-chip--active" : ""}`}
+              type="button"
+              onClick={() => setFilterStatus(undefined)}
+            >
+              All
+            </button>
+            {statusOptions.map((opt) => (
+              <button
+                key={opt.value}
+                className={`filter-chip ${filterStatus === opt.value ? "filter-chip--active" : ""}`}
+                type="button"
+                onClick={() => setFilterStatus(filterStatus === opt.value ? undefined : opt.value)}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+        </div>
 
-          {filteredGoalsQuery.isFetching && isFiltering ? (
-            <p className="support-copy">Filtering…</p>
-          ) : null}
+        {filteredGoalsQuery.isFetching && isFiltering ? (
+          <p className="support-copy">Filtering…</p>
+        ) : null}
 
-          {showGoalForm ? (
-            <div className="stack-form" ref={goalFormRef}>
-              <label className="field">
-                <span>Title</span>
-                <input
-                  ref={goalTitleRef}
-                  type="text"
-                  value={goalForm.title}
-                  placeholder="What do you want to achieve?"
-                  onChange={(e) => setGoalForm((p) => ({ ...p, title: e.target.value }))}
-                />
-              </label>
-              <label className="field">
-                <span>Domain</span>
-                <select
-                  value={goalForm.domain}
-                  onChange={(e) => setGoalForm((p) => ({ ...p, domain: e.target.value as GoalFormData["domain"] }))}
-                >
-                  {domainOptions.map((opt) => (
-                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+        <div className="goals-workspace__main">
+          {/* ── Goal List ── */}
+          <div className="goals-workspace__list">
+            {/* Goal form */}
+            {showGoalForm ? (
+              <div className="stack-form" ref={goalFormRef} style={{ padding: "1rem", border: "1px solid var(--border)", borderRadius: "var(--r-sm)", background: "var(--panel)" }}>
+                <label className="field">
+                  <span>Title</span>
+                  <input
+                    ref={goalTitleRef}
+                    type="text"
+                    value={goalForm.title}
+                    placeholder="What do you want to achieve?"
+                    onChange={(e) => setGoalForm((p) => ({ ...p, title: e.target.value }))}
+                  />
+                </label>
+                <label className="field">
+                  <span>Domain</span>
+                  <select
+                    value={goalForm.domain}
+                    onChange={(e) => setGoalForm((p) => ({ ...p, domain: e.target.value as GoalFormData["domain"] }))}
+                  >
+                    {domainOptions.map((opt) => (
+                      <option key={opt.value} value={opt.value}>{opt.label}</option>
+                    ))}
+                  </select>
+                </label>
+                <label className="field">
+                  <span>Target date (optional)</span>
+                  <input
+                    type="date"
+                    value={goalForm.targetDate}
+                    onChange={(e) => setGoalForm((p) => ({ ...p, targetDate: e.target.value }))}
+                  />
+                </label>
+                <label className="field">
+                  <span>Notes (optional)</span>
+                  <textarea
+                    rows={2}
+                    value={goalForm.notes}
+                    placeholder="Context or motivation"
+                    onChange={(e) => setGoalForm((p) => ({ ...p, notes: e.target.value }))}
+                  />
+                </label>
+                <div className="button-row">
+                  <button
+                    className="button button--primary button--small"
+                    type="button"
+                    onClick={() => void handleGoalSubmit()}
+                    disabled={createGoalMutation.isPending || updateGoalMutation.isPending}
+                  >
+                    {editingGoalId ? "Update" : "Create"}
+                  </button>
+                  <button
+                    className="button button--ghost button--small"
+                    type="button"
+                    onClick={() => {
+                      setShowGoalForm(false);
+                      setEditingGoalId(null);
+                    }}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            ) : null}
+
+            {/* Active goals */}
+            {displayActiveGoals.length > 0 ? (
+              <div className="stagger" style={{ display: "flex", flexDirection: "column", gap: "0.6rem" }}>
+                {displayActiveGoals.map((goal) => (
+                  <ActiveGoalCard
+                    key={goal.id}
+                    goal={goal}
+                    selected={selectedGoalId === goal.id}
+                    onSelect={() => setSelectedGoalId(selectedGoalId === goal.id ? null : goal.id)}
+                  />
+                ))}
+              </div>
+            ) : displayOtherGoals.length === 0 && !showGoalForm ? (
+              <EmptyState
+                title={isFiltering ? "No matching goals" : "No active goals"}
+                description={isFiltering ? "Try adjusting the filters above." : "Create your first goal to start planning with purpose."}
+                actionLabel={isFiltering ? undefined : "+ Add your first goal"}
+                onAction={isFiltering ? undefined : openCreateGoal}
+              />
+            ) : null}
+
+            {/* Inactive goals */}
+            {displayOtherGoals.length > 0 && (
+              <SectionCard
+                title="Inactive goals"
+                subtitle={`${displayOtherGoals.length} ${displayOtherGoals.length === 1 ? "goal" : "goals"}`}
+              >
+                <div className="inactive-goals">
+                  {displayOtherGoals.map((goal) => (
+                    <div key={goal.id} className="inactive-goal-row">
+                      <span className={`goal-chip__dot goal-chip__dot--${goal.domain}`} />
+                      <span className="inactive-goal-row__title">{goal.title}</span>
+                      <span className={`tag ${goal.status === "completed" ? "tag--positive" : goal.status === "paused" ? "tag--warning" : "tag--neutral"}`}>
+                        {statusLabels[goal.status] ?? goal.status}
+                      </span>
+                      <div className="inactive-goal-row__actions">
+                        <button className="button button--ghost button--small" type="button" onClick={() => void handleGoalStatusChange(goal.id, "active")}>
+                          Reactivate
+                        </button>
+                      </div>
+                    </div>
                   ))}
-                </select>
-              </label>
-              <label className="field">
-                <span>Target date (optional)</span>
-                <input
-                  type="date"
-                  value={goalForm.targetDate}
-                  onChange={(e) => setGoalForm((p) => ({ ...p, targetDate: e.target.value }))}
-                />
-              </label>
-              <label className="field">
-                <span>Notes (optional)</span>
-                <textarea
-                  rows={2}
-                  value={goalForm.notes}
-                  placeholder="Context or motivation"
-                  onChange={(e) => setGoalForm((p) => ({ ...p, notes: e.target.value }))}
-                />
-              </label>
-              <div className="button-row">
+                </div>
+              </SectionCard>
+            )}
+
+            {/* Add goal button */}
+            {!showGoalForm && (
+              <div style={{ display: "flex", gap: "0.5rem" }}>
                 <button
                   className="button button--primary button--small"
                   type="button"
-                  onClick={() => void handleGoalSubmit()}
-                  disabled={createGoalMutation.isPending || updateGoalMutation.isPending}
+                  onClick={openCreateGoal}
                 >
-                  {editingGoalId ? "Update" : "Create"}
+                  + Add goal
                 </button>
-                <button
-                  className="button button--ghost button--small"
-                  type="button"
-                  onClick={() => {
-                    setShowGoalForm(false);
-                    setEditingGoalId(null);
-                  }}
-                >
-                  Cancel
-                </button>
+                {selectedGoalId && (
+                  <button
+                    className="button button--ghost button--small"
+                    type="button"
+                    onClick={() => {
+                      const goal = allGoals.find((g) => g.id === selectedGoalId);
+                      if (goal) openEditGoal(goal);
+                    }}
+                  >
+                    Edit selected goal
+                  </button>
+                )}
               </div>
-            </div>
-          ) : (
+            )}
+          </div>
+
+          {/* ── Detail Panel ── */}
+          {selectedGoalId && (
             <>
-              {displayActiveGoals.length > 0 ? (
-                <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
-                  {displayActiveGoals.map((goal) => (
-                    <div key={goal.id} className="goal-card goal-card--interactive">
-                      <div className="goal-card__domain">
-                        <span className={`goal-chip__dot goal-chip__dot--${goal.domain}`} style={{ display: "inline-block", marginRight: "0.35rem", verticalAlign: "middle" }} />
-                        {domainLabels[goal.domain] || goal.domain}
-                      </div>
-                      <div className="goal-card__title">{goal.title}</div>
-                      {goal.notes && <div className="goal-card__notes">{goal.notes}</div>}
-                      <div className="button-row button-row--tight" style={{ marginTop: "0.4rem" }}>
-                        <button className="button button--ghost button--small" type="button" onClick={() => openEditGoal(goal)}>Edit</button>
-                        <button className="button button--ghost button--small" type="button" onClick={() => void handleGoalStatusChange(goal.id, "paused")}>Pause</button>
-                        <button className="button button--positive button--small" type="button" onClick={() => void handleGoalStatusChange(goal.id, "completed")}>Complete</button>
-                        <button className="button button--ghost button--small" type="button" onClick={() => void handleGoalStatusChange(goal.id, "archived")}>Archive</button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : displayOtherGoals.length === 0 ? (
-                <EmptyState
-                  title={isFiltering ? "No matching goals" : "No active goals"}
-                  description={isFiltering ? "Try adjusting the filters above." : "Create your first goal to start planning with purpose."}
+              <div className="detail-backdrop" onClick={() => setSelectedGoalId(null)} />
+              <div className="goals-workspace__detail">
+                <GoalDetailPanel
+                  goalId={selectedGoalId}
+                  onClose={() => setSelectedGoalId(null)}
                 />
-              ) : null}
-
-              {displayOtherGoals.length > 0 ? (
-                <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem", marginTop: displayActiveGoals.length > 0 ? "0.75rem" : undefined }}>
-                  {displayOtherGoals.map((goal) => (
-                    <div key={goal.id} className="goal-card">
-                      <div className="goal-card__domain">
-                        <span className={`goal-chip__dot goal-chip__dot--${goal.domain}`} style={{ display: "inline-block", marginRight: "0.35rem", verticalAlign: "middle" }} />
-                        {domainLabels[goal.domain] || goal.domain}
-                      </div>
-                      <div className="goal-card__title">{goal.title}</div>
-                      <div className="button-row button-row--tight" style={{ marginTop: "0.35rem" }}>
-                        <span className={`tag ${goal.status === "completed" ? "tag--positive" : goal.status === "paused" ? "tag--warning" : "tag--neutral"}`}>
-                          {statusLabels[goal.status] ?? goal.status}
-                        </span>
-                        {goal.status !== "active" && (
-                          <button className="button button--ghost button--small" type="button" onClick={() => void handleGoalStatusChange(goal.id, "active")}>
-                            Reactivate
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : null}
-
-              <button
-                className="button button--primary button--small"
-                type="button"
-                onClick={openCreateGoal}
-                style={{ marginTop: "0.6rem" }}
-              >
-                Add goal
-              </button>
+              </div>
             </>
           )}
-        </SectionCard>
+        </div>
       </div>
     </div>
   );

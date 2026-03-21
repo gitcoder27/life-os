@@ -70,6 +70,21 @@ describe("module route smoke tests", () => {
 
     vi.clearAllMocks();
     prisma = createMockPrisma();
+    prisma.recurrenceRule = {
+      findMany: vi.fn().mockResolvedValue([]),
+      upsert: vi.fn().mockResolvedValue({ id: "recurrence-1" }),
+      findUniqueOrThrow: vi.fn().mockResolvedValue({
+        id: "recurrence-1",
+        ruleJson: { frequency: "daily", startsOn: "2026-03-14" },
+        carryPolicy: null,
+        legacyRuleText: null,
+        exceptions: [],
+      }),
+    } as any;
+    prisma.recurrenceException = {
+      deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
+      createMany: vi.fn().mockResolvedValue({ count: 0 }),
+    } as any;
 
     scoringMock.ensureCycle.mockResolvedValue({
       id: "cycle-id",
@@ -294,6 +309,125 @@ describe("module route smoke tests", () => {
     );
   });
 
+  it("supports habit goal linkage", async () => {
+    scoringMock.ensureCycle.mockResolvedValue({
+      id: "week-cycle",
+      weeklyReview: null,
+    } as any);
+    const goalId = "11111111-1111-4111-8111-111111111111";
+    prisma.goal = {
+      findFirst: vi.fn().mockResolvedValue({
+        id: goalId,
+        userId: "user-1",
+        title: "Stay on track",
+        domain: "HEALTH",
+        status: "ACTIVE",
+      }),
+    } as any;
+    prisma.habit = {
+      findMany: vi.fn().mockResolvedValue([
+        {
+          id: "habit-1",
+          userId: "user-1",
+          title: "Hydrate",
+          category: "Health",
+          scheduleRuleJson: {},
+          goalId,
+          goal: {
+            id: goalId,
+            title: "Stay on track",
+            domain: "HEALTH",
+            status: "ACTIVE",
+          },
+          targetPerDay: 1,
+          status: "ACTIVE",
+          createdAt: new Date("2026-03-01T00:00:00.000Z"),
+          checkins: [],
+        },
+      ]),
+      create: vi.fn().mockResolvedValue({
+        id: "habit-1",
+        userId: "user-1",
+        title: "Hydrate",
+        category: "Health",
+        scheduleRuleJson: {},
+        goalId,
+        targetPerDay: 1,
+        status: "ACTIVE",
+        createdAt: new Date("2026-03-01T00:00:00.000Z"),
+      }),
+      findFirst: vi.fn().mockResolvedValue({
+        id: "habit-1",
+        userId: "user-1",
+      }),
+      update: vi.fn().mockResolvedValue({}),
+      findUniqueOrThrow: vi.fn().mockResolvedValue({
+        id: "habit-1",
+        userId: "user-1",
+        title: "Hydrate",
+        category: "Health",
+        scheduleRuleJson: {},
+        goalId,
+        goal: {
+          id: goalId,
+          title: "Stay on track",
+          domain: "HEALTH",
+          status: "ACTIVE",
+        },
+        targetPerDay: 1,
+        status: "ACTIVE",
+        createdAt: new Date("2026-03-01T00:00:00.000Z"),
+        updatedAt: new Date("2026-03-22T00:00:00.000Z"),
+        checkins: [],
+      }),
+    } as any;
+    prisma.routine = { findMany: vi.fn().mockResolvedValue([]) } as any;
+    prisma.userPreference = {
+      findUnique: vi.fn().mockResolvedValue({ timezone: "UTC", weekStartsOn: 1 }),
+    } as any;
+    prisma.$transaction = vi.fn(async (callback: any) => callback(prisma)) as any;
+
+    const list = await app!.inject({ method: "GET", url: "/api/habits" });
+    const created = await app!.inject({
+      method: "POST",
+      url: "/api/habits",
+      payload: {
+        title: "Hydrate",
+        category: "Health",
+        goalId,
+      },
+    });
+    const updated = await app!.inject({
+      method: "PATCH",
+      url: "/api/habits/habit-1",
+      payload: {
+        goalId,
+      },
+    });
+
+    expect(list.statusCode).toBe(200);
+    expect(JSON.parse(list.body).habits[0]).toEqual(
+      expect.objectContaining({
+        goalId,
+        goal: expect.objectContaining({
+          id: goalId,
+          title: "Stay on track",
+        }),
+      }),
+    );
+    expect(created.statusCode).toBe(201);
+    expect(JSON.parse(created.body).habit).toEqual(
+      expect.objectContaining({
+        goalId,
+        goal: expect.objectContaining({
+          id: goalId,
+        }),
+      }),
+    );
+    expect(updated.statusCode).toBe(200);
+    expect(prisma.goal.findFirst).toHaveBeenCalled();
+  });
+
   it("serves notifications", async () => {
     prisma.notification = { findMany: vi.fn().mockResolvedValue([]) } as any;
 
@@ -352,7 +486,21 @@ describe("module route smoke tests", () => {
   });
 
   it("serves planning goals", async () => {
-    prisma.goal = { findMany: vi.fn().mockResolvedValue([]) } as any;
+    prisma.userPreference = {
+      findUnique: vi.fn().mockResolvedValue({ timezone: "UTC", weekStartsOn: 1 }),
+    } as any;
+    prisma.goal = {
+      findMany: vi.fn().mockResolvedValue([]),
+    } as any;
+    prisma.cyclePriority = {
+      findMany: vi.fn().mockResolvedValue([]),
+    } as any;
+    prisma.task = {
+      findMany: vi.fn().mockResolvedValue([]),
+    } as any;
+    prisma.habit = {
+      findMany: vi.fn().mockResolvedValue([]),
+    } as any;
 
     const response = await app!.inject({ method: "GET", url: "/api/goals?domain=health&status=active" });
     expect(response.statusCode).toBe(200);
@@ -363,6 +511,189 @@ describe("module route smoke tests", () => {
           domain: "HEALTH",
           status: "ACTIVE",
         }),
+        include: expect.objectContaining({
+          milestones: expect.any(Object),
+        }),
+      }),
+    );
+  });
+
+  it("serves goal detail and milestone updates", async () => {
+    const goalId = "11111111-1111-4111-8111-111111111111";
+    const milestoneId = "22222222-2222-4222-8222-222222222222";
+    prisma.userPreference = {
+      findUnique: vi.fn().mockResolvedValue({ timezone: "UTC", weekStartsOn: 1 }),
+    } as any;
+    prisma.goal = {
+      findFirst: vi.fn().mockResolvedValue({
+        id: goalId,
+        userId: "user-1",
+        title: "Stay on track",
+        domain: "HEALTH",
+        status: "ACTIVE",
+        targetDate: new Date("2026-03-31T00:00:00.000Z"),
+        notes: "Goal notes",
+        createdAt: new Date("2026-03-01T00:00:00.000Z"),
+        updatedAt: new Date("2026-03-20T00:00:00.000Z"),
+        milestones: [
+          {
+            id: milestoneId,
+            goalId,
+            title: "Milestone one",
+            targetDate: new Date("2026-03-25T00:00:00.000Z"),
+            status: "PENDING",
+            completedAt: null,
+            sortOrder: 1,
+            createdAt: new Date("2026-03-01T00:00:00.000Z"),
+            updatedAt: new Date("2026-03-01T00:00:00.000Z"),
+          },
+        ],
+      }),
+    } as any;
+    prisma.goalMilestone = {
+      findMany: vi
+        .fn()
+        .mockResolvedValueOnce([
+          {
+            id: milestoneId,
+            goalId,
+            title: "Milestone one",
+            targetDate: new Date("2026-03-25T00:00:00.000Z"),
+            status: "PENDING",
+            completedAt: null,
+            sortOrder: 1,
+            createdAt: new Date("2026-03-01T00:00:00.000Z"),
+            updatedAt: new Date("2026-03-01T00:00:00.000Z"),
+          },
+        ])
+        .mockResolvedValueOnce([
+          {
+            id: milestoneId,
+            goalId,
+            title: "Milestone one updated",
+            targetDate: new Date("2026-03-26T00:00:00.000Z"),
+            status: "COMPLETED",
+            completedAt: new Date("2026-03-22T00:00:00.000Z"),
+            sortOrder: 1,
+            createdAt: new Date("2026-03-01T00:00:00.000Z"),
+            updatedAt: new Date("2026-03-22T00:00:00.000Z"),
+          },
+        ]),
+      deleteMany: vi.fn().mockResolvedValue({}),
+      update: vi.fn().mockResolvedValue({}),
+      create: vi.fn().mockResolvedValue({}),
+    } as any;
+    prisma.cyclePriority = {
+      findMany: vi.fn().mockResolvedValue([
+        {
+          id: "priority-1",
+          planningCycleId: "cycle-1",
+          slot: 1,
+          title: "Priority",
+          status: "PENDING",
+          goalId,
+          completedAt: null,
+          planningCycle: {
+            cycleType: "WEEK",
+            cycleStartDate: new Date("2026-03-16T00:00:00.000Z"),
+            cycleEndDate: new Date("2026-03-22T00:00:00.000Z"),
+          },
+        },
+      ]),
+    } as any;
+    prisma.task = {
+      findMany: vi.fn().mockResolvedValue([
+        {
+          id: "task-1",
+          userId: "user-1",
+          title: "Linked task",
+          notes: null,
+          status: "PENDING",
+          scheduledForDate: new Date("2026-03-22T00:00:00.000Z"),
+          dueAt: new Date("2026-03-23T09:00:00.000Z"),
+          goalId,
+          originType: "MANUAL",
+          carriedFromTaskId: null,
+          completedAt: null,
+          createdAt: new Date("2026-03-18T00:00:00.000Z"),
+          updatedAt: new Date("2026-03-18T00:00:00.000Z"),
+        },
+      ]),
+    } as any;
+    prisma.habit = {
+      findMany: vi.fn().mockResolvedValue([
+        {
+          id: "habit-1",
+          userId: "user-1",
+          title: "Hydrate",
+          category: "Health",
+          scheduleRuleJson: {},
+          goalId,
+          targetPerDay: 1,
+          status: "ACTIVE",
+          createdAt: new Date("2026-03-01T00:00:00.000Z"),
+          updatedAt: new Date("2026-03-18T00:00:00.000Z"),
+          archivedAt: null,
+          recurrenceRule: null,
+          checkins: [{ occurredOn: new Date("2026-03-21T00:00:00.000Z"), status: "COMPLETED" }],
+        },
+      ]),
+    } as any;
+    prisma.$transaction = vi.fn(async (callback: any) => callback(prisma)) as any;
+
+    const detail = await app!.inject({ method: "GET", url: `/api/goals/${goalId}?date=2026-03-22` });
+    const milestoneUpdate = await app!.inject({
+      method: "PUT",
+      url: `/api/goals/${goalId}/milestones`,
+      payload: {
+        milestones: [
+          {
+            id: milestoneId,
+            title: "Milestone one updated",
+            targetDate: "2026-03-26",
+            status: "completed",
+          },
+        ],
+      },
+    });
+
+    expect(detail.statusCode).toBe(200);
+    expect(JSON.parse(detail.body)).toEqual(
+      expect.objectContaining({
+        contextDate: "2026-03-22",
+        goal: expect.objectContaining({
+          id: goalId,
+          nextBestAction: expect.any(String),
+          milestones: [
+            expect.objectContaining({
+              id: milestoneId,
+              title: "Milestone one",
+            }),
+          ],
+          linkedPriorities: [
+            expect.objectContaining({
+              cycleType: "week",
+            }),
+          ],
+          linkedTasks: [
+            expect.objectContaining({
+              id: "task-1",
+            }),
+          ],
+          linkedHabits: [
+            expect.objectContaining({
+              id: "habit-1",
+            }),
+          ],
+        }),
+      }),
+    );
+    expect(milestoneUpdate.statusCode).toBe(200);
+    expect(JSON.parse(milestoneUpdate.body).milestones[0]).toEqual(
+      expect.objectContaining({
+        id: milestoneId,
+        status: "completed",
+        title: "Milestone one updated",
       }),
     );
   });
@@ -728,6 +1059,20 @@ describe("module route smoke tests", () => {
         createdAt: new Date(),
         updatedAt: new Date(),
       }),
+      findUniqueOrThrow: vi.fn().mockResolvedValue({
+        id: "template-2",
+        userId: "user-1",
+        title: "Gym",
+        expenseCategoryId: "cat-1",
+        defaultAmountMinor: 12000,
+        currencyCode: "USD",
+        recurrenceRule: "monthly",
+        nextDueOn: new Date("2026-03-30T00:00:00.000Z"),
+        remindDaysBefore: 3,
+        status: "ACTIVE",
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      }),
     } as any;
 
     const financeCategories = await app!.inject({ method: "GET", url: "/api/finance/categories" });
@@ -788,6 +1133,7 @@ describe("module route smoke tests", () => {
       payload: {
         title: "Rent updated",
         defaultAmountMinor: 10500,
+        recurrenceRule: "monthly",
         nextDueOn: "2026-03-22",
         status: "paused",
       },
@@ -1477,6 +1823,22 @@ describe("module route smoke tests", () => {
         originType: "MANUAL",
         carriedFromTaskId: null,
         completedAt: new Date(),
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      }),
+      findUniqueOrThrow: vi.fn().mockResolvedValue({
+        id: "task-2",
+        userId: "user-1",
+        title: "New task",
+        notes: null,
+        status: "PENDING",
+        scheduledForDate: null,
+        dueAt: null,
+        goalId: null,
+        goal: null,
+        originType: "MANUAL",
+        carriedFromTaskId: null,
+        completedAt: null,
         createdAt: new Date(),
         updatedAt: new Date(),
       }),

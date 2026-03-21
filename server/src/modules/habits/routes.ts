@@ -20,6 +20,8 @@ import type {
 import type {
   Prisma,
   CheckinStatus as PrismaCheckinStatus,
+  GoalDomain as PrismaGoalDomain,
+  GoalStatus as PrismaGoalStatus,
   Habit,
   HabitCheckin,
   HabitStatus as PrismaHabitStatus,
@@ -104,6 +106,7 @@ const createHabitSchema = z.object({
   category: z.string().max(120).nullable().optional(),
   scheduleRule: habitScheduleRuleSchema.optional(),
   recurrence: recurrenceInputSchema.optional(),
+  goalId: z.string().uuid().nullable().optional(),
   targetPerDay: z.number().int().positive().max(20).optional(),
 });
 
@@ -113,6 +116,7 @@ const updateHabitSchema = z
     category: z.string().max(120).nullable().optional(),
     scheduleRule: habitScheduleRuleSchema.optional(),
     recurrence: recurrenceInputSchema.optional(),
+    goalId: z.string().uuid().nullable().optional(),
     targetPerDay: z.number().int().positive().max(20).optional(),
     status: habitStatusSchema.optional(),
   })
@@ -182,6 +186,50 @@ function fromPrismaHabitStatus(status: PrismaHabitStatus): HabitItem["status"] {
     case "ARCHIVED":
       return "archived";
   }
+}
+
+function fromPrismaGoalDomain(domain: PrismaGoalDomain) {
+  switch (domain) {
+    case "HEALTH":
+      return "health";
+    case "MONEY":
+      return "money";
+    case "WORK_GROWTH":
+      return "work_growth";
+    case "HOME_ADMIN":
+      return "home_admin";
+    case "DISCIPLINE":
+      return "discipline";
+    case "OTHER":
+      return "other";
+  }
+}
+
+function fromPrismaGoalStatus(status: PrismaGoalStatus) {
+  switch (status) {
+    case "ACTIVE":
+      return "active";
+    case "PAUSED":
+      return "paused";
+    case "COMPLETED":
+      return "completed";
+    case "ARCHIVED":
+      return "archived";
+  }
+}
+
+function serializeGoalSummary(goal: {
+  id: string;
+  title: string;
+  domain: PrismaGoalDomain;
+  status: PrismaGoalStatus;
+}): HabitItem["goal"] {
+  return {
+    id: goal.id,
+    title: goal.title,
+    domain: fromPrismaGoalDomain(goal.domain),
+    status: fromPrismaGoalStatus(goal.status),
+  };
 }
 
 function toPrismaCheckinStatus(status: NonNullable<HabitCheckinRequest["status"]>): PrismaCheckinStatus {
@@ -257,6 +305,12 @@ function serializeRoutine(
 
 async function serializeHabit(
   habit: Habit & {
+    goal?: {
+      id: string;
+      title: string;
+      domain: PrismaGoalDomain;
+      status: PrismaGoalStatus;
+    } | null;
     recurrenceRule?: {
       id?: string;
       ruleJson: unknown;
@@ -282,6 +336,8 @@ async function serializeHabit(
     category: habit.category,
     scheduleRule,
     recurrence: serializeRecurrenceDefinition(habit.recurrenceRule),
+    goalId: habit.goalId ?? null,
+    goal: habit.goal ? serializeGoalSummary(habit.goal) : null,
     targetPerDay: habit.targetPerDay,
     status: fromPrismaHabitStatus(habit.status),
     dueToday,
@@ -308,6 +364,31 @@ async function findOwnedHabit(app: Parameters<FastifyPluginAsync>[0], userId: st
   }
 
   return habit;
+}
+
+async function assertOwnedGoalReference(
+  app: Parameters<FastifyPluginAsync>[0],
+  userId: string,
+  goalId: string | null | undefined,
+) {
+  if (!goalId) {
+    return;
+  }
+
+  const goal = await app.prisma.goal.findFirst({
+    where: {
+      id: goalId,
+      userId,
+    },
+  });
+
+  if (!goal) {
+    throw new AppError({
+      statusCode: 404,
+      code: "NOT_FOUND",
+      message: "Goal not found",
+    });
+  }
 }
 
 async function findOwnedRoutine(app: Parameters<FastifyPluginAsync>[0], userId: string, routineId: string) {
@@ -404,6 +485,7 @@ export const registerHabitsRoutes: FastifyPluginAsync = async (app) => {
         userId: user.id,
       },
       include: {
+        goal: true,
         recurrenceRule: {
           include: {
             exceptions: {
@@ -482,6 +564,7 @@ export const registerHabitsRoutes: FastifyPluginAsync = async (app) => {
     const user = requireAuthenticatedUser(request);
     const payload = parseOrThrow(createHabitSchema, request.body as CreateHabitRequest);
     const { targetIsoDate } = await getTodayIsoDate(app, user.id);
+    await assertOwnedGoalReference(app, user.id, payload.goalId);
     const habit = await app.prisma.$transaction(async (tx) => {
       const recurrence = resolveHabitRecurrenceInput(payload, targetIsoDate);
       const createdHabit = await tx.habit.create({
@@ -490,6 +573,7 @@ export const registerHabitsRoutes: FastifyPluginAsync = async (app) => {
           title: payload.title,
           category: payload.category ?? null,
           scheduleRuleJson: recurrence.rule as unknown as Prisma.InputJsonValue,
+          goalId: payload.goalId ?? null,
           targetPerDay: payload.targetPerDay ?? 1,
         },
       });
@@ -514,6 +598,7 @@ export const registerHabitsRoutes: FastifyPluginAsync = async (app) => {
           id: createdHabit.id,
         },
         include: {
+          goal: true,
           recurrenceRule: {
             include: {
               exceptions: {
@@ -539,6 +624,7 @@ export const registerHabitsRoutes: FastifyPluginAsync = async (app) => {
     const payload = parseOrThrow(updateHabitSchema, request.body as UpdateHabitRequest);
     const { habitId } = request.params as { habitId: string };
     await findOwnedHabit(app, user.id, habitId);
+    await assertOwnedGoalReference(app, user.id, payload.goalId);
     const { targetIsoDate } = await getTodayIsoDate(app, user.id);
     const todayDate = parseIsoDate(targetIsoDate);
     const habit = await app.prisma.$transaction(async (tx) => {
@@ -555,6 +641,7 @@ export const registerHabitsRoutes: FastifyPluginAsync = async (app) => {
           category: payload.category,
           scheduleRuleJson:
             (recurrence?.rule ?? payload.scheduleRule) as unknown as Prisma.InputJsonValue | undefined,
+          goalId: payload.goalId,
           targetPerDay: payload.targetPerDay,
           status: payload.status ? toPrismaHabitStatus(payload.status) : undefined,
           archivedAt: payload.status === "archived" ? new Date() : undefined,
@@ -583,6 +670,7 @@ export const registerHabitsRoutes: FastifyPluginAsync = async (app) => {
           id: habitId,
         },
         include: {
+          goal: true,
           recurrenceRule: {
             include: {
               exceptions: {

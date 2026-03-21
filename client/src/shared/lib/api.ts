@@ -354,6 +354,8 @@ type HabitsResponse = {
     category: string | null;
     scheduleRule: { daysOfWeek?: number[] };
     recurrence: RecurrenceDefinitionResponse | null;
+    goalId: string | null;
+    goal: LinkedGoal | null;
     targetPerDay: number;
     status: "active" | "paused" | "archived";
     dueToday: boolean;
@@ -374,6 +376,8 @@ type HabitsResponse = {
     category: string | null;
     scheduleRule: { daysOfWeek?: number[] };
     recurrence: RecurrenceDefinitionResponse | null;
+    goalId: string | null;
+    goal: LinkedGoal | null;
     targetPerDay: number;
     status: "active" | "paused" | "archived";
     dueToday: boolean;
@@ -675,6 +679,124 @@ type GoalMutationResponse = {
   goal: GoalsResponse["goals"][number];
 };
 
+/* ── Goal Planning Types ─────────────────── */
+
+export type GoalHealthState = "on_track" | "drifting" | "stalled" | "achieved";
+export type GoalMomentumTrend = "up" | "down" | "steady";
+
+export type GoalMilestoneCounts = {
+  total: number;
+  completed: number;
+  pending: number;
+  overdue: number;
+};
+
+export type GoalMomentumPoint = {
+  startDate: string;
+  endDate: string;
+  completedCount: number;
+};
+
+export type GoalMomentumSummary = {
+  trend: GoalMomentumTrend;
+  buckets: GoalMomentumPoint[];
+};
+
+export type GoalLinkedSummary = {
+  currentDayPriorities: number;
+  currentWeekPriorities: number;
+  currentMonthPriorities: number;
+  pendingTasks: number;
+  activeHabits: number;
+  dueHabitsToday: number;
+};
+
+export type GoalOverviewItem = {
+  id: string;
+  title: string;
+  domain: GoalDomain;
+  status: GoalStatus;
+  targetDate: string | null;
+  notes: string | null;
+  createdAt: string;
+  updatedAt: string;
+  progressPercent: number;
+  health: GoalHealthState | null;
+  nextBestAction: string | null;
+  milestoneCounts: GoalMilestoneCounts;
+  momentum: GoalMomentumSummary;
+  linkedSummary: GoalLinkedSummary;
+  lastActivityAt: string | null;
+};
+
+export type GoalMilestoneItem = {
+  id: string;
+  goalId: string;
+  title: string;
+  targetDate: string | null;
+  status: "pending" | "completed";
+  completedAt: string | null;
+  sortOrder: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type GoalLinkedPriorityItem = {
+  id: string;
+  slot: 1 | 2 | 3;
+  title: string;
+  status: "pending" | "completed" | "dropped";
+  completedAt: string | null;
+  cycleType: "day" | "week" | "month";
+  cycleStartDate: string;
+  cycleEndDate: string;
+};
+
+export type GoalLinkedTaskItem = {
+  id: string;
+  title: string;
+  notes: string | null;
+  status: "pending" | "completed" | "dropped";
+  scheduledForDate: string | null;
+  dueAt: string | null;
+  originType: "manual" | "quick_capture" | "carry_forward" | "review_seed" | "recurring";
+  completedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type GoalLinkedHabitItem = {
+  id: string;
+  title: string;
+  category: string | null;
+  status: "active" | "paused" | "archived";
+  targetPerDay: number;
+  dueToday: boolean;
+  completedToday: boolean;
+  streakCount: number;
+  completionRate7d: number;
+  riskLevel: "none" | "at_risk" | "drifting";
+  riskMessage: string | null;
+};
+
+export type GoalDetailItem = GoalOverviewItem & {
+  milestones: GoalMilestoneItem[];
+  linkedPriorities: GoalLinkedPriorityItem[];
+  linkedTasks: GoalLinkedTaskItem[];
+  linkedHabits: GoalLinkedHabitItem[];
+};
+
+type GoalDetailResponse = {
+  generatedAt: string;
+  contextDate: string;
+  goal: GoalDetailItem;
+};
+
+type GoalMilestonesMutationResponse = {
+  generatedAt: string;
+  milestones: GoalMilestoneItem[];
+};
+
 type CategoryMutationResponse = {
   generatedAt: string;
   category: FinanceCategoriesResponse["categories"][number];
@@ -692,16 +814,8 @@ type MealTemplateMutationResponse = {
 
 type GoalsResponse = {
   generatedAt: string;
-  goals: Array<{
-    id: string;
-    title: string;
-    domain: "health" | "money" | "work_growth" | "home_admin" | "discipline" | "other";
-    status: "active" | "paused" | "completed" | "archived";
-    targetDate: string | null;
-    notes: string | null;
-    createdAt: string;
-    updatedAt: string;
-  }>;
+  contextDate: string;
+  goals: GoalOverviewItem[];
 };
 
 type WeekPlanResponse = {
@@ -981,6 +1095,7 @@ const queryKeys = {
   goalsAll: ["goals", "all"] as const,
   goalsFiltered: (domain?: string, status?: string) =>
     ["goals", "filtered", domain ?? "all", status ?? "all"] as const,
+  goalDetail: (goalId: string) => ["goals", "detail", goalId] as const,
   review: (cadence: ReviewCadence, dateKey: string) => ["review", cadence, dateKey] as const,
   notifications: ["notifications"] as const,
   settings: ["settings"] as const,
@@ -1830,6 +1945,7 @@ export function useCreateHabitMutation() {
       scheduleRule?: { daysOfWeek?: number[] };
       recurrence?: RecurrenceInputPayload;
       targetPerDay?: number;
+      goalId?: string | null;
     }) =>
       apiRequest<HabitMutationResponse>("/api/habits/habits", {
         method: "POST",
@@ -1860,6 +1976,7 @@ export function useUpdateHabitMutation() {
       recurrence?: RecurrenceInputPayload;
       targetPerDay?: number;
       status?: "active" | "paused" | "archived";
+      goalId?: string | null;
     }) =>
       apiRequest<HabitMutationResponse>(`/api/habits/habits/${habitId}`, {
         method: "PATCH",
@@ -2465,7 +2582,42 @@ export function useUpdateGoalMutation() {
   });
 }
 
-/* ── Planning ──────────────────────────────── */
+export function useGoalDetailQuery(goalId: string | null) {
+  return useQuery({
+    queryKey: queryKeys.goalDetail(goalId ?? ""),
+    queryFn: () => apiRequest<GoalDetailResponse>(`/api/goals/${goalId}`),
+    enabled: !!goalId,
+    retry: false,
+  });
+}
+
+export function useUpdateGoalMilestonesMutation(goalId: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (payload: {
+      milestones: Array<{
+        id?: string;
+        title: string;
+        targetDate?: string | null;
+        status: "pending" | "completed";
+      }>;
+    }) =>
+      apiRequest<GoalMilestonesMutationResponse>(
+        `/api/goals/${goalId}/milestones`,
+        { method: "PUT", body: payload },
+      ),
+    meta: {
+      successMessage: "Milestones saved.",
+      errorMessage: "Milestones could not be saved.",
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.goalDetail(goalId) });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.goalsAll });
+      void queryClient.invalidateQueries({ queryKey: ["goals"] });
+    },
+  });
+}
 
 export function useUpdateWeekPrioritiesMutation(weekStartDate: string) {
   const queryClient = useQueryClient();

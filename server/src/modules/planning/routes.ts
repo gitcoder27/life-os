@@ -4,7 +4,14 @@ import type {
   CreateTaskRequest,
   DayPlanResponse,
   GoalDomain,
+  GoalDetailResponse,
   GoalItem,
+  GoalLinkedHabitItem,
+  GoalLinkedPriorityItem,
+  GoalLinkedTaskItem,
+  GoalMilestoneInput,
+  GoalMilestoneItem,
+  GoalMilestonesMutationResponse,
   GoalSummary,
   GoalMutationResponse,
   GoalsQuery,
@@ -30,11 +37,16 @@ import type {
   CarryForwardTaskRequest,
   RecurrenceInput,
   RecurringTaskCarryPolicy,
+  UpdateGoalMilestonesRequest,
 } from "@life-os/contracts";
 import type {
   Goal,
   GoalDomain as PrismaGoalDomain,
+  GoalMilestone,
+  GoalMilestoneStatus as PrismaGoalMilestoneStatus,
   GoalStatus as PrismaGoalStatus,
+  Habit,
+  HabitStatus as PrismaHabitStatus,
   PlanningCycle,
   PlanningCycleType,
   PriorityStatus as PrismaPriorityStatus,
@@ -46,12 +58,16 @@ import { z } from "zod";
 
 import { requireAuthenticatedUser } from "../../lib/auth/require-auth.js";
 import { AppError } from "../../lib/errors/app-error.js";
+import { calculateHabitActiveStreak, calculateHabitRisk } from "../../lib/habits/guidance.js";
+import { isHabitDueOnIsoDate, resolveHabitRecurrence } from "../../lib/habits/schedule.js";
 import { withGeneratedAt } from "../../lib/http/response.js";
 import { applyRecurringTaskCarryForward, materializeNextRecurringTaskOccurrence, materializeRecurringTasksInRange } from "../../lib/recurrence/tasks.js";
 import { serializeRecurrenceDefinition, upsertRecurrenceRuleRecord } from "../../lib/recurrence/store.js";
-import { addDays, getMonthEndDate, getWeekEndDate, parseIsoDate } from "../../lib/time/cycle.js";
+import { addDays, getMonthEndDate, getMonthStartIsoDate, getWeekEndDate, getWeekStartIsoDate, parseIsoDate } from "../../lib/time/cycle.js";
 import { toIsoDateString } from "../../lib/time/date.js";
+import { getUserLocalDate } from "../../lib/time/user-time.js";
 import { parseOrThrow } from "../../lib/validation/parse.js";
+import { buildGoalInsights } from "./goal-insights.js";
 
 const isoDateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/) as unknown as z.ZodType<IsoDateString>;
 const isoDateTimeSchema = z.string().datetime({ offset: true });
@@ -65,6 +81,7 @@ const goalDomainSchema = z.enum([
   "other",
 ]);
 const goalStatusSchema = z.enum(["active", "paused", "completed", "archived"]);
+const goalMilestoneStatusSchema = z.enum(["pending", "completed"]);
 const priorityStatusSchema = z.enum(["pending", "completed", "dropped"]);
 const taskStatusSchema = z.enum(["pending", "completed", "dropped"]);
 const taskOriginSchema = z.enum([
@@ -148,6 +165,22 @@ const updateMonthFocusSchema = z.object({
 const goalsQuerySchema = z.object({
   domain: goalDomainSchema.optional(),
   status: goalStatusSchema.optional(),
+  date: isoDateSchema.optional(),
+});
+
+const goalContextQuerySchema = z.object({
+  date: isoDateSchema.optional(),
+});
+
+const goalMilestoneInputSchema = z.object({
+  id: z.string().uuid().optional(),
+  title: z.string().min(1).max(200),
+  targetDate: isoDateSchema.nullable().optional(),
+  status: goalMilestoneStatusSchema,
+});
+
+const updateGoalMilestonesSchema = z.object({
+  milestones: z.array(goalMilestoneInputSchema).max(12),
 });
 
 const updatePrioritySchema = z
@@ -256,6 +289,48 @@ function fromPrismaGoalStatus(status: PrismaGoalStatus): GoalStatus {
       return "paused";
     case "COMPLETED":
       return "completed";
+    case "ARCHIVED":
+      return "archived";
+  }
+}
+
+function toPrismaGoalMilestoneStatus(status: GoalMilestoneInput["status"]): PrismaGoalMilestoneStatus {
+  switch (status) {
+    case "pending":
+      return "PENDING";
+    case "completed":
+      return "COMPLETED";
+  }
+}
+
+function fromPrismaGoalMilestoneStatus(status: PrismaGoalMilestoneStatus): GoalMilestoneItem["status"] {
+  switch (status) {
+    case "PENDING":
+      return "pending";
+    case "COMPLETED":
+      return "completed";
+  }
+}
+
+function fromPrismaPlanningCycleType(
+  cycleType: PlanningCycleType,
+): GoalLinkedPriorityItem["cycleType"] {
+  switch (cycleType) {
+    case "DAY":
+      return "day";
+    case "WEEK":
+      return "week";
+    case "MONTH":
+      return "month";
+  }
+}
+
+function fromPrismaHabitStatus(status: PrismaHabitStatus): GoalLinkedHabitItem["status"] {
+  switch (status) {
+    case "ACTIVE":
+      return "active";
+    case "PAUSED":
+      return "paused";
     case "ARCHIVED":
       return "archived";
   }
@@ -401,6 +476,516 @@ function serializeTask(task: Task & {
     createdAt: task.createdAt.toISOString(),
     updatedAt: task.updatedAt.toISOString(),
   };
+}
+
+function serializeGoalMilestone(milestone: GoalMilestone): GoalMilestoneItem {
+  return {
+    id: milestone.id,
+    goalId: milestone.goalId,
+    title: milestone.title,
+    targetDate: milestone.targetDate ? toIsoDateString(milestone.targetDate) : null,
+    status: fromPrismaGoalMilestoneStatus(milestone.status),
+    completedAt: milestone.completedAt?.toISOString() ?? null,
+    sortOrder: milestone.sortOrder,
+    createdAt: milestone.createdAt.toISOString(),
+    updatedAt: milestone.updatedAt.toISOString(),
+  };
+}
+
+function serializeGoalLinkedPriority(priority: {
+  id: string;
+  slot: number;
+  title: string;
+  status: PrismaPriorityStatus;
+  completedAt: Date | null;
+  planningCycle: {
+    cycleType: PlanningCycleType;
+    cycleStartDate: Date;
+    cycleEndDate: Date;
+  };
+}): GoalLinkedPriorityItem {
+  return {
+    id: priority.id,
+    slot: priority.slot as 1 | 2 | 3,
+    title: priority.title,
+    status: fromPrismaPriorityStatus(priority.status),
+    completedAt: priority.completedAt?.toISOString() ?? null,
+    cycleType: fromPrismaPlanningCycleType(priority.planningCycle.cycleType),
+    cycleStartDate: toIsoDateString(priority.planningCycle.cycleStartDate),
+    cycleEndDate: toIsoDateString(priority.planningCycle.cycleEndDate),
+  };
+}
+
+function serializeGoalLinkedTask(task: Task): GoalLinkedTaskItem {
+  return {
+    id: task.id,
+    title: task.title,
+    notes: task.notes,
+    status: fromPrismaTaskStatus(task.status),
+    scheduledForDate: task.scheduledForDate ? toIsoDateString(task.scheduledForDate) : null,
+    dueAt: task.dueAt?.toISOString() ?? null,
+    originType: fromPrismaTaskOriginType(task.originType),
+    completedAt: task.completedAt?.toISOString() ?? null,
+    createdAt: task.createdAt.toISOString(),
+    updatedAt: task.updatedAt.toISOString(),
+  };
+}
+
+function serializeGoalLinkedHabit(
+  habit: Habit & {
+    recurrenceRule?: {
+      id?: string;
+      ruleJson: unknown;
+      exceptions?: Array<{ occurrenceDate: Date; action: unknown; targetDate: Date | null }>;
+      carryPolicy?: unknown;
+      legacyRuleText?: string | null;
+    } | null;
+    checkins: Array<{ occurredOn: Date; status: "COMPLETED" | "SKIPPED" }>;
+  },
+  targetIsoDate: IsoDateString,
+): GoalLinkedHabitItem {
+  const recurrence = resolveHabitRecurrence(habit, targetIsoDate);
+  const dueToday = isHabitDueOnIsoDate(recurrence, targetIsoDate);
+  const completedToday = habit.checkins.some(
+    (checkin) => toIsoDateString(checkin.occurredOn) === targetIsoDate && checkin.status === "COMPLETED",
+  );
+  const risk = calculateHabitRisk(habit.checkins, recurrence, targetIsoDate);
+
+  return {
+    id: habit.id,
+    title: habit.title,
+    category: habit.category,
+    status: fromPrismaHabitStatus(habit.status),
+    targetPerDay: habit.targetPerDay,
+    dueToday,
+    completedToday,
+    streakCount: calculateHabitActiveStreak(habit.checkins, recurrence, targetIsoDate),
+    completionRate7d: risk.completionRate7d,
+    riskLevel: risk.level,
+    riskMessage: risk.message,
+  };
+}
+
+async function resolveGoalContext(
+  app: Parameters<FastifyPluginAsync>[0],
+  userId: string,
+  requestedDate?: IsoDateString,
+) {
+  const preferences = await app.prisma.userPreference.findUnique({
+    where: {
+      userId,
+    },
+    select: {
+      timezone: true,
+      weekStartsOn: true,
+    },
+  });
+  const contextIsoDate = requestedDate ?? getUserLocalDate(new Date(), preferences?.timezone);
+
+  return {
+    contextIsoDate,
+    contextDate: parseIsoDate(contextIsoDate),
+    weekStartsOn: preferences?.weekStartsOn ?? 1,
+  };
+}
+
+function getCurrentGoalCycleFilters(contextIsoDate: IsoDateString, weekStartsOn: number) {
+  const dayStartDate = parseIsoDate(contextIsoDate);
+  const weekStartIsoDate = getWeekStartIsoDate(contextIsoDate, weekStartsOn);
+  const monthStartIsoDate = getMonthStartIsoDate(contextIsoDate);
+
+  return {
+    dayStartDate,
+    weekStartDate: parseIsoDate(weekStartIsoDate),
+    monthStartDate: parseIsoDate(monthStartIsoDate),
+  };
+}
+
+async function buildGoalOverviews(
+  app: Parameters<FastifyPluginAsync>[0],
+  userId: string,
+  goals: Array<Goal & { milestones: GoalMilestone[] }>,
+  context: Awaited<ReturnType<typeof resolveGoalContext>>,
+) {
+  if (goals.length === 0) {
+    return [];
+  }
+
+  const goalIds = goals.map((goal) => goal.id);
+  const currentCycleFilters = getCurrentGoalCycleFilters(context.contextIsoDate, context.weekStartsOn);
+  const habitsCheckinStart = addDays(context.contextDate, -30);
+
+  const [
+    currentPriorities,
+    pendingTasks,
+    completedTasks,
+    completedPriorities,
+    linkedHabits,
+  ] = await Promise.all([
+    app.prisma.cyclePriority.findMany({
+      where: {
+        goalId: {
+          in: goalIds,
+        },
+        planningCycle: {
+          userId,
+          OR: [
+            {
+              cycleType: "DAY",
+              cycleStartDate: currentCycleFilters.dayStartDate,
+            },
+            {
+              cycleType: "WEEK",
+              cycleStartDate: currentCycleFilters.weekStartDate,
+            },
+            {
+              cycleType: "MONTH",
+              cycleStartDate: currentCycleFilters.monthStartDate,
+            },
+          ],
+        },
+      },
+      include: {
+        planningCycle: true,
+      },
+    }),
+    app.prisma.task.findMany({
+      where: {
+        userId,
+        goalId: {
+          in: goalIds,
+        },
+        status: "PENDING",
+      },
+      select: {
+        goalId: true,
+        title: true,
+        dueAt: true,
+        scheduledForDate: true,
+        createdAt: true,
+      },
+      orderBy: [{ dueAt: "asc" }, { scheduledForDate: "asc" }, { createdAt: "asc" }],
+    }),
+    app.prisma.task.findMany({
+      where: {
+        userId,
+        goalId: {
+          in: goalIds,
+        },
+        completedAt: {
+          not: null,
+        },
+      },
+      select: {
+        goalId: true,
+        completedAt: true,
+      },
+    }),
+    app.prisma.cyclePriority.findMany({
+      where: {
+        goalId: {
+          in: goalIds,
+        },
+        completedAt: {
+          not: null,
+        },
+        planningCycle: {
+          userId,
+        },
+      },
+      select: {
+        goalId: true,
+        completedAt: true,
+      },
+    }),
+    app.prisma.habit.findMany({
+      where: {
+        userId,
+        goalId: {
+          in: goalIds,
+        },
+      },
+      include: {
+        recurrenceRule: {
+          include: {
+            exceptions: {
+              orderBy: {
+                occurrenceDate: "asc",
+              },
+            },
+          },
+        },
+        checkins: {
+          where: {
+            occurredOn: {
+              gte: habitsCheckinStart,
+              lte: context.contextDate,
+            },
+          },
+          orderBy: {
+            occurredOn: "asc",
+          },
+        },
+      },
+    }),
+  ]);
+
+  const currentPriorityCounts = new Map<
+    string,
+    { currentDayPriorities: number; currentWeekPriorities: number; currentMonthPriorities: number }
+  >();
+  for (const priority of currentPriorities) {
+    const counts = currentPriorityCounts.get(priority.goalId ?? "") ?? {
+      currentDayPriorities: 0,
+      currentWeekPriorities: 0,
+      currentMonthPriorities: 0,
+    };
+
+    if (priority.planningCycle.cycleType === "DAY") {
+      counts.currentDayPriorities += 1;
+    } else if (priority.planningCycle.cycleType === "WEEK") {
+      counts.currentWeekPriorities += 1;
+    } else if (priority.planningCycle.cycleType === "MONTH") {
+      counts.currentMonthPriorities += 1;
+    }
+
+    currentPriorityCounts.set(priority.goalId ?? "", counts);
+  }
+
+  const pendingTasksByGoal = new Map<string, typeof pendingTasks>();
+  for (const task of pendingTasks) {
+    if (!task.goalId) {
+      continue;
+    }
+
+    const bucket = pendingTasksByGoal.get(task.goalId) ?? [];
+    bucket.push(task);
+    pendingTasksByGoal.set(task.goalId, bucket);
+  }
+
+  const completionDatesByGoal = new Map<string, Date[]>();
+  for (const goal of goals) {
+    completionDatesByGoal.set(
+      goal.id,
+      goal.milestones.flatMap((milestone) => (milestone.completedAt ? [milestone.completedAt] : [])),
+    );
+  }
+  for (const task of completedTasks) {
+    if (!task.goalId || !task.completedAt) {
+      continue;
+    }
+
+    completionDatesByGoal.set(task.goalId, [...(completionDatesByGoal.get(task.goalId) ?? []), task.completedAt]);
+  }
+  for (const priority of completedPriorities) {
+    if (!priority.goalId || !priority.completedAt) {
+      continue;
+    }
+
+    completionDatesByGoal.set(
+      priority.goalId,
+      [...(completionDatesByGoal.get(priority.goalId) ?? []), priority.completedAt],
+    );
+  }
+
+  const linkedHabitsByGoal = new Map<string, typeof linkedHabits>();
+  for (const habit of linkedHabits) {
+    if (!habit.goalId) {
+      continue;
+    }
+
+    const bucket = linkedHabitsByGoal.get(habit.goalId) ?? [];
+    bucket.push(habit);
+    linkedHabitsByGoal.set(habit.goalId, bucket);
+    const habitCompletionDates = habit.checkins
+      .filter((checkin) => checkin.status === "COMPLETED")
+      .map((checkin) => checkin.occurredOn);
+    completionDatesByGoal.set(
+      habit.goalId,
+      [...(completionDatesByGoal.get(habit.goalId) ?? []), ...habitCompletionDates],
+    );
+  }
+
+  return goals.map((goal) => {
+    const goalHabits = linkedHabitsByGoal.get(goal.id) ?? [];
+    const linkedHabitStates = goalHabits.map((habit) =>
+      serializeGoalLinkedHabit(
+        habit as Habit & {
+          recurrenceRule?: {
+            id?: string;
+            ruleJson: unknown;
+            exceptions?: Array<{ occurrenceDate: Date; action: unknown; targetDate: Date | null }>;
+            carryPolicy?: unknown;
+            legacyRuleText?: string | null;
+          } | null;
+          checkins: Array<{ occurredOn: Date; status: "COMPLETED" | "SKIPPED" }>;
+        },
+        context.contextIsoDate,
+      ),
+    );
+    const insights = buildGoalInsights({
+      goalStatus: fromPrismaGoalStatus(goal.status),
+      targetDate: goal.targetDate,
+      milestones: goal.milestones.map((milestone) => ({
+        title: milestone.title,
+        status: fromPrismaGoalMilestoneStatus(milestone.status),
+        targetDate: milestone.targetDate,
+        sortOrder: milestone.sortOrder,
+      })),
+      pendingTasks: (pendingTasksByGoal.get(goal.id) ?? []).map((task) => ({
+        title: task.title,
+        dueAt: task.dueAt,
+        scheduledForDate: task.scheduledForDate,
+        createdAt: task.createdAt,
+      })),
+      habits: linkedHabitStates.map((habit) => ({
+        title: habit.title,
+        dueToday: habit.dueToday,
+        completedToday: habit.completedToday,
+      })),
+      completionDates: completionDatesByGoal.get(goal.id) ?? [],
+      contextDate: context.contextDate,
+    });
+    const currentCounts = currentPriorityCounts.get(goal.id) ?? {
+      currentDayPriorities: 0,
+      currentWeekPriorities: 0,
+      currentMonthPriorities: 0,
+    };
+
+    return {
+      ...serializeGoal(goal),
+      progressPercent: insights.progressPercent,
+      health: insights.health,
+      nextBestAction: insights.nextBestAction,
+      milestoneCounts: insights.milestoneCounts,
+      momentum: insights.momentum,
+      linkedSummary: {
+        ...currentCounts,
+        pendingTasks: (pendingTasksByGoal.get(goal.id) ?? []).length,
+        activeHabits: linkedHabitStates.filter((habit) => habit.status === "active").length,
+        dueHabitsToday: linkedHabitStates.filter(
+          (habit) => habit.status === "active" && habit.dueToday && !habit.completedToday,
+        ).length,
+      },
+      lastActivityAt: insights.lastActivityAt,
+    };
+  });
+}
+
+async function replaceGoalMilestones(
+  app: Parameters<FastifyPluginAsync>[0],
+  goalId: string,
+  milestones: GoalMilestoneInput[],
+) {
+  const existingMilestones = await app.prisma.goalMilestone.findMany({
+    where: {
+      goalId,
+    },
+    orderBy: {
+      sortOrder: "asc",
+    },
+  });
+  const existingById = new Map(existingMilestones.map((milestone) => [milestone.id, milestone]));
+  const inputIds = milestones.flatMap((milestone) => (milestone.id ? [milestone.id] : []));
+
+  if (new Set(inputIds).size !== inputIds.length) {
+    throw new AppError({
+      statusCode: 400,
+      code: "BAD_REQUEST",
+      message: "Milestone IDs must be unique",
+    });
+  }
+
+  for (const milestoneId of inputIds) {
+    if (!existingById.has(milestoneId)) {
+      throw new AppError({
+        statusCode: 404,
+        code: "NOT_FOUND",
+        message: "Milestone not found",
+      });
+    }
+  }
+
+  await app.prisma.$transaction(async (tx) => {
+    const keptIds = new Set(inputIds);
+    const milestoneIdsToDelete = existingMilestones
+      .filter((milestone) => !keptIds.has(milestone.id))
+      .map((milestone) => milestone.id);
+
+    if (milestoneIdsToDelete.length > 0) {
+      await tx.goalMilestone.deleteMany({
+        where: {
+          id: {
+            in: milestoneIdsToDelete,
+          },
+        },
+      });
+    }
+
+    const referencedMilestones = milestones.filter(
+      (milestone): milestone is GoalMilestoneInput & { id: string } => Boolean(milestone.id),
+    );
+
+    for (const [index, milestone] of referencedMilestones.entries()) {
+      await tx.goalMilestone.update({
+        where: {
+          id: milestone.id,
+        },
+        data: {
+          sortOrder: 100 + index,
+        },
+      });
+    }
+
+    for (const [index, milestone] of milestones.entries()) {
+      const status = toPrismaGoalMilestoneStatus(milestone.status);
+      const existingMilestone = milestone.id ? existingById.get(milestone.id) : null;
+      const completedAt =
+        status === "COMPLETED"
+          ? existingMilestone?.completedAt ?? new Date()
+          : null;
+      const data = {
+        title: milestone.title,
+        targetDate:
+          milestone.targetDate === undefined
+            ? null
+            : milestone.targetDate === null
+              ? null
+              : parseIsoDate(milestone.targetDate),
+        status,
+        completedAt,
+        sortOrder: index + 1,
+      };
+
+      if (milestone.id) {
+        await tx.goalMilestone.update({
+          where: {
+            id: milestone.id,
+          },
+          data,
+        });
+        continue;
+      }
+
+      await tx.goalMilestone.create({
+        data: {
+          goalId,
+          ...data,
+        },
+      });
+    }
+  });
+
+  const refreshed = await app.prisma.goalMilestone.findMany({
+    where: {
+      goalId,
+    },
+    orderBy: {
+      sortOrder: "asc",
+    },
+  });
+
+  return refreshed.map(serializeGoalMilestone);
 }
 
 async function ensurePlanningCycle(
@@ -664,6 +1249,7 @@ export const registerPlanningRoutes: FastifyPluginAsync = async (app) => {
   app.get("/goals", async (request, reply) => {
     const user = requireAuthenticatedUser(request);
     const query = parseOrThrow(goalsQuerySchema, request.query as GoalsQuery);
+    const context = await resolveGoalContext(app, user.id, query.date);
     const goals = await app.prisma.goal.findMany({
       where: {
         userId: user.id,
@@ -674,10 +1260,19 @@ export const registerPlanningRoutes: FastifyPluginAsync = async (app) => {
         { status: "asc" },
         { createdAt: "desc" },
       ],
+      include: {
+        milestones: {
+          orderBy: {
+            sortOrder: "asc",
+          },
+        },
+      },
     });
+    const goalOverviews = await buildGoalOverviews(app, user.id, goals, context);
 
     const response: GoalsResponse = withGeneratedAt({
-      goals: goals.map(serializeGoal),
+      contextDate: context.contextIsoDate,
+      goals: goalOverviews,
     });
 
     return reply.send(response);
@@ -701,6 +1296,134 @@ export const registerPlanningRoutes: FastifyPluginAsync = async (app) => {
     });
 
     return reply.status(201).send(response);
+  });
+
+  app.get("/goals/:goalId", async (request, reply) => {
+    const user = requireAuthenticatedUser(request);
+    const { goalId } = request.params as { goalId: string };
+    const query = parseOrThrow(goalContextQuerySchema, request.query);
+    const context = await resolveGoalContext(app, user.id, query.date);
+    const goal = await app.prisma.goal.findFirst({
+      where: {
+        id: goalId,
+        userId: user.id,
+      },
+      include: {
+        milestones: {
+          orderBy: {
+            sortOrder: "asc",
+          },
+        },
+      },
+    });
+
+    if (!goal) {
+      throw new AppError({
+        statusCode: 404,
+        code: "NOT_FOUND",
+        message: "Goal not found",
+      });
+    }
+
+    const [overview] = await buildGoalOverviews(app, user.id, [goal], context);
+    const currentCycleFilters = getCurrentGoalCycleFilters(context.contextIsoDate, context.weekStartsOn);
+    const habitsCheckinStart = addDays(context.contextDate, -30);
+    const [linkedPriorities, linkedTasks, linkedHabits] = await Promise.all([
+      app.prisma.cyclePriority.findMany({
+        where: {
+          goalId,
+          planningCycle: {
+            userId: user.id,
+            OR: [
+              {
+                cycleType: "DAY",
+                cycleStartDate: currentCycleFilters.dayStartDate,
+              },
+              {
+                cycleType: "WEEK",
+                cycleStartDate: currentCycleFilters.weekStartDate,
+              },
+              {
+                cycleType: "MONTH",
+                cycleStartDate: currentCycleFilters.monthStartDate,
+              },
+            ],
+          },
+        },
+        include: {
+          planningCycle: true,
+        },
+        orderBy: [{ planningCycle: { cycleStartDate: "asc" } }, { slot: "asc" }],
+      }),
+      app.prisma.task.findMany({
+        where: {
+          userId: user.id,
+          goalId,
+          status: "PENDING",
+        },
+        orderBy: [{ dueAt: "asc" }, { scheduledForDate: "asc" }, { createdAt: "asc" }],
+        take: 5,
+      }),
+      app.prisma.habit.findMany({
+        where: {
+          userId: user.id,
+          goalId,
+          status: "ACTIVE",
+        },
+        include: {
+          recurrenceRule: {
+            include: {
+              exceptions: {
+                orderBy: {
+                  occurrenceDate: "asc",
+                },
+              },
+            },
+          },
+          checkins: {
+            where: {
+              occurredOn: {
+                gte: habitsCheckinStart,
+                lte: context.contextDate,
+              },
+            },
+            orderBy: {
+              occurredOn: "asc",
+            },
+          },
+        },
+        orderBy: {
+          createdAt: "asc",
+        },
+      }),
+    ]);
+
+    const response: GoalDetailResponse = withGeneratedAt({
+      contextDate: context.contextIsoDate,
+      goal: {
+        ...overview,
+        milestones: goal.milestones.map(serializeGoalMilestone),
+        linkedPriorities: linkedPriorities.map(serializeGoalLinkedPriority),
+        linkedTasks: linkedTasks.map(serializeGoalLinkedTask),
+        linkedHabits: linkedHabits.map((habit) =>
+          serializeGoalLinkedHabit(
+            habit as Habit & {
+              recurrenceRule?: {
+                id?: string;
+                ruleJson: unknown;
+                exceptions?: Array<{ occurrenceDate: Date; action: unknown; targetDate: Date | null }>;
+                carryPolicy?: unknown;
+                legacyRuleText?: string | null;
+              } | null;
+              checkins: Array<{ occurredOn: Date; status: "COMPLETED" | "SKIPPED" }>;
+            },
+            context.contextIsoDate,
+          ),
+        ),
+      },
+    });
+
+    return reply.send(response);
   });
 
   app.patch("/goals/:goalId", async (request, reply) => {
@@ -729,6 +1452,23 @@ export const registerPlanningRoutes: FastifyPluginAsync = async (app) => {
 
     const response: GoalMutationResponse = withGeneratedAt({
       goal: serializeGoal(goal),
+    });
+
+    return reply.send(response);
+  });
+
+  app.put("/goals/:goalId/milestones", async (request, reply) => {
+    const user = requireAuthenticatedUser(request);
+    const { goalId } = request.params as { goalId: string };
+    const payload = parseOrThrow(
+      updateGoalMilestonesSchema,
+      request.body as UpdateGoalMilestonesRequest,
+    );
+    await findOwnedGoal(app, user.id, goalId);
+    const milestones = await replaceGoalMilestones(app, goalId, payload.milestones);
+
+    const response: GoalMilestonesMutationResponse = withGeneratedAt({
+      milestones,
     });
 
     return reply.send(response);

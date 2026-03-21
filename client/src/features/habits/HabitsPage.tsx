@@ -4,6 +4,7 @@ import {
   getTodayDate,
   useCreateHabitMutation,
   useCreateRoutineMutation,
+  useGoalsListQuery,
   useHabitCheckinMutation,
   useHabitsQuery,
   useRoutineCheckinMutation,
@@ -53,9 +54,10 @@ type HabitFormValues = {
   category: string;
   targetPerDay: string;
   recurrenceRule: RecurrenceRuleInput | null;
+  goalId: string;
 };
 
-const emptyHabitForm: HabitFormValues = { title: "", category: "", targetPerDay: "1", recurrenceRule: null };
+const emptyHabitForm: HabitFormValues = { title: "", category: "", targetPerDay: "1", recurrenceRule: null, goalId: "" };
 
 function HabitForm({
   initial = emptyHabitForm,
@@ -72,6 +74,8 @@ function HabitForm({
 }) {
   const today = getTodayDate();
   const [values, setValues] = useState<HabitFormValues>(initial);
+  const goalsQuery = useGoalsListQuery();
+  const activeGoals = (goalsQuery.data?.goals ?? []).filter((g) => g.status === "active");
 
   function handleSubmit(event: FormEvent) {
     event.preventDefault();
@@ -113,6 +117,18 @@ function HabitForm({
             />
           </label>
         </div>
+        <label className="field">
+          <span>Linked goal (optional)</span>
+          <select
+            value={values.goalId}
+            onChange={(e) => setValues((v) => ({ ...v, goalId: e.target.value }))}
+          >
+            <option value="">None</option>
+            {activeGoals.map((g) => (
+              <option key={g.id} value={g.id}>{g.title}</option>
+            ))}
+          </select>
+        </label>
         <div className="manage-form__section">
           <span className="manage-form__section-label">Schedule</span>
           <RecurrenceEditor
@@ -266,6 +282,7 @@ export function HabitsPage() {
         category: values.category.trim() || null,
         targetPerDay: Math.max(1, Number.parseInt(values.targetPerDay, 10) || 1),
         recurrence: values.recurrenceRule ? buildRecurrenceInput(values.recurrenceRule) : undefined,
+        goalId: values.goalId || null,
       },
       { onSuccess: () => setShowAddHabit(false) },
     );
@@ -279,6 +296,7 @@ export function HabitsPage() {
         category: values.category.trim() || null,
         targetPerDay: Math.max(1, Number.parseInt(values.targetPerDay, 10) || 1),
         recurrence: values.recurrenceRule ? buildRecurrenceInput(values.recurrenceRule) : undefined,
+        goalId: values.goalId || null,
       },
       { onSuccess: () => setEditingHabitId(null) },
     );
@@ -566,6 +584,7 @@ export function HabitsPage() {
                       category: habit.category ?? "",
                       targetPerDay: String(habit.targetPerDay),
                       recurrenceRule: habit.recurrence?.rule ?? null,
+                      goalId: habit.goalId ?? "",
                     }}
                     submitLabel="Save changes"
                     isPending={updateHabitMutation.isPending}
@@ -581,6 +600,7 @@ export function HabitsPage() {
                       </div>
                       <div className="manage-list__meta">
                         {habit.category ?? "General"} · target {habit.targetPerDay}/day · {habit.streakCount} streak
+                        {habit.goal ? ` · ${habit.goal.title}` : ""}
                         {isRecurring(habit.recurrence) && (
                           <span className="manage-list__recurrence"> · ↻ {formatFullRecurrenceSummary(habit.recurrence!.rule)}</span>
                         )}
