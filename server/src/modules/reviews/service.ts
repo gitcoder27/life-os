@@ -1,4 +1,16 @@
-import type { IsoDateString, RecurrenceDefinition, ReviewSubmissionWindow } from "@life-os/contracts";
+import type {
+  IsoDateString,
+  MonthlyReviewHistoryTrendPoint,
+  RecurrenceDefinition,
+  ReviewHistoryCadence,
+  ReviewHistoryCadenceFilter,
+  ReviewHistoryItem,
+  ReviewHistoryRange,
+  ReviewHistoryResponse,
+  ReviewHistorySummary,
+  ReviewSubmissionWindow,
+  WeeklyReviewHistoryTrendPoint,
+} from "@life-os/contracts";
 import type { Prisma, PrismaClient } from "@prisma/client";
 
 import { AppError } from "../../lib/errors/app-error.js";
@@ -220,6 +232,56 @@ interface MonthlyReviewResponse {
   generatedAt: string;
 }
 
+interface ReviewHistoryQuery {
+  cadence?: ReviewHistoryCadenceFilter;
+  range?: ReviewHistoryRange;
+  q?: string;
+  cursor?: string;
+  limit?: number;
+}
+
+interface ReviewHistoryCursorPayload {
+  cadence: ReviewHistoryCadence;
+  id: string;
+  completedAt: string;
+}
+
+interface WeeklyHistoryMetrics {
+  averageDailyScore: number;
+  habitCompletionRate: number;
+  strongDayCount: number;
+  topFrictionTags: ReviewFrictionTag[];
+}
+
+interface MonthlyHistoryMetrics {
+  averageWeeklyMomentum: number;
+  waterSuccessRate: number;
+  workoutCount: number;
+  topFrictionTags: ReviewFrictionTag[];
+}
+
+type DailyReviewHistoryRow = Prisma.DailyReviewGetPayload<{
+  include: {
+    planningCycle: {
+      include: {
+        dailyScore: true;
+      };
+    };
+  };
+}>;
+
+type WeeklyReviewHistoryRow = Prisma.WeeklyReviewGetPayload<{
+  include: {
+    planningCycle: true;
+  };
+}>;
+
+type MonthlyReviewHistoryRow = Prisma.MonthlyReviewGetPayload<{
+  include: {
+    planningCycle: true;
+  };
+}>;
+
 const FRICTION_TAGS = [
   "low energy",
   "poor planning",
@@ -300,7 +362,7 @@ function throwReviewAlreadySubmitted(reviewLabel: "Weekly review" | "Monthly rev
 }
 
 function listIsoDates(startDate: string, endDate: string) {
-  const dates: string[] = [];
+  const dates: Array<`${number}-${number}-${number}`> = [];
 
   for (
     let currentDate = startDate as `${number}-${number}-${number}`;
@@ -311,6 +373,153 @@ function listIsoDates(startDate: string, endDate: string) {
   }
 
   return dates;
+}
+
+function normalizeReviewHistoryQuery(query: ReviewHistoryQuery) {
+  return {
+    cadence: query.cadence ?? "all",
+    range: query.range ?? "90d",
+    q: query.q?.trim() ?? "",
+    cursor: query.cursor ?? null,
+    limit: Math.min(50, Math.max(1, query.limit ?? 30)),
+  };
+}
+
+function resolveHistoryRangeStart(range: ReviewHistoryRange, now: Date) {
+  if (range === "all") {
+    return null;
+  }
+
+  const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+  const offset = range === "30d" ? 29 : range === "90d" ? 89 : 364;
+  start.setUTCDate(start.getUTCDate() - offset);
+  return start;
+}
+
+function containsNormalized(haystack: string | null | undefined, needle: string) {
+  if (!needle) {
+    return true;
+  }
+
+  return haystack?.toLowerCase().includes(needle) ?? false;
+}
+
+function buildReviewHistoryRoute(cadence: ReviewHistoryCadence, periodStart: string) {
+  return `/reviews/${cadence}?date=${periodStart}`;
+}
+
+function createHistoryMetric(
+  key: string,
+  label: string,
+  value: number | string | null,
+  valueLabel: string,
+): ReviewHistoryItem["metrics"][number] {
+  return {
+    key,
+    label,
+    value,
+    valueLabel,
+  };
+}
+
+function compareHistoryItems(left: ReviewHistoryItem, right: ReviewHistoryItem) {
+  const completedDiff = right.completedAt.localeCompare(left.completedAt);
+  if (completedDiff !== 0) {
+    return completedDiff;
+  }
+
+  const cadenceDiff = right.cadence.localeCompare(left.cadence);
+  if (cadenceDiff !== 0) {
+    return cadenceDiff;
+  }
+
+  return right.id.localeCompare(left.id);
+}
+
+function encodeReviewHistoryCursor(item: ReviewHistoryItem) {
+  return Buffer.from(
+    JSON.stringify({
+      cadence: item.cadence,
+      id: item.id,
+      completedAt: item.completedAt,
+    } satisfies ReviewHistoryCursorPayload),
+  ).toString("base64url");
+}
+
+function decodeReviewHistoryCursor(cursor: string): ReviewHistoryCursorPayload {
+  try {
+    const parsed = JSON.parse(Buffer.from(cursor, "base64url").toString("utf8")) as Partial<ReviewHistoryCursorPayload>;
+    if (
+      !parsed ||
+      (parsed.cadence !== "daily" && parsed.cadence !== "weekly" && parsed.cadence !== "monthly") ||
+      typeof parsed.id !== "string" ||
+      typeof parsed.completedAt !== "string"
+    ) {
+      throw new Error("Invalid cursor payload");
+    }
+
+    return parsed as ReviewHistoryCursorPayload;
+  } catch {
+    throw new AppError({
+      statusCode: 400,
+      code: "BAD_REQUEST",
+      message: "Invalid review history cursor",
+    });
+  }
+}
+
+function paginateReviewHistoryItems(items: ReviewHistoryItem[], cursor: string | null, limit: number) {
+  const startIndex = cursor
+    ? (() => {
+        const decoded = decodeReviewHistoryCursor(cursor);
+        const index = items.findIndex(
+          (item) =>
+            item.id === decoded.id &&
+            item.cadence === decoded.cadence &&
+            item.completedAt === decoded.completedAt,
+        );
+
+        if (index === -1) {
+          throw new AppError({
+            statusCode: 400,
+            code: "BAD_REQUEST",
+            message: "Review history cursor no longer matches the current result set",
+          });
+        }
+
+        return index + 1;
+      })()
+    : 0;
+  const page = items.slice(startIndex, startIndex + limit);
+  const hasMore = startIndex + limit < items.length;
+
+  return {
+    items: page,
+    nextCursor: hasMore && page.length > 0 ? encodeReviewHistoryCursor(page[page.length - 1]!) : null,
+  };
+}
+
+function addFrictionTagCounts(
+  counts: Partial<Record<ReviewFrictionTag, number>>,
+  tags: ReviewFrictionTag[],
+) {
+  for (const tag of tags) {
+    counts[tag] = (counts[tag] ?? 0) + 1;
+  }
+}
+
+function getTopFrictionTags(
+  counts: Partial<Record<ReviewFrictionTag, number>>,
+  limit = 3,
+): Array<{ tag: ReviewFrictionTag; count: number }> {
+  return Object.entries(counts)
+    .sort((left, right) => right[1]! - left[1]!)
+    .slice(0, limit)
+    .map(([tag, count]) => ({ tag: tag as ReviewFrictionTag, count: count ?? 0 }));
+}
+
+function formatPeriodLabel(startDate: string, endDate: string) {
+  return startDate === endDate ? startDate : `${startDate} to ${endDate}`;
 }
 
 async function getDailySummary(prisma: PrismaClient, userId: string, date: Date) {
@@ -1360,6 +1569,802 @@ export async function submitMonthlyReview(
     reviewCompletedAt: completedAt.toISOString(),
     nextMonthTheme: payload.nextMonthTheme,
     nextMonthOutcomes,
+    generatedAt: new Date().toISOString(),
+  };
+}
+
+function matchesDailyHistorySearch(review: DailyReviewHistoryRow, normalizedQuery: string) {
+  return (
+    !normalizedQuery ||
+    containsNormalized(review.biggestWin, normalizedQuery) ||
+    containsNormalized(review.frictionTag, normalizedQuery) ||
+    containsNormalized(review.frictionNote, normalizedQuery) ||
+    containsNormalized(review.optionalNote, normalizedQuery)
+  );
+}
+
+function matchesWeeklyHistorySearch(review: WeeklyReviewHistoryRow, normalizedQuery: string) {
+  return (
+    !normalizedQuery ||
+    containsNormalized(review.biggestWin, normalizedQuery) ||
+    containsNormalized(review.biggestMiss, normalizedQuery) ||
+    containsNormalized(review.mainLesson, normalizedQuery) ||
+    containsNormalized(review.keepText, normalizedQuery) ||
+    containsNormalized(review.improveText, normalizedQuery) ||
+    containsNormalized(review.notes, normalizedQuery) ||
+    containsNormalized(review.healthTargetText, normalizedQuery)
+  );
+}
+
+function matchesMonthlyHistorySearch(review: MonthlyReviewHistoryRow, normalizedQuery: string) {
+  return (
+    !normalizedQuery ||
+    containsNormalized(review.monthVerdict, normalizedQuery) ||
+    containsNormalized(review.biggestWin, normalizedQuery) ||
+    containsNormalized(review.biggestLeak, normalizedQuery) ||
+    containsNormalized(review.nextMonthTheme, normalizedQuery) ||
+    containsNormalized(review.simplifyText, normalizedQuery) ||
+    containsNormalized(review.notes, normalizedQuery) ||
+    (review.threeOutcomesJson as string[]).some((value) => containsNormalized(value, normalizedQuery)) ||
+    (review.habitChangesJson as string[]).some((value) => containsNormalized(value, normalizedQuery))
+  );
+}
+
+async function buildDailyHistoryItems(
+  prisma: PrismaClient,
+  userId: string,
+  reviews: DailyReviewHistoryRow[],
+): Promise<ReviewHistoryItem[]> {
+  if (reviews.length === 0) {
+    return [];
+  }
+
+  const sortedDates = [...reviews]
+    .map((review) => review.planningCycle.cycleStartDate)
+    .sort((left, right) => left.getTime() - right.getTime());
+  const minDate = sortedDates[0]!;
+  const maxDate = sortedDates[sortedDates.length - 1]!;
+  const [tasks, habitCheckins] = await Promise.all([
+    prisma.task.findMany({
+      where: {
+        userId,
+        scheduledForDate: {
+          gte: minDate,
+          lte: maxDate,
+        },
+      },
+      select: {
+        status: true,
+        scheduledForDate: true,
+      },
+    }),
+    prisma.habitCheckin.findMany({
+      where: {
+        status: "COMPLETED",
+        occurredOn: {
+          gte: minDate,
+          lte: maxDate,
+        },
+        habit: {
+          userId,
+        },
+      },
+      select: {
+        occurredOn: true,
+      },
+    }),
+  ]);
+
+  const taskCounts = new Map<string, { scheduled: number; completed: number }>();
+  for (const task of tasks) {
+    if (!task.scheduledForDate) {
+      continue;
+    }
+
+    const isoDate = toIsoDateString(task.scheduledForDate);
+    const current = taskCounts.get(isoDate) ?? { scheduled: 0, completed: 0 };
+    current.scheduled += 1;
+    if (task.status === "COMPLETED") {
+      current.completed += 1;
+    }
+    taskCounts.set(isoDate, current);
+  }
+
+  const habitCounts = new Map<string, number>();
+  for (const checkin of habitCheckins) {
+    const isoDate = toIsoDateString(checkin.occurredOn);
+    habitCounts.set(isoDate, (habitCounts.get(isoDate) ?? 0) + 1);
+  }
+
+  return reviews.map((review) => {
+    const periodStart = toIsoDateString(review.planningCycle.cycleStartDate);
+    const counts = taskCounts.get(periodStart) ?? { scheduled: 0, completed: 0 };
+    const habitsCompleted = habitCounts.get(periodStart) ?? 0;
+    const scoreValue = review.planningCycle.dailyScore?.scoreValue ?? null;
+
+    return {
+      id: review.id,
+      cadence: "daily",
+      periodStart,
+      periodEnd: periodStart,
+      completedAt: review.completedAt.toISOString(),
+      primaryText: review.biggestWin,
+      secondaryText: review.frictionNote ?? review.optionalNote,
+      metrics: [
+        createHistoryMetric("score", "Score", scoreValue, scoreValue === null ? "No score" : String(scoreValue)),
+        createHistoryMetric(
+          "tasks",
+          "Tasks",
+          `${counts.completed}/${counts.scheduled}`,
+          `${counts.completed}/${counts.scheduled} done`,
+        ),
+        createHistoryMetric("habitsCompleted", "Habits", habitsCompleted, `${habitsCompleted} completed`),
+      ],
+      frictionTags: [review.frictionTag as ReviewFrictionTag],
+      route: buildReviewHistoryRoute("daily", periodStart),
+    };
+  });
+}
+
+async function buildWeeklyHistoryMetricsMap(
+  prisma: PrismaClient,
+  userId: string,
+  reviews: WeeklyReviewHistoryRow[],
+) {
+  const metricsMap = new Map<string, WeeklyHistoryMetrics>();
+  if (reviews.length === 0) {
+    return metricsMap;
+  }
+
+  const minStart = new Date(
+    Math.min(...reviews.map((review) => review.planningCycle.cycleStartDate.getTime())),
+  );
+  const maxEnd = new Date(
+    Math.max(...reviews.map((review) => review.planningCycle.cycleEndDate.getTime())),
+  );
+  const [scores, habits, routineCheckins, routines, dailyReviews] = await Promise.all([
+    prisma.dailyScore.findMany({
+      where: {
+        userId,
+        finalizedAt: {
+          not: null,
+        },
+        planningCycle: {
+          cycleStartDate: {
+            gte: minStart,
+            lte: maxEnd,
+          },
+        },
+      },
+      include: {
+        planningCycle: true,
+      },
+    }),
+    prisma.habit.findMany({
+      where: {
+        userId,
+        status: "ACTIVE",
+        archivedAt: null,
+      },
+      include: {
+        checkins: {
+          where: {
+            occurredOn: {
+              gte: minStart,
+              lte: maxEnd,
+            },
+          },
+        },
+      },
+    }),
+    prisma.routineItemCheckin.findMany({
+      where: {
+        occurredOn: {
+          gte: minStart,
+          lte: maxEnd,
+        },
+        routineItem: {
+          routine: {
+            userId,
+          },
+        },
+      },
+    }),
+    prisma.routineItem.findMany({
+      where: {
+        routine: {
+          userId,
+          status: "ACTIVE",
+        },
+      },
+    }),
+    prisma.dailyReview.findMany({
+      where: {
+        userId,
+        planningCycle: {
+          cycleStartDate: {
+            gte: minStart,
+            lte: maxEnd,
+          },
+        },
+      },
+      include: {
+        planningCycle: true,
+      },
+    }),
+  ]);
+
+  for (const review of reviews) {
+    const startDate = review.planningCycle.cycleStartDate;
+    const endDate = review.planningCycle.cycleEndDate;
+    const startIso = toIsoDateString(startDate);
+    const endIso = toIsoDateString(endDate);
+    const scopedIsoDates = listIsoDates(startIso, endIso);
+    const periodScores = scores.filter(
+      (score) =>
+        score.planningCycle.cycleStartDate.getTime() >= startDate.getTime() &&
+        score.planningCycle.cycleStartDate.getTime() <= endDate.getTime(),
+    );
+    const periodRoutineCheckins = routineCheckins.filter(
+      (checkin) =>
+        checkin.occurredOn.getTime() >= startDate.getTime() &&
+        checkin.occurredOn.getTime() <= endDate.getTime(),
+    );
+    const periodDailyReviews = dailyReviews.filter(
+      (entry) =>
+        entry.planningCycle.cycleStartDate.getTime() >= startDate.getTime() &&
+        entry.planningCycle.cycleStartDate.getTime() <= endDate.getTime(),
+    );
+    const habitTotals = habits.reduce(
+      (totals, habit) => {
+        const scheduleRule = normalizeHabitScheduleRule(habit.scheduleRuleJson);
+        const completedDates = new Set(
+          habit.checkins
+            .filter((checkin) => checkin.status === "COMPLETED")
+            .map((checkin) => toIsoDateString(checkin.occurredOn)),
+        );
+
+        for (const isoDate of scopedIsoDates) {
+          if (!isHabitDueOnIsoDate(scheduleRule, isoDate as `${number}-${number}-${number}`)) {
+            continue;
+          }
+
+          totals.due += 1;
+          if (completedDates.has(isoDate)) {
+            totals.completed += 1;
+          }
+        }
+
+        return totals;
+      },
+      { due: 0, completed: 0 },
+    );
+    const frictionCounts = periodDailyReviews.reduce<Partial<Record<ReviewFrictionTag, number>>>((acc, entry) => {
+      const tag = entry.frictionTag as ReviewFrictionTag;
+      acc[tag] = (acc[tag] ?? 0) + 1;
+      return acc;
+    }, {});
+
+    metricsMap.set(review.id, {
+      averageDailyScore:
+        periodScores.length > 0
+          ? Math.round(periodScores.reduce((sum, score) => sum + score.scoreValue, 0) / periodScores.length)
+          : 0,
+      habitCompletionRate:
+        habitTotals.due > 0 ? roundToPercent(habitTotals.completed / habitTotals.due) : 0,
+      strongDayCount: periodScores.filter((score) => score.scoreValue >= 70).length,
+      topFrictionTags: getTopFrictionTags(frictionCounts).map((entry) => entry.tag),
+    });
+  }
+
+  return metricsMap;
+}
+
+function buildWeeklyHistoryItems(
+  reviews: WeeklyReviewHistoryRow[],
+  metricsMap: Map<string, WeeklyHistoryMetrics>,
+): ReviewHistoryItem[] {
+  return reviews.map((review) => {
+    const periodStart = toIsoDateString(review.planningCycle.cycleStartDate);
+    const periodEnd = toIsoDateString(review.planningCycle.cycleEndDate);
+    const metrics = metricsMap.get(review.id) ?? {
+      averageDailyScore: 0,
+      habitCompletionRate: 0,
+      strongDayCount: 0,
+      topFrictionTags: [],
+    };
+
+    return {
+      id: review.id,
+      cadence: "weekly",
+      periodStart,
+      periodEnd,
+      completedAt: review.completedAt.toISOString(),
+      primaryText: review.mainLesson,
+      secondaryText: review.biggestWin,
+      metrics: [
+        createHistoryMetric(
+          "averageDailyScore",
+          "Avg daily score",
+          metrics.averageDailyScore,
+          String(metrics.averageDailyScore),
+        ),
+        createHistoryMetric(
+          "habitCompletionRate",
+          "Habit completion",
+          metrics.habitCompletionRate,
+          `${metrics.habitCompletionRate}%`,
+        ),
+        createHistoryMetric("strongDayCount", "Strong days", metrics.strongDayCount, String(metrics.strongDayCount)),
+      ],
+      frictionTags: metrics.topFrictionTags,
+      route: buildReviewHistoryRoute("weekly", periodStart),
+    };
+  });
+}
+
+async function buildMonthlyHistoryMetricsMap(
+  prisma: PrismaClient,
+  userId: string,
+  reviews: MonthlyReviewHistoryRow[],
+  timezone: string,
+  waterTargetMl: number,
+) {
+  const metricsMap = new Map<string, MonthlyHistoryMetrics>();
+  if (reviews.length === 0) {
+    return metricsMap;
+  }
+
+  const minStart = new Date(
+    Math.min(...reviews.map((review) => review.planningCycle.cycleStartDate.getTime())),
+  );
+  const maxEnd = new Date(
+    Math.max(...reviews.map((review) => review.planningCycle.cycleEndDate.getTime())),
+  );
+  const rangeWindow = getDateRangeWindowUtc(toIsoDateString(minStart), toIsoDateString(maxEnd), timezone);
+  const [workoutDays, waterLogs, dailyReviews, momentumValues] = await Promise.all([
+    prisma.workoutDay.findMany({
+      where: {
+        userId,
+        date: {
+          gte: minStart,
+          lte: maxEnd,
+        },
+      },
+    }),
+    prisma.waterLog.findMany({
+      where: {
+        userId,
+        occurredAt: {
+          gte: rangeWindow.start,
+          lt: rangeWindow.end,
+        },
+      },
+    }),
+    prisma.dailyReview.findMany({
+      where: {
+        userId,
+        planningCycle: {
+          cycleStartDate: {
+            gte: minStart,
+            lte: maxEnd,
+          },
+        },
+      },
+      include: {
+        planningCycle: true,
+      },
+    }),
+    Promise.all(
+      reviews.map((review) =>
+        getWeeklyMomentum(prisma, userId, review.planningCycle.cycleEndDate).then((result) => ({
+          reviewId: review.id,
+          value: result.value,
+        })),
+      ),
+    ),
+  ]);
+
+  const momentumMap = new Map(momentumValues.map((entry) => [entry.reviewId, entry.value]));
+
+  for (const review of reviews) {
+    const startDate = review.planningCycle.cycleStartDate;
+    const endDate = review.planningCycle.cycleEndDate;
+    const startIso = toIsoDateString(startDate);
+    const endIso = toIsoDateString(endDate);
+    const scopedIsoDates = listIsoDates(startIso, endIso);
+    const periodWindow = getDateRangeWindowUtc(startIso, endIso, timezone);
+    const periodWaterLogs = waterLogs.filter(
+      (log) => log.occurredAt >= periodWindow.start && log.occurredAt < periodWindow.end,
+    );
+    const waterTargetHitCount = countWaterTargetHits(periodWaterLogs, timezone, waterTargetMl);
+    const periodWorkoutCount = workoutDays.filter(
+      (day) =>
+        day.date.getTime() >= startDate.getTime() &&
+        day.date.getTime() <= endDate.getTime() &&
+        day.actualStatus === "COMPLETED",
+    ).length;
+    const frictionCounts = dailyReviews.reduce<Partial<Record<ReviewFrictionTag, number>>>((acc, entry) => {
+      if (
+        entry.planningCycle.cycleStartDate.getTime() < startDate.getTime() ||
+        entry.planningCycle.cycleStartDate.getTime() > endDate.getTime()
+      ) {
+        return acc;
+      }
+
+      const tag = entry.frictionTag as ReviewFrictionTag;
+      acc[tag] = (acc[tag] ?? 0) + 1;
+      return acc;
+    }, {});
+
+    metricsMap.set(review.id, {
+      averageWeeklyMomentum: momentumMap.get(review.id) ?? 0,
+      waterSuccessRate:
+        scopedIsoDates.length > 0 ? roundToPercent(waterTargetHitCount / scopedIsoDates.length) : 0,
+      workoutCount: periodWorkoutCount,
+      topFrictionTags: getTopFrictionTags(frictionCounts).map((entry) => entry.tag),
+    });
+  }
+
+  return metricsMap;
+}
+
+function buildMonthlyHistoryItems(
+  reviews: MonthlyReviewHistoryRow[],
+  metricsMap: Map<string, MonthlyHistoryMetrics>,
+): ReviewHistoryItem[] {
+  return reviews.map((review) => {
+    const periodStart = toIsoDateString(review.planningCycle.cycleStartDate);
+    const periodEnd = toIsoDateString(review.planningCycle.cycleEndDate);
+    const metrics = metricsMap.get(review.id) ?? {
+      averageWeeklyMomentum: 0,
+      waterSuccessRate: 0,
+      workoutCount: 0,
+      topFrictionTags: [],
+    };
+
+    return {
+      id: review.id,
+      cadence: "monthly",
+      periodStart,
+      periodEnd,
+      completedAt: review.completedAt.toISOString(),
+      primaryText: review.monthVerdict,
+      secondaryText: review.biggestWin,
+      metrics: [
+        createHistoryMetric(
+          "averageWeeklyMomentum",
+          "Weekly momentum",
+          metrics.averageWeeklyMomentum,
+          String(metrics.averageWeeklyMomentum),
+        ),
+        createHistoryMetric(
+          "waterSuccessRate",
+          "Water success",
+          metrics.waterSuccessRate,
+          `${metrics.waterSuccessRate}%`,
+        ),
+        createHistoryMetric("workoutCount", "Workouts", metrics.workoutCount, String(metrics.workoutCount)),
+      ],
+      frictionTags: metrics.topFrictionTags,
+      route: buildReviewHistoryRoute("monthly", periodStart),
+    };
+  });
+}
+
+function buildReviewHistorySummary(items: ReviewHistoryItem[]): ReviewHistorySummary {
+  const countsByCadence: ReviewHistorySummary["countsByCadence"] = {
+    daily: 0,
+    weekly: 0,
+    monthly: 0,
+  };
+  const frictionCounts: Partial<Record<ReviewFrictionTag, number>> = {};
+
+  for (const item of items) {
+    countsByCadence[item.cadence] += 1;
+    addFrictionTagCounts(frictionCounts, item.frictionTags);
+  }
+
+  return {
+    totalReviews: items.length,
+    countsByCadence,
+    topFrictionTags: getTopFrictionTags(frictionCounts),
+  };
+}
+
+function buildWeeklyTrend(
+  reviews: WeeklyReviewHistoryRow[],
+  metricsMap: Map<string, WeeklyHistoryMetrics>,
+): WeeklyReviewHistoryTrendPoint[] {
+  return [...reviews]
+    .sort(
+      (left, right) =>
+        left.planningCycle.cycleStartDate.getTime() - right.planningCycle.cycleStartDate.getTime(),
+    )
+    .slice(-8)
+    .map((review) => {
+      const metrics = metricsMap.get(review.id) ?? {
+        averageDailyScore: 0,
+        habitCompletionRate: 0,
+        strongDayCount: 0,
+        topFrictionTags: [],
+      };
+
+      return {
+        startDate: toIsoDateString(review.planningCycle.cycleStartDate),
+        endDate: toIsoDateString(review.planningCycle.cycleEndDate),
+        averageDailyScore: metrics.averageDailyScore,
+        habitCompletionRate: metrics.habitCompletionRate,
+        strongDayCount: metrics.strongDayCount,
+      };
+    });
+}
+
+function buildMonthlyTrend(
+  reviews: MonthlyReviewHistoryRow[],
+  metricsMap: Map<string, MonthlyHistoryMetrics>,
+): MonthlyReviewHistoryTrendPoint[] {
+  return [...reviews]
+    .sort(
+      (left, right) =>
+        left.planningCycle.cycleStartDate.getTime() - right.planningCycle.cycleStartDate.getTime(),
+    )
+    .slice(-6)
+    .map((review) => {
+      const metrics = metricsMap.get(review.id) ?? {
+        averageWeeklyMomentum: 0,
+        waterSuccessRate: 0,
+        workoutCount: 0,
+        topFrictionTags: [],
+      };
+
+      return {
+        startDate: toIsoDateString(review.planningCycle.cycleStartDate),
+        endDate: toIsoDateString(review.planningCycle.cycleEndDate),
+        averageWeeklyMomentum: metrics.averageWeeklyMomentum,
+        waterSuccessRate: metrics.waterSuccessRate,
+        workoutCount: metrics.workoutCount,
+      };
+    });
+}
+
+function buildWeeklyComparison(
+  reviews: WeeklyReviewHistoryRow[],
+  metricsMap: Map<string, WeeklyHistoryMetrics>,
+): ReviewHistoryResponse["comparisons"]["weekly"] {
+  const [current, previous] = [...reviews].sort(
+    (left, right) =>
+      right.planningCycle.cycleStartDate.getTime() - left.planningCycle.cycleStartDate.getTime(),
+  );
+
+  if (!current || !previous) {
+    return null;
+  }
+
+  const currentMetrics = metricsMap.get(current.id) ?? {
+    averageDailyScore: 0,
+    habitCompletionRate: 0,
+    strongDayCount: 0,
+    topFrictionTags: [],
+  };
+  const previousMetrics = metricsMap.get(previous.id) ?? {
+    averageDailyScore: 0,
+    habitCompletionRate: 0,
+    strongDayCount: 0,
+    topFrictionTags: [],
+  };
+
+  return {
+    currentPeriodStart: toIsoDateString(current.planningCycle.cycleStartDate),
+    currentPeriodEnd: toIsoDateString(current.planningCycle.cycleEndDate),
+    previousPeriodStart: toIsoDateString(previous.planningCycle.cycleStartDate),
+    previousPeriodEnd: toIsoDateString(previous.planningCycle.cycleEndDate),
+    currentLabel: formatPeriodLabel(
+      toIsoDateString(current.planningCycle.cycleStartDate),
+      toIsoDateString(current.planningCycle.cycleEndDate),
+    ),
+    previousLabel: formatPeriodLabel(
+      toIsoDateString(previous.planningCycle.cycleStartDate),
+      toIsoDateString(previous.planningCycle.cycleEndDate),
+    ),
+    currentText: current.mainLesson,
+    previousText: previous.mainLesson,
+    metrics: {
+      current: {
+        averageDailyScore: currentMetrics.averageDailyScore,
+        habitCompletionRate: currentMetrics.habitCompletionRate,
+        strongDayCount: currentMetrics.strongDayCount,
+      },
+      previous: {
+        averageDailyScore: previousMetrics.averageDailyScore,
+        habitCompletionRate: previousMetrics.habitCompletionRate,
+        strongDayCount: previousMetrics.strongDayCount,
+      },
+      delta: {
+        averageDailyScore: currentMetrics.averageDailyScore - previousMetrics.averageDailyScore,
+        habitCompletionRate: currentMetrics.habitCompletionRate - previousMetrics.habitCompletionRate,
+        strongDayCount: currentMetrics.strongDayCount - previousMetrics.strongDayCount,
+      },
+    },
+  };
+}
+
+function buildMonthlyComparison(
+  reviews: MonthlyReviewHistoryRow[],
+  metricsMap: Map<string, MonthlyHistoryMetrics>,
+): ReviewHistoryResponse["comparisons"]["monthly"] {
+  const [current, previous] = [...reviews].sort(
+    (left, right) =>
+      right.planningCycle.cycleStartDate.getTime() - left.planningCycle.cycleStartDate.getTime(),
+  );
+
+  if (!current || !previous) {
+    return null;
+  }
+
+  const currentMetrics = metricsMap.get(current.id) ?? {
+    averageWeeklyMomentum: 0,
+    waterSuccessRate: 0,
+    workoutCount: 0,
+    topFrictionTags: [],
+  };
+  const previousMetrics = metricsMap.get(previous.id) ?? {
+    averageWeeklyMomentum: 0,
+    waterSuccessRate: 0,
+    workoutCount: 0,
+    topFrictionTags: [],
+  };
+
+  return {
+    currentPeriodStart: toIsoDateString(current.planningCycle.cycleStartDate),
+    currentPeriodEnd: toIsoDateString(current.planningCycle.cycleEndDate),
+    previousPeriodStart: toIsoDateString(previous.planningCycle.cycleStartDate),
+    previousPeriodEnd: toIsoDateString(previous.planningCycle.cycleEndDate),
+    currentLabel: formatPeriodLabel(
+      toIsoDateString(current.planningCycle.cycleStartDate),
+      toIsoDateString(current.planningCycle.cycleEndDate),
+    ),
+    previousLabel: formatPeriodLabel(
+      toIsoDateString(previous.planningCycle.cycleStartDate),
+      toIsoDateString(previous.planningCycle.cycleEndDate),
+    ),
+    currentText: current.monthVerdict,
+    previousText: previous.monthVerdict,
+    metrics: {
+      current: {
+        averageWeeklyMomentum: currentMetrics.averageWeeklyMomentum,
+        waterSuccessRate: currentMetrics.waterSuccessRate,
+        workoutCount: currentMetrics.workoutCount,
+      },
+      previous: {
+        averageWeeklyMomentum: previousMetrics.averageWeeklyMomentum,
+        waterSuccessRate: previousMetrics.waterSuccessRate,
+        workoutCount: previousMetrics.workoutCount,
+      },
+      delta: {
+        averageWeeklyMomentum: currentMetrics.averageWeeklyMomentum - previousMetrics.averageWeeklyMomentum,
+        waterSuccessRate: currentMetrics.waterSuccessRate - previousMetrics.waterSuccessRate,
+        workoutCount: currentMetrics.workoutCount - previousMetrics.workoutCount,
+      },
+    },
+  };
+}
+
+export async function getReviewHistory(
+  prisma: PrismaClient,
+  userId: string,
+  query: ReviewHistoryQuery = {},
+): Promise<ReviewHistoryResponse> {
+  const resolved = normalizeReviewHistoryQuery(query);
+  const now = new Date();
+  const rangeStart = resolveHistoryRangeStart(resolved.range, now);
+  const [preferences, dailyReviewsAll, weeklyReviewsAll, monthlyReviewsAll] = await Promise.all([
+    getUserPreferences(prisma, userId),
+    prisma.dailyReview.findMany({
+      where: {
+        userId,
+        planningCycle: rangeStart
+          ? {
+              cycleStartDate: {
+                gte: rangeStart,
+              },
+            }
+          : undefined,
+      },
+      include: {
+        planningCycle: {
+          include: {
+            dailyScore: true,
+          },
+        },
+      },
+      orderBy: {
+        completedAt: "desc",
+      },
+    }),
+    prisma.weeklyReview.findMany({
+      where: {
+        userId,
+        planningCycle: rangeStart
+          ? {
+              cycleStartDate: {
+                gte: rangeStart,
+              },
+            }
+          : undefined,
+      },
+      include: {
+        planningCycle: true,
+      },
+      orderBy: {
+        completedAt: "desc",
+      },
+    }),
+    prisma.monthlyReview.findMany({
+      where: {
+        userId,
+        planningCycle: rangeStart
+          ? {
+              cycleStartDate: {
+                gte: rangeStart,
+              },
+            }
+          : undefined,
+      },
+      include: {
+        planningCycle: true,
+      },
+      orderBy: {
+        completedAt: "desc",
+      },
+    }),
+  ]);
+
+  const normalizedQuery = resolved.q.toLowerCase();
+  const timezone = normalizeTimezone(preferences?.timezone);
+  const waterTargetMl = preferences?.dailyWaterTargetMl ?? 2500;
+  const cadenceAllowsDaily = resolved.cadence === "all" || resolved.cadence === "daily";
+  const cadenceAllowsWeekly = resolved.cadence === "all" || resolved.cadence === "weekly";
+  const cadenceAllowsMonthly = resolved.cadence === "all" || resolved.cadence === "monthly";
+
+  const dailyReviewsFiltered = cadenceAllowsDaily
+    ? dailyReviewsAll.filter((review) => matchesDailyHistorySearch(review, normalizedQuery))
+    : [];
+  const weeklyReviewsFiltered = cadenceAllowsWeekly
+    ? weeklyReviewsAll.filter((review) => matchesWeeklyHistorySearch(review, normalizedQuery))
+    : [];
+  const monthlyReviewsFiltered = cadenceAllowsMonthly
+    ? monthlyReviewsAll.filter((review) => matchesMonthlyHistorySearch(review, normalizedQuery))
+    : [];
+
+  const [dailyItems, weeklyMetricsMap, monthlyMetricsMap] = await Promise.all([
+    buildDailyHistoryItems(prisma, userId, dailyReviewsFiltered),
+    cadenceAllowsWeekly
+      ? buildWeeklyHistoryMetricsMap(prisma, userId, weeklyReviewsAll)
+      : Promise.resolve(new Map<string, WeeklyHistoryMetrics>()),
+    cadenceAllowsMonthly
+      ? buildMonthlyHistoryMetricsMap(prisma, userId, monthlyReviewsAll, timezone, waterTargetMl)
+      : Promise.resolve(new Map<string, MonthlyHistoryMetrics>()),
+  ]);
+
+  const allFilteredItems = [
+    ...dailyItems,
+    ...buildWeeklyHistoryItems(weeklyReviewsFiltered, weeklyMetricsMap),
+    ...buildMonthlyHistoryItems(monthlyReviewsFiltered, monthlyMetricsMap),
+  ].sort(compareHistoryItems);
+  const summary = buildReviewHistorySummary(allFilteredItems);
+  const paginated = paginateReviewHistoryItems(allFilteredItems, resolved.cursor, resolved.limit);
+
+  return {
+    items: paginated.items,
+    nextCursor: paginated.nextCursor,
+    summary,
+    weeklyTrend: cadenceAllowsWeekly ? buildWeeklyTrend(weeklyReviewsAll, weeklyMetricsMap) : [],
+    monthlyTrend: cadenceAllowsMonthly ? buildMonthlyTrend(monthlyReviewsAll, monthlyMetricsMap) : [],
+    comparisons: {
+      weekly: cadenceAllowsWeekly ? buildWeeklyComparison(weeklyReviewsAll, weeklyMetricsMap) : null,
+      monthly: cadenceAllowsMonthly ? buildMonthlyComparison(monthlyReviewsAll, monthlyMetricsMap) : null,
+    },
     generatedAt: new Date().toISOString(),
   };
 }

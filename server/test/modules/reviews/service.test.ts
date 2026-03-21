@@ -14,6 +14,7 @@ vi.mock("../../../src/modules/scoring/service.js", () => ({
 
 import {
   getDailyReviewModel,
+  getReviewHistory,
   getMonthlyReviewModel,
   getWeeklyReviewModel,
   submitDailyReview,
@@ -58,6 +59,7 @@ describe("reviews service", () => {
     });
 
     const prisma = {
+      recurrenceRule: { findMany: vi.fn().mockResolvedValue([]) },
       planningCycle: {
         findUnique: vi.fn().mockResolvedValue({
           priorities: [
@@ -162,6 +164,13 @@ describe("reviews service", () => {
       dueAt: null,
       goalId: null,
     };
+    const droppedTask = {
+      id: "drop-task",
+      title: "Drop this",
+      notes: null,
+      dueAt: null,
+      goalId: null,
+    };
     const rescheduledTask = {
       id: "resched-task",
       title: "Reschedule",
@@ -191,12 +200,16 @@ describe("reviews service", () => {
         if (id === "resched-task") {
           return Promise.resolve(rescheduledTask);
         }
+        if (id === "drop-task") {
+          return Promise.resolve(droppedTask);
+        }
         throw new Error(`Task not found: ${id}`);
       }),
       update: vi.fn().mockResolvedValue({}),
       create: vi.fn().mockResolvedValue({}),
     };
     const prisma = {
+      recurrenceRule: { findMany: vi.fn().mockResolvedValue([]) },
       task: {
         findMany: vi.fn().mockResolvedValue([
           {
@@ -298,7 +311,10 @@ describe("reviews service", () => {
 
     await expect(
       submitDailyReview(
-        { task: { findMany: vi.fn().mockResolvedValue([]) } } as any,
+        {
+          recurrenceRule: { findMany: vi.fn().mockResolvedValue([]) },
+          task: { findMany: vi.fn().mockResolvedValue([]) },
+        } as any,
         "user-1",
         new Date("2026-03-14T00:00:00.000Z"),
         {
@@ -330,6 +346,7 @@ describe("reviews service", () => {
     await expect(
       submitDailyReview(
         {
+          recurrenceRule: { findMany: vi.fn().mockResolvedValue([]) },
           task: {
             findMany: vi.fn().mockResolvedValue([
               {
@@ -668,6 +685,7 @@ describe("reviews service", () => {
     });
 
     const prisma = {
+      recurrenceRule: { findMany: vi.fn().mockResolvedValue([]) },
       planningCycle: {
         findUnique: vi.fn().mockResolvedValue({ priorities: [] }),
       },
@@ -708,6 +726,7 @@ describe("reviews service", () => {
     vi.setSystemTime(new Date("2026-03-15T12:00:00.000Z"));
 
     const prisma = {
+      recurrenceRule: { findMany: vi.fn().mockResolvedValue([]) },
       userPreference: {
         findUnique: vi.fn().mockResolvedValue({
           timezone: "UTC",
@@ -781,4 +800,329 @@ describe("reviews service", () => {
       }),
     ).rejects.toThrow("Monthly review can only be submitted for 2026-02-01 right now");
   });
+
+  it("builds paginated review history with mixed cadences and stable insights", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-03-22T12:00:00.000Z"));
+
+    getWeeklyMomentumMock.mockImplementation(async (_prisma: unknown, _userId: string, endDate: Date) => ({
+      endingOn: toIso(endDate),
+      value: toIso(endDate) === "2026-02-28" ? 74 : 68,
+      basedOnDays: 7,
+      weeklyReviewBonus: 0,
+      strongDayStreak: 0,
+      dailyScores: [],
+      generatedAt: new Date().toISOString(),
+    }));
+
+    const dailyReviews = [
+      {
+        id: "daily-1",
+        biggestWin: "Closed the loop",
+        frictionTag: "distraction",
+        frictionNote: "Slack spiral",
+        optionalNote: null,
+        completedAt: new Date("2026-03-18T21:00:00.000Z"),
+        planningCycle: {
+          cycleStartDate: new Date("2026-03-18T00:00:00.000Z"),
+          cycleEndDate: new Date("2026-03-18T00:00:00.000Z"),
+          dailyScore: {
+            scoreValue: 81,
+          },
+        },
+      },
+    ];
+    const weeklyReviews = [
+      {
+        id: "weekly-1",
+        biggestWin: "Shipped core work",
+        biggestMiss: "Too reactive",
+        mainLesson: "Protect mornings",
+        keepText: "Morning planning",
+        improveText: "Reduce context switching",
+        notes: "Weekly note",
+        healthTargetText: "Sleep",
+        completedAt: new Date("2026-03-17T08:00:00.000Z"),
+        planningCycle: {
+          cycleStartDate: new Date("2026-03-09T00:00:00.000Z"),
+          cycleEndDate: new Date("2026-03-15T00:00:00.000Z"),
+        },
+      },
+      {
+        id: "weekly-0",
+        biggestWin: "Recovered focus",
+        biggestMiss: "Late starts",
+        mainLesson: "Start cleaner",
+        keepText: "Shallow work blocks",
+        improveText: "Calendar control",
+        notes: null,
+        healthTargetText: null,
+        completedAt: new Date("2026-03-10T08:00:00.000Z"),
+        planningCycle: {
+          cycleStartDate: new Date("2026-03-02T00:00:00.000Z"),
+          cycleEndDate: new Date("2026-03-08T00:00:00.000Z"),
+        },
+      },
+    ];
+    const monthlyReviews = [
+      {
+        id: "monthly-1",
+        monthVerdict: "February got cleaner",
+        biggestWin: "Less drift",
+        biggestLeak: "Meetings",
+        nextMonthTheme: "Momentum",
+        simplifyText: "Simplify meetings",
+        notes: "Monthly note",
+        threeOutcomesJson: ["One", "Two", "Three"],
+        habitChangesJson: ["Remove one low-value habit"],
+        completedAt: new Date("2026-03-03T09:00:00.000Z"),
+        planningCycle: {
+          cycleStartDate: new Date("2026-02-01T00:00:00.000Z"),
+          cycleEndDate: new Date("2026-02-28T00:00:00.000Z"),
+        },
+      },
+      {
+        id: "monthly-0",
+        monthVerdict: "January was noisy",
+        biggestWin: "Stayed afloat",
+        biggestLeak: "Admin churn",
+        nextMonthTheme: "Stability",
+        simplifyText: "Cut admin overhead",
+        notes: null,
+        threeOutcomesJson: ["A", "B", "C"],
+        habitChangesJson: ["Keep sleep fixed"],
+        completedAt: new Date("2026-02-03T09:00:00.000Z"),
+        planningCycle: {
+          cycleStartDate: new Date("2026-01-01T00:00:00.000Z"),
+          cycleEndDate: new Date("2026-01-31T00:00:00.000Z"),
+        },
+      },
+    ];
+
+    const prisma = {
+      userPreference: {
+        findUnique: vi.fn().mockResolvedValue({
+          timezone: "UTC",
+          dailyWaterTargetMl: 2500,
+        }),
+      },
+      dailyReview: {
+        findMany: vi.fn().mockResolvedValue(dailyReviews),
+      },
+      weeklyReview: {
+        findMany: vi.fn().mockResolvedValue(weeklyReviews),
+      },
+      monthlyReview: {
+        findMany: vi.fn().mockResolvedValue(monthlyReviews),
+      },
+      task: {
+        findMany: vi.fn().mockResolvedValue([
+          {
+            scheduledForDate: new Date("2026-03-18T00:00:00.000Z"),
+            status: "COMPLETED",
+          },
+          {
+            scheduledForDate: new Date("2026-03-18T00:00:00.000Z"),
+            status: "PENDING",
+          },
+        ]),
+      },
+      habitCheckin: {
+        findMany: vi.fn().mockResolvedValue([
+          {
+            occurredOn: new Date("2026-03-18T00:00:00.000Z"),
+          },
+        ]),
+      },
+      dailyScore: {
+        findMany: vi.fn().mockResolvedValue([
+          {
+            scoreValue: 72,
+            planningCycle: { cycleStartDate: new Date("2026-03-09T00:00:00.000Z") },
+          },
+          {
+            scoreValue: 66,
+            planningCycle: { cycleStartDate: new Date("2026-03-10T00:00:00.000Z") },
+          },
+          {
+            scoreValue: 82,
+            planningCycle: { cycleStartDate: new Date("2026-03-02T00:00:00.000Z") },
+          },
+        ]),
+      },
+      habit: {
+        findMany: vi.fn().mockResolvedValue([
+          {
+            id: "habit-1",
+            scheduleRuleJson: {},
+            checkins: [
+              { status: "COMPLETED", occurredOn: new Date("2026-03-09T00:00:00.000Z") },
+              { status: "COMPLETED", occurredOn: new Date("2026-03-10T00:00:00.000Z") },
+              { status: "COMPLETED", occurredOn: new Date("2026-03-02T00:00:00.000Z") },
+              { status: "COMPLETED", occurredOn: new Date("2026-03-03T00:00:00.000Z") },
+              { status: "COMPLETED", occurredOn: new Date("2026-03-04T00:00:00.000Z") },
+              { status: "COMPLETED", occurredOn: new Date("2026-03-05T00:00:00.000Z") },
+              { status: "COMPLETED", occurredOn: new Date("2026-03-06T00:00:00.000Z") },
+            ],
+          },
+        ]),
+      },
+      routineItemCheckin: {
+        findMany: vi.fn().mockResolvedValue([]),
+      },
+      routineItem: {
+        findMany: vi.fn().mockResolvedValue([]),
+      },
+      workoutDay: {
+        findMany: vi.fn().mockResolvedValue([
+          { date: new Date("2026-02-12T00:00:00.000Z"), actualStatus: "COMPLETED" },
+          { date: new Date("2026-01-15T00:00:00.000Z"), actualStatus: "COMPLETED" },
+          { date: new Date("2026-01-22T00:00:00.000Z"), actualStatus: "COMPLETED" },
+        ]),
+      },
+      waterLog: {
+        findMany: vi.fn().mockResolvedValue([
+          { occurredAt: new Date("2026-02-01T09:00:00.000Z"), amountMl: 2500 },
+          { occurredAt: new Date("2026-02-02T09:00:00.000Z"), amountMl: 2500 },
+          { occurredAt: new Date("2026-01-01T09:00:00.000Z"), amountMl: 2500 },
+        ]),
+      },
+    } as any;
+
+    const response = await getReviewHistory(prisma, "user-1", {
+      range: "90d",
+      limit: 2,
+    });
+
+    expect(response.items).toHaveLength(2);
+    expect(response.items[0]).toEqual(
+      expect.objectContaining({
+        cadence: "daily",
+        primaryText: "Closed the loop",
+      }),
+    );
+    expect(response.items[1]).toEqual(
+      expect.objectContaining({
+        cadence: "weekly",
+        primaryText: "Protect mornings",
+      }),
+    );
+    expect(response.nextCursor).toBeTruthy();
+    expect(response.summary).toEqual(
+      expect.objectContaining({
+        totalReviews: 5,
+        countsByCadence: {
+          daily: 1,
+          weekly: 2,
+          monthly: 2,
+        },
+      }),
+    );
+    expect(response.weeklyTrend).toHaveLength(2);
+    expect(response.monthlyTrend).toHaveLength(2);
+    expect(response.comparisons.weekly).toEqual(
+      expect.objectContaining({
+        currentText: "Protect mornings",
+        previousText: "Start cleaner",
+        metrics: expect.objectContaining({
+          delta: expect.objectContaining({
+            averageDailyScore: -13,
+            strongDayCount: 0,
+          }),
+        }),
+      }),
+    );
+    expect(response.comparisons.monthly).toEqual(
+      expect.objectContaining({
+        currentText: "February got cleaner",
+        previousText: "January was noisy",
+      }),
+    );
+  });
+
+  it("filters review history search results and rejects invalid cursors", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-03-22T12:00:00.000Z"));
+
+    getWeeklyMomentumMock.mockResolvedValue({
+      endingOn: "2026-03-15",
+      value: 70,
+      basedOnDays: 7,
+      weeklyReviewBonus: 0,
+      strongDayStreak: 0,
+      dailyScores: [],
+      generatedAt: new Date().toISOString(),
+    });
+
+    const prisma = {
+      userPreference: {
+        findUnique: vi.fn().mockResolvedValue({
+          timezone: "UTC",
+          dailyWaterTargetMl: 2500,
+        }),
+      },
+      dailyReview: {
+        findMany: vi.fn().mockResolvedValue([]),
+      },
+      weeklyReview: {
+        findMany: vi.fn().mockResolvedValue([
+          {
+            id: "weekly-1",
+            biggestWin: "Win",
+            biggestMiss: "Miss",
+            mainLesson: "Lesson that matches",
+            keepText: "Keep",
+            improveText: "Improve",
+            notes: null,
+            healthTargetText: null,
+            completedAt: new Date("2026-03-17T08:00:00.000Z"),
+            planningCycle: {
+              cycleStartDate: new Date("2026-03-09T00:00:00.000Z"),
+              cycleEndDate: new Date("2026-03-15T00:00:00.000Z"),
+            },
+          },
+        ]),
+      },
+      monthlyReview: {
+        findMany: vi.fn().mockResolvedValue([]),
+      },
+      task: { findMany: vi.fn().mockResolvedValue([]) },
+      habitCheckin: { findMany: vi.fn().mockResolvedValue([]) },
+      dailyScore: {
+        findMany: vi.fn().mockResolvedValue([
+          {
+            scoreValue: 75,
+            planningCycle: { cycleStartDate: new Date("2026-03-09T00:00:00.000Z") },
+          },
+        ]),
+      },
+      habit: {
+        findMany: vi.fn().mockResolvedValue([]),
+      },
+      routineItemCheckin: { findMany: vi.fn().mockResolvedValue([]) },
+      routineItem: { findMany: vi.fn().mockResolvedValue([]) },
+      workoutDay: { findMany: vi.fn().mockResolvedValue([]) },
+      waterLog: { findMany: vi.fn().mockResolvedValue([]) },
+    } as any;
+
+    const filtered = await getReviewHistory(prisma, "user-1", {
+      cadence: "weekly",
+      q: "matches",
+    });
+
+    expect(filtered.items).toHaveLength(1);
+    expect(filtered.summary.totalReviews).toBe(1);
+    expect(filtered.monthlyTrend).toEqual([]);
+
+    await expect(
+      getReviewHistory(prisma, "user-1", {
+        cadence: "weekly",
+        cursor: "not-base64",
+      }),
+    ).rejects.toThrow("Invalid review history cursor");
+  });
 });
+
+function toIso(value: Date) {
+  return value.toISOString().slice(0, 10);
+}

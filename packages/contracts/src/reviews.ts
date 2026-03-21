@@ -193,3 +193,85 @@ export interface MonthlyReviewMutationResponse extends ApiMeta {
   nextMonthTheme: string;
   nextMonthOutcomes: PlanningPriorityItem[];
 }
+
+export type ReviewHistoryCadence = "daily" | "weekly" | "monthly";
+export type ReviewHistoryCadenceFilter = "all" | ReviewHistoryCadence;
+export type ReviewHistoryRange = "30d" | "90d" | "365d" | "all";
+
+export interface ReviewHistoryMetric {
+  key: string;
+  label: string;
+  value: number | string | null;
+  valueLabel: string;
+}
+
+export interface ReviewHistoryItem {
+  id: EntityId;
+  cadence: ReviewHistoryCadence;
+  periodStart: IsoDateString;
+  periodEnd: IsoDateString;
+  completedAt: string;
+  primaryText: string;
+  secondaryText: string | null;
+  metrics: ReviewHistoryMetric[];
+  frictionTags: ReviewFrictionTag[];
+  route: string;
+}
+
+export interface ReviewHistorySummary {
+  totalReviews: number;
+  countsByCadence: Record<ReviewHistoryCadence, number>;
+  topFrictionTags: Array<{ tag: ReviewFrictionTag; count: number }>;
+}
+
+export interface WeeklyReviewHistoryTrendPoint {
+  startDate: IsoDateString;
+  endDate: IsoDateString;
+  averageDailyScore: number;
+  habitCompletionRate: number;
+  strongDayCount: number;
+}
+
+export interface MonthlyReviewHistoryTrendPoint {
+  startDate: IsoDateString;
+  endDate: IsoDateString;
+  averageWeeklyMomentum: number;
+  waterSuccessRate: number;
+  workoutCount: number;
+}
+
+export interface ReviewHistoryPeriodComparison<TMetrics extends Record<string, number>> {
+  currentPeriodStart: IsoDateString;
+  currentPeriodEnd: IsoDateString;
+  previousPeriodStart: IsoDateString;
+  previousPeriodEnd: IsoDateString;
+  currentLabel: string;
+  previousLabel: string;
+  currentText: string;
+  previousText: string;
+  metrics: {
+    current: TMetrics;
+    previous: TMetrics;
+    delta: TMetrics;
+  };
+}
+
+export interface ReviewHistoryResponse extends ApiMeta {
+  items: ReviewHistoryItem[];
+  nextCursor: string | null;
+  summary: ReviewHistorySummary;
+  weeklyTrend: WeeklyReviewHistoryTrendPoint[];
+  monthlyTrend: MonthlyReviewHistoryTrendPoint[];
+  comparisons: {
+    weekly: ReviewHistoryPeriodComparison<{
+      averageDailyScore: number;
+      habitCompletionRate: number;
+      strongDayCount: number;
+    }> | null;
+    monthly: ReviewHistoryPeriodComparison<{
+      averageWeeklyMomentum: number;
+      waterSuccessRate: number;
+      workoutCount: number;
+    }> | null;
+  };
+}

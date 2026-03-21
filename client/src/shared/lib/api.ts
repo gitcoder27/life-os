@@ -1035,6 +1035,101 @@ type MonthlyReviewMutationResponse = {
   }>;
 };
 
+export type ReviewHistoryCadence = "daily" | "weekly" | "monthly";
+export type ReviewHistoryCadenceFilter = "all" | ReviewHistoryCadence;
+export type ReviewHistoryRange = "30d" | "90d" | "365d" | "all";
+
+export type ReviewHistoryMetric = {
+  key: string;
+  label: string;
+  value: number | string | null;
+  valueLabel: string;
+};
+
+export type ReviewHistoryItem = {
+  id: string;
+  cadence: ReviewHistoryCadence;
+  periodStart: string;
+  periodEnd: string;
+  completedAt: string;
+  primaryText: string;
+  secondaryText: string | null;
+  metrics: ReviewHistoryMetric[];
+  frictionTags: DailyFrictionTag[];
+  route: string;
+};
+
+export type ReviewHistorySummary = {
+  totalReviews: number;
+  countsByCadence: Record<ReviewHistoryCadence, number>;
+  topFrictionTags: Array<{ tag: DailyFrictionTag; count: number }>;
+};
+
+export type WeeklyReviewHistoryTrendPoint = {
+  startDate: string;
+  endDate: string;
+  averageDailyScore: number;
+  habitCompletionRate: number;
+  strongDayCount: number;
+};
+
+export type MonthlyReviewHistoryTrendPoint = {
+  startDate: string;
+  endDate: string;
+  averageWeeklyMomentum: number;
+  waterSuccessRate: number;
+  workoutCount: number;
+};
+
+export type ReviewHistoryPeriodComparison<TMetrics extends Record<string, number>> = {
+  currentPeriodStart: string;
+  currentPeriodEnd: string;
+  previousPeriodStart: string;
+  previousPeriodEnd: string;
+  currentLabel: string;
+  previousLabel: string;
+  currentText: string;
+  previousText: string;
+  metrics: {
+    current: TMetrics;
+    previous: TMetrics;
+    delta: TMetrics;
+  };
+};
+
+export type WeeklyComparisonMetrics = {
+  averageDailyScore: number;
+  habitCompletionRate: number;
+  strongDayCount: number;
+};
+
+export type MonthlyComparisonMetrics = {
+  averageWeeklyMomentum: number;
+  waterSuccessRate: number;
+  workoutCount: number;
+};
+
+export type ReviewHistoryResponse = {
+  generatedAt: string;
+  items: ReviewHistoryItem[];
+  nextCursor: string | null;
+  summary: ReviewHistorySummary;
+  weeklyTrend: WeeklyReviewHistoryTrendPoint[];
+  monthlyTrend: MonthlyReviewHistoryTrendPoint[];
+  comparisons: {
+    weekly: ReviewHistoryPeriodComparison<WeeklyComparisonMetrics> | null;
+    monthly: ReviewHistoryPeriodComparison<MonthlyComparisonMetrics> | null;
+  };
+};
+
+export type ReviewHistoryQueryParams = {
+  cadence?: ReviewHistoryCadenceFilter;
+  range?: ReviewHistoryRange;
+  q?: string;
+  cursor?: string;
+  limit?: number;
+};
+
 type ApiErrorResponse = {
   success: false;
   code: string;
@@ -1097,6 +1192,8 @@ const queryKeys = {
     ["goals", "filtered", domain ?? "all", status ?? "all"] as const,
   goalDetail: (goalId: string) => ["goals", "detail", goalId] as const,
   review: (cadence: ReviewCadence, dateKey: string) => ["review", cadence, dateKey] as const,
+  reviewHistory: (params: ReviewHistoryQueryParams) =>
+    ["reviewHistory", params.cadence ?? "all", params.range ?? "90d", params.q ?? "", params.cursor ?? ""] as const,
   notifications: ["notifications"] as const,
   settings: ["settings"] as const,
   mealTemplates: ["health", "meal-templates"] as const,
@@ -1698,6 +1795,23 @@ export function useReviewDataQuery(cadence: ReviewCadence, date: string) {
         review,
       } as const;
     },
+    retry: false,
+  });
+}
+
+export function useReviewHistoryQuery(params: ReviewHistoryQueryParams) {
+  return useQuery({
+    queryKey: queryKeys.reviewHistory(params),
+    queryFn: () =>
+      apiRequest<ReviewHistoryResponse>("/api/reviews/history", {
+        query: {
+          cadence: params.cadence && params.cadence !== "all" ? params.cadence : undefined,
+          range: params.range,
+          q: params.q || undefined,
+          cursor: params.cursor || undefined,
+          limit: params.limit ? String(params.limit) : undefined,
+        },
+      }),
     retry: false,
   });
 }

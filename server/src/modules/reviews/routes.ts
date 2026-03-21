@@ -1,5 +1,5 @@
 import type { FastifyPluginAsync } from "fastify";
-import type { IsoDateString } from "@life-os/contracts";
+import type { IsoDateString, ReviewHistoryCadenceFilter, ReviewHistoryRange } from "@life-os/contracts";
 import { z } from "zod";
 
 import { requireAuthenticatedUser } from "../../lib/auth/require-auth.js";
@@ -7,6 +7,7 @@ import { parseIsoDate } from "../../lib/time/cycle.js";
 import { parseOrThrow } from "../../lib/validation/parse.js";
 import {
   getDailyReviewModel,
+  getReviewHistory,
   getMonthlyReviewModel,
   getWeeklyReviewModel,
   submitDailyReview,
@@ -15,6 +16,13 @@ import {
 } from "./service.js";
 
 const isoDateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/) as unknown as z.ZodType<IsoDateString>;
+const reviewHistoryQuerySchema = z.object({
+  cadence: z.enum(["all", "daily", "weekly", "monthly"]).optional() as z.ZodType<ReviewHistoryCadenceFilter | undefined>,
+  range: z.enum(["30d", "90d", "365d", "all"]).optional() as z.ZodType<ReviewHistoryRange | undefined>,
+  q: z.string().trim().max(200).optional(),
+  cursor: z.string().min(1).max(500).optional(),
+  limit: z.coerce.number().int().min(1).max(50).optional(),
+});
 const priorityInputSchema = z.object({
   slot: z.union([z.literal(1), z.literal(2), z.literal(3)]),
   title: z.string().min(1).max(200),
@@ -73,6 +81,20 @@ const monthlyReviewSchema = z.object({
 });
 
 export const registerReviewRoutes: FastifyPluginAsync = async (app) => {
+  app.get("/reviews/history", async (request, reply) => {
+    const user = requireAuthenticatedUser(request);
+    const query = parseOrThrow(reviewHistoryQuerySchema, request.query ?? {});
+    const response = await getReviewHistory(app.prisma, user.id, {
+      cadence: query.cadence,
+      range: query.range,
+      q: query.q,
+      cursor: query.cursor,
+      limit: query.limit,
+    });
+
+    return reply.send(response);
+  });
+
   app.get("/reviews/daily/:date", async (request, reply) => {
     const user = requireAuthenticatedUser(request);
     const { date } = request.params as { date: IsoDateString };

@@ -492,6 +492,13 @@ export function ReviewsPage() {
             {reviewCadences[currentCadence].label}
           </NavLink>
         ))}
+        <span style={{ width: "1px", background: "var(--border)", margin: "0 0.15rem" }} />
+        <NavLink
+          to="/reviews/history"
+          className="button button--ghost button--small"
+        >
+          History
+        </NavLink>
       </div>
 
       <PageHeader

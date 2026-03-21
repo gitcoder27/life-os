@@ -10,6 +10,7 @@ import { InboxPage } from "../features/inbox/InboxPage";
 import { NotificationsPage } from "../features/notifications/NotificationsPage";
 import { OnboardingPage } from "../features/onboarding/OnboardingPage";
 import { ReviewsPage } from "../features/reviews/ReviewsPage";
+import { ReviewHistoryPage } from "../features/reviews/ReviewHistoryPage";
 import { SettingsPage } from "../features/settings/SettingsPage";
 import { TodayPage } from "../features/today/TodayPage";
 import {
@@ -131,6 +132,10 @@ export const router = createBrowserRouter([
       {
         path: "goals",
         element: <GoalsPage />,
+      },
+      {
+        path: "reviews/history",
+        element: <ReviewHistoryPage />,
       },
       {
         path: "reviews/:cadence",
