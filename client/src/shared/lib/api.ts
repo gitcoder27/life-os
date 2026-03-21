@@ -254,6 +254,28 @@ type WeeklyMomentumResponse = {
   }>;
 };
 
+type RecurrenceRuleResponse = {
+  frequency: "daily" | "weekly" | "monthly_nth_weekday" | "interval";
+  startsOn: string;
+  interval?: number;
+  daysOfWeek?: number[];
+  nthWeekday?: { ordinal: 1 | 2 | 3 | 4 | -1; dayOfWeek: number };
+  end?: { type: "never" | "on_date" | "after_occurrences"; until?: string | null; occurrenceCount?: number | null };
+};
+
+type RecurrenceDefinitionResponse = {
+  id: string;
+  rule: RecurrenceRuleResponse;
+  exceptions: Array<{ occurrenceDate: string; action: "skip" | "do_once" | "reschedule"; targetDate?: string | null }>;
+  carryPolicy?: "complete_and_clone" | "move_due_date" | "cancel" | null;
+  legacyRuleText?: string | null;
+};
+
+type RecurrenceInputPayload = {
+  rule: RecurrenceRuleResponse;
+  exceptions?: Array<{ occurrenceDate: string; action: "skip" | "do_once" | "reschedule"; targetDate?: string | null }>;
+};
+
 type DayPlanResponse = {
   generatedAt: string;
   date: string;
@@ -277,6 +299,7 @@ type DayPlanResponse = {
     goal: LinkedGoal | null;
     originType: string;
     carriedFromTaskId: string | null;
+    recurrence: RecurrenceDefinitionResponse | null;
     completedAt: string | null;
     createdAt: string;
     updatedAt: string;
@@ -323,6 +346,7 @@ type HabitsResponse = {
     title: string;
     category: string | null;
     scheduleRule: { daysOfWeek?: number[] };
+    recurrence: RecurrenceDefinitionResponse | null;
     targetPerDay: number;
     status: "active" | "paused" | "archived";
     dueToday: boolean;
@@ -342,6 +366,7 @@ type HabitsResponse = {
     title: string;
     category: string | null;
     scheduleRule: { daysOfWeek?: number[] };
+    recurrence: RecurrenceDefinitionResponse | null;
     targetPerDay: number;
     status: "active" | "paused" | "archived";
     dueToday: boolean;
@@ -559,6 +584,7 @@ type RecurringExpensesResponse = {
     defaultAmountMinor: number | null;
     currencyCode: string;
     recurrenceRule: string;
+    recurrence: RecurrenceDefinitionResponse | null;
     nextDueOn: string;
     remindDaysBefore: number;
     status: "active" | "paused" | "archived";
@@ -1636,6 +1662,8 @@ export function useCreateTaskMutation(date: string) {
       notes?: string | null;
       scheduledForDate?: string | null;
       originType?: "manual" | "quick_capture" | "carry_forward" | "review_seed" | "recurring";
+      recurrence?: RecurrenceInputPayload;
+      carryPolicy?: "complete_and_clone" | "move_due_date" | "cancel";
     }) =>
       apiRequest<TaskMutationResponse>("/api/tasks", {
         method: "POST",
@@ -1693,6 +1721,7 @@ export function useCreateHabitMutation() {
       title: string;
       category?: string | null;
       scheduleRule?: { daysOfWeek?: number[] };
+      recurrence?: RecurrenceInputPayload;
       targetPerDay?: number;
     }) =>
       apiRequest<HabitMutationResponse>("/api/habits/habits", {
@@ -1721,6 +1750,7 @@ export function useUpdateHabitMutation() {
       title?: string;
       category?: string | null;
       scheduleRule?: { daysOfWeek?: number[] };
+      recurrence?: RecurrenceInputPayload;
       targetPerDay?: number;
       status?: "active" | "paused" | "archived";
     }) =>
@@ -2442,7 +2472,8 @@ export function useCreateRecurringExpenseMutation() {
       expenseCategoryId?: string | null;
       defaultAmountMinor?: number | null;
       currencyCode?: string;
-      recurrenceRule: string;
+      recurrenceRule?: string;
+      recurrence?: RecurrenceInputPayload;
       nextDueOn: string;
       remindDaysBefore?: number;
     }) =>
@@ -2474,6 +2505,7 @@ export function useUpdateRecurringExpenseMutation() {
       expenseCategoryId?: string | null;
       defaultAmountMinor?: number | null;
       recurrenceRule?: string;
+      recurrence?: RecurrenceInputPayload;
       nextDueOn?: string;
       remindDaysBefore?: number;
       status?: "active" | "paused" | "archived";

@@ -16,6 +16,11 @@ import {
   useUpdateExpenseMutation,
   useUpdateRecurringExpenseMutation,
 } from "../../shared/lib/api";
+import {
+  type RecurrenceRuleInput,
+  formatFullRecurrenceSummary,
+  isRecurring,
+} from "../../shared/lib/recurrence";
 import { PageHeader } from "../../shared/ui/PageHeader";
 import {
   EmptyState,
@@ -23,6 +28,7 @@ import {
   PageErrorState,
   PageLoadingState,
 } from "../../shared/ui/PageState";
+import { RecurrenceEditor, buildRecurrenceInput } from "../../shared/ui/RecurrenceEditor";
 import { SectionCard } from "../../shared/ui/SectionCard";
 
 type CategoryForm = { name: string; color: string };
@@ -31,6 +37,7 @@ type RecurringForm = {
   expenseCategoryId: string;
   defaultAmount: string;
   recurrenceRule: string;
+  recurrenceInput: RecurrenceRuleInput | null;
   nextDueOn: string;
   remindDaysBefore: string;
 };
@@ -48,6 +55,7 @@ const emptyRecurring: RecurringForm = {
   expenseCategoryId: "",
   defaultAmount: "",
   recurrenceRule: "monthly",
+  recurrenceInput: null,
   nextDueOn: "",
   remindDaysBefore: "3",
 };
@@ -206,6 +214,7 @@ export function FinancePage() {
       expenseCategoryId: item.expenseCategoryId ?? "",
       defaultAmount: item.defaultAmountMinor ? String(item.defaultAmountMinor / 100) : "",
       recurrenceRule: item.recurrenceRule,
+      recurrenceInput: item.recurrence?.rule ?? null,
       nextDueOn: item.nextDueOn,
       remindDaysBefore: String(item.remindDaysBefore),
     });
@@ -215,6 +224,9 @@ export function FinancePage() {
   async function handleRecurringSave() {
     if (!recForm.title.trim() || !recForm.nextDueOn) return;
     const amountMinor = recForm.defaultAmount ? parseAmountToMinor(recForm.defaultAmount) : null;
+    const recurrence = recForm.recurrenceInput
+      ? buildRecurrenceInput(recForm.recurrenceInput)
+      : undefined;
     if (editingRecId) {
       await updateRecurringMutation.mutateAsync({
         recurringExpenseId: editingRecId,
@@ -222,6 +234,7 @@ export function FinancePage() {
         expenseCategoryId: recForm.expenseCategoryId || null,
         defaultAmountMinor: amountMinor,
         recurrenceRule: recForm.recurrenceRule,
+        recurrence,
         nextDueOn: recForm.nextDueOn,
         remindDaysBefore: Number(recForm.remindDaysBefore) || 3,
       });
@@ -231,6 +244,7 @@ export function FinancePage() {
         expenseCategoryId: recForm.expenseCategoryId || undefined,
         defaultAmountMinor: amountMinor,
         recurrenceRule: recForm.recurrenceRule,
+        recurrence,
         nextDueOn: recForm.nextDueOn,
         remindDaysBefore: Number(recForm.remindDaysBefore) || 3,
       });
@@ -524,14 +538,15 @@ export function FinancePage() {
                 <span>Default amount</span>
                 <input type="text" value={recForm.defaultAmount} placeholder="0.00" onChange={(e) => setRecForm((p) => ({ ...p, defaultAmount: e.target.value }))} />
               </label>
-              <label className="field">
-                <span>Recurrence</span>
-                <select value={recForm.recurrenceRule} onChange={(e) => setRecForm((p) => ({ ...p, recurrenceRule: e.target.value }))}>
-                  <option value="monthly">Monthly</option>
-                  <option value="weekly">Weekly</option>
-                  <option value="yearly">Yearly</option>
-                </select>
-              </label>
+              <div className="manage-form__section">
+                <span className="manage-form__section-label">Recurrence</span>
+                <RecurrenceEditor
+                  value={recForm.recurrenceInput}
+                  onChange={(rule) => setRecForm((p) => ({ ...p, recurrenceInput: rule }))}
+                  context="finance"
+                  startsOn={recForm.nextDueOn || today}
+                />
+              </div>
               <label className="field">
                 <span>Next due date</span>
                 <input type="date" value={recForm.nextDueOn} onChange={(e) => setRecForm((p) => ({ ...p, nextDueOn: e.target.value }))} />
@@ -556,6 +571,13 @@ export function FinancePage() {
                       <div className="expense-row__info">
                         <div className="expense-row__title">{item.title}</div>
                         <div className="expense-row__meta">
+                          {isRecurring(item.recurrence) ? (
+                            <span className="expense-row__recurrence">
+                              <span className="recurrence-badge recurrence-badge--compact" title={formatFullRecurrenceSummary(item.recurrence!.rule)}>↻</span>
+                              {" "}{formatFullRecurrenceSummary(item.recurrence!.rule)}
+                              {" · "}
+                            </span>
+                          ) : null}
                           Due in {formatDueLabel(item.nextDueOn)} &middot;{" "}
                           <span className={`tag ${item.status === "active" ? "tag--positive" : item.status === "paused" ? "tag--warning" : "tag--neutral"}`}>
                             {item.status}

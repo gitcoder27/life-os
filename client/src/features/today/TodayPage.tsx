@@ -15,6 +15,7 @@ import {
   useUpdatePriorityMutation,
   type LinkedGoal,
 } from "../../shared/lib/api";
+import { isRecurring } from "../../shared/lib/recurrence";
 import { getQuickCaptureDisplayText, parseQuickCaptureNotes } from "../../shared/lib/quickCapture";
 import { PageHeader } from "../../shared/ui/PageHeader";
 import {
@@ -23,6 +24,7 @@ import {
   PageErrorState,
   PageLoadingState,
 } from "../../shared/ui/PageState";
+import { RecurrenceInfo } from "../../shared/ui/RecurrenceBadge";
 import { SectionCard } from "../../shared/ui/SectionCard";
 
 type EditablePriority = {
@@ -423,7 +425,12 @@ export function TodayPage() {
               {executionTasks.map((item) => (
                 <li key={item.id} className="task-list__item">
                   <div className="task-list__main">
-                    <strong>{item.title}</strong>
+                    <strong>
+                      {item.title}
+                      {isRecurring(item.recurrence) && (
+                        <RecurrenceInfo recurrence={item.recurrence} showCarryPolicy />
+                      )}
+                    </strong>
                     <div className="list__subtle">
                       {getTaskDayMetaText(item.notes, item.scheduledForDate ?? "Scheduled today")}
                       {item.goal ? (
@@ -483,7 +490,7 @@ export function TodayPage() {
                           })
                         }
                       >
-                        Carry to tomorrow
+                        {isRecurring(item.recurrence) ? "Skip to next" : "Carry to tomorrow"}
                       </button>
                     </div>
                     <div className="task-reschedule-row">

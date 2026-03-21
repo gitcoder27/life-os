@@ -12,3 +12,4 @@ export * from "./habits.js";
 export * from "./health.js";
 export * from "./reviews.js";
 export * from "./scoring.js";
+export * from "./recurrence.js";

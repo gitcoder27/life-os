@@ -1,5 +1,6 @@
 import type { ApiMeta, EntityId, IsoDateString } from "./common.js";
 import type { GoalSummary } from "./goals.js";
+import type { RecurrenceDefinition, RecurrenceInput, RecurringTaskCarryPolicy } from "./recurrence.js";
 
 export type PriorityStatus = "pending" | "completed" | "dropped";
 export type TaskStatus = "pending" | "completed" | "dropped";
@@ -33,6 +34,7 @@ export interface PlanningTaskItem {
   goal: GoalSummary | null;
   originType: TaskOriginType;
   carriedFromTaskId: EntityId | null;
+  recurrence: RecurrenceDefinition | null;
   completedAt: string | null;
   createdAt: string;
   updatedAt: string;
@@ -95,6 +97,8 @@ export interface CreateTaskRequest {
   dueAt?: string | null;
   goalId?: EntityId | null;
   originType?: TaskOriginType;
+  recurrence?: RecurrenceInput;
+  carryPolicy?: RecurringTaskCarryPolicy;
 }
 
 export interface UpdateTaskRequest {
@@ -104,6 +108,8 @@ export interface UpdateTaskRequest {
   scheduledForDate?: IsoDateString | null;
   dueAt?: string | null;
   goalId?: EntityId | null;
+  recurrence?: RecurrenceInput;
+  carryPolicy?: RecurringTaskCarryPolicy | null;
 }
 
 export interface CarryForwardTaskRequest {

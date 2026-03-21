@@ -8,6 +8,8 @@ import {
   normalizeHabitScheduleRule,
 } from "../../lib/habits/schedule.js";
 import { buildWaterTotalsByLocalDate, countWaterTargetHits } from "../../lib/health/water.js";
+import { applyRecurringTaskCarryForward, applyRecurringTaskSkip, materializeRecurringTasksInRange } from "../../lib/recurrence/tasks.js";
+import { serializeRecurrenceDefinition } from "../../lib/recurrence/store.js";
 import { addDays, addIsoDays, getMonthEndDate, getWeekEndDate, parseIsoDate } from "../../lib/time/cycle.js";
 import { toIsoDateString } from "../../lib/time/date.js";
 import { getDateRangeWindowUtc, getDayWindowUtc, normalizeTimezone } from "../../lib/time/user-time.js";
@@ -312,6 +314,7 @@ function listIsoDates(startDate: string, endDate: string) {
 
 async function getDailySummary(prisma: PrismaClient, userId: string, date: Date) {
   const targetIsoDate = toIsoDateString(date);
+  await materializeRecurringTasksInRange(prisma, userId, date, date);
   const preferences = await prisma.userPreference?.findUnique?.({
     where: {
       userId,
@@ -330,6 +333,17 @@ async function getDailySummary(prisma: PrismaClient, userId: string, date: Date)
         where: {
           userId,
           scheduledForDate: date,
+        },
+        include: {
+          recurrenceRule: {
+            include: {
+              exceptions: {
+                orderBy: {
+                  occurrenceDate: "asc",
+                },
+              },
+            },
+          },
         },
       }),
       prisma.routine.findMany({
@@ -458,6 +472,7 @@ async function getDailySummary(prisma: PrismaClient, userId: string, date: Date)
                   ? "recurring"
                   : "manual",
         carriedFromTaskId: task.carriedFromTaskId,
+        recurrence: serializeRecurrenceDefinition(task.recurrenceRule),
         completedAt: task.completedAt?.toISOString() ?? null,
         createdAt: task.createdAt.toISOString(),
         updatedAt: task.updatedAt.toISOString(),
@@ -621,6 +636,7 @@ export async function submitDailyReview(
   payload: SubmitDailyReviewRequest,
 ) {
   dedupeTaskIds(payload);
+  await materializeRecurringTasksInRange(prisma, userId, date, date);
   const preferences = await getUserPreferences(prisma, userId);
   assertReviewSubmissionWindow(
     "Daily review",
@@ -680,14 +696,24 @@ export async function submitDailyReview(
     await replacePriorities(tx, tomorrowCycle.id, payload.tomorrowPriorities, "DAILY");
 
     for (const taskId of payload.droppedTaskIds) {
-      await tx.task.update({
+      const task = await tx.task.findUniqueOrThrow({
         where: {
           id: taskId,
         },
-        data: {
-          status: "DROPPED",
-        },
       });
+
+      if (task.recurrenceRuleId) {
+        await applyRecurringTaskSkip(tx, userId, task);
+      } else {
+        await tx.task.update({
+          where: {
+            id: taskId,
+          },
+          data: {
+            status: "DROPPED",
+          },
+        });
+      }
     }
 
     for (const taskId of payload.carryForwardTaskIds) {
@@ -696,6 +722,11 @@ export async function submitDailyReview(
           id: taskId,
         },
       });
+
+      if (task.recurrenceRuleId) {
+        await applyRecurringTaskCarryForward(tx, userId, task, toIsoDateString(tomorrowDate));
+        continue;
+      }
 
       await tx.task.update({
         where: {
@@ -729,6 +760,11 @@ export async function submitDailyReview(
       const targetDate = parseIsoDate(
         rescheduledTask.targetDate as `${number}-${number}-${number}`,
       );
+
+      if (task.recurrenceRuleId) {
+        await applyRecurringTaskCarryForward(tx, userId, task, rescheduledTask.targetDate);
+        continue;
+      }
 
       await tx.task.update({
         where: {

@@ -11,6 +11,11 @@ import {
   useUpdateRoutineMutation,
   useWeeklyMomentumQuery,
 } from "../../shared/lib/api";
+import {
+  type RecurrenceRuleInput,
+  formatFullRecurrenceSummary,
+  isRecurring,
+} from "../../shared/lib/recurrence";
 import { PageHeader } from "../../shared/ui/PageHeader";
 import {
   EmptyState,
@@ -18,6 +23,7 @@ import {
   PageErrorState,
   PageLoadingState,
 } from "../../shared/ui/PageState";
+import { RecurrenceEditor, buildRecurrenceInput } from "../../shared/ui/RecurrenceEditor";
 import { SectionCard } from "../../shared/ui/SectionCard";
 
 function ChallengeProgressRing({ completions, target }: { completions: number; target: number }) {
@@ -46,9 +52,10 @@ type HabitFormValues = {
   title: string;
   category: string;
   targetPerDay: string;
+  recurrenceRule: RecurrenceRuleInput | null;
 };
 
-const emptyHabitForm: HabitFormValues = { title: "", category: "", targetPerDay: "1" };
+const emptyHabitForm: HabitFormValues = { title: "", category: "", targetPerDay: "1", recurrenceRule: null };
 
 function HabitForm({
   initial = emptyHabitForm,
@@ -63,6 +70,7 @@ function HabitForm({
   onSubmit: (values: HabitFormValues) => void;
   onCancel: () => void;
 }) {
+  const today = getTodayDate();
   const [values, setValues] = useState<HabitFormValues>(initial);
 
   function handleSubmit(event: FormEvent) {
@@ -104,6 +112,15 @@ function HabitForm({
               onChange={(e) => setValues((v) => ({ ...v, targetPerDay: e.target.value }))}
             />
           </label>
+        </div>
+        <div className="manage-form__section">
+          <span className="manage-form__section-label">Schedule</span>
+          <RecurrenceEditor
+            value={values.recurrenceRule}
+            onChange={(rule) => setValues((v) => ({ ...v, recurrenceRule: rule }))}
+            context="habit"
+            startsOn={values.recurrenceRule?.startsOn ?? today}
+          />
         </div>
       </div>
       <div className="button-row button-row--tight">
@@ -248,6 +265,7 @@ export function HabitsPage() {
         title: values.title.trim(),
         category: values.category.trim() || null,
         targetPerDay: Math.max(1, Number.parseInt(values.targetPerDay, 10) || 1),
+        recurrence: values.recurrenceRule ? buildRecurrenceInput(values.recurrenceRule) : undefined,
       },
       { onSuccess: () => setShowAddHabit(false) },
     );
@@ -260,6 +278,7 @@ export function HabitsPage() {
         title: values.title.trim(),
         category: values.category.trim() || null,
         targetPerDay: Math.max(1, Number.parseInt(values.targetPerDay, 10) || 1),
+        recurrence: values.recurrenceRule ? buildRecurrenceInput(values.recurrenceRule) : undefined,
       },
       { onSuccess: () => setEditingHabitId(null) },
     );
@@ -374,6 +393,9 @@ export function HabitsPage() {
                       </div>
                       <div className="habit-item__detail">
                         {habit.category ?? "General"} · target {habit.targetPerDay}
+                        {isRecurring(habit.recurrence) && (
+                          <span className="habit-item__recurrence"> · {formatFullRecurrenceSummary(habit.recurrence!.rule)}</span>
+                        )}
                         {habit.risk && habit.risk.dueCount7d > 0 ? (
                           <span className="habit-item__stats"> · {habit.risk.completedCount7d}/{habit.risk.dueCount7d} this week</span>
                         ) : null}
@@ -543,6 +565,7 @@ export function HabitsPage() {
                       title: habit.title,
                       category: habit.category ?? "",
                       targetPerDay: String(habit.targetPerDay),
+                      recurrenceRule: habit.recurrence?.rule ?? null,
                     }}
                     submitLabel="Save changes"
                     isPending={updateHabitMutation.isPending}
@@ -558,6 +581,9 @@ export function HabitsPage() {
                       </div>
                       <div className="manage-list__meta">
                         {habit.category ?? "General"} · target {habit.targetPerDay}/day · {habit.streakCount} streak
+                        {isRecurring(habit.recurrence) && (
+                          <span className="manage-list__recurrence"> · ↻ {formatFullRecurrenceSummary(habit.recurrence!.rule)}</span>
+                        )}
                       </div>
                     </div>
                     <div className="button-row button-row--tight">

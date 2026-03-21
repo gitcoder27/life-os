@@ -15,7 +15,9 @@ import {
   useMealTemplatesQuery,
   useWorkoutMutation,
 } from "../../shared/lib/api";
+import { type RecurrenceRuleInput } from "../../shared/lib/recurrence";
 import { stringifyQuickCaptureNotes } from "../../shared/lib/quickCapture";
+import { RecurrenceToggle, buildRecurrenceInput } from "../../shared/ui/RecurrenceEditor";
 
 const LAST_EXPENSE_CATEGORY_KEY = "lifeos_last_expense_category";
 
@@ -64,6 +66,8 @@ export function QuickCaptureSheet({
   const [mealSlot, setMealSlot] = useState<"breakfast" | "lunch" | "dinner" | "snack">("breakfast");
   const [workoutStatus, setWorkoutStatus] = useState<"completed" | "recovery_respected">("completed");
   const [reminderDate, setReminderDate] = useState(defaultReminderDate);
+  const [recurrenceEnabled, setRecurrenceEnabled] = useState(false);
+  const [recurrenceRule, setRecurrenceRule] = useState<RecurrenceRuleInput | null>(null);
 
   const panelRef = useRef<HTMLElement>(null);
   const firstInputRef = useRef<HTMLInputElement | HTMLTextAreaElement | null>(null);
@@ -122,6 +126,8 @@ export function QuickCaptureSheet({
     setDetailValue("");
     setWeightValue("");
     setReminderDate(defaultReminderDate);
+    setRecurrenceEnabled(false);
+    setRecurrenceRule(null);
     onClose();
   }
 
@@ -182,6 +188,7 @@ export function QuickCaptureSheet({
         }),
         scheduledForDate: activeType === "Reminder" ? reminderDate : today,
         originType: "quick_capture",
+        recurrence: recurrenceEnabled && recurrenceRule ? buildRecurrenceInput(recurrenceRule) : undefined,
       });
       resetAndClose();
       return;
@@ -359,6 +366,17 @@ export function QuickCaptureSheet({
                 onKeyDown={(e) => { if (e.key === "Enter") void handleSave(); }}
               />
             </label>
+          )}
+
+          {(activeType === "Note" || activeType === "Reminder") && (
+            <RecurrenceToggle
+              enabled={recurrenceEnabled}
+              onToggle={setRecurrenceEnabled}
+              rule={recurrenceRule}
+              onRuleChange={setRecurrenceRule}
+              context="reminder"
+              startsOn={activeType === "Reminder" ? reminderDate : today}
+            />
           )}
 
           {activeType === "Meal" && (

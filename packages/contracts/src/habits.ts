@@ -1,4 +1,5 @@
 import type { ApiMeta, EntityId, IsoDateString } from "./common.js";
+import type { RecurrenceDefinition, RecurrenceInput } from "./recurrence.js";
 
 export type HabitStatus = "active" | "paused" | "archived";
 export type HabitCheckinStatus = "completed" | "skipped";
@@ -16,6 +17,7 @@ export interface HabitItem {
   title: string;
   category: string | null;
   scheduleRule: HabitScheduleRule;
+  recurrence: RecurrenceDefinition | null;
   targetPerDay: number;
   status: HabitStatus;
   dueToday: boolean;
@@ -79,6 +81,7 @@ export interface CreateHabitRequest {
   title: string;
   category?: string | null;
   scheduleRule?: HabitScheduleRule;
+  recurrence?: RecurrenceInput;
   targetPerDay?: number;
 }
 
@@ -86,6 +89,7 @@ export interface UpdateHabitRequest {
   title?: string;
   category?: string | null;
   scheduleRule?: HabitScheduleRule;
+  recurrence?: RecurrenceInput;
   targetPerDay?: number;
   status?: HabitStatus;
 }

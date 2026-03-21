@@ -8,6 +8,7 @@ import type {
   FinanceCategoriesResponse,
   IsoDateString,
   IsoMonthString,
+  RecurrenceInput,
   RecurringExpenseMutationResponse,
   UpdateExpenseCategoryRequest,
   UpdateRecurringExpenseRequest,
@@ -25,6 +26,8 @@ import { z } from "zod";
 import { requireAuthenticatedUser } from "../../lib/auth/require-auth.js";
 import { AppError } from "../../lib/errors/app-error.js";
 import { withGeneratedAt } from "../../lib/http/response.js";
+import { formatLegacyFinanceRecurrenceRule, parseLegacyFinanceRecurrenceRule } from "../../lib/recurrence/rules.js";
+import { serializeRecurrenceDefinition, upsertRecurrenceRuleRecord } from "../../lib/recurrence/store.js";
 import { parseIsoDate } from "../../lib/time/cycle.js";
 import { toIsoDateString } from "../../lib/time/date.js";
 import { parseOrThrow } from "../../lib/validation/parse.js";
@@ -96,6 +99,7 @@ interface RecurringExpenseItem {
   defaultAmountMinor: number | null;
   currencyCode: string;
   recurrenceRule: string;
+  recurrence: ReturnType<typeof serializeRecurrenceDefinition>;
   nextDueOn: IsoDateString;
   remindDaysBefore: number;
   status: RecurringExpenseStatus;
@@ -113,7 +117,8 @@ interface CreateRecurringExpenseRequest {
   expenseCategoryId?: string | null;
   defaultAmountMinor?: number | null;
   currencyCode?: string;
-  recurrenceRule: string;
+  recurrenceRule?: string;
+  recurrence?: RecurrenceInput;
   nextDueOn: IsoDateString;
   remindDaysBefore?: number;
   status?: RecurringExpenseStatus;
@@ -124,6 +129,39 @@ const isoMonthSchema = z.string().regex(/^\d{4}-\d{2}$/) as unknown as z.ZodType
 
 const expenseSourceSchema = z.enum(["manual", "quick_capture", "template"]);
 const recurringExpenseStatusSchema = z.enum(["active", "paused", "archived"]);
+const recurrenceExceptionActionSchema = z.enum(["skip", "do_once", "reschedule"]);
+const recurrenceRuleSchema = z.object({
+  frequency: z.enum(["daily", "weekly", "monthly_nth_weekday", "interval"]),
+  startsOn: isoDateSchema,
+  interval: z.number().int().positive().max(365).optional(),
+  daysOfWeek: z.array(z.number().int().min(0).max(6)).max(7).optional(),
+  nthWeekday: z
+    .object({
+      ordinal: z.union([z.literal(-1), z.literal(1), z.literal(2), z.literal(3), z.literal(4)]),
+      dayOfWeek: z.number().int().min(0).max(6),
+    })
+    .optional(),
+  end: z
+    .object({
+      type: z.enum(["never", "on_date", "after_occurrences"]),
+      until: isoDateSchema.nullable().optional(),
+      occurrenceCount: z.number().int().positive().optional(),
+    })
+    .optional(),
+});
+const recurrenceInputSchema = z.object({
+  rule: recurrenceRuleSchema,
+  exceptions: z
+    .array(
+      z.object({
+        occurrenceDate: isoDateSchema,
+        action: recurrenceExceptionActionSchema,
+        targetDate: isoDateSchema.nullable().optional(),
+      }),
+    )
+    .max(180)
+    .optional(),
+});
 
 const createExpenseSchema = z.object({
   expenseCategoryId: z.string().uuid().nullable().optional(),
@@ -150,11 +188,12 @@ const createRecurringExpenseSchema = z.object({
   expenseCategoryId: z.string().uuid().nullable().optional(),
   defaultAmountMinor: z.number().int().positive().nullable().optional(),
   currencyCode: z.string().length(3).optional(),
-  recurrenceRule: z.string().min(1).max(100),
+  recurrenceRule: z.string().min(1).max(100).optional(),
+  recurrence: recurrenceInputSchema.optional(),
   nextDueOn: isoDateSchema,
   remindDaysBefore: z.number().int().min(0).max(365).optional(),
   status: recurringExpenseStatusSchema.optional(),
-});
+}).refine((value) => Boolean(value.recurrence || value.recurrenceRule), "Provide recurrence details");
 
 const createExpenseCategorySchema = z.object({
   name: z.string().min(1).max(120),
@@ -178,6 +217,7 @@ const updateRecurringExpenseSchema = z
     defaultAmountMinor: z.number().int().positive().nullable().optional(),
     currencyCode: z.string().length(3).optional(),
     recurrenceRule: z.string().min(1).max(100).optional(),
+    recurrence: recurrenceInputSchema.optional(),
     nextDueOn: isoDateSchema.optional(),
     remindDaysBefore: z.number().int().min(0).max(365).optional(),
     status: recurringExpenseStatusSchema.optional(),
@@ -298,7 +338,9 @@ function serializeExpenseCategory(category: ExpenseCategory): ExpenseCategoryIte
 }
 
 function serializeRecurringExpense(
-  recurringExpense: RecurringExpenseTemplate,
+  recurringExpense: RecurringExpenseTemplate & {
+    recurrenceRuleRecord?: Parameters<typeof serializeRecurrenceDefinition>[0];
+  },
 ): RecurringExpenseItem {
   return {
     id: recurringExpense.id,
@@ -307,11 +349,42 @@ function serializeRecurringExpense(
     defaultAmountMinor: recurringExpense.defaultAmountMinor,
     currencyCode: recurringExpense.currencyCode,
     recurrenceRule: recurringExpense.recurrenceRule,
+    recurrence: serializeRecurrenceDefinition(recurringExpense.recurrenceRuleRecord),
     nextDueOn: toIsoDateString(recurringExpense.nextDueOn),
     remindDaysBefore: recurringExpense.remindDaysBefore,
     status: fromPrismaRecurringExpenseStatus(recurringExpense.status),
     createdAt: recurringExpense.createdAt.toISOString(),
     updatedAt: recurringExpense.updatedAt.toISOString(),
+  };
+}
+
+function resolveRecurringExpenseRecurrenceInput(
+  payload: { recurrence?: RecurrenceInput; recurrenceRule?: string; nextDueOn: IsoDateString },
+) {
+  if (payload.recurrence) {
+    return {
+      recurrence: payload.recurrence,
+      legacyRuleText: formatLegacyFinanceRecurrenceRule(payload.recurrence.rule),
+    };
+  }
+
+  const parsedRule = payload.recurrenceRule
+    ? parseLegacyFinanceRecurrenceRule(payload.recurrenceRule, payload.nextDueOn)
+    : null;
+  if (!parsedRule) {
+    throw new AppError({
+      statusCode: 400,
+      code: "BAD_REQUEST",
+      message: "Unsupported recurring expense rule",
+    });
+  }
+
+  return {
+    recurrence: {
+      rule: parsedRule,
+      exceptions: [],
+    } satisfies RecurrenceInput,
+    legacyRuleText: payload.recurrenceRule ?? formatLegacyFinanceRecurrenceRule(parsedRule),
   };
 }
 
@@ -717,6 +790,17 @@ export const registerFinanceRoutes: FastifyPluginAsync = async (app) => {
       where: {
         userId: user.id,
       },
+      include: {
+        recurrenceRuleRecord: {
+          include: {
+            exceptions: {
+              orderBy: {
+                occurrenceDate: "asc",
+              },
+            },
+          },
+        },
+      },
       orderBy: [
         { status: "asc" },
         { nextDueOn: "asc" },
@@ -737,21 +821,57 @@ export const registerFinanceRoutes: FastifyPluginAsync = async (app) => {
       createRecurringExpenseSchema,
       request.body as CreateRecurringExpenseRequest,
     );
+    const recurrence = resolveRecurringExpenseRecurrenceInput(payload);
 
     await assertOwnedExpenseCategory(app, user.id, payload.expenseCategoryId);
 
-    const recurringExpense = await app.prisma.recurringExpenseTemplate.create({
-      data: {
-        userId: user.id,
-        title: payload.title,
-        expenseCategoryId: payload.expenseCategoryId ?? null,
-        defaultAmountMinor: payload.defaultAmountMinor ?? null,
-        currencyCode: payload.currencyCode ?? (await getUserCurrencyCode(app, user.id)),
-        recurrenceRule: payload.recurrenceRule,
-        nextDueOn: parseIsoDate(payload.nextDueOn),
-        remindDaysBefore: payload.remindDaysBefore ?? 0,
-        status: toPrismaRecurringExpenseStatus(payload.status ?? "active"),
-      },
+    const recurringExpense = await app.prisma.$transaction(async (tx) => {
+      const createdRecurringExpense = await tx.recurringExpenseTemplate.create({
+        data: {
+          userId: user.id,
+          title: payload.title,
+          expenseCategoryId: payload.expenseCategoryId ?? null,
+          defaultAmountMinor: payload.defaultAmountMinor ?? null,
+          currencyCode: payload.currencyCode ?? (await getUserCurrencyCode(app, user.id)),
+          recurrenceRule: recurrence.legacyRuleText,
+          nextDueOn: parseIsoDate(payload.nextDueOn),
+          remindDaysBefore: payload.remindDaysBefore ?? 0,
+          status: toPrismaRecurringExpenseStatus(payload.status ?? "active"),
+        },
+      });
+
+      const recurrenceRecord = await upsertRecurrenceRuleRecord(tx, {
+        ownerType: "RECURRING_EXPENSE",
+        ownerId: createdRecurringExpense.id,
+        recurrence: recurrence.recurrence,
+        legacyRuleText: recurrence.legacyRuleText,
+      });
+
+      await tx.recurringExpenseTemplate.update({
+        where: {
+          id: createdRecurringExpense.id,
+        },
+        data: {
+          recurrenceRuleId: recurrenceRecord.id,
+        },
+      });
+
+      return tx.recurringExpenseTemplate.findUniqueOrThrow({
+        where: {
+          id: createdRecurringExpense.id,
+        },
+        include: {
+          recurrenceRuleRecord: {
+            include: {
+              exceptions: {
+                orderBy: {
+                  occurrenceDate: "asc",
+                },
+              },
+            },
+          },
+        },
+      });
     });
 
     const response: RecurringExpenseMutationResponse = withGeneratedAt({
@@ -769,23 +889,69 @@ export const registerFinanceRoutes: FastifyPluginAsync = async (app) => {
       request.body as UpdateRecurringExpenseRequest,
     );
 
-    await findOwnedRecurringExpenseTemplate(app, user.id, recurringExpenseId);
+    const existingRecurringExpense = await findOwnedRecurringExpenseTemplate(app, user.id, recurringExpenseId);
     await assertOwnedExpenseCategory(app, user.id, payload.expenseCategoryId);
 
-    const recurringExpense = await app.prisma.recurringExpenseTemplate.update({
-      where: {
-        id: recurringExpenseId,
-      },
-      data: {
-        title: payload.title,
-        expenseCategoryId: payload.expenseCategoryId,
-        defaultAmountMinor: payload.defaultAmountMinor,
-        currencyCode: payload.currencyCode,
-        recurrenceRule: payload.recurrenceRule,
-        nextDueOn: payload.nextDueOn ? parseIsoDate(payload.nextDueOn) : undefined,
-        remindDaysBefore: payload.remindDaysBefore,
-        status: payload.status ? toPrismaRecurringExpenseStatus(payload.status) : undefined,
-      },
+    const recurringExpense = await app.prisma.$transaction(async (tx) => {
+      const recurrence =
+        payload.recurrence || payload.recurrenceRule || payload.nextDueOn
+          ? resolveRecurringExpenseRecurrenceInput({
+              recurrence: payload.recurrence,
+              recurrenceRule: payload.recurrenceRule,
+              nextDueOn: payload.nextDueOn ?? toIsoDateString(existingRecurringExpense.nextDueOn),
+            })
+          : null;
+
+      await tx.recurringExpenseTemplate.update({
+        where: {
+          id: recurringExpenseId,
+        },
+        data: {
+          title: payload.title,
+          expenseCategoryId: payload.expenseCategoryId,
+          defaultAmountMinor: payload.defaultAmountMinor,
+          currencyCode: payload.currencyCode,
+          recurrenceRule: recurrence?.legacyRuleText ?? payload.recurrenceRule,
+          nextDueOn: payload.nextDueOn ? parseIsoDate(payload.nextDueOn) : undefined,
+          remindDaysBefore: payload.remindDaysBefore,
+          status: payload.status ? toPrismaRecurringExpenseStatus(payload.status) : undefined,
+        },
+      });
+
+      if (recurrence) {
+        const recurrenceRecord = await upsertRecurrenceRuleRecord(tx, {
+          ownerType: "RECURRING_EXPENSE",
+          ownerId: recurringExpenseId,
+          recurrence: recurrence.recurrence,
+          legacyRuleText: recurrence.legacyRuleText,
+        });
+
+        await tx.recurringExpenseTemplate.update({
+          where: {
+            id: recurringExpenseId,
+          },
+          data: {
+            recurrenceRuleId: recurrenceRecord.id,
+          },
+        });
+      }
+
+      return tx.recurringExpenseTemplate.findUniqueOrThrow({
+        where: {
+          id: recurringExpenseId,
+        },
+        include: {
+          recurrenceRuleRecord: {
+            include: {
+              exceptions: {
+                orderBy: {
+                  occurrenceDate: "asc",
+                },
+              },
+            },
+          },
+        },
+      });
     });
 
     const response: RecurringExpenseMutationResponse = withGeneratedAt({

@@ -1,4 +1,5 @@
 import type { ApiMeta, EntityId, IsoDateString, IsoMonthString } from "./common.js";
+import type { RecurrenceDefinition, RecurrenceInput } from "./recurrence.js";
 
 export type ExpenseSource = "manual" | "quick_capture" | "template";
 export type RecurringExpenseStatus = "active" | "paused" | "archived";
@@ -110,6 +111,7 @@ export interface RecurringExpenseItem {
   defaultAmountMinor: number | null;
   currencyCode: string;
   recurrenceRule: string;
+  recurrence: RecurrenceDefinition | null;
   nextDueOn: IsoDateString;
   remindDaysBefore: number;
   status: RecurringExpenseStatus;
@@ -126,7 +128,8 @@ export interface CreateRecurringExpenseRequest {
   expenseCategoryId?: EntityId | null;
   defaultAmountMinor?: number | null;
   currencyCode?: string;
-  recurrenceRule: string;
+  recurrenceRule?: string;
+  recurrence?: RecurrenceInput;
   nextDueOn: IsoDateString;
   remindDaysBefore?: number;
   status?: RecurringExpenseStatus;
@@ -138,6 +141,7 @@ export interface UpdateRecurringExpenseRequest {
   defaultAmountMinor?: number | null;
   currencyCode?: string;
   recurrenceRule?: string;
+  recurrence?: RecurrenceInput;
   nextDueOn?: IsoDateString;
   remindDaysBefore?: number;
   status?: RecurringExpenseStatus;

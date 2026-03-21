@@ -13,6 +13,7 @@ import {
   useSubmitMonthlyReviewMutation,
   useSubmitWeeklyReviewMutation,
 } from "../../shared/lib/api";
+import { isRecurring } from "../../shared/lib/recurrence";
 import { getQuickCaptureDisplayText, parseQuickCaptureNotes } from "../../shared/lib/quickCapture";
 import { PageHeader } from "../../shared/ui/PageHeader";
 import {
@@ -21,6 +22,7 @@ import {
   PageErrorState,
   PageLoadingState,
 } from "../../shared/ui/PageState";
+import { RecurrenceBadge } from "../../shared/ui/RecurrenceBadge";
 import { SectionCard } from "../../shared/ui/SectionCard";
 import { ReviewWindowBanner } from "./ReviewWindowBanner";
 import { deriveReviewWindowPresentation, isAlreadySubmittedError, isOutOfWindowError } from "./reviewWindowModel";
@@ -540,8 +542,17 @@ export function ReviewsPage() {
                     return (
                       <div key={task.id} className="review-decision-item">
                         <div>
-                          <strong>{task.title}</strong>
-                          <div className="list__subtle">{getQuickCaptureDisplayText(task.notes, task.title)}</div>
+                          <strong>
+                            {task.title}
+                            {isRecurring(task.recurrence) && (
+                              <RecurrenceBadge recurrence={task.recurrence} compact />
+                            )}
+                          </strong>
+                          <div className="list__subtle">
+                            {isRecurring(task.recurrence)
+                              ? "Recurring — your decision updates the series"
+                              : getQuickCaptureDisplayText(task.notes, task.title)}
+                          </div>
                         </div>
                         {isDailyCompleted ? (
                           <span className="tag tag--neutral">closed</span>

@@ -28,6 +28,8 @@ import type {
   UpdateWeekPrioritiesRequest,
   WeekPlanResponse,
   CarryForwardTaskRequest,
+  RecurrenceInput,
+  RecurringTaskCarryPolicy,
 } from "@life-os/contracts";
 import type {
   Goal,
@@ -45,6 +47,8 @@ import { z } from "zod";
 import { requireAuthenticatedUser } from "../../lib/auth/require-auth.js";
 import { AppError } from "../../lib/errors/app-error.js";
 import { withGeneratedAt } from "../../lib/http/response.js";
+import { applyRecurringTaskCarryForward, materializeNextRecurringTaskOccurrence, materializeRecurringTasksInRange } from "../../lib/recurrence/tasks.js";
+import { serializeRecurrenceDefinition, upsertRecurrenceRuleRecord } from "../../lib/recurrence/store.js";
 import { addDays, getMonthEndDate, getWeekEndDate, parseIsoDate } from "../../lib/time/cycle.js";
 import { toIsoDateString } from "../../lib/time/date.js";
 import { parseOrThrow } from "../../lib/validation/parse.js";
@@ -70,6 +74,40 @@ const taskOriginSchema = z.enum([
   "review_seed",
   "recurring",
 ]);
+const carryPolicySchema = z.enum(["complete_and_clone", "move_due_date", "cancel"]);
+const recurrenceExceptionActionSchema = z.enum(["skip", "do_once", "reschedule"]);
+const recurrenceRuleSchema = z.object({
+  frequency: z.enum(["daily", "weekly", "monthly_nth_weekday", "interval"]),
+  startsOn: isoDateSchema,
+  interval: z.number().int().positive().max(365).optional(),
+  daysOfWeek: z.array(z.number().int().min(0).max(6)).max(7).optional(),
+  nthWeekday: z
+    .object({
+      ordinal: z.union([z.literal(-1), z.literal(1), z.literal(2), z.literal(3), z.literal(4)]),
+      dayOfWeek: z.number().int().min(0).max(6),
+    })
+    .optional(),
+  end: z
+    .object({
+      type: z.enum(["never", "on_date", "after_occurrences"]),
+      until: isoDateSchema.nullable().optional(),
+      occurrenceCount: z.number().int().positive().optional(),
+    })
+    .optional(),
+});
+const recurrenceInputSchema = z.object({
+  rule: recurrenceRuleSchema,
+  exceptions: z
+    .array(
+      z.object({
+        occurrenceDate: isoDateSchema,
+        action: recurrenceExceptionActionSchema,
+        targetDate: isoDateSchema.nullable().optional(),
+      }),
+    )
+    .max(180)
+    .optional(),
+});
 const priorityInputSchema = z.object({
   id: z.string().uuid().optional(),
   slot: z.union([z.literal(1), z.literal(2), z.literal(3)]),
@@ -126,6 +164,8 @@ const createTaskSchema = z.object({
   dueAt: isoDateTimeSchema.nullable().optional(),
   goalId: z.string().uuid().nullable().optional(),
   originType: taskOriginSchema.optional(),
+  recurrence: recurrenceInputSchema.optional(),
+  carryPolicy: carryPolicySchema.optional(),
 });
 
 const updateTaskSchema = z
@@ -136,6 +176,8 @@ const updateTaskSchema = z
     scheduledForDate: isoDateSchema.nullable().optional(),
     dueAt: isoDateTimeSchema.nullable().optional(),
     goalId: z.string().uuid().nullable().optional(),
+    recurrence: recurrenceInputSchema.optional(),
+    carryPolicy: carryPolicySchema.nullable().optional(),
   })
   .refine((value) => Object.keys(value).length > 0, "At least one field must be updated");
 
@@ -339,6 +381,7 @@ function serializeTask(task: Task & {
     domain: PrismaGoalDomain;
     status: PrismaGoalStatus;
   } | null;
+  recurrenceRule?: Parameters<typeof serializeRecurrenceDefinition>[0];
 }): PlanningTaskItem {
   return {
     id: task.id,
@@ -351,6 +394,7 @@ function serializeTask(task: Task & {
     goal: task.goal ? serializeGoalSummary(task.goal) : null,
     originType: fromPrismaTaskOriginType(task.originType),
     carriedFromTaskId: task.carriedFromTaskId,
+    recurrence: serializeRecurrenceDefinition(task.recurrenceRule),
     completedAt: task.completedAt?.toISOString() ?? null,
     createdAt: task.createdAt.toISOString(),
     updatedAt: task.updatedAt.toISOString(),
@@ -389,6 +433,35 @@ async function ensurePlanningCycle(
       },
     },
   });
+}
+
+async function syncTaskRecurrence(
+  tx: any,
+  taskId: string,
+  recurrence: RecurrenceInput | undefined,
+  carryPolicy: RecurringTaskCarryPolicy | null | undefined,
+) {
+  if (!recurrence) {
+    return null;
+  }
+
+  const recurrenceRecord = await upsertRecurrenceRuleRecord(tx, {
+    ownerType: "TASK",
+    ownerId: taskId,
+    recurrence,
+    carryPolicy,
+  });
+
+  await tx.task.update({
+    where: {
+      id: taskId,
+    },
+    data: {
+      recurrenceRuleId: recurrenceRecord.id,
+    },
+  });
+
+  return recurrenceRecord;
 }
 
 async function replaceCyclePriorities(
@@ -664,6 +737,7 @@ export const registerPlanningRoutes: FastifyPluginAsync = async (app) => {
     const { date } = request.params as { date: IsoDateString };
     const parsedDate = parseOrThrow(isoDateSchema, date);
     const cycleStartDate = parseIsoDate(parsedDate);
+    await materializeRecurringTasksInRange(app.prisma, user.id, cycleStartDate, cycleStartDate);
     const cycle = await ensurePlanningCycle(app, {
       userId: user.id,
       cycleType: "DAY",
@@ -681,6 +755,15 @@ export const registerPlanningRoutes: FastifyPluginAsync = async (app) => {
       ],
       include: {
         goal: true,
+        recurrenceRule: {
+          include: {
+            exceptions: {
+              orderBy: {
+                occurrenceDate: "asc",
+              },
+            },
+          },
+        },
       },
     });
 
@@ -853,6 +936,11 @@ export const registerPlanningRoutes: FastifyPluginAsync = async (app) => {
     const scheduledForDate = query.scheduledForDate ? parseIsoDate(query.scheduledForDate) : null;
     const fromDate = query.from ? parseIsoDate(query.from) : null;
     const toDateExclusive = query.to ? addDays(parseIsoDate(query.to), 1) : null;
+    if (scheduledForDate) {
+      await materializeRecurringTasksInRange(app.prisma, user.id, scheduledForDate, scheduledForDate);
+    } else if (fromDate && toDateExclusive) {
+      await materializeRecurringTasksInRange(app.prisma, user.id, fromDate, addDays(toDateExclusive, -1));
+    }
     const tasks = await app.prisma.task.findMany({
       where: {
         userId: user.id,
@@ -869,6 +957,15 @@ export const registerPlanningRoutes: FastifyPluginAsync = async (app) => {
       orderBy: [{ scheduledForDate: "asc" }, { createdAt: "asc" }],
       include: {
         goal: true,
+        recurrenceRule: {
+          include: {
+            exceptions: {
+              orderBy: {
+                occurrenceDate: "asc",
+              },
+            },
+          },
+        },
       },
     });
 
@@ -883,19 +980,40 @@ export const registerPlanningRoutes: FastifyPluginAsync = async (app) => {
     const user = requireAuthenticatedUser(request);
     const payload = parseOrThrow(createTaskSchema, request.body as CreateTaskRequest);
     await assertOwnedGoalReference(app, user.id, payload.goalId);
-    const task = await app.prisma.task.create({
-      data: {
-        userId: user.id,
-        title: payload.title,
-        notes: payload.notes ?? null,
-        scheduledForDate: payload.scheduledForDate ? parseIsoDate(payload.scheduledForDate) : null,
-        dueAt: payload.dueAt ? new Date(payload.dueAt) : null,
-        goalId: payload.goalId ?? null,
-        originType: toPrismaTaskOriginType(payload.originType ?? "manual"),
-      },
-      include: {
-        goal: true,
-      },
+    const task = await app.prisma.$transaction(async (tx) => {
+      const createdTask = await tx.task.create({
+        data: {
+          userId: user.id,
+          title: payload.title,
+          notes: payload.notes ?? null,
+          scheduledForDate: payload.scheduledForDate ? parseIsoDate(payload.scheduledForDate) : null,
+          dueAt: payload.dueAt ? new Date(payload.dueAt) : null,
+          goalId: payload.goalId ?? null,
+          originType: toPrismaTaskOriginType(
+            payload.recurrence ? "recurring" : (payload.originType ?? "manual"),
+          ),
+        },
+      });
+
+      await syncTaskRecurrence(tx, createdTask.id, payload.recurrence, payload.carryPolicy);
+
+      return tx.task.findUniqueOrThrow({
+        where: {
+          id: createdTask.id,
+        },
+        include: {
+          goal: true,
+          recurrenceRule: {
+            include: {
+              exceptions: {
+                orderBy: {
+                  occurrenceDate: "asc",
+                },
+              },
+            },
+          },
+        },
+      });
     });
 
     const response: TaskMutationResponse = withGeneratedAt({
@@ -909,35 +1027,95 @@ export const registerPlanningRoutes: FastifyPluginAsync = async (app) => {
     const user = requireAuthenticatedUser(request);
     const payload = parseOrThrow(updateTaskSchema, request.body as UpdateTaskRequest);
     const { taskId } = request.params as { taskId: string };
-    await findOwnedTask(app, user.id, taskId);
-    await assertOwnedGoalReference(app, user.id, payload.goalId);
-    const task = await app.prisma.task.update({
+    const existingTask = await app.prisma.task.findFirst({
       where: {
         id: taskId,
-      },
-      data: {
-        title: payload.title,
-        notes: payload.notes,
-        status: payload.status ? toPrismaTaskStatus(payload.status) : undefined,
-        scheduledForDate:
-          payload.scheduledForDate === undefined
-            ? undefined
-            : payload.scheduledForDate === null
-              ? null
-              : parseIsoDate(payload.scheduledForDate),
-        dueAt:
-          payload.dueAt === undefined ? undefined : payload.dueAt === null ? null : new Date(payload.dueAt),
-        goalId: payload.goalId,
-        completedAt:
-          payload.status === "completed"
-            ? new Date()
-            : payload.status === "pending" || payload.status === "dropped"
-              ? null
-              : undefined,
+        userId: user.id,
       },
       include: {
-        goal: true,
+        recurrenceRule: {
+          include: {
+            exceptions: {
+              orderBy: {
+                occurrenceDate: "asc",
+              },
+            },
+          },
+        },
       },
+    });
+    if (!existingTask) {
+      throw new AppError({
+        statusCode: 404,
+        code: "NOT_FOUND",
+        message: "Task not found",
+      });
+    }
+    await assertOwnedGoalReference(app, user.id, payload.goalId);
+    const task = await app.prisma.$transaction(async (tx) => {
+      await tx.task.update({
+        where: {
+          id: taskId,
+        },
+        data: {
+          title: payload.title,
+          notes: payload.notes,
+          status: payload.status ? toPrismaTaskStatus(payload.status) : undefined,
+          scheduledForDate:
+            payload.scheduledForDate === undefined
+              ? undefined
+              : payload.scheduledForDate === null
+                ? null
+                : parseIsoDate(payload.scheduledForDate),
+          dueAt:
+            payload.dueAt === undefined ? undefined : payload.dueAt === null ? null : new Date(payload.dueAt),
+          goalId: payload.goalId,
+          completedAt:
+            payload.status === "completed"
+              ? new Date()
+              : payload.status === "pending" || payload.status === "dropped"
+                ? null
+                : undefined,
+          originType:
+            payload.recurrence || existingTask.recurrenceRuleId
+              ? toPrismaTaskOriginType("recurring")
+              : undefined,
+        },
+      });
+
+      await syncTaskRecurrence(
+        tx,
+        taskId,
+        payload.recurrence,
+        payload.carryPolicy === undefined ? undefined : payload.carryPolicy,
+      );
+
+      if (payload.status === "completed" && existingTask.recurrenceRuleId && existingTask.scheduledForDate) {
+        await materializeNextRecurringTaskOccurrence(
+          tx,
+          user.id,
+          existingTask.recurrenceRuleId,
+          toIsoDateString(existingTask.scheduledForDate),
+        );
+      }
+
+      return tx.task.findUniqueOrThrow({
+        where: {
+          id: taskId,
+        },
+        include: {
+          goal: true,
+          recurrenceRule: {
+            include: {
+              exceptions: {
+                orderBy: {
+                  occurrenceDate: "asc",
+                },
+              },
+            },
+          },
+        },
+      });
     });
 
     const response: TaskMutationResponse = withGeneratedAt({
@@ -951,9 +1129,45 @@ export const registerPlanningRoutes: FastifyPluginAsync = async (app) => {
     const user = requireAuthenticatedUser(request);
     const payload = parseOrThrow(carryForwardTaskSchema, request.body as CarryForwardTaskRequest);
     const { taskId } = request.params as { taskId: string };
-    const existingTask = await findOwnedTask(app, user.id, taskId);
+    const existingTask = await app.prisma.task.findFirst({
+      where: {
+        id: taskId,
+        userId: user.id,
+      },
+      include: {
+        goal: true,
+        recurrenceRule: {
+          include: {
+            exceptions: {
+              orderBy: {
+                occurrenceDate: "asc",
+              },
+            },
+          },
+        },
+      },
+    });
+    if (!existingTask) {
+      throw new AppError({
+        statusCode: 404,
+        code: "NOT_FOUND",
+        message: "Task not found",
+      });
+    }
 
     const task = await app.prisma.$transaction(async (tx) => {
+      if (existingTask.recurrenceRuleId) {
+        const recurringTask = await applyRecurringTaskCarryForward(
+          tx,
+          user.id,
+          existingTask,
+          payload.targetDate,
+        );
+        if (recurringTask) {
+          return recurringTask;
+        }
+      }
+
       await tx.task.update({
         where: {
           id: existingTask.id,
@@ -976,6 +1190,15 @@ export const registerPlanningRoutes: FastifyPluginAsync = async (app) => {
         },
         include: {
           goal: true,
+          recurrenceRule: {
+            include: {
+              exceptions: {
+                orderBy: {
+                  occurrenceDate: "asc",
+                },
+              },
+            },
+          },
         },
       });
     });

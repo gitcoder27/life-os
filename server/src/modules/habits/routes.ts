@@ -15,6 +15,7 @@ import type {
   RoutineItemCheckinRequest,
   UpdateHabitRequest,
   UpdateRoutineRequest,
+  RecurrenceInput,
 } from "@life-os/contracts";
 import type {
   CheckinStatus as PrismaCheckinStatus,
@@ -39,8 +40,11 @@ import {
 import {
   isHabitDueOnIsoDate,
   normalizeHabitScheduleRule,
+  resolveHabitRecurrence,
 } from "../../lib/habits/schedule.js";
 import { withGeneratedAt } from "../../lib/http/response.js";
+import { buildLegacyHabitRecurrence, deriveHabitScheduleFromRecurrence } from "../../lib/recurrence/rules.js";
+import { serializeRecurrenceDefinition, upsertRecurrenceRuleRecord } from "../../lib/recurrence/store.js";
 import { addIsoDays, getWeekEndDate, getWeekStartIsoDate, parseIsoDate } from "../../lib/time/cycle.js";
 import { toIsoDateString } from "../../lib/time/date.js";
 import { getUserLocalDate } from "../../lib/time/user-time.js";
@@ -55,6 +59,39 @@ const routineStatusSchema = z.enum(["active", "archived"]);
 const habitScheduleRuleSchema = z.object({
   daysOfWeek: z.array(z.number().int().min(0).max(6)).max(7).optional(),
 });
+const recurrenceExceptionActionSchema = z.enum(["skip", "do_once", "reschedule"]);
+const recurrenceRuleSchema = z.object({
+  frequency: z.enum(["daily", "weekly", "monthly_nth_weekday", "interval"]),
+  startsOn: isoDateSchema,
+  interval: z.number().int().positive().max(365).optional(),
+  daysOfWeek: z.array(z.number().int().min(0).max(6)).max(7).optional(),
+  nthWeekday: z
+    .object({
+      ordinal: z.union([z.literal(-1), z.literal(1), z.literal(2), z.literal(3), z.literal(4)]),
+      dayOfWeek: z.number().int().min(0).max(6),
+    })
+    .optional(),
+  end: z
+    .object({
+      type: z.enum(["never", "on_date", "after_occurrences"]),
+      until: isoDateSchema.nullable().optional(),
+      occurrenceCount: z.number().int().positive().optional(),
+    })
+    .optional(),
+});
+const recurrenceInputSchema = z.object({
+  rule: recurrenceRuleSchema,
+  exceptions: z
+    .array(
+      z.object({
+        occurrenceDate: isoDateSchema,
+        action: recurrenceExceptionActionSchema,
+        targetDate: isoDateSchema.nullable().optional(),
+      }),
+    )
+    .max(180)
+    .optional(),
+});
 const routineItemInputSchema = z.object({
   title: z.string().min(1).max(200),
   sortOrder: z.number().int().min(0),
@@ -65,6 +102,7 @@ const createHabitSchema = z.object({
   title: z.string().min(1).max(200),
   category: z.string().max(120).nullable().optional(),
   scheduleRule: habitScheduleRuleSchema.optional(),
+  recurrence: recurrenceInputSchema.optional(),
   targetPerDay: z.number().int().positive().max(20).optional(),
 });
 
@@ -73,6 +111,7 @@ const updateHabitSchema = z
     title: z.string().min(1).max(200).optional(),
     category: z.string().max(120).nullable().optional(),
     scheduleRule: habitScheduleRuleSchema.optional(),
+    recurrence: recurrenceInputSchema.optional(),
     targetPerDay: z.number().int().positive().max(20).optional(),
     status: habitStatusSchema.optional(),
   })
@@ -220,8 +259,9 @@ async function serializeHabit(
   checkins: HabitCheckin[],
   targetIsoDate: IsoDateString,
 ): Promise<HabitItem> {
-  const scheduleRule = normalizeHabitScheduleRule(habit.scheduleRuleJson);
-  const dueToday = isHabitDueOnIsoDate(scheduleRule, targetIsoDate);
+  const recurrence = resolveHabitRecurrence(habit as Habit & { recurrenceRule?: unknown }, targetIsoDate);
+  const scheduleRule = deriveHabitScheduleFromRecurrence(recurrence.rule);
+  const dueToday = isHabitDueOnIsoDate(recurrence, targetIsoDate);
   const completedToday = checkins.some(
     (checkin) =>
       toIsoDateString(checkin.occurredOn) === targetIsoDate && checkin.status === "COMPLETED",
@@ -232,12 +272,13 @@ async function serializeHabit(
     title: habit.title,
     category: habit.category,
     scheduleRule,
+    recurrence: serializeRecurrenceDefinition((habit as Habit & { recurrenceRule?: any }).recurrenceRule),
     targetPerDay: habit.targetPerDay,
     status: fromPrismaHabitStatus(habit.status),
     dueToday,
     completedToday,
-    streakCount: calculateHabitActiveStreak(checkins, scheduleRule, targetIsoDate),
-    risk: calculateHabitRisk(checkins, scheduleRule, targetIsoDate),
+    streakCount: calculateHabitActiveStreak(checkins, recurrence, targetIsoDate),
+    risk: calculateHabitRisk(checkins, recurrence, targetIsoDate),
   };
 }
 
@@ -330,6 +371,20 @@ async function loadRoutineById(
   });
 }
 
+function resolveHabitRecurrenceInput(
+  payload: { recurrence?: RecurrenceInput; scheduleRule?: HabitScheduleRule },
+  fallbackIsoDate: IsoDateString,
+) {
+  if (payload.recurrence) {
+    return payload.recurrence;
+  }
+
+  return {
+    rule: buildLegacyHabitRecurrence(payload.scheduleRule ?? {}, fallbackIsoDate),
+    exceptions: [],
+  } satisfies RecurrenceInput;
+}
+
 export const registerHabitsRoutes: FastifyPluginAsync = async (app) => {
   app.get("/habits", async (request, reply) => {
     const user = requireAuthenticatedUser(request);
@@ -340,6 +395,15 @@ export const registerHabitsRoutes: FastifyPluginAsync = async (app) => {
         userId: user.id,
       },
       include: {
+        recurrenceRule: {
+          include: {
+            exceptions: {
+              orderBy: {
+                occurrenceDate: "asc",
+              },
+            },
+          },
+        },
         checkins: {
           where: {
             occurredOn: {
@@ -388,7 +452,7 @@ export const registerHabitsRoutes: FastifyPluginAsync = async (app) => {
             title: focusHabit.title,
           },
           checkins: focusHabit.checkins,
-          scheduleRule: normalizeHabitScheduleRule(focusHabit.scheduleRuleJson),
+          scheduleInput: resolveHabitRecurrence(focusHabit, targetIsoDate),
           weekStartIsoDate: getWeekStartIsoDate(targetIsoDate, weekStartsOn),
           targetIsoDate,
         })
@@ -408,16 +472,51 @@ export const registerHabitsRoutes: FastifyPluginAsync = async (app) => {
   app.post("/habits", async (request, reply) => {
     const user = requireAuthenticatedUser(request);
     const payload = parseOrThrow(createHabitSchema, request.body as CreateHabitRequest);
-    const habit = await app.prisma.habit.create({
-      data: {
-        userId: user.id,
-        title: payload.title,
-        category: payload.category ?? null,
-        scheduleRuleJson: payload.scheduleRule ?? {},
-        targetPerDay: payload.targetPerDay ?? 1,
-      },
-    });
     const { targetIsoDate } = await getTodayIsoDate(app, user.id);
+    const habit = await app.prisma.$transaction(async (tx) => {
+      const recurrence = resolveHabitRecurrenceInput(payload, targetIsoDate);
+      const createdHabit = await tx.habit.create({
+        data: {
+          userId: user.id,
+          title: payload.title,
+          category: payload.category ?? null,
+          scheduleRuleJson: recurrence.rule,
+          targetPerDay: payload.targetPerDay ?? 1,
+        },
+      });
+
+      const recurrenceRecord = await upsertRecurrenceRuleRecord(tx, {
+        ownerType: "HABIT",
+        ownerId: createdHabit.id,
+        recurrence,
+      });
+
+      await tx.habit.update({
+        where: {
+          id: createdHabit.id,
+        },
+        data: {
+          recurrenceRuleId: recurrenceRecord.id,
+        },
+      });
+
+      return tx.habit.findUniqueOrThrow({
+        where: {
+          id: createdHabit.id,
+        },
+        include: {
+          recurrenceRule: {
+            include: {
+              exceptions: {
+                orderBy: {
+                  occurrenceDate: "asc",
+                },
+              },
+            },
+          },
+        },
+      });
+    });
 
     const response: HabitMutationResponse = withGeneratedAt({
       habit: await serializeHabit(habit, [], targetIsoDate),
@@ -433,28 +532,66 @@ export const registerHabitsRoutes: FastifyPluginAsync = async (app) => {
     await findOwnedHabit(app, user.id, habitId);
     const { targetIsoDate } = await getTodayIsoDate(app, user.id);
     const todayDate = parseIsoDate(targetIsoDate);
-    const habit = await app.prisma.habit.update({
-      where: {
-        id: habitId,
-      },
-      data: {
-        title: payload.title,
-        category: payload.category,
-        scheduleRuleJson: payload.scheduleRule,
-        targetPerDay: payload.targetPerDay,
-        status: payload.status ? toPrismaHabitStatus(payload.status) : undefined,
-        archivedAt: payload.status === "archived" ? new Date() : undefined,
-      },
-      include: {
-        checkins: {
+    const habit = await app.prisma.$transaction(async (tx) => {
+      const recurrence = payload.recurrence || payload.scheduleRule
+        ? resolveHabitRecurrenceInput(payload, targetIsoDate)
+        : null;
+
+      await tx.habit.update({
+        where: {
+          id: habitId,
+        },
+        data: {
+          title: payload.title,
+          category: payload.category,
+          scheduleRuleJson: recurrence?.rule ?? payload.scheduleRule,
+          targetPerDay: payload.targetPerDay,
+          status: payload.status ? toPrismaHabitStatus(payload.status) : undefined,
+          archivedAt: payload.status === "archived" ? new Date() : undefined,
+        },
+      });
+
+      if (recurrence) {
+        const recurrenceRecord = await upsertRecurrenceRuleRecord(tx, {
+          ownerType: "HABIT",
+          ownerId: habitId,
+          recurrence,
+        });
+
+        await tx.habit.update({
           where: {
-            occurredOn: {
-              gte: parseIsoDate(addIsoDays(targetIsoDate, -30)),
-              lte: todayDate,
+            id: habitId,
+          },
+          data: {
+            recurrenceRuleId: recurrenceRecord.id,
+          },
+        });
+      }
+
+      return tx.habit.findUniqueOrThrow({
+        where: {
+          id: habitId,
+        },
+        include: {
+          recurrenceRule: {
+            include: {
+              exceptions: {
+                orderBy: {
+                  occurrenceDate: "asc",
+                },
+              },
+            },
+          },
+          checkins: {
+            where: {
+              occurredOn: {
+                gte: parseIsoDate(addIsoDays(targetIsoDate, -30)),
+                lte: todayDate,
+              },
             },
           },
         },
-      },
+      });
     });
 
     const response: HabitMutationResponse = withGeneratedAt({
@@ -498,6 +635,15 @@ export const registerHabitsRoutes: FastifyPluginAsync = async (app) => {
         id: habitId,
       },
       include: {
+        recurrenceRule: {
+          include: {
+            exceptions: {
+              orderBy: {
+                occurrenceDate: "asc",
+              },
+            },
+          },
+        },
         checkins: {
           where: {
             occurredOn: {

@@ -60,6 +60,24 @@ enum TaskOriginType {
   RECURRING
 }
 
+enum RecurrenceOwnerType {
+  TASK
+  HABIT
+  RECURRING_EXPENSE
+}
+
+enum RecurrenceCarryPolicy {
+  COMPLETE_AND_CLONE
+  MOVE_DUE_DATE
+  CANCEL
+}
+
+enum RecurrenceExceptionAction {
+  SKIP
+  DO_ONCE
+  RESCHEDULE
+}
+
 enum HabitStatus {
   ACTIVE
   PAUSED
@@ -291,6 +309,7 @@ model Task {
   goalId            String?
   originType        TaskOriginType @default(MANUAL)
   carriedFromTaskId String?
+  recurrenceRuleId  String?
   completedAt       DateTime?
   createdAt         DateTime       @default(now())
   updatedAt         DateTime       @updatedAt
@@ -299,8 +318,10 @@ model Task {
   carriedFromTask   Task?          @relation("TaskCarryForward", fields: [carriedFromTaskId], references: [id], onDelete: SetNull)
   carriedTasks      Task[]         @relation("TaskCarryForward")
   adminItems        AdminItem[]    @relation("AdminItemTask")
+  recurrenceRule    RecurrenceRule? @relation(fields: [recurrenceRuleId], references: [id], onDelete: SetNull)
 
   @@index([userId, scheduledForDate, status])
+  @@index([userId, recurrenceRuleId, scheduledForDate])
 }
 
 model Habit {
@@ -309,6 +330,7 @@ model Habit {
   title            String
   category         String?
   scheduleRuleJson Json
+  recurrenceRuleId String?
   targetPerDay     Int            @default(1)
   status           HabitStatus    @default(ACTIVE)
   createdAt        DateTime       @default(now())
@@ -317,6 +339,7 @@ model Habit {
   user             User           @relation(fields: [userId], references: [id], onDelete: Cascade)
   checkins         HabitCheckin[]
   weeklyReviewFocuses WeeklyReview[] @relation("WeeklyReviewFocusHabit")
+  recurrenceRule   RecurrenceRule? @relation(fields: [recurrenceRuleId], references: [id], onDelete: SetNull)
 }
 
 model HabitCheckin {
@@ -451,6 +474,7 @@ model RecurringExpenseTemplate {
   defaultAmountMinor Int?
   currencyCode      String
   recurrenceRule    String
+  recurrenceRuleId  String?
   nextDueOn         DateTime
   remindDaysBefore  Int                    @default(0)
   status            RecurringExpenseStatus @default(ACTIVE)
@@ -460,6 +484,37 @@ model RecurringExpenseTemplate {
   expenseCategory   ExpenseCategory?       @relation(fields: [expenseCategoryId], references: [id], onDelete: SetNull)
   expenses          Expense[]
   adminItems        AdminItem[]
+  recurrenceRuleRecord RecurrenceRule?     @relation(fields: [recurrenceRuleId], references: [id], onDelete: SetNull)
+}
+
+model RecurrenceRule {
+  id                     String                 @id @default(uuid())
+  ownerType              RecurrenceOwnerType
+  ownerId                String
+  ruleJson               Json
+  carryPolicy            RecurrenceCarryPolicy?
+  legacyRuleText         String?
+  createdAt              DateTime               @default(now())
+  updatedAt              DateTime               @updatedAt
+  tasks                  Task[]
+  habits                 Habit[]
+  recurringExpenseTemplates RecurringExpenseTemplate[]
+  exceptions             RecurrenceException[]
+
+  @@unique([ownerType, ownerId])
+}
+
+model RecurrenceException {
+  id               String                    @id @default(uuid())
+  recurrenceRuleId String
+  occurrenceDate   DateTime
+  action           RecurrenceExceptionAction
+  targetDate       DateTime?
+  createdAt        DateTime                  @default(now())
+  updatedAt        DateTime                  @updatedAt
+  recurrenceRule   RecurrenceRule            @relation(fields: [recurrenceRuleId], references: [id], onDelete: Cascade)
+
+  @@unique([recurrenceRuleId, occurrenceDate])
 }
 
 model Expense {
