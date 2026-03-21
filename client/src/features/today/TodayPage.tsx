@@ -1,5 +1,22 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
+import {
+  DndContext,
+  closestCenter,
+  PointerSensor,
+  KeyboardSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 
 import {
   formatTimeLabel,
@@ -14,6 +31,7 @@ import {
   useUpdateDayPrioritiesMutation,
   useUpdatePriorityMutation,
   type LinkedGoal,
+  type TaskItem,
 } from "../../shared/lib/api";
 import { isRecurring } from "../../shared/lib/recurrence";
 import { getQuickCaptureDisplayText, parseQuickCaptureNotes } from "../../shared/lib/quickCapture";
@@ -27,14 +45,52 @@ import {
 import { RecurrenceInfo } from "../../shared/ui/RecurrenceBadge";
 import { SectionCard } from "../../shared/ui/SectionCard";
 
+/* ── Inline icons ─────────────────────────────── */
+
+function GripIcon() {
+  return (
+    <svg width="10" height="18" viewBox="0 0 10 18" fill="currentColor" aria-hidden="true">
+      <circle cx="2.5" cy="2.5" r="1.2" />
+      <circle cx="7.5" cy="2.5" r="1.2" />
+      <circle cx="2.5" cy="9" r="1.2" />
+      <circle cx="7.5" cy="9" r="1.2" />
+      <circle cx="2.5" cy="15.5" r="1.2" />
+      <circle cx="7.5" cy="15.5" r="1.2" />
+    </svg>
+  );
+}
+
+function CheckIcon() {
+  return (
+    <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M2 5.5l2 2L8 3" />
+    </svg>
+  );
+}
+
+function MoreIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor" aria-hidden="true">
+      <circle cx="3" cy="7" r="1.3" />
+      <circle cx="7" cy="7" r="1.3" />
+      <circle cx="11" cy="7" r="1.3" />
+    </svg>
+  );
+}
+
+/* ── Types ────────────────────────────────────── */
+
 type EditablePriority = {
   id?: string;
+  sortKey: string;
   title: string;
   goalId?: string | null;
   status: "pending" | "completed" | "dropped";
 };
 
 const prioritySlots: Array<1 | 2 | 3> = [1, 2, 3];
+
+/* ── Helpers ──────────────────────────────────── */
 
 function getTomorrowDate(fromDate: string) {
   const tomorrow = new Date(`${fromDate}T12:00:00`);
@@ -55,6 +111,34 @@ function getTaskDayMetaText(notes: string | null, fallback: string) {
   return getQuickCaptureDisplayText(notes, fallback);
 }
 
+let draftKeyCounter = 0;
+function nextDraftKey() {
+  return `draft-${++draftKeyCounter}`;
+}
+
+/* ── Click-outside hook ──────────────────────── */
+
+function useClickOutside(
+  ref: React.RefObject<HTMLElement | null>,
+  active: boolean,
+  onClose: () => void,
+) {
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+  useEffect(() => {
+    if (!active) return;
+    function handler(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        onCloseRef.current();
+      }
+    }
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [active, ref]);
+}
+
+/* ── GoalChip ─────────────────────────────────── */
+
 function GoalChip({ goal }: { goal: LinkedGoal }) {
   return (
     <Link to="/goals" className="goal-chip">
@@ -63,6 +147,318 @@ function GoalChip({ goal }: { goal: LinkedGoal }) {
     </Link>
   );
 }
+
+/* ── Sortable Priority Card ──────────────────── */
+
+function SortablePriorityCard({
+  item,
+  index,
+  isMutating,
+  activeGoals,
+  onTitleChange,
+  onGoalChange,
+  onRemove,
+  onStatusChange,
+}: {
+  item: EditablePriority;
+  index: number;
+  isMutating: boolean;
+  activeGoals: Array<{ id: string; title: string; status: string }>;
+  onTitleChange: (title: string) => void;
+  onGoalChange: (goalId: string) => void;
+  onRemove: () => void;
+  onStatusChange: (status: "pending" | "completed" | "dropped") => void;
+}) {
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+  useClickOutside(menuRef, menuOpen, () => setMenuOpen(false));
+
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: item.sortKey });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+  };
+
+  const isDone = item.status === "completed";
+  const isDropped = item.status === "dropped";
+  const isSaved = Boolean(item.id);
+
+  return (
+    <li
+      ref={setNodeRef}
+      style={style}
+      className={
+        "priority-card"
+        + (isDragging ? " priority-card--dragging" : "")
+        + (isDone ? " priority-card--done" : "")
+        + (isDropped ? " priority-card--dropped" : "")
+      }
+    >
+      <button
+        className="priority-card__handle"
+        type="button"
+        aria-label="Drag to reorder"
+        {...attributes}
+        {...listeners}
+      >
+        <GripIcon />
+      </button>
+
+      <span className="priority-card__slot">P{index + 1}</span>
+
+      {isSaved ? (
+        <button
+          className={
+            "priority-card__check"
+            + (isDone ? " priority-card__check--done" : "")
+            + (isDropped ? " priority-card__check--dropped" : "")
+          }
+          type="button"
+          onClick={() => {
+            if (isDone || isDropped) onStatusChange("pending");
+            else onStatusChange("completed");
+          }}
+          disabled={isMutating}
+          aria-label={isDone || isDropped ? "Reopen priority" : "Complete priority"}
+        >
+          {isDone ? <CheckIcon /> : null}
+          {isDropped ? <span className="priority-card__check-x">×</span> : null}
+        </button>
+      ) : (
+        <span className="priority-card__check priority-card__check--new" />
+      )}
+
+      <input
+        className="priority-card__input"
+        type="text"
+        value={item.title}
+        placeholder="What's the focus?"
+        onChange={(e) => onTitleChange(e.target.value)}
+        aria-label={`Priority ${index + 1} title`}
+      />
+
+      {activeGoals.length > 0 ? (
+        <select
+          className="priority-card__goal"
+          value={item.goalId ?? ""}
+          onChange={(e) => onGoalChange(e.target.value)}
+          aria-label={`Goal for priority ${index + 1}`}
+        >
+          <option value="">No goal</option>
+          {activeGoals.map((g) => (
+            <option key={g.id} value={g.id}>{g.title}</option>
+          ))}
+        </select>
+      ) : null}
+
+      <div className="priority-card__actions" ref={menuRef}>
+        <button
+          className="priority-card__more"
+          type="button"
+          onClick={() => setMenuOpen(!menuOpen)}
+          aria-label="More actions"
+        >
+          <MoreIcon />
+        </button>
+        {menuOpen ? (
+          <div className="action-menu">
+            {isSaved && item.status === "pending" ? (
+              <button
+                className="action-menu__item"
+                type="button"
+                onClick={() => { onStatusChange("dropped"); setMenuOpen(false); }}
+              >
+                ✗ Drop
+              </button>
+            ) : null}
+            {isSaved && (isDone || isDropped) ? (
+              <button
+                className="action-menu__item"
+                type="button"
+                onClick={() => { onStatusChange("pending"); setMenuOpen(false); }}
+              >
+                ↶ Reopen
+              </button>
+            ) : null}
+            <button
+              className="action-menu__item action-menu__item--danger"
+              type="button"
+              onClick={() => { onRemove(); setMenuOpen(false); }}
+            >
+              Remove
+            </button>
+          </div>
+        ) : null}
+      </div>
+    </li>
+  );
+}
+
+/* ── Task Card ───────────────────────────────── */
+
+function TaskCard({
+  task,
+  isTaskMutationPending,
+  rescheduleDate,
+  onRescheduleDateChange,
+  onStatusChange,
+  onCarryForward,
+  onReschedule,
+}: {
+  task: TaskItem;
+  isTaskMutationPending: boolean;
+  rescheduleDate: string;
+  onRescheduleDateChange: (date: string) => void;
+  onStatusChange: (status: "pending" | "completed" | "dropped") => void;
+  onCarryForward: () => void;
+  onReschedule: () => void;
+}) {
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [showReschedule, setShowReschedule] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+  useClickOutside(menuRef, menuOpen, () => setMenuOpen(false));
+
+  const isDone = task.status === "completed";
+  const isDropped = task.status === "dropped";
+  const isPending = task.status === "pending";
+
+  return (
+    <div
+      className={
+        "task-card"
+        + (isDone ? " task-card--done" : "")
+        + (isDropped ? " task-card--dropped" : "")
+      }
+    >
+      <button
+        className={
+          "task-card__check"
+          + (isDone ? " task-card__check--done" : "")
+          + (isDropped ? " task-card__check--dropped" : "")
+        }
+        type="button"
+        onClick={() => {
+          if (isDone || isDropped) onStatusChange("pending");
+          else onStatusChange("completed");
+        }}
+        disabled={isTaskMutationPending}
+        aria-label={isDone || isDropped ? "Reopen task" : "Complete task"}
+      >
+        {isDone ? <CheckIcon /> : null}
+        {isDropped ? <span className="task-card__check-x">×</span> : null}
+      </button>
+
+      <div className="task-card__content">
+        <div className="task-card__title">
+          {task.title}
+          {isRecurring(task.recurrence) ? (
+            <RecurrenceInfo recurrence={task.recurrence} showCarryPolicy />
+          ) : null}
+        </div>
+        <div className="task-card__meta">
+          <span>{getTaskDayMetaText(task.notes, task.scheduledForDate ?? "Scheduled today")}</span>
+          {task.goal ? <GoalChip goal={task.goal} /> : null}
+        </div>
+
+        {showReschedule ? (
+          <div className="task-card__reschedule">
+            <input
+              type="date"
+              className="task-card__date-input"
+              value={rescheduleDate}
+              onChange={(e) => onRescheduleDateChange(e.target.value)}
+            />
+            <button
+              className="button button--primary button--small"
+              type="button"
+              disabled={!isPending || isTaskMutationPending}
+              onClick={() => { onReschedule(); setShowReschedule(false); }}
+            >
+              Move
+            </button>
+            <button
+              className="button button--ghost button--small"
+              type="button"
+              onClick={() => setShowReschedule(false)}
+            >
+              Cancel
+            </button>
+          </div>
+        ) : null}
+      </div>
+
+      <div className="task-card__actions" ref={menuRef}>
+        <button
+          className="task-card__more"
+          type="button"
+          onClick={() => setMenuOpen(!menuOpen)}
+          aria-label="Task actions"
+        >
+          <MoreIcon />
+        </button>
+        {menuOpen ? (
+          <div className="action-menu">
+            {isPending ? (
+              <>
+                <button
+                  className="action-menu__item"
+                  type="button"
+                  onClick={() => { onStatusChange("completed"); setMenuOpen(false); }}
+                >
+                  ✓ Complete
+                </button>
+                <button
+                  className="action-menu__item"
+                  type="button"
+                  onClick={() => { onStatusChange("dropped"); setMenuOpen(false); }}
+                >
+                  ✗ Drop
+                </button>
+              </>
+            ) : (
+              <button
+                className="action-menu__item"
+                type="button"
+                onClick={() => { onStatusChange("pending"); setMenuOpen(false); }}
+              >
+                ↶ Reopen
+              </button>
+            )}
+            {isPending ? (
+              <>
+                <div className="action-menu__divider" />
+                <button
+                  className="action-menu__item"
+                  type="button"
+                  onClick={() => { onCarryForward(); setMenuOpen(false); }}
+                >
+                  {isRecurring(task.recurrence) ? "↷ Skip to next" : "→ Tomorrow"}
+                </button>
+                <button
+                  className="action-menu__item"
+                  type="button"
+                  onClick={() => { setShowReschedule(true); setMenuOpen(false); }}
+                >
+                  📅 Reschedule…
+                </button>
+              </>
+            ) : null}
+          </div>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+/* ── Main Page ───────────────────────────────── */
 
 export function TodayPage() {
   const today = getTodayDate();
@@ -76,6 +472,11 @@ export function TodayPage() {
   const updateDayPrioritiesMutation = useUpdateDayPrioritiesMutation(today);
   const [priorityDraft, setPriorityDraft] = useState<EditablePriority[]>([]);
   const [rescheduleDates, setRescheduleDates] = useState<Record<string, string>>({});
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
 
   const activeGoals = useMemo(
     () => (goalsListQuery.data?.goals ?? []).filter((g) => g.status === "active"),
@@ -105,6 +506,7 @@ export function TodayPage() {
       .sort((left, right) => left.slot - right.slot)
       .map((priority) => ({
         id: priority.id,
+        sortKey: priority.id,
         title: priority.title,
         goalId: priority.goalId,
         status: priority.status,
@@ -161,12 +563,7 @@ export function TodayPage() {
   function updateDraftPriority(index: number, title: string) {
     setPriorityDraft((current) =>
       current.map((item, currentIndex) =>
-        currentIndex === index
-          ? {
-              ...item,
-              title,
-            }
-          : item,
+        currentIndex === index ? { ...item, title } : item,
       ),
     );
   }
@@ -174,9 +571,7 @@ export function TodayPage() {
   function updateDraftPriorityGoal(index: number, goalId: string) {
     setPriorityDraft((current) =>
       current.map((item, currentIndex) =>
-        currentIndex === index
-          ? { ...item, goalId: goalId || null }
-          : item,
+        currentIndex === index ? { ...item, goalId: goalId || null } : item,
       ),
     );
   }
@@ -186,8 +581,7 @@ export function TodayPage() {
       if (current.length >= 3) {
         return current;
       }
-
-      return [...current, { title: "", goalId: null, status: "pending" }];
+      return [...current, { title: "", goalId: null, status: "pending", sortKey: nextDraftKey() }];
     });
   }
 
@@ -195,18 +589,15 @@ export function TodayPage() {
     setPriorityDraft((current) => current.filter((_, currentIndex) => currentIndex !== index));
   }
 
-  function moveDraftPriority(index: number, direction: -1 | 1) {
-    setPriorityDraft((current) => {
-      const nextIndex = index + direction;
-      if (nextIndex < 0 || nextIndex >= current.length) {
-        return current;
-      }
-
-      const next = [...current];
-      const [moved] = next.splice(index, 1);
-      next.splice(nextIndex, 0, moved);
-      return next;
-    });
+  function handleDragEnd(event: DragEndEvent) {
+    const { active, over } = event;
+    if (over && active.id !== over.id) {
+      setPriorityDraft((current) => {
+        const oldIndex = current.findIndex((p) => p.sortKey === active.id);
+        const newIndex = current.findIndex((p) => p.sortKey === over.id);
+        return arrayMove(current, oldIndex, newIndex);
+      });
+    }
   }
 
   function savePriorityDraft() {
@@ -224,13 +615,6 @@ export function TodayPage() {
 
   function getRescheduleDate(taskId: string) {
     return rescheduleDates[taskId] ?? tomorrow;
-  }
-
-  // Look up the linked goal from the server data for display
-  function getServerPriorityGoal(priorityId?: string): LinkedGoal | null {
-    if (!priorityId) return null;
-    const serverP = priorities.find((p) => p.id === priorityId);
-    return serverP?.goal ?? null;
   }
 
   if (dayPlanQuery.isLoading && !dayPlanQuery.data) {
@@ -265,125 +649,48 @@ export function TodayPage() {
       ) : null}
 
       <div className="two-column-grid stagger">
+        {/* ── Priority Stack ── */}
         <SectionCard
           title="Priority stack"
-          subtitle="Keep the top three clear and actionable."
+          subtitle="Top three for today — drag to reorder"
         >
           {priorityDraft.length > 0 ? (
-            <ol className="priority-list priority-list--editable">
-              {priorityDraft.map((item, index) => {
-                const linkedGoal = getServerPriorityGoal(item.id);
-                return (
-                  <li
-                    key={item.id ?? `draft-priority-${index}`}
-                    className={
-                      item.status === "completed"
-                        ? "priority-list__item priority-list__item--done"
-                        : item.status === "dropped"
-                          ? "priority-list__item priority-list__item--dropped"
-                          : "priority-list__item"
-                    }
-                  >
-                    <div className="priority-edit-row">
-                      <span className="tag tag--neutral">P{index + 1}</span>
-                      <input
-                        className="priority-inline-input"
-                        type="text"
-                        value={item.title}
-                        placeholder="Priority title"
-                        onChange={(event) => updateDraftPriority(index, event.target.value)}
-                        aria-label={`Priority ${index + 1}`}
-                      />
-                      <select
-                        className="goal-select"
-                        value={item.goalId ?? ""}
-                        onChange={(e) => updateDraftPriorityGoal(index, e.target.value)}
-                        aria-label={`Goal for priority ${index + 1}`}
-                      >
-                        <option value="">No goal</option>
-                        {activeGoals.map((g) => (
-                          <option key={g.id} value={g.id}>{g.title}</option>
-                        ))}
-                      </select>
-                    </div>
-                    {linkedGoal && item.status !== "dropped" ? (
-                      <div style={{ paddingLeft: "2.5rem", paddingTop: "0.2rem" }}>
-                        <GoalChip goal={linkedGoal} />
-                      </div>
-                    ) : null}
-                    <div className="button-row button-row--tight button-row--wrap">
-                      <button
-                        className="button button--ghost button--small"
-                        type="button"
-                        onClick={() => moveDraftPriority(index, -1)}
-                        disabled={index === 0 || updateDayPrioritiesMutation.isPending}
-                      >
-                        Up
-                      </button>
-                      <button
-                        className="button button--ghost button--small"
-                        type="button"
-                        onClick={() => moveDraftPriority(index, 1)}
-                        disabled={index === priorityDraft.length - 1 || updateDayPrioritiesMutation.isPending}
-                      >
-                        Down
-                      </button>
-                      <button
-                        className="button button--ghost button--small"
-                        type="button"
-                        onClick={() => removeDraftPriority(index)}
-                        disabled={updateDayPrioritiesMutation.isPending}
-                      >
-                        Remove
-                      </button>
-                      {item.id ? (
-                        <>
-                          <button
-                            className="button button--ghost button--small"
-                            type="button"
-                            onClick={() =>
-                              updatePriorityMutation.mutate({
-                                priorityId: item.id!,
-                                status: "completed",
-                              })
-                            }
-                            disabled={item.status === "completed" || updatePriorityMutation.isPending}
-                          >
-                            Done
-                          </button>
-                          <button
-                            className="button button--ghost button--small"
-                            type="button"
-                            onClick={() =>
-                              updatePriorityMutation.mutate({
-                                priorityId: item.id!,
-                                status: "dropped",
-                              })
-                            }
-                            disabled={item.status === "dropped" || updatePriorityMutation.isPending}
-                          >
-                            Drop
-                          </button>
-                          <button
-                            className="button button--ghost button--small"
-                            type="button"
-                            onClick={() =>
-                              updatePriorityMutation.mutate({
-                                priorityId: item.id!,
-                                status: "pending",
-                              })
-                            }
-                            disabled={item.status === "pending" || updatePriorityMutation.isPending}
-                          >
-                            Reopen
-                          </button>
-                        </>
-                      ) : null}
-                    </div>
-                  </li>
-                );
-              })}
-            </ol>
+            <DndContext
+              sensors={sensors}
+              collisionDetection={closestCenter}
+              onDragEnd={handleDragEnd}
+            >
+              <SortableContext
+                items={priorityDraft.map((p) => p.sortKey)}
+                strategy={verticalListSortingStrategy}
+              >
+                <ol className="priority-stack">
+                  {priorityDraft.map((item, index) => (
+                    <SortablePriorityCard
+                      key={item.sortKey}
+                      item={item}
+                      index={index}
+                      isMutating={
+                        updatePriorityMutation.isPending ||
+                        updateDayPrioritiesMutation.isPending
+                      }
+                      activeGoals={activeGoals}
+                      onTitleChange={(title) => updateDraftPriority(index, title)}
+                      onGoalChange={(goalId) => updateDraftPriorityGoal(index, goalId)}
+                      onRemove={() => removeDraftPriority(index)}
+                      onStatusChange={(status) => {
+                        if (item.id) {
+                          updatePriorityMutation.mutate({
+                            priorityId: item.id,
+                            status,
+                          });
+                        }
+                      }}
+                    />
+                  ))}
+                </ol>
+              </SortableContext>
+            </DndContext>
           ) : (
             <EmptyState
               title="No ranked priorities"
@@ -391,155 +698,80 @@ export function TodayPage() {
             />
           )}
 
-          <div className="button-row button-row--wrap" style={{ marginTop: "0.75rem" }}>
+          {priorityDraft.length < 3 ? (
             <button
-              className="button button--ghost button--small"
+              className="priority-stack__add"
               type="button"
               onClick={addDraftPriority}
-              disabled={priorityDraft.length >= 3 || updateDayPrioritiesMutation.isPending}
+              disabled={updateDayPrioritiesMutation.isPending}
             >
-              Add priority
+              + Add priority
             </button>
-            <button
-              className="button button--primary button--small"
-              type="button"
-              onClick={savePriorityDraft}
-              disabled={!isPriorityDraftDirty || prioritiesHaveBlankTitle || updateDayPrioritiesMutation.isPending}
-            >
-              {updateDayPrioritiesMutation.isPending ? "Saving..." : "Save priorities"}
-            </button>
-          </div>
-          {prioritiesHaveBlankTitle ? (
-            <p className="support-copy" style={{ marginTop: "0.5rem" }}>
-              Fill every priority title before saving.
-            </p>
+          ) : null}
+
+          {isPriorityDraftDirty ? (
+            <div className="priority-stack__save-bar">
+              <span className="priority-stack__save-hint">
+                {prioritiesHaveBlankTitle
+                  ? "Fill every title before saving"
+                  : "Unsaved changes"}
+              </span>
+              <button
+                className="button button--primary button--small"
+                type="button"
+                onClick={savePriorityDraft}
+                disabled={
+                  !isPriorityDraftDirty ||
+                  prioritiesHaveBlankTitle ||
+                  updateDayPrioritiesMutation.isPending
+                }
+              >
+                {updateDayPrioritiesMutation.isPending ? "Saving…" : "Save"}
+              </button>
+            </div>
           ) : null}
         </SectionCard>
 
+        {/* ── Task Lane ── */}
         <SectionCard
           title="Task lane"
           subtitle="Resolve or move every open task"
         >
           {executionTasks.length > 0 ? (
-            <ul className="list task-list">
+            <div className="task-lane">
               {executionTasks.map((item) => (
-                <li key={item.id} className="task-list__item">
-                  <div className="task-list__main">
-                    <strong>
-                      {item.title}
-                      {isRecurring(item.recurrence) && (
-                        <RecurrenceInfo recurrence={item.recurrence} showCarryPolicy />
-                      )}
-                    </strong>
-                    <div className="list__subtle">
-                      {getTaskDayMetaText(item.notes, item.scheduledForDate ?? "Scheduled today")}
-                      {item.goal ? (
-                        <span style={{ marginLeft: "0.5rem" }}>
-                          <GoalChip goal={item.goal} />
-                        </span>
-                      ) : null}
-                    </div>
-                    <div className="button-row button-row--tight button-row--wrap" style={{ marginTop: "0.45rem" }}>
-                      <button
-                        className="button button--ghost button--small"
-                        type="button"
-                        disabled={item.status === "completed" || isTaskMutationPending}
-                        onClick={() =>
-                          updateTaskMutation.mutate({
-                            taskId: item.id,
-                            status: "completed",
-                          })
-                        }
-                      >
-                        Done
-                      </button>
-                      <button
-                        className="button button--ghost button--small"
-                        type="button"
-                        disabled={item.status === "dropped" || isTaskMutationPending}
-                        onClick={() =>
-                          updateTaskMutation.mutate({
-                            taskId: item.id,
-                            status: "dropped",
-                          })
-                        }
-                      >
-                        Drop
-                      </button>
-                      <button
-                        className="button button--ghost button--small"
-                        type="button"
-                        disabled={item.status === "pending" || isTaskMutationPending}
-                        onClick={() =>
-                          updateTaskMutation.mutate({
-                            taskId: item.id,
-                            status: "pending",
-                          })
-                        }
-                      >
-                        Reopen
-                      </button>
-                      <button
-                        className="button button--ghost button--small"
-                        type="button"
-                        disabled={item.status !== "pending" || isTaskMutationPending}
-                        onClick={() =>
-                          carryForwardTaskMutation.mutate({
-                            taskId: item.id,
-                            targetDate: tomorrow,
-                          })
-                        }
-                      >
-                        {isRecurring(item.recurrence) ? "Skip to next" : "Carry to tomorrow"}
-                      </button>
-                    </div>
-                    <div className="task-reschedule-row">
-                      <label className="field" style={{ margin: 0 }}>
-                        <span>Reschedule date</span>
-                        <input
-                          type="date"
-                          value={getRescheduleDate(item.id)}
-                          onChange={(event) =>
-                            setRescheduleDates((current) => ({
-                              ...current,
-                              [item.id]: event.target.value,
-                            }))
-                          }
-                        />
-                      </label>
-                      <button
-                        className="button button--ghost button--small"
-                        type="button"
-                        disabled={item.status !== "pending" || isTaskMutationPending}
-                        onClick={() =>
-                          carryForwardTaskMutation.mutate({
-                            taskId: item.id,
-                            targetDate: getRescheduleDate(item.id),
-                          })
-                        }
-                      >
-                        Reschedule
-                      </button>
-                    </div>
-                  </div>
-                  <span
-                    className={
-                      item.status === "completed"
-                        ? "tag tag--positive"
-                        : item.status === "dropped"
-                          ? "tag tag--negative"
-                          : "tag tag--warning"
-                    }
-                  >
-                    {item.status === "completed"
-                      ? "done"
-                      : item.status === "dropped"
-                        ? "dropped"
-                        : "open"}
-                  </span>
-                </li>
+                <TaskCard
+                  key={item.id}
+                  task={item}
+                  isTaskMutationPending={isTaskMutationPending}
+                  rescheduleDate={getRescheduleDate(item.id)}
+                  onRescheduleDateChange={(date) =>
+                    setRescheduleDates((current) => ({
+                      ...current,
+                      [item.id]: date,
+                    }))
+                  }
+                  onStatusChange={(status) =>
+                    updateTaskMutation.mutate({
+                      taskId: item.id,
+                      status,
+                    })
+                  }
+                  onCarryForward={() =>
+                    carryForwardTaskMutation.mutate({
+                      taskId: item.id,
+                      targetDate: tomorrow,
+                    })
+                  }
+                  onReschedule={() =>
+                    carryForwardTaskMutation.mutate({
+                      taskId: item.id,
+                      targetDate: getRescheduleDate(item.id),
+                    })
+                  }
+                />
               ))}
-            </ul>
+            </div>
           ) : (
             <EmptyState
               title="No tasks scheduled"
