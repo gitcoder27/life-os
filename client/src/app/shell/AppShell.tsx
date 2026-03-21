@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 
 import { QuickCaptureSheet } from "../../features/capture/QuickCaptureSheet";
@@ -8,6 +8,7 @@ import {
   setPreferredTimezone,
   setPreferredWeekStart,
   useHomeOverviewQuery,
+  useNotificationsQuery,
   useSessionQuery,
   useSettingsProfileQuery,
 } from "../../shared/lib/api";
@@ -34,8 +35,16 @@ export function AppShell() {
   const sessionQuery = useSessionQuery();
   const homeQuery = useHomeOverviewQuery(today);
   const settingsQuery = useSettingsProfileQuery();
+  const notificationsQuery = useNotificationsQuery();
   const userEmail = sessionQuery.data?.user?.email ?? "owner@life-os";
   const greeting = homeQuery.data?.greeting ?? "Good day";
+
+  const unreadCount = useMemo(() => {
+    if (!notificationsQuery.data) return 0;
+    return notificationsQuery.data.notifications.filter(
+      (n: { read: boolean; dismissedAt: string | null }) => !n.read && !n.dismissedAt,
+    ).length;
+  }, [notificationsQuery.data]);
 
   useEffect(() => {
     if (!settingsQuery.data) return;
@@ -120,11 +129,16 @@ export function AppShell() {
           </div>
           <div className="shell-header__actions">
             <button
-              className="button button--ghost"
+              className="button button--ghost shell-notif-btn"
               type="button"
               onClick={() => navigate("/notifications")}
             >
               Notifications
+              {unreadCount > 0 && (
+                <span className="shell-notif-badge" aria-label={`${unreadCount} unread`}>
+                  {unreadCount > 99 ? "99+" : unreadCount}
+                </span>
+              )}
             </button>
             <button
               className="button button--primary shell-header__capture"

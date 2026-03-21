@@ -1,11 +1,14 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import {
+  getPreferredTimezone,
   useDismissNotificationMutation,
   useMarkNotificationReadMutation,
   useNotificationsQuery,
+  useSnoozeNotificationMutation,
 } from "../../shared/lib/api";
+import type { NotificationItem, SnoozePreset } from "../../shared/lib/api";
 import { PageHeader } from "../../shared/ui/PageHeader";
 import {
   EmptyState,
@@ -13,17 +16,13 @@ import {
   PageLoadingState,
 } from "../../shared/ui/PageState";
 
-type NotifItem = {
-  id: string;
-  title: string;
-  body: string;
-  severity: "info" | "warning" | "critical";
-  entityType: string | null;
-  entityId: string | null;
-  read: boolean;
-  dismissedAt: string | null;
-  createdAt: string;
-};
+type FilterTab = "all" | "needs_action" | "read";
+
+const FILTER_TABS: { key: FilterTab; label: string }[] = [
+  { key: "all", label: "All" },
+  { key: "needs_action", label: "Needs action" },
+  { key: "read", label: "Read" },
+];
 
 const SEVERITY_ORDER: Record<string, number> = {
   critical: 0,
@@ -35,6 +34,14 @@ const SEVERITY_CONFIG: Record<string, { label: string; className: string }> = {
   critical: { label: "Needs attention", className: "notif-severity-group--critical" },
   warning: { label: "Reminders", className: "notif-severity-group--warning" },
   info: { label: "Updates", className: "notif-severity-group--info" },
+};
+
+const CATEGORY_LABELS: Record<string, string> = {
+  review: "Review",
+  finance: "Finance",
+  health: "Health",
+  habit: "Habit",
+  routine: "Routine",
 };
 
 function resolveEntityRoute(
@@ -91,8 +98,20 @@ function formatNotificationTime(isoDateTime: string) {
   return date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
-function groupBySeverity(items: NotifItem[]) {
-  const groups: Record<string, NotifItem[]> = {};
+function isTonightAvailable(): boolean {
+  const tz = getPreferredTimezone();
+  if (!tz) return true;
+  try {
+    const nowInTz = new Date().toLocaleString("en-US", { timeZone: tz, hour12: false, hour: "2-digit" });
+    const hour = parseInt(nowInTz, 10);
+    return hour < 18;
+  } catch {
+    return true;
+  }
+}
+
+function groupBySeverity(items: NotificationItem[]) {
+  const groups: Record<string, NotificationItem[]> = {};
 
   for (const item of items) {
     const key = item.severity || "info";
@@ -104,24 +123,94 @@ function groupBySeverity(items: NotifItem[]) {
     .sort(([a], [b]) => (SEVERITY_ORDER[a] ?? 99) - (SEVERITY_ORDER[b] ?? 99));
 }
 
+function SnoozeMenu({
+  notificationId,
+  onSnooze,
+  isSnooping,
+}: {
+  notificationId: string;
+  onSnooze: (notificationId: string, preset: SnoozePreset) => void;
+  isSnooping: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const tonightOk = isTonightAvailable();
+
+  if (!open) {
+    return (
+      <button
+        className="button button--ghost button--small"
+        type="button"
+        onClick={() => setOpen(true)}
+        disabled={isSnooping}
+      >
+        Snooze
+      </button>
+    );
+  }
+
+  return (
+    <div className="notif-snooze-group">
+      <button
+        className="button button--ghost button--small notif-snooze-btn"
+        type="button"
+        disabled={isSnooping}
+        onClick={() => { onSnooze(notificationId, "one_hour"); setOpen(false); }}
+      >
+        1h
+      </button>
+      {tonightOk && (
+        <button
+          className="button button--ghost button--small notif-snooze-btn"
+          type="button"
+          disabled={isSnooping}
+          onClick={() => { onSnooze(notificationId, "tonight"); setOpen(false); }}
+        >
+          Tonight
+        </button>
+      )}
+      <button
+        className="button button--ghost button--small notif-snooze-btn"
+        type="button"
+        disabled={isSnooping}
+        onClick={() => { onSnooze(notificationId, "tomorrow"); setOpen(false); }}
+      >
+        Tomorrow
+      </button>
+      <button
+        className="button button--ghost button--small"
+        type="button"
+        onClick={() => setOpen(false)}
+        aria-label="Cancel snooze"
+      >
+        ✕
+      </button>
+    </div>
+  );
+}
+
 function ActionCard({
   item,
   onMarkRead,
   onDismiss,
   onOpen,
+  onSnooze,
   isMarkingRead,
   isDismissing,
+  isSnooping,
 }: {
-  item: NotifItem;
+  item: NotificationItem;
   onMarkRead: () => void;
   onDismiss: () => void;
   onOpen: () => void;
+  onSnooze: (notificationId: string, preset: SnoozePreset) => void;
   isMarkingRead: boolean;
   isDismissing: boolean;
+  isSnooping: boolean;
 }) {
   const route = resolveEntityRoute(item.entityType, item.entityId);
   const isUnread = !item.read;
   const severity = item.severity || "info";
+  const category = item.notificationType || "routine";
 
   return (
     <div
@@ -137,6 +226,9 @@ function ActionCard({
 
       <div className="notif-action-card__body">
         <div className="notif-action-card__top">
+          <span className={`notif-category-badge notif-category-badge--${category}`}>
+            {CATEGORY_LABELS[category] ?? category}
+          </span>
           <span className="notif-action-card__title">{item.title}</span>
           <span className="notif-action-card__time">
             {formatNotificationTime(item.createdAt)}
@@ -165,6 +257,11 @@ function ActionCard({
               Mark read
             </button>
           )}
+          <SnoozeMenu
+            notificationId={item.id}
+            onSnooze={onSnooze}
+            isSnooping={isSnooping}
+          />
           <button
             className="button button--ghost button--small"
             type="button"
@@ -184,26 +281,32 @@ export function NotificationsPage() {
   const notificationsQuery = useNotificationsQuery();
   const markReadMutation = useMarkNotificationReadMutation();
   const dismissMutation = useDismissNotificationMutation();
+  const snoozeMutation = useSnoozeNotificationMutation();
+
+  const [activeFilter, setActiveFilter] = useState<FilterTab>("needs_action");
 
   const activeItems = useMemo(() => {
     if (!notificationsQuery.data) return [];
     return notificationsQuery.data.notifications.filter(
-      (n: NotifItem) => !n.dismissedAt,
+      (n: NotificationItem) => !n.dismissedAt,
     );
   }, [notificationsQuery.data]);
 
-  const severityGroups = useMemo(() => groupBySeverity(activeItems), [activeItems]);
-
-  const counts = useMemo(() => {
-    const result: Record<string, number> = { critical: 0, warning: 0, info: 0 };
-    for (const item of activeItems) {
-      const key = item.severity || "info";
-      result[key] = (result[key] ?? 0) + 1;
+  const filteredItems = useMemo(() => {
+    switch (activeFilter) {
+      case "needs_action":
+        return activeItems.filter((n) => !n.read);
+      case "read":
+        return activeItems.filter((n) => n.read);
+      default:
+        return activeItems;
     }
-    return result;
-  }, [activeItems]);
+  }, [activeItems, activeFilter]);
 
-  const unreadCount = activeItems.filter((n: NotifItem) => !n.read).length;
+  const severityGroups = useMemo(() => groupBySeverity(filteredItems), [filteredItems]);
+
+  const unreadCount = activeItems.filter((n: NotificationItem) => !n.read).length;
+  const readCount = activeItems.filter((n: NotificationItem) => n.read).length;
 
   if (notificationsQuery.isLoading && !notificationsQuery.data) {
     return (
@@ -235,6 +338,10 @@ export function NotificationsPage() {
     }
   }
 
+  function handleSnooze(notificationId: string, preset: SnoozePreset) {
+    snoozeMutation.mutate({ notificationId, preset });
+  }
+
   return (
     <div className="page">
       <PageHeader
@@ -243,10 +350,39 @@ export function NotificationsPage() {
         description="Alerts, reminders, and items that need your attention — grouped by urgency."
       />
 
+      {/* Filter tabs */}
+      <div className="notif-filter-bar" role="tablist" aria-label="Notification filters">
+        {FILTER_TABS.map((tab) => {
+          const count = tab.key === "needs_action" ? unreadCount
+            : tab.key === "read" ? readCount
+            : activeItems.length;
+          return (
+            <button
+              key={tab.key}
+              role="tab"
+              aria-selected={activeFilter === tab.key}
+              className={`notif-filter-tab${activeFilter === tab.key ? " notif-filter-tab--active" : ""}`}
+              type="button"
+              onClick={() => setActiveFilter(tab.key)}
+            >
+              {tab.label}
+              {count > 0 && <span className="notif-filter-tab__count">{count}</span>}
+            </button>
+          );
+        })}
+      </div>
+
       {activeItems.length === 0 ? (
         <EmptyState
           title="All clear"
           description="No pending notifications. You're caught up — keep the momentum going."
+        />
+      ) : filteredItems.length === 0 ? (
+        <EmptyState
+          title={activeFilter === "needs_action" ? "No unread notifications" : "No read notifications"}
+          description={activeFilter === "needs_action"
+            ? "Everything has been addressed. Check All to see your full list."
+            : "No notifications have been read yet."}
         />
       ) : (
         <>
@@ -256,24 +392,6 @@ export function NotificationsPage() {
               <div className="notif-page__summary-stat">
                 <span className="notif-page__summary-count">{unreadCount}</span>
                 <span className="notif-page__summary-label">unread</span>
-              </div>
-            )}
-            {counts.critical > 0 && (
-              <div className="notif-page__summary-stat notif-page__summary-stat--critical">
-                <span className="notif-page__summary-count">{counts.critical}</span>
-                <span className="notif-page__summary-label">critical</span>
-              </div>
-            )}
-            {counts.warning > 0 && (
-              <div className="notif-page__summary-stat notif-page__summary-stat--warning">
-                <span className="notif-page__summary-count">{counts.warning}</span>
-                <span className="notif-page__summary-label">warning{counts.warning !== 1 ? "s" : ""}</span>
-              </div>
-            )}
-            {counts.info > 0 && (
-              <div className="notif-page__summary-stat notif-page__summary-stat--info">
-                <span className="notif-page__summary-count">{counts.info}</span>
-                <span className="notif-page__summary-label">info</span>
               </div>
             )}
           </div>
@@ -300,8 +418,10 @@ export function NotificationsPage() {
                         onMarkRead={() => markReadMutation.mutate(item.id)}
                         onDismiss={() => dismissMutation.mutate(item.id)}
                         onOpen={() => handleOpen(item.entityType, item.entityId)}
+                        onSnooze={handleSnooze}
                         isMarkingRead={markReadMutation.isPending}
                         isDismissing={dismissMutation.isPending}
+                        isSnooping={snoozeMutation.isPending}
                       />
                     ))}
                   </div>

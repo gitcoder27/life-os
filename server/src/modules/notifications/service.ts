@@ -1,4 +1,5 @@
 import type { Prisma, PrismaClient } from "@prisma/client";
+import type { NotificationCategory, NotificationSeverity } from "@life-os/contracts";
 
 import {
   calculateHabitStreak,
@@ -14,6 +15,13 @@ import {
   getUserLocalHour,
   normalizeTimezone,
 } from "../../lib/time/user-time.js";
+import {
+  buildNotificationDeliveryKey,
+  buildNotificationNaturalKey,
+  getEffectiveRepeatCadence,
+  normalizeNotificationPreferences,
+  shouldGenerateNotification,
+} from "./policy.js";
 import { ensureCycle } from "../scoring/service.js";
 import { resolveDailyReviewSubmissionWindow } from "../reviews/submission-window.js";
 
@@ -36,23 +44,92 @@ async function ensureGeneratedNotification(
   prisma: NotificationClient,
   input: {
     userId: string;
-    notificationType: string;
+    notificationType: NotificationCategory;
     severity: "INFO" | "WARNING" | "CRITICAL";
     title: string;
     body: string;
     entityType: string;
     entityId: string;
     ruleKey: string;
+    timezone?: string | null;
+    now: Date;
+    notificationPreferences: ReturnType<typeof normalizeNotificationPreferences>;
     visibleFrom?: Date | null;
     expiresAt?: Date | null;
   },
 ) {
-  const existing = await prisma.notification.findFirst({
+  const severity = input.severity.toLowerCase() as NotificationSeverity;
+  const shouldCreate = shouldGenerateNotification({
+    preferences: input.notificationPreferences,
+    category: input.notificationType,
+    severity,
+  });
+
+  if (!shouldCreate) {
+    return false;
+  }
+
+  const naturalKey = buildNotificationNaturalKey({
+    ruleKey: input.ruleKey,
+    entityType: input.entityType,
+    entityId: input.entityId,
+  });
+  const repeatCadence = getEffectiveRepeatCadence(
+    input.notificationPreferences,
+    input.notificationType,
+  );
+  const deliveryKey = buildNotificationDeliveryKey({
+    naturalKey,
+    now: input.now,
+    timezone: input.timezone,
+    repeatCadence,
+  });
+
+  const dismissed = await prisma.notification.findFirst({
     where: {
       userId: input.userId,
       ruleKey: input.ruleKey,
       entityType: input.entityType,
       entityId: input.entityId,
+      dismissedAt: {
+        not: null,
+      },
+    },
+  });
+
+  if (dismissed) {
+    return false;
+  }
+
+  const activeUnread = await prisma.notification.findFirst({
+    where: {
+      userId: input.userId,
+      ruleKey: input.ruleKey,
+      entityType: input.entityType,
+      entityId: input.entityId,
+      dismissedAt: null,
+      readAt: null,
+    },
+  });
+
+  if (activeUnread) {
+    return false;
+  }
+
+  const existing = await prisma.notification.findFirst({
+    where: {
+      userId: input.userId,
+      ...(repeatCadence === "off"
+        ? {
+            ruleKey: input.ruleKey,
+            entityType: input.entityType,
+            entityId: input.entityId,
+            dismissedAt: null,
+          }
+        : {
+            deliveryKey,
+            dismissedAt: null,
+          }),
     },
   });
 
@@ -70,6 +147,7 @@ async function ensureGeneratedNotification(
       entityType: input.entityType,
       entityId: input.entityId,
       ruleKey: input.ruleKey,
+      deliveryKey,
       visibleFrom: input.visibleFrom ?? null,
       expiresAt: input.expiresAt ?? null,
     },
@@ -111,6 +189,9 @@ export async function generateRuleNotifications(
       dailyReviewStartTime: user.preferences?.dailyReviewStartTime,
       dailyReviewEndTime: user.preferences?.dailyReviewEndTime,
     };
+    const notificationPreferences = normalizeNotificationPreferences(
+      user.preferences?.notificationPreferences,
+    );
 
     const [
       dueAdminItems,
@@ -206,6 +287,9 @@ export async function generateRuleNotifications(
         entityType: "admin_item",
         entityId: `${adminItem.id}:${todayIso}`,
         ruleKey: "admin_item_due_soon",
+        now,
+        timezone,
+        notificationPreferences,
         expiresAt: getDayWindowUtc(toIsoDateString(adminItem.dueOn), timezone).end,
       });
 
@@ -228,6 +312,9 @@ export async function generateRuleNotifications(
           entityType: "health_day",
           entityId: `water:${todayIso}`,
           ruleKey: "low_water_late_day",
+          now,
+          timezone,
+          notificationPreferences,
           visibleFrom: getTimeWindowUtc(todayIso, "18:00", timezone),
           expiresAt: dayWindow.end,
         });
@@ -256,6 +343,9 @@ export async function generateRuleNotifications(
           entityType: "workout_day",
           entityId: `workout:${todayIso}`,
           ruleKey: "workout_unconfirmed_late_day",
+          now,
+          timezone,
+          notificationPreferences,
           visibleFrom: getTimeWindowUtc(todayIso, "18:00", timezone),
           expiresAt: dayWindow.end,
         });
@@ -297,6 +387,9 @@ export async function generateRuleNotifications(
           entityType: "habit",
           entityId: `${topHabit.habit.id}:${todayIso}`,
           ruleKey: "habit_streak_at_risk",
+          now,
+          timezone,
+          notificationPreferences,
           visibleFrom: getTimeWindowUtc(todayIso, "18:00", timezone),
           expiresAt: dayWindow.end,
         });
@@ -321,6 +414,9 @@ export async function generateRuleNotifications(
           entityType: "routine_day",
           entityId: `routine:${todayIso}`,
           ruleKey: "incomplete_routine_late_day",
+          now,
+          timezone,
+          notificationPreferences,
           visibleFrom: getTimeWindowUtc(todayIso, "20:00", timezone),
           expiresAt: dayWindow.end,
         });
@@ -350,6 +446,9 @@ export async function generateRuleNotifications(
         entityType: "daily_review",
         entityId: `daily-review:${todayIso}`,
         ruleKey: "daily_review_due",
+        now,
+        timezone,
+        notificationPreferences,
         visibleFrom: todayReviewWindow.opensAt ? new Date(todayReviewWindow.opensAt) : getTimeWindowUtc(todayIso, "20:00", timezone),
         expiresAt: todayReviewWindow.closesAt ? new Date(todayReviewWindow.closesAt) : dayWindow.end,
       });
@@ -380,6 +479,9 @@ export async function generateRuleNotifications(
         entityType: "daily_review",
         entityId: `daily-review-overdue:${toIsoDateString(yesterday)}`,
         ruleKey: "daily_review_overdue",
+        now,
+        timezone,
+        notificationPreferences,
         expiresAt: yesterdayReviewWindow.closesAt ? new Date(yesterdayReviewWindow.closesAt) : dayWindow.end,
       });
 
@@ -408,6 +510,9 @@ export async function generateRuleNotifications(
         entityType: "weekly_review",
         entityId: `weekly-review:${toIsoDateString(previousWeekStart)}`,
         ruleKey: "weekly_review_overdue",
+        now,
+        timezone,
+        notificationPreferences,
         expiresAt: getDayWindowUtc(addIsoDays(toIsoDateString(getWeekEndDate(currentWeekStart)), 1), timezone).start,
       });
 
@@ -438,6 +543,9 @@ export async function generateRuleNotifications(
         entityType: "monthly_review",
         entityId: `monthly-review:${toIsoDateString(previousMonthStart).slice(0, 7)}`,
         ruleKey: "monthly_review_overdue",
+        now,
+        timezone,
+        notificationPreferences,
         expiresAt: getDayWindowUtc(addIsoDays(toIsoDateString(getMonthEndDate(currentMonthStart)), 1), timezone).start,
       });
 

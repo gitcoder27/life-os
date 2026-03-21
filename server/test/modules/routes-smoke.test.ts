@@ -473,6 +473,11 @@ describe("module route smoke tests", () => {
         dailyWaterTargetMl: 2800,
         dailyReviewStartTime: "20:00",
         dailyReviewEndTime: "23:00",
+        notificationPreferences: {
+          review: { enabled: true, minSeverity: "info", repeatCadence: "hourly" },
+          finance: { enabled: true, minSeverity: "warning", repeatCadence: "every_3_hours" },
+          health: { enabled: false, minSeverity: "critical", repeatCadence: "off" },
+        },
       }),
     } as any;
 
@@ -488,6 +493,23 @@ describe("module route smoke tests", () => {
         preferences: expect.objectContaining({
           timezone: "America/New_York",
           dailyWaterTargetMl: 2800,
+          notificationPreferences: expect.objectContaining({
+            review: expect.objectContaining({
+              enabled: true,
+              minSeverity: "info",
+              repeatCadence: "hourly",
+            }),
+            health: expect.objectContaining({
+              enabled: false,
+              minSeverity: "critical",
+              repeatCadence: "off",
+            }),
+            habit: expect.objectContaining({
+              enabled: true,
+              minSeverity: "warning",
+              repeatCadence: "off",
+            }),
+          }),
         }),
       }),
     );
@@ -1539,13 +1561,14 @@ describe("module route smoke tests", () => {
       findFirst: vi.fn().mockResolvedValue({
         id: "notification-1",
         userId: "user-1",
-        notificationType: "info",
+        notificationType: "review",
         severity: "INFO",
         title: "Reminder",
         body: "Body",
         entityType: "item",
         entityId: "item-1",
         ruleKey: "rule-1",
+        deliveryKey: "rule-1|item|item-1",
         visibleFrom: null,
         expiresAt: null,
         readAt: null,
@@ -1555,13 +1578,14 @@ describe("module route smoke tests", () => {
       update: vi.fn().mockResolvedValue({
         id: "notification-1",
         userId: "user-1",
-        notificationType: "info",
+        notificationType: "review",
         severity: "INFO",
         title: "Reminder",
         body: "Body",
         entityType: "item",
         entityId: "item-1",
         ruleKey: "rule-1",
+        deliveryKey: "rule-1|item|item-1",
         visibleFrom: null,
         expiresAt: null,
         readAt: new Date(),
@@ -1575,6 +1599,77 @@ describe("module route smoke tests", () => {
 
     expect(read.statusCode).toBe(200);
     expect(dismiss.statusCode).toBe(200);
+  });
+
+  it("snoozes notifications", async () => {
+    prisma.notification = {
+      findFirst: vi.fn().mockResolvedValue({
+        id: "notification-1",
+        userId: "user-1",
+        notificationType: "review",
+        severity: "INFO",
+        title: "Reminder",
+        body: "Body",
+        entityType: "daily_review",
+        entityId: "daily-review:2026-03-14",
+        ruleKey: "daily_review_due",
+        deliveryKey: "daily_review_due|daily_review|daily-review:2026-03-14",
+        visibleFrom: null,
+        expiresAt: new Date("2026-03-14T23:59:59.000Z"),
+        readAt: new Date("2026-03-14T18:30:00.000Z"),
+        dismissedAt: null,
+        createdAt: new Date("2026-03-14T17:30:00.000Z"),
+      }),
+      update: vi.fn().mockResolvedValue({
+        id: "notification-1",
+        userId: "user-1",
+        notificationType: "review",
+        severity: "INFO",
+        title: "Reminder",
+        body: "Body",
+        entityType: "daily_review",
+        entityId: "daily-review:2026-03-14",
+        ruleKey: "daily_review_due",
+        deliveryKey: "daily_review_due|daily_review|daily-review:2026-03-14",
+        visibleFrom: new Date("2026-03-15T03:30:00.000Z"),
+        expiresAt: new Date("2026-03-15T23:59:59.000Z"),
+        readAt: null,
+        dismissedAt: null,
+        createdAt: new Date("2026-03-14T17:30:00.000Z"),
+      }),
+    } as any;
+    prisma.userPreference = {
+      findUnique: vi.fn().mockResolvedValue({
+        timezone: "UTC",
+      }),
+    } as any;
+
+    const response = await app!.inject({
+      method: "POST",
+      url: "/api/notifications/notification-1/snooze",
+      payload: {
+        preset: "tomorrow",
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(prisma.notification.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          readAt: null,
+          visibleFrom: expect.any(Date),
+        }),
+      }),
+    );
+    expect(JSON.parse(response.body)).toEqual(
+      expect.objectContaining({
+        notification: expect.objectContaining({
+          id: "notification-1",
+          read: false,
+          visibleFrom: "2026-03-15T03:30:00.000Z",
+        }),
+      }),
+    );
   });
 
   it("completes onboarding payload", async () => {
@@ -2006,6 +2101,11 @@ describe("module route smoke tests", () => {
       }),
     } as any;
     prisma.userPreference = {
+      findUnique: vi.fn().mockResolvedValue({
+        notificationPreferences: {
+          review: { enabled: true, minSeverity: "info", repeatCadence: "hourly" },
+        },
+      }),
       upsert: vi.fn().mockResolvedValue({
         timezone: "America/Chicago",
         currencyCode: "USD",
@@ -2013,6 +2113,13 @@ describe("module route smoke tests", () => {
         dailyWaterTargetMl: 3000,
         dailyReviewStartTime: "19:00",
         dailyReviewEndTime: "22:00",
+        notificationPreferences: {
+          review: { enabled: true, minSeverity: "warning", repeatCadence: "hourly" },
+          finance: { enabled: false, minSeverity: "critical", repeatCadence: "every_3_hours" },
+          health: { enabled: true, minSeverity: "warning", repeatCadence: "off" },
+          habit: { enabled: true, minSeverity: "warning", repeatCadence: "off" },
+          routine: { enabled: true, minSeverity: "warning", repeatCadence: "off" },
+        },
       }),
     } as any;
 
@@ -2027,6 +2134,15 @@ describe("module route smoke tests", () => {
         dailyWaterTargetMl: 3000,
         dailyReviewStartTime: "19:00",
         dailyReviewEndTime: "22:00",
+        notificationPreferences: {
+          review: {
+            minSeverity: "warning",
+          },
+          finance: {
+            enabled: false,
+            minSeverity: "critical",
+          },
+        },
       },
     });
 
@@ -2048,6 +2164,18 @@ describe("module route smoke tests", () => {
           timezone: "America/Chicago",
           currencyCode: "USD",
           weekStartsOn: 0,
+          notificationPreferences: expect.objectContaining({
+            review: expect.objectContaining({
+              enabled: true,
+              minSeverity: "warning",
+              repeatCadence: "hourly",
+            }),
+            finance: expect.objectContaining({
+              enabled: false,
+              minSeverity: "critical",
+              repeatCadence: "every_3_hours",
+            }),
+          }),
         }),
       }),
     );

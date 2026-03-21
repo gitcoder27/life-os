@@ -8,6 +8,13 @@ import {
   useSettingsProfileQuery,
   useUpdateSettingsProfileMutation,
 } from "../../shared/lib/api";
+import type {
+  NotificationCategory,
+  NotificationCategoryPreference,
+  NotificationCategoryPreferences,
+  NotificationMinSeverity,
+  NotificationRepeatCadence,
+} from "../../shared/lib/api";
 import {
   getCurrencyOptions,
   getTimezoneOptions,
@@ -32,6 +39,39 @@ const weekDayOptions = [
 const defaultTimezoneOptions = getTimezoneOptions();
 const defaultCurrencyOptions = getCurrencyOptions();
 
+const NOTIF_CATEGORIES: {
+  key: NotificationCategory;
+  label: string;
+  description: string;
+  hasRepeatCadence: boolean;
+}[] = [
+  { key: "review", label: "Review", description: "Daily, weekly, and monthly review reminders", hasRepeatCadence: true },
+  { key: "finance", label: "Finance", description: "Bill due dates, budget warnings, spending alerts", hasRepeatCadence: true },
+  { key: "health", label: "Health", description: "Hydration, workout, and meal tracking nudges", hasRepeatCadence: false },
+  { key: "habit", label: "Habit", description: "Habit streak and completion reminders", hasRepeatCadence: false },
+  { key: "routine", label: "Routine", description: "Morning and evening routine prompts", hasRepeatCadence: false },
+];
+
+const SEVERITY_OPTIONS: { value: NotificationMinSeverity; label: string }[] = [
+  { value: "info", label: "All (info+)" },
+  { value: "warning", label: "Warning+" },
+  { value: "critical", label: "Critical only" },
+];
+
+const CADENCE_OPTIONS: { value: NotificationRepeatCadence; label: string }[] = [
+  { value: "off", label: "No repeat" },
+  { value: "hourly", label: "Hourly" },
+  { value: "every_3_hours", label: "Every 3 hours" },
+];
+
+const DEFAULT_NOTIF_PREFS: NotificationCategoryPreferences = {
+  review: { enabled: true, minSeverity: "info", repeatCadence: "hourly" },
+  finance: { enabled: true, minSeverity: "warning", repeatCadence: "every_3_hours" },
+  health: { enabled: true, minSeverity: "warning", repeatCadence: "off" },
+  habit: { enabled: true, minSeverity: "warning", repeatCadence: "off" },
+  routine: { enabled: true, minSeverity: "warning", repeatCadence: "off" },
+};
+
 export function SettingsPage() {
   const settingsQuery = useSettingsProfileQuery();
   const updateMutation = useUpdateSettingsProfileMutation();
@@ -46,6 +86,8 @@ export function SettingsPage() {
     dailyReviewStartTime: "",
     dailyReviewEndTime: "",
   });
+
+  const [notifPrefs, setNotifPrefs] = useState<NotificationCategoryPreferences>(DEFAULT_NOTIF_PREFS);
 
   const [dirty, setDirty] = useState(false);
   const timezoneOptions = form.timezone
@@ -67,6 +109,9 @@ export function SettingsPage() {
       dailyReviewStartTime: preferences.dailyReviewStartTime ?? "",
       dailyReviewEndTime: preferences.dailyReviewEndTime ?? "",
     });
+    if (preferences.notificationPreferences) {
+      setNotifPrefs(preferences.notificationPreferences);
+    }
     setPreferredWeekStart(preferences.weekStartsOn);
     if (preferences.timezone) {
       setPreferredTimezone(preferences.timezone);
@@ -82,6 +127,18 @@ export function SettingsPage() {
     setDirty(true);
   }
 
+  function handleNotifPrefChange(
+    category: NotificationCategory,
+    field: keyof NotificationCategoryPreference,
+    value: boolean | string,
+  ) {
+    setNotifPrefs((prev) => ({
+      ...prev,
+      [category]: { ...prev[category], [field]: value },
+    }));
+    setDirty(true);
+  }
+
   async function handleSave() {
     await updateMutation.mutateAsync({
       displayName: form.displayName,
@@ -91,6 +148,7 @@ export function SettingsPage() {
       dailyWaterTargetMl: form.dailyWaterTargetMl,
       dailyReviewStartTime: form.dailyReviewStartTime || null,
       dailyReviewEndTime: form.dailyReviewEndTime || null,
+      notificationPreferences: notifPrefs,
     });
     setPreferredWeekStart(form.weekStartsOn);
     if (form.timezone) {
@@ -264,6 +322,68 @@ export function SettingsPage() {
                 }
               />
             </label>
+          </div>
+        </SectionCard>
+
+        <SectionCard title="Notification behavior" subtitle="Control which alerts reach you and how often they repeat">
+          <div className="notif-settings-grid">
+            {NOTIF_CATEGORIES.map((cat) => {
+              const pref = notifPrefs[cat.key];
+              return (
+                <div key={cat.key} className={`notif-settings-row${!pref.enabled ? " notif-settings-row--disabled" : ""}`}>
+                  <div className="notif-settings-row__header">
+                    <label className="notif-settings-toggle">
+                      <input
+                        type="checkbox"
+                        checked={pref.enabled}
+                        onChange={(e) => handleNotifPrefChange(cat.key, "enabled", e.target.checked)}
+                        aria-label={`Enable ${cat.label} notifications`}
+                      />
+                      <span className="notif-settings-toggle__track">
+                        <span className="notif-settings-toggle__thumb" />
+                      </span>
+                    </label>
+                    <div className="notif-settings-row__info">
+                      <span className="notif-settings-row__label">{cat.label}</span>
+                      <span className="notif-settings-row__desc">{cat.description}</span>
+                    </div>
+                  </div>
+                  <div className="notif-settings-row__controls">
+                    <label className="field notif-settings-field">
+                      <span>Min severity</span>
+                      <select
+                        value={pref.minSeverity}
+                        disabled={!pref.enabled}
+                        onChange={(e) => handleNotifPrefChange(cat.key, "minSeverity", e.target.value)}
+                      >
+                        {SEVERITY_OPTIONS.map((o) => (
+                          <option key={o.value} value={o.value}>{o.label}</option>
+                        ))}
+                      </select>
+                    </label>
+                    {cat.hasRepeatCadence ? (
+                      <label className="field notif-settings-field">
+                        <span>Repeat</span>
+                        <select
+                          value={pref.repeatCadence}
+                          disabled={!pref.enabled}
+                          onChange={(e) => handleNotifPrefChange(cat.key, "repeatCadence", e.target.value)}
+                        >
+                          {CADENCE_OPTIONS.map((o) => (
+                            <option key={o.value} value={o.value}>{o.label}</option>
+                          ))}
+                        </select>
+                      </label>
+                    ) : (
+                      <div className="field notif-settings-field">
+                        <span>Repeat</span>
+                        <span className="notif-settings-fixed">Off</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </SectionCard>
       </div>

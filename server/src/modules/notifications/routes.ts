@@ -3,35 +3,35 @@ import type {
   Notification,
   NotificationSeverity as PrismaNotificationSeverity,
 } from "@prisma/client";
+import type {
+  NotificationCategory,
+  NotificationItem,
+  NotificationMutationResponse,
+  NotificationsResponse,
+  NotificationSnoozeRequest,
+} from "@life-os/contracts";
+import { z } from "zod";
 
 import { requireAuthenticatedUser } from "../../lib/auth/require-auth.js";
 import { AppError } from "../../lib/errors/app-error.js";
 import { withGeneratedAt } from "../../lib/http/response.js";
+import { parseOrThrow } from "../../lib/validation/parse.js";
+import {
+  notificationCategories,
+  resolveNotificationSnoozeTime,
+  resolveSnoozedNotificationExpiry,
+} from "./policy.js";
 
-interface NotificationItem {
-  id: string;
-  notificationType: string;
-  severity: "info" | "warning" | "critical";
-  title: string;
-  body: string;
-  entityType: string | null;
-  entityId: string | null;
-  ruleKey: string;
-  visibleFrom: string | null;
-  expiresAt: string | null;
-  readAt: string | null;
-  dismissedAt: string | null;
-  createdAt: string;
-}
+const snoozeRequestSchema = z.object({
+  preset: z.enum(["one_hour", "tonight", "tomorrow"]),
+});
 
-interface NotificationsResponse {
-  generatedAt: string;
-  notifications: NotificationItem[];
-}
+function toNotificationCategory(value: string): NotificationCategory {
+  if (notificationCategories.includes(value as NotificationCategory)) {
+    return value as NotificationCategory;
+  }
 
-interface NotificationMutationResponse {
-  generatedAt: string;
-  notification: NotificationItem;
+  throw new Error(`Unsupported notification category: ${value}`);
 }
 
 function fromPrismaNotificationSeverity(
@@ -52,7 +52,7 @@ function fromPrismaNotificationSeverity(
 function serializeNotification(notification: Notification): NotificationItem {
   return {
     id: notification.id,
-    notificationType: notification.notificationType,
+    notificationType: toNotificationCategory(notification.notificationType),
     severity: fromPrismaNotificationSeverity(notification.severity),
     title: notification.title,
     body: notification.body,
@@ -61,6 +61,7 @@ function serializeNotification(notification: Notification): NotificationItem {
     ruleKey: notification.ruleKey,
     visibleFrom: notification.visibleFrom?.toISOString() ?? null,
     expiresAt: notification.expiresAt?.toISOString() ?? null,
+    read: Boolean(notification.readAt),
     readAt: notification.readAt?.toISOString() ?? null,
     dismissedAt: notification.dismissedAt?.toISOString() ?? null,
     createdAt: notification.createdAt.toISOString(),
@@ -114,6 +115,68 @@ export const registerNotificationRoutes: FastifyPluginAsync = async (app) => {
 
     const response: NotificationsResponse = withGeneratedAt({
       notifications: notifications.map(serializeNotification),
+    });
+
+    return reply.send(response);
+  });
+
+  app.post("/:notificationId/snooze", async (request, reply) => {
+    const user = requireAuthenticatedUser(request);
+    const { notificationId } = request.params as { notificationId: string };
+    const payload = parseOrThrow(
+      snoozeRequestSchema,
+      request.body as NotificationSnoozeRequest,
+    );
+    const notification = await findOwnedNotification(app, user.id, notificationId);
+    const preferences = await app.prisma.userPreference.findUnique({
+      where: {
+        userId: user.id,
+      },
+      select: {
+        timezone: true,
+      },
+    });
+
+    if (notification.dismissedAt) {
+      throw new AppError({
+        statusCode: 400,
+        code: "BAD_REQUEST",
+        message: "Dismissed notifications cannot be snoozed",
+      });
+    }
+
+    const now = new Date();
+    const visibleFrom = resolveNotificationSnoozeTime({
+      now,
+      timezone: preferences?.timezone,
+      preset: payload.preset,
+    });
+
+    if (!visibleFrom) {
+      throw new AppError({
+        statusCode: 400,
+        code: "BAD_REQUEST",
+        message: "Tonight snooze is only available before 18:00 in the user's timezone",
+      });
+    }
+
+    const updatedNotification = await app.prisma.notification.update({
+      where: {
+        id: notificationId,
+      },
+      data: {
+        visibleFrom,
+        readAt: null,
+        expiresAt: resolveSnoozedNotificationExpiry({
+          currentExpiresAt: notification.expiresAt,
+          visibleFrom,
+          timezone: preferences?.timezone,
+        }),
+      },
+    });
+
+    const response: NotificationMutationResponse = withGeneratedAt({
+      notification: serializeNotification(updatedNotification),
     });
 
     return reply.send(response);

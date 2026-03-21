@@ -627,25 +627,49 @@ type DeleteExpenseMutationResponse = {
   expenseId: string;
 };
 
+export type NotificationCategory = "review" | "finance" | "health" | "habit" | "routine";
+export type NotificationMinSeverity = "info" | "warning" | "critical";
+export type NotificationRepeatCadence = "off" | "hourly" | "every_3_hours";
+
+export type NotificationCategoryPreference = {
+  enabled: boolean;
+  minSeverity: NotificationMinSeverity;
+  repeatCadence: NotificationRepeatCadence;
+};
+
+export type NotificationCategoryPreferences = Record<
+  NotificationCategory,
+  NotificationCategoryPreference
+>;
+
+export type NotificationItem = {
+  id: string;
+  notificationType: NotificationCategory;
+  severity: "info" | "warning" | "critical";
+  title: string;
+  body: string;
+  entityType: string | null;
+  entityId: string | null;
+  ruleKey: string;
+  visibleFrom: string | null;
+  expiresAt: string | null;
+  read: boolean;
+  readAt: string | null;
+  dismissedAt: string | null;
+  createdAt: string;
+};
+
 type NotificationsResponse = {
   generatedAt: string;
-  notifications: Array<{
-    id: string;
-    title: string;
-    body: string;
-    severity: "info" | "warning" | "critical";
-    entityType: string | null;
-    entityId: string | null;
-    read: boolean;
-    dismissedAt: string | null;
-    createdAt: string;
-  }>;
+  notifications: NotificationItem[];
 };
 
 type NotificationMutationResponse = {
   generatedAt: string;
-  notification: NotificationsResponse["notifications"][number];
+  notification: NotificationItem;
 };
+
+export type SnoozePreset = "one_hour" | "tonight" | "tomorrow";
 
 type SettingsProfileResponse = {
   generatedAt: string;
@@ -661,6 +685,7 @@ type SettingsProfileResponse = {
     dailyWaterTargetMl: number;
     dailyReviewStartTime: string | null;
     dailyReviewEndTime: string | null;
+    notificationPreferences: NotificationCategoryPreferences;
   };
 };
 
@@ -672,6 +697,7 @@ type UpdateSettingsProfileRequest = {
   dailyWaterTargetMl?: number;
   dailyReviewStartTime?: string | null;
   dailyReviewEndTime?: string | null;
+  notificationPreferences?: Partial<Record<NotificationCategory, Partial<NotificationCategoryPreference>>>;
 };
 
 type GoalMutationResponse = {
@@ -2061,7 +2087,7 @@ export function useCreateHabitMutation() {
       targetPerDay?: number;
       goalId?: string | null;
     }) =>
-      apiRequest<HabitMutationResponse>("/api/habits/habits", {
+      apiRequest<HabitMutationResponse>("/api/habits", {
         method: "POST",
         body: payload,
       }),
@@ -2092,7 +2118,7 @@ export function useUpdateHabitMutation() {
       status?: "active" | "paused" | "archived";
       goalId?: string | null;
     }) =>
-      apiRequest<HabitMutationResponse>(`/api/habits/habits/${habitId}`, {
+      apiRequest<HabitMutationResponse>(`/api/habits/${habitId}`, {
         method: "PATCH",
         body: payload,
       }),
@@ -2117,7 +2143,7 @@ export function useCreateRoutineMutation() {
       period: "morning" | "evening";
       items: Array<{ title: string; sortOrder: number; isRequired?: boolean }>;
     }) =>
-      apiRequest<RoutineMutationResponse>("/api/habits/routines", {
+      apiRequest<RoutineMutationResponse>("/api/routines", {
         method: "POST",
         body: payload,
       }),
@@ -2144,7 +2170,7 @@ export function useUpdateRoutineMutation() {
       status?: "active" | "archived";
       items?: Array<{ title: string; sortOrder: number; isRequired?: boolean }>;
     }) =>
-      apiRequest<RoutineMutationResponse>(`/api/habits/routines/${routineId}`, {
+      apiRequest<RoutineMutationResponse>(`/api/routines/${routineId}`, {
         method: "PATCH",
         body: payload,
       }),
@@ -2574,6 +2600,25 @@ export function useDismissNotificationMutation() {
     meta: {
       successMessage: "Notification dismissed.",
       errorMessage: "Could not dismiss notification.",
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.notifications });
+    },
+  });
+}
+
+export function useSnoozeNotificationMutation() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ notificationId, preset }: { notificationId: string; preset: SnoozePreset }) =>
+      apiRequest<NotificationMutationResponse>(
+        `/api/notifications/${notificationId}/snooze`,
+        { method: "POST", body: { preset } },
+      ),
+    meta: {
+      successMessage: "Notification snoozed.",
+      errorMessage: "Could not snooze notification.",
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.notifications });

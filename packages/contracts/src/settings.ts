@@ -1,4 +1,5 @@
 import type { ApiMeta } from "./common.js";
+import type { NotificationCategoryPreferences } from "./notifications.js";
 
 export interface SettingsProfile {
   user: {
@@ -13,6 +14,7 @@ export interface SettingsProfile {
     dailyWaterTargetMl: number;
     dailyReviewStartTime: string | null;
     dailyReviewEndTime: string | null;
+    notificationPreferences: NotificationCategoryPreferences;
   };
 }
 
@@ -26,6 +28,9 @@ export interface UpdateSettingsProfileRequest {
   dailyWaterTargetMl?: number;
   dailyReviewStartTime?: string | null;
   dailyReviewEndTime?: string | null;
+  notificationPreferences?: Partial<{
+    [K in keyof NotificationCategoryPreferences]: Partial<NotificationCategoryPreferences[K]>;
+  }>;
 }
 
 export interface SettingsProfileMutationResponse extends ApiMeta, SettingsProfile {}
