@@ -14,6 +14,7 @@ const scoringMock = {
 
 const reviewsMock = {
   getDailyReviewModel: vi.fn(),
+  getReviewHistory: vi.fn(),
   submitDailyReview: vi.fn(),
   getWeeklyReviewModel: vi.fn(),
   submitWeeklyReview: vi.fn(),
@@ -29,6 +30,7 @@ vi.mock("../../src/modules/scoring/service.js", () => ({
 }));
 vi.mock("../../src/modules/reviews/service.js", () => ({
   getDailyReviewModel: (...args: unknown[]) => reviewsMock.getDailyReviewModel(...args),
+  getReviewHistory: (...args: unknown[]) => reviewsMock.getReviewHistory(...args),
   submitDailyReview: (...args: unknown[]) => reviewsMock.submitDailyReview(...args),
   getWeeklyReviewModel: (...args: unknown[]) => reviewsMock.getWeeklyReviewModel(...args),
   submitWeeklyReview: (...args: unknown[]) => reviewsMock.submitWeeklyReview(...args),
@@ -121,6 +123,26 @@ describe("module route smoke tests", () => {
       },
       incompleteTasks: [],
       existingReview: null,
+      generatedAt: new Date().toISOString(),
+    } as any);
+    reviewsMock.getReviewHistory.mockResolvedValue({
+      items: [],
+      nextCursor: null,
+      summary: {
+        totalReviews: 0,
+        countsByCadence: {
+          daily: 0,
+          weekly: 0,
+          monthly: 0,
+        },
+        topFrictionTags: [],
+      },
+      weeklyTrend: [],
+      monthlyTrend: [],
+      comparisons: {
+        weekly: null,
+        monthly: null,
+      },
       generatedAt: new Date().toISOString(),
     } as any);
     reviewsMock.getWeeklyReviewModel.mockResolvedValue({
@@ -702,6 +724,25 @@ describe("module route smoke tests", () => {
     const response = await app!.inject({ method: "GET", url: "/api/reviews/daily/2026-03-14" });
     expect(response.statusCode).toBe(200);
     expect(reviewsMock.getDailyReviewModel).toHaveBeenCalled();
+  });
+
+  it("serves review history endpoint from mocked service", async () => {
+    const response = await app!.inject({
+      method: "GET",
+      url: "/api/reviews/history?cadence=weekly&range=90d&q=lesson&limit=10",
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(reviewsMock.getReviewHistory).toHaveBeenCalledWith(
+      expect.anything(),
+      "user-1",
+      expect.objectContaining({
+        cadence: "weekly",
+        range: "90d",
+        q: "lesson",
+        limit: 10,
+      }),
+    );
   });
 
   it("serves weekly reviews endpoint from mocked service", async () => {
@@ -1981,6 +2022,7 @@ describe("module route smoke tests", () => {
       payload: {
         displayName: "Owner Prime",
         timezone: "America/Chicago",
+        currencyCode: "usd",
         weekStartsOn: 0,
         dailyWaterTargetMl: 3000,
         dailyReviewStartTime: "19:00",
@@ -1989,12 +2031,39 @@ describe("module route smoke tests", () => {
     });
 
     expect(response.statusCode).toBe(200);
+    expect(prisma.userPreference.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        create: expect.objectContaining({
+          currencyCode: "USD",
+        }),
+        update: expect.objectContaining({
+          currencyCode: "USD",
+        }),
+      }),
+    );
     expect(JSON.parse(response.body)).toEqual(
       expect.objectContaining({
         user: expect.objectContaining({ displayName: "Owner Prime" }),
-        preferences: expect.objectContaining({ timezone: "America/Chicago", weekStartsOn: 0 }),
+        preferences: expect.objectContaining({
+          timezone: "America/Chicago",
+          currencyCode: "USD",
+          weekStartsOn: 0,
+        }),
       }),
     );
+  });
+
+  it("rejects invalid locale values on settings profile update", async () => {
+    const response = await app!.inject({
+      method: "PUT",
+      url: "/api/settings/profile",
+      payload: {
+        timezone: "Mars/Phobos",
+        currencyCode: "ZZZ",
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
   });
 
   it("rejects foreign goal references on task creation", async () => {

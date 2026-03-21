@@ -8,6 +8,10 @@ import {
   useSettingsProfileQuery,
   useUpdateSettingsProfileMutation,
 } from "../../shared/lib/api";
+import {
+  getCurrencyOptions,
+  getTimezoneOptions,
+} from "../../shared/lib/localeOptions";
 import { PageHeader } from "../../shared/ui/PageHeader";
 import {
   PageErrorState,
@@ -25,6 +29,9 @@ const weekDayOptions = [
   { value: 6, label: "Saturday" },
 ];
 
+const defaultTimezoneOptions = getTimezoneOptions();
+const defaultCurrencyOptions = getCurrencyOptions();
+
 export function SettingsPage() {
   const settingsQuery = useSettingsProfileQuery();
   const updateMutation = useUpdateSettingsProfileMutation();
@@ -41,6 +48,12 @@ export function SettingsPage() {
   });
 
   const [dirty, setDirty] = useState(false);
+  const timezoneOptions = form.timezone
+    ? getTimezoneOptions(form.timezone)
+    : defaultTimezoneOptions;
+  const currencyOptions = form.currencyCode
+    ? getCurrencyOptions(form.currencyCode)
+    : defaultCurrencyOptions;
 
   useEffect(() => {
     if (!settingsQuery.data) return;
@@ -162,24 +175,31 @@ export function SettingsPage() {
           <div className="stack-form">
             <label className="field">
               <span>Timezone</span>
-              <input
-                type="text"
+              <select
                 value={form.timezone}
-                placeholder="e.g. America/New_York"
                 onChange={(e) => handleChange("timezone", e.target.value)}
-              />
+              >
+                {timezoneOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
             </label>
             <label className="field">
               <span>Currency code</span>
-              <input
-                type="text"
+              <select
                 value={form.currencyCode}
-                placeholder="e.g. USD"
-                maxLength={3}
                 onChange={(e) =>
-                  handleChange("currencyCode", e.target.value.toUpperCase())
+                  handleChange("currencyCode", e.target.value)
                 }
-              />
+              >
+                {currencyOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
             </label>
             <label className="field">
               <span>Week starts on</span>

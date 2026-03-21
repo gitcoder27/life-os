@@ -15,11 +15,38 @@ const reviewTimeSchema = z
   .regex(/^\d{2}:\d{2}$/)
   .nullable();
 
+const intlWithSupportedValues = Intl as typeof Intl & {
+  supportedValuesOf?: (kind: "currency") => string[];
+};
+
+const supportedCurrencyCodes = new Set(
+  intlWithSupportedValues.supportedValuesOf?.("currency") ?? [],
+);
+
+function isValidTimezone(value: string) {
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone: value });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 const updateSettingsProfileSchema = z
   .object({
     displayName: z.string().min(1).max(200).nullable().optional(),
-    timezone: z.string().min(1).max(120).optional(),
-    currencyCode: z.string().length(3).optional(),
+    timezone: z
+      .string()
+      .min(1)
+      .max(120)
+      .refine(isValidTimezone, "Invalid timezone")
+      .optional(),
+    currencyCode: z
+      .string()
+      .length(3)
+      .transform((value) => value.toUpperCase())
+      .refine((value) => supportedCurrencyCodes.has(value), "Invalid currency code")
+      .optional(),
     weekStartsOn: z.number().int().min(0).max(6).optional(),
     dailyWaterTargetMl: z.number().int().positive().max(20000).optional(),
     dailyReviewStartTime: reviewTimeSchema.optional(),
