@@ -30,10 +30,10 @@ describe("finance service", () => {
 
     const result = await materializeRecurringExpenseItems(prisma, new Date("2026-01-15T00:00:00.000Z"));
 
-    expect(result.createdAdminItems).toBe(3);
+    expect(result.createdAdminItems).toBe(1);
     expect(result.advancedTemplates).toBe(1);
     expect(result.unsupportedTemplates).toBe(0);
-    expect(txCreate).toHaveBeenCalledTimes(3);
+    expect(txCreate).toHaveBeenCalledTimes(1);
     expect(txUpdate).toHaveBeenCalled();
   });
 

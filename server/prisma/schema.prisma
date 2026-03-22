@@ -63,6 +63,7 @@ enum TaskOriginType {
   CARRY_FORWARD
   REVIEW_SEED
   RECURRING
+  TEMPLATE
 }
 
 enum RecurrenceOwnerType {
@@ -195,6 +196,7 @@ model User {
   goals                 Goal[]
   planningCycles        PlanningCycle[]
   tasks                 Task[]
+  taskTemplates         TaskTemplate[]
   habits                Habit[]
   routines              Routine[]
   waterLogs             WaterLog[]
@@ -346,6 +348,21 @@ model Task {
 
   @@index([userId, scheduledForDate, status])
   @@index([userId, recurrenceRuleId, scheduledForDate])
+}
+
+model TaskTemplate {
+  id                  String   @id @default(uuid())
+  userId              String
+  name                String
+  description         String?
+  templatePayloadJson Json
+  lastAppliedAt       DateTime?
+  archivedAt          DateTime?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  user                User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, archivedAt, updatedAt])
 }
 
 model Habit {

@@ -24,6 +24,7 @@ import {
   PageLoadingState,
 } from "../../shared/ui/PageState";
 import { SectionCard } from "../../shared/ui/SectionCard";
+import { WorkflowTemplatesSection } from "./WorkflowTemplatesSection";
 
 type InboxFilter = "all" | "task" | "note" | "reminder";
 
@@ -260,17 +261,19 @@ export function InboxPage() {
       <PageHeader
         eyebrow="Capture triage"
         title="Inbox"
-        description="Everything captured lands here first. Decide what belongs on Today, what should be scheduled later, and what should stay as reference."
+        description="Everything unscheduled lands here first. Decide what belongs on Today, what should be scheduled later, and what should stay as reference."
       />
 
       {mutationError ? <InlineErrorState message={mutationError} onRetry={retryAll} /> : null}
+
+      <WorkflowTemplatesSection />
 
       <section className="inbox-summary">
         <div className="inbox-summary__headline">
           <span className="inbox-summary__count">{counts.all}</span>
           <div>
-            <p className="inbox-summary__label">Pending capture items</p>
-            <p className="inbox-summary__copy">Keep capture friction low. Add structure only when you triage.</p>
+            <p className="inbox-summary__label">Pending inbox items</p>
+            <p className="inbox-summary__copy">Keep intake friction low. Add structure only when you are ready to schedule or organize.</p>
           </div>
         </div>
         <div className="inbox-summary__stats">
@@ -284,7 +287,7 @@ export function InboxPage() {
         <SectionCard
           className="inbox-panel inbox-panel--queue"
           title={`Queue (${filteredItems.length})`}
-          subtitle="Newest captures first. Filter the lane, then open one item at a time."
+          subtitle="Newest inbox items first. Filter the lane, then open one item at a time."
         >
           <div className="inbox-filter-bar" role="tablist" aria-label="Inbox filters">
             {filterOptions.map((option) => (
@@ -355,7 +358,7 @@ export function InboxPage() {
                   </span>
                   {selectedTask.goal ? <GoalChip goal={selectedTask.goal} /> : null}
                 </div>
-                <span className="inbox-detail__time">Captured {formatCreatedAt(selectedTask.createdAt)}</span>
+                <span className="inbox-detail__time">Created {formatCreatedAt(selectedTask.createdAt)}</span>
               </div>
 
               <div className="inbox-detail__content">

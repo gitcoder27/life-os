@@ -1,7 +1,9 @@
 import type { FastifyPluginAsync } from "fastify";
 import type {
+  ApplyTaskTemplateResponse,
   CreateGoalRequest,
   CreateTaskRequest,
+  CreateTaskTemplateRequest,
   DayPlanResponse,
   GoalDomain,
   GoalDetailResponse,
@@ -27,11 +29,15 @@ import type {
   PlanningTaskItem,
   TasksResponse,
   TaskMutationResponse,
+  TaskTemplateItem,
+  TaskTemplateMutationResponse,
+  TaskTemplatesResponse,
   UpdateDayPrioritiesRequest,
   UpdateGoalRequest,
   UpdateMonthFocusRequest,
   UpdatePriorityRequest,
   UpdateTaskRequest,
+  UpdateTaskTemplateRequest,
   UpdateWeekPrioritiesRequest,
   WeekPlanResponse,
   CarryForwardTaskRequest,
@@ -53,6 +59,7 @@ import type {
   Task,
   TaskOriginType as PrismaTaskOriginType,
   TaskStatus as PrismaTaskStatus,
+  TaskTemplate,
 } from "@prisma/client";
 import { z } from "zod";
 
@@ -90,6 +97,7 @@ const taskOriginSchema = z.enum([
   "carry_forward",
   "review_seed",
   "recurring",
+  "template",
 ]);
 const carryPolicySchema = z.enum(["complete_and_clone", "move_due_date", "cancel"]);
 const recurrenceExceptionActionSchema = z.enum(["skip", "do_once", "reschedule"]);
@@ -217,6 +225,25 @@ const updateTaskSchema = z
 const carryForwardTaskSchema = z.object({
   targetDate: isoDateSchema,
 });
+
+const taskTemplateTaskSchema = z.object({
+  title: z.string().trim().min(1).max(200),
+});
+
+const createTaskTemplateSchema = z.object({
+  name: z.string().trim().min(1).max(120),
+  description: z.string().max(500).nullable().optional(),
+  tasks: z.array(taskTemplateTaskSchema).min(1).max(20),
+});
+
+const updateTaskTemplateSchema = z
+  .object({
+    name: z.string().trim().min(1).max(120).optional(),
+    description: z.string().max(500).nullable().optional(),
+    tasks: z.array(taskTemplateTaskSchema).min(1).max(20).optional(),
+    archived: z.boolean().optional(),
+  })
+  .refine((value) => Object.keys(value).length > 0, "At least one field must be updated");
 
 const taskListQuerySchema = z
   .object({
@@ -381,6 +408,8 @@ function toPrismaTaskOriginType(originType: PlanningTaskItem["originType"]): Pri
       return "REVIEW_SEED";
     case "recurring":
       return "RECURRING";
+    case "template":
+      return "TEMPLATE";
   }
 }
 
@@ -396,6 +425,8 @@ function fromPrismaTaskOriginType(originType: PrismaTaskOriginType): PlanningTas
       return "review_seed";
     case "RECURRING":
       return "recurring";
+    case "TEMPLATE":
+      return "template";
   }
 }
 
@@ -409,6 +440,43 @@ function serializeGoal(goal: Goal): GoalItem {
     notes: goal.notes,
     createdAt: goal.createdAt.toISOString(),
     updatedAt: goal.updatedAt.toISOString(),
+  };
+}
+
+function normalizeTaskTemplateDescription(value: string | null | undefined) {
+  const trimmed = value?.trim() ?? "";
+  return trimmed ? trimmed : null;
+}
+
+function parseTaskTemplateTasks(payload: unknown): TaskTemplateItem["tasks"] {
+  return z.array(taskTemplateTaskSchema).parse(payload);
+}
+
+function compareTaskTemplates(left: TaskTemplate, right: TaskTemplate) {
+  const leftLastApplied = left.lastAppliedAt?.getTime() ?? -1;
+  const rightLastApplied = right.lastAppliedAt?.getTime() ?? -1;
+  if (leftLastApplied !== rightLastApplied) {
+    return rightLastApplied - leftLastApplied;
+  }
+
+  const updatedAtDiff = right.updatedAt.getTime() - left.updatedAt.getTime();
+  if (updatedAtDiff !== 0) {
+    return updatedAtDiff;
+  }
+
+  return left.name.localeCompare(right.name);
+}
+
+function serializeTaskTemplate(template: TaskTemplate): TaskTemplateItem {
+  return {
+    id: template.id,
+    name: template.name,
+    description: template.description,
+    tasks: parseTaskTemplateTasks(template.templatePayloadJson),
+    lastAppliedAt: template.lastAppliedAt?.toISOString() ?? null,
+    archivedAt: template.archivedAt?.toISOString() ?? null,
+    createdAt: template.createdAt.toISOString(),
+    updatedAt: template.updatedAt.toISOString(),
   };
 }
 
@@ -1220,6 +1288,31 @@ async function findOwnedTask(app: Parameters<FastifyPluginAsync>[0], userId: str
   return task;
 }
 
+async function findOwnedTaskTemplate(
+  app: Parameters<FastifyPluginAsync>[0],
+  userId: string,
+  taskTemplateId: string,
+  options?: { activeOnly?: boolean },
+) {
+  const taskTemplate = await app.prisma.taskTemplate.findFirst({
+    where: {
+      id: taskTemplateId,
+      userId,
+      archivedAt: options?.activeOnly ? null : undefined,
+    },
+  });
+
+  if (!taskTemplate) {
+    throw new AppError({
+      statusCode: 404,
+      code: "NOT_FOUND",
+      message: "Task template not found",
+    });
+  }
+
+  return taskTemplate;
+}
+
 async function findOwnedPriority(
   app: Parameters<FastifyPluginAsync>[0],
   userId: string,
@@ -1670,6 +1763,118 @@ export const registerPlanningRoutes: FastifyPluginAsync = async (app) => {
     });
 
     return reply.send(response);
+  });
+
+  app.get("/task-templates", async (request, reply) => {
+    const user = requireAuthenticatedUser(request);
+    const taskTemplates = await app.prisma.taskTemplate.findMany({
+      where: {
+        userId: user.id,
+        archivedAt: null,
+      },
+      orderBy: [{ updatedAt: "desc" }, { name: "asc" }],
+    });
+
+    const response: TaskTemplatesResponse = withGeneratedAt({
+      taskTemplates: [...taskTemplates].sort(compareTaskTemplates).map(serializeTaskTemplate),
+    });
+
+    return reply.send(response);
+  });
+
+  app.post("/task-templates", async (request, reply) => {
+    const user = requireAuthenticatedUser(request);
+    const payload = parseOrThrow(createTaskTemplateSchema, request.body as CreateTaskTemplateRequest);
+    const taskTemplate = await app.prisma.taskTemplate.create({
+      data: {
+        userId: user.id,
+        name: payload.name,
+        description: normalizeTaskTemplateDescription(payload.description),
+        templatePayloadJson: payload.tasks.map((task) => ({ title: task.title })),
+      },
+    });
+
+    const response: TaskTemplateMutationResponse = withGeneratedAt({
+      taskTemplate: serializeTaskTemplate(taskTemplate),
+    });
+
+    return reply.status(201).send(response);
+  });
+
+  app.patch("/task-templates/:taskTemplateId", async (request, reply) => {
+    const user = requireAuthenticatedUser(request);
+    const payload = parseOrThrow(updateTaskTemplateSchema, request.body as UpdateTaskTemplateRequest);
+    const { taskTemplateId } = request.params as { taskTemplateId: string };
+    await findOwnedTaskTemplate(app, user.id, taskTemplateId);
+
+    const taskTemplate = await app.prisma.taskTemplate.update({
+      where: {
+        id: taskTemplateId,
+      },
+      data: {
+        name: payload.name,
+        description:
+          payload.description === undefined
+            ? undefined
+            : normalizeTaskTemplateDescription(payload.description),
+        templatePayloadJson:
+          payload.tasks === undefined
+            ? undefined
+            : payload.tasks.map((task) => ({ title: task.title })),
+        archivedAt:
+          payload.archived === undefined ? undefined : payload.archived ? new Date() : null,
+      },
+    });
+
+    const response: TaskTemplateMutationResponse = withGeneratedAt({
+      taskTemplate: serializeTaskTemplate(taskTemplate),
+    });
+
+    return reply.send(response);
+  });
+
+  app.post("/task-templates/:taskTemplateId/apply", async (request, reply) => {
+    const user = requireAuthenticatedUser(request);
+    const { taskTemplateId } = request.params as { taskTemplateId: string };
+    const taskTemplate = await findOwnedTaskTemplate(app, user.id, taskTemplateId, {
+      activeOnly: true,
+    });
+    const templateTasks = parseTaskTemplateTasks(taskTemplate.templatePayloadJson);
+    const appliedAt = new Date();
+
+    const result = await app.prisma.$transaction(async (tx) => {
+      const tasks = await Promise.all(
+        templateTasks.map((templateTask) =>
+          tx.task.create({
+            data: {
+              userId: user.id,
+              title: templateTask.title,
+              originType: "TEMPLATE",
+            },
+          }),
+        ),
+      );
+      const updatedTaskTemplate = await tx.taskTemplate.update({
+        where: {
+          id: taskTemplate.id,
+        },
+        data: {
+          lastAppliedAt: appliedAt,
+        },
+      });
+
+      return {
+        tasks,
+        taskTemplate: updatedTaskTemplate,
+      };
+    });
+
+    const response: ApplyTaskTemplateResponse = withGeneratedAt({
+      taskTemplate: serializeTaskTemplate(result.taskTemplate),
+      tasks: result.tasks.map(serializeTask),
+    });
+
+    return reply.status(201).send(response);
   });
 
   app.get("/tasks", async (request, reply) => {

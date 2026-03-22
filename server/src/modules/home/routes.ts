@@ -107,6 +107,8 @@ function fromPrismaTaskOriginType(originType: PrismaTaskOriginType) {
       return "review_seed";
     case "RECURRING":
       return "recurring";
+    case "TEMPLATE":
+      return "template";
   }
 }
 

@@ -56,7 +56,7 @@ describe("habit guidance helpers", () => {
         { occurredOn: new Date("2026-03-10T00:00:00.000Z"), status: "COMPLETED" },
         { occurredOn: new Date("2026-03-11T00:00:00.000Z"), status: "COMPLETED" },
       ],
-      scheduleRule: {},
+      scheduleInput: {},
       weekStartIsoDate: "2026-03-09",
       targetIsoDate: "2026-03-12",
     });

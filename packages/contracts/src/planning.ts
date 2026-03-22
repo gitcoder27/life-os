@@ -4,7 +4,13 @@ import type { RecurrenceDefinition, RecurrenceInput, RecurringTaskCarryPolicy } 
 
 export type PriorityStatus = "pending" | "completed" | "dropped";
 export type TaskStatus = "pending" | "completed" | "dropped";
-export type TaskOriginType = "manual" | "quick_capture" | "carry_forward" | "review_seed" | "recurring";
+export type TaskOriginType =
+  | "manual"
+  | "quick_capture"
+  | "carry_forward"
+  | "review_seed"
+  | "recurring"
+  | "template";
 export type TaskScheduledState = "all" | "scheduled" | "unscheduled";
 
 export interface PlanningPriorityItem {
@@ -119,6 +125,47 @@ export interface CarryForwardTaskRequest {
 
 export interface TaskMutationResponse extends ApiMeta {
   task: PlanningTaskItem;
+}
+
+export interface TaskTemplateTask {
+  title: string;
+}
+
+export interface TaskTemplateItem {
+  id: EntityId;
+  name: string;
+  description: string | null;
+  tasks: TaskTemplateTask[];
+  lastAppliedAt: string | null;
+  archivedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface TaskTemplatesResponse extends ApiMeta {
+  taskTemplates: TaskTemplateItem[];
+}
+
+export interface CreateTaskTemplateRequest {
+  name: string;
+  description?: string | null;
+  tasks: TaskTemplateTask[];
+}
+
+export interface UpdateTaskTemplateRequest {
+  name?: string;
+  description?: string | null;
+  tasks?: TaskTemplateTask[];
+  archived?: boolean;
+}
+
+export interface TaskTemplateMutationResponse extends ApiMeta {
+  taskTemplate: TaskTemplateItem;
+}
+
+export interface ApplyTaskTemplateResponse extends ApiMeta {
+  taskTemplate: TaskTemplateItem;
+  tasks: PlanningTaskItem[];
 }
 
 export interface TasksQuery {

@@ -114,7 +114,7 @@ interface PlanningTaskItem {
   scheduledForDate: string | null;
   dueAt: string | null;
   goalId: string | null;
-  originType: "manual" | "quick_capture" | "carry_forward" | "review_seed" | "recurring";
+  originType: "manual" | "quick_capture" | "carry_forward" | "review_seed" | "recurring" | "template";
   carriedFromTaskId: string | null;
   recurrence: RecurrenceDefinition | null;
   completedAt: string | null;
@@ -680,6 +680,8 @@ async function getDailySummary(prisma: PrismaClient, userId: string, date: Date)
                 ? "review_seed"
                 : task.originType === "RECURRING"
                   ? "recurring"
+                  : task.originType === "TEMPLATE"
+                    ? "template"
                   : "manual",
         carriedFromTaskId: task.carriedFromTaskId,
         recurrence: serializeRecurrenceDefinition(task.recurrenceRule),

@@ -1920,27 +1920,34 @@ describe("module route smoke tests", () => {
         carriedFromTaskId: null,
         completedAt: null,
       }),
-      create: vi.fn().mockResolvedValue({
-        id: "task-2",
+      create: vi.fn().mockImplementation(async ({ data }: any) => ({
+        id:
+          data.originType === "TEMPLATE"
+            ? `template-task-${String(data.title).toLowerCase().replace(/[^a-z0-9]+/g, "-")}`
+            : "task-2",
         userId: "user-1",
-        title: "Task two",
-        notes: null,
+        title: data.title,
+        notes: data.notes ?? null,
         status: "PENDING",
-        scheduledForDate: new Date("2026-03-15T00:00:00.000Z"),
-        dueAt: null,
-        goalId: "goal-1",
-        goal: {
-          id: "goal-1",
-          title: "Stay on track",
-          domain: "HEALTH",
-          status: "ACTIVE",
-        },
-        originType: "MANUAL",
-        carriedFromTaskId: null,
+        scheduledForDate:
+          data.scheduledForDate ?? (data.originType === "TEMPLATE" ? null : new Date("2026-03-15T00:00:00.000Z")),
+        dueAt: data.dueAt ?? null,
+        goalId: data.goalId ?? (data.originType === "TEMPLATE" ? null : "goal-1"),
+        goal:
+          data.originType === "TEMPLATE"
+            ? null
+            : {
+                id: "goal-1",
+                title: "Stay on track",
+                domain: "HEALTH",
+                status: "ACTIVE",
+              },
+        originType: data.originType ?? "MANUAL",
+        carriedFromTaskId: data.carriedFromTaskId ?? null,
         completedAt: null,
         createdAt: new Date(),
         updatedAt: new Date(),
-      }),
+      })),
       update: vi.fn().mockResolvedValue({
         id: "task-1",
         userId: "user-1",
@@ -1978,6 +1985,57 @@ describe("module route smoke tests", () => {
         createdAt: new Date(),
         updatedAt: new Date(),
       }),
+    } as any;
+    prisma.taskTemplate = {
+      findMany: vi.fn().mockResolvedValue([
+        {
+          id: "task-template-1",
+          userId: "user-1",
+          name: "Travel prep",
+          description: "Standard pre-trip checklist",
+          templatePayloadJson: [{ title: "Check passport" }, { title: "Pack chargers" }],
+          lastAppliedAt: null,
+          archivedAt: null,
+          createdAt: new Date("2026-03-01T00:00:00.000Z"),
+          updatedAt: new Date("2026-03-10T00:00:00.000Z"),
+        },
+      ]),
+      findFirst: vi.fn().mockResolvedValue({
+        id: "task-template-1",
+        userId: "user-1",
+        name: "Travel prep",
+        description: "Standard pre-trip checklist",
+        templatePayloadJson: [{ title: "Check passport" }, { title: "Pack chargers" }],
+        lastAppliedAt: null,
+        archivedAt: null,
+        createdAt: new Date("2026-03-01T00:00:00.000Z"),
+        updatedAt: new Date("2026-03-10T00:00:00.000Z"),
+      }),
+      create: vi.fn().mockImplementation(async ({ data }: any) => ({
+        id: "task-template-2",
+        userId: "user-1",
+        name: data.name,
+        description: data.description ?? null,
+        templatePayloadJson: data.templatePayloadJson,
+        lastAppliedAt: null,
+        archivedAt: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      })),
+      update: vi.fn().mockImplementation(async ({ where, data }: any) => ({
+        id: where.id,
+        userId: "user-1",
+        name: data.name ?? "Travel prep",
+        description:
+          data.description === undefined
+            ? "Standard pre-trip checklist"
+            : data.description,
+        templatePayloadJson: data.templatePayloadJson ?? [{ title: "Check passport" }, { title: "Pack chargers" }],
+        lastAppliedAt: data.lastAppliedAt ?? null,
+        archivedAt: data.archivedAt ?? null,
+        createdAt: new Date("2026-03-01T00:00:00.000Z"),
+        updatedAt: new Date(),
+      })),
     } as any;
     prisma.$transaction = vi.fn(async (callback: any) => {
       return callback(prisma);
@@ -2029,6 +2087,31 @@ describe("module route smoke tests", () => {
         topOutcomes: [{ slot: 1, title: "Top", goalId: "11111111-1111-4111-8111-111111111111" }],
       },
     });
+    const taskTemplatesList = await app!.inject({
+      method: "GET",
+      url: "/api/task-templates",
+    });
+    const taskTemplateCreate = await app!.inject({
+      method: "POST",
+      url: "/api/task-templates",
+      payload: {
+        name: "Month-end admin",
+        description: "Recurring finance closeout",
+        tasks: [{ title: "Reconcile statements" }, { title: "File receipts" }],
+      },
+    });
+    const taskTemplatePatch = await app!.inject({
+      method: "PATCH",
+      url: "/api/task-templates/task-template-1",
+      payload: {
+        name: "Travel prep v2",
+        tasks: [{ title: "Check passport" }, { title: "Download tickets" }],
+      },
+    });
+    const taskTemplateApply = await app!.inject({
+      method: "POST",
+      url: "/api/task-templates/task-template-1/apply",
+    });
     const tasksList = await app!.inject({ method: "GET", url: "/api/tasks?status=pending" });
     const taskCreate = await app!.inject({
       method: "POST",
@@ -2065,6 +2148,10 @@ describe("module route smoke tests", () => {
     expect(planningWeekPriorities.statusCode).toBe(200);
     expect(planningMonth.statusCode).toBe(200);
     expect(planningMonthFocus.statusCode).toBe(200);
+    expect(taskTemplatesList.statusCode).toBe(200);
+    expect(taskTemplateCreate.statusCode).toBe(201);
+    expect(taskTemplatePatch.statusCode).toBe(200);
+    expect(taskTemplateApply.statusCode).toBe(201);
     expect(tasksList.statusCode).toBe(200);
     expect(taskCreate.statusCode).toBe(201);
     expect(taskPatch.statusCode).toBe(200);
@@ -2088,6 +2175,20 @@ describe("module route smoke tests", () => {
           id: "goal-1",
           title: "Stay on track",
         }),
+      }),
+    );
+    expect(JSON.parse(taskTemplateApply.body)).toEqual(
+      expect.objectContaining({
+        taskTemplate: expect.objectContaining({
+          id: "task-template-1",
+        }),
+        tasks: expect.arrayContaining([
+          expect.objectContaining({
+            title: "Check passport",
+            originType: "template",
+            scheduledForDate: null,
+          }),
+        ]),
       }),
     );
   });

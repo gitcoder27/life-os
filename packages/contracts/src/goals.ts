@@ -1,4 +1,5 @@
 import type { ApiMeta, EntityId, IsoDateString } from "./common.js";
+import type { TaskOriginType } from "./planning.js";
 
 export type GoalDomain = "health" | "money" | "work_growth" | "home_admin" | "discipline" | "other";
 export type GoalStatus = "active" | "paused" | "completed" | "archived";
@@ -98,7 +99,7 @@ export interface GoalLinkedTaskItem {
   status: "pending" | "completed" | "dropped";
   scheduledForDate: IsoDateString | null;
   dueAt: string | null;
-  originType: "manual" | "quick_capture" | "carry_forward" | "review_seed" | "recurring";
+  originType: TaskOriginType;
   completedAt: string | null;
   createdAt: string;
   updatedAt: string;

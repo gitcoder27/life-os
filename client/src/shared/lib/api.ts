@@ -138,7 +138,7 @@ type HomeOverviewResponse = {
     goalId: string | null;
     goal: LinkedGoal | null;
     notes: string | null;
-    originType: string;
+    originType: TaskItem["originType"];
   }>;
   routineSummary: {
     completedItems: number;
@@ -281,10 +281,25 @@ export type TaskItem = {
   dueAt: string | null;
   goalId: string | null;
   goal: LinkedGoal | null;
-  originType: "manual" | "quick_capture" | "carry_forward" | "review_seed" | "recurring";
+  originType: "manual" | "quick_capture" | "carry_forward" | "review_seed" | "recurring" | "template";
   carriedFromTaskId: string | null;
   recurrence: RecurrenceDefinitionResponse | null;
   completedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type TaskTemplateTask = {
+  title: string;
+};
+
+export type TaskTemplate = {
+  id: string;
+  name: string;
+  description: string | null;
+  tasks: TaskTemplateTask[];
+  lastAppliedAt: string | null;
+  archivedAt: string | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -331,12 +346,28 @@ type TasksResponse = {
   tasks: TaskItem[];
 };
 
+type TaskTemplatesResponse = {
+  generatedAt: string;
+  taskTemplates: TaskTemplate[];
+};
+
+type TaskTemplateMutationResponse = {
+  generatedAt: string;
+  taskTemplate: TaskTemplate;
+};
+
+type ApplyTaskTemplateResponse = {
+  generatedAt: string;
+  taskTemplate: TaskTemplate;
+  tasks: TaskItem[];
+};
+
 export type TasksQueryFilters = {
   scheduledForDate?: string;
   from?: string;
   to?: string;
   status?: "pending" | "completed" | "dropped";
-  originType?: "manual" | "quick_capture" | "carry_forward" | "review_seed" | "recurring";
+  originType?: "manual" | "quick_capture" | "carry_forward" | "review_seed" | "recurring" | "template";
   scheduledState?: "all" | "scheduled" | "unscheduled";
 };
 
@@ -790,7 +821,7 @@ export type GoalLinkedTaskItem = {
   status: "pending" | "completed" | "dropped";
   scheduledForDate: string | null;
   dueAt: string | null;
-  originType: "manual" | "quick_capture" | "carry_forward" | "review_seed" | "recurring";
+  originType: TaskItem["originType"];
   completedAt: string | null;
   createdAt: string;
   updatedAt: string;
@@ -1228,6 +1259,7 @@ const queryKeys = {
   notifications: ["notifications"] as const,
   settings: ["settings"] as const,
   mealTemplates: ["health", "meal-templates"] as const,
+  taskTemplates: ["planning", "task-templates"] as const,
 };
 
 function buildUrl(path: string, query?: Record<string, string | undefined>) {
@@ -1347,6 +1379,10 @@ function invalidateCoreData(queryClient: ReturnType<typeof useQueryClient>, date
   void queryClient.invalidateQueries({ queryKey: queryKeys.review("daily", date) });
   void queryClient.invalidateQueries({ queryKey: queryKeys.review("weekly", weekStart) });
   void queryClient.invalidateQueries({ queryKey: queryKeys.review("monthly", monthStart) });
+}
+
+function invalidateTaskTemplateData(queryClient: ReturnType<typeof useQueryClient>) {
+  void queryClient.invalidateQueries({ queryKey: queryKeys.taskTemplates });
 }
 
 export function padNumber(value: number) {
@@ -1637,8 +1673,15 @@ export function useTasksQuery(filters: TasksQueryFilters = {}) {
 export function useInboxQuery() {
   return useTasksQuery({
     status: "pending",
-    originType: "quick_capture",
     scheduledState: "unscheduled",
+  });
+}
+
+export function useTaskTemplatesQuery() {
+  return useQuery({
+    queryKey: queryKeys.taskTemplates,
+    queryFn: () => apiRequest<TaskTemplatesResponse>("/api/task-templates"),
+    retry: false,
   });
 }
 
@@ -2049,7 +2092,7 @@ export function useCreateTaskMutation(date: string) {
       title: string;
       notes?: string | null;
       scheduledForDate?: string | null;
-      originType?: "manual" | "quick_capture" | "carry_forward" | "review_seed" | "recurring";
+      originType?: "manual" | "quick_capture" | "carry_forward" | "review_seed" | "recurring" | "template";
       goalId?: string | null;
       dueAt?: string | null;
       recurrence?: RecurrenceInputPayload;
@@ -2064,6 +2107,80 @@ export function useCreateTaskMutation(date: string) {
       errorMessage: "Task capture failed.",
     },
     onSuccess: () => invalidateCoreData(queryClient, date),
+  });
+}
+
+export function useCreateTaskTemplateMutation() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (payload: {
+      name: string;
+      description?: string | null;
+      tasks: TaskTemplateTask[];
+    }) =>
+      apiRequest<TaskTemplateMutationResponse>("/api/task-templates", {
+        method: "POST",
+        body: payload,
+      }),
+    meta: {
+      successMessage: "Workflow template created.",
+      errorMessage: "Workflow template creation failed.",
+    },
+    onSuccess: () => invalidateTaskTemplateData(queryClient),
+  });
+}
+
+export function useUpdateTaskTemplateMutation() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      taskTemplateId,
+      name,
+      description,
+      tasks,
+      archived,
+    }: {
+      taskTemplateId: string;
+      name?: string;
+      description?: string | null;
+      tasks?: TaskTemplateTask[];
+      archived?: boolean;
+    }) =>
+      apiRequest<TaskTemplateMutationResponse>(`/api/task-templates/${taskTemplateId}`, {
+        method: "PATCH",
+        body: {
+          name,
+          description,
+          tasks,
+          archived,
+        },
+      }),
+    meta: {
+      successMessage: "Workflow template updated.",
+      errorMessage: "Workflow template update failed.",
+    },
+    onSuccess: () => invalidateTaskTemplateData(queryClient),
+  });
+}
+
+export function useApplyTaskTemplateMutation(date: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (taskTemplateId: string) =>
+      apiRequest<ApplyTaskTemplateResponse>(`/api/task-templates/${taskTemplateId}/apply`, {
+        method: "POST",
+      }),
+    meta: {
+      successMessage: "Workflow template applied.",
+      errorMessage: "Workflow template apply failed.",
+    },
+    onSuccess: () => {
+      invalidateTaskTemplateData(queryClient);
+      invalidateCoreData(queryClient, date);
+    },
   });
 }
 
