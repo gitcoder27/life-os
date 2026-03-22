@@ -78,6 +78,7 @@ import { toIsoDateString } from "../../lib/time/date.js";
 import { getUserLocalDate } from "../../lib/time/user-time.js";
 import { parseOrThrow } from "../../lib/validation/parse.js";
 import { buildGoalInsights } from "./goal-insights.js";
+import { buildGoalNudges } from "./goal-nudges.js";
 
 const isoDateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/) as unknown as z.ZodType<IsoDateString>;
 const isoDateTimeSchema = z.string().datetime({ offset: true });
@@ -1004,6 +1005,41 @@ async function buildGoalOverviews(
   });
 }
 
+function buildTodayLinkedGoalCounts(
+  priorities: Array<{ goalId: string | null }>,
+  tasks: Array<{ goalId: string | null }>,
+) {
+  const counts = new Map<string, { todayPriorityCount: number; todayTaskCount: number }>();
+
+  for (const priority of priorities) {
+    if (!priority.goalId) {
+      continue;
+    }
+
+    const nextCounts = counts.get(priority.goalId) ?? {
+      todayPriorityCount: 0,
+      todayTaskCount: 0,
+    };
+    nextCounts.todayPriorityCount += 1;
+    counts.set(priority.goalId, nextCounts);
+  }
+
+  for (const task of tasks) {
+    if (!task.goalId) {
+      continue;
+    }
+
+    const nextCounts = counts.get(task.goalId) ?? {
+      todayPriorityCount: 0,
+      todayTaskCount: 0,
+    };
+    nextCounts.todayTaskCount += 1;
+    counts.set(task.goalId, nextCounts);
+  }
+
+  return counts;
+}
+
 async function replaceGoalMilestones(
   app: Parameters<FastifyPluginAsync>[0],
   goalId: string,
@@ -1636,6 +1672,7 @@ export const registerPlanningRoutes: FastifyPluginAsync = async (app) => {
     const { date } = request.params as { date: IsoDateString };
     const parsedDate = parseOrThrow(isoDateSchema, date);
     const cycleStartDate = parseIsoDate(parsedDate);
+    const goalContext = await resolveGoalContext(app, user.id, parsedDate);
     await materializeRecurringTasksInRange(app.prisma, user.id, cycleStartDate, cycleStartDate);
     const cycle = await ensurePlanningCycle(app, {
       userId: user.id,
@@ -1665,11 +1702,54 @@ export const registerPlanningRoutes: FastifyPluginAsync = async (app) => {
         },
       },
     });
+    const activeGoals = await app.prisma.goal.findMany({
+      where: {
+        userId: user.id,
+        status: "ACTIVE",
+      },
+      orderBy: {
+        createdAt: "desc",
+      },
+      include: {
+        milestones: {
+          orderBy: {
+            sortOrder: "asc",
+          },
+        },
+      },
+    });
+    const goalOverviews = await buildGoalOverviews(app, user.id, activeGoals, goalContext);
+    const todayLinkedGoalCounts = buildTodayLinkedGoalCounts(cycle.priorities, tasks);
+    const goalNudges = buildGoalNudges(
+      goalOverviews.map((goal) => {
+        const todayCounts = todayLinkedGoalCounts.get(goal.id) ?? {
+          todayPriorityCount: 0,
+          todayTaskCount: 0,
+        };
+
+        return {
+          goal: {
+            id: goal.id,
+            title: goal.title,
+            domain: goal.domain,
+            status: goal.status,
+          },
+          health: goal.health,
+          progressPercent: goal.progressPercent,
+          nextBestAction: goal.nextBestAction,
+          targetDate: goal.targetDate ? parseIsoDate(goal.targetDate) : null,
+          lastActivityAt: goal.lastActivityAt,
+          todayPriorityCount: todayCounts.todayPriorityCount,
+          todayTaskCount: todayCounts.todayTaskCount,
+        };
+      }),
+    );
 
     const response: DayPlanResponse = withGeneratedAt({
       date: parsedDate,
       priorities: cycle.priorities.map(serializePriority),
       tasks: tasks.map(serializeTask),
+      goalNudges,
     });
 
     return reply.send(response);

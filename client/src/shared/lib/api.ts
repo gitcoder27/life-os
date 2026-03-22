@@ -322,6 +322,14 @@ export type TaskTemplate = {
   updatedAt: string;
 };
 
+export type GoalNudgeItem = {
+  goal: LinkedGoal;
+  health: GoalHealthState;
+  progressPercent: number;
+  nextBestAction: string;
+  suggestedPriorityTitle: string;
+};
+
 type DayPlanResponse = {
   generatedAt: string;
   date: string;
@@ -335,6 +343,7 @@ type DayPlanResponse = {
     completedAt: string | null;
   }>;
   tasks: TaskItem[];
+  goalNudges: GoalNudgeItem[];
 };
 
 export type DayPriorityInput = {

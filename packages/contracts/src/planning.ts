@@ -1,5 +1,5 @@
 import type { ApiMeta, EntityId, IsoDateString } from "./common.js";
-import type { GoalSummary } from "./goals.js";
+import type { GoalHealthState, GoalSummary } from "./goals.js";
 import type { RecurrenceDefinition, RecurrenceInput, RecurringTaskCarryPolicy } from "./recurrence.js";
 
 export type PriorityStatus = "pending" | "completed" | "dropped";
@@ -47,10 +47,19 @@ export interface PlanningTaskItem {
   updatedAt: string;
 }
 
+export interface GoalNudgeItem {
+  goal: GoalSummary;
+  health: GoalHealthState;
+  progressPercent: number;
+  nextBestAction: string;
+  suggestedPriorityTitle: string;
+}
+
 export interface DayPlanResponse extends ApiMeta {
   date: IsoDateString;
   priorities: PlanningPriorityItem[];
   tasks: PlanningTaskItem[];
+  goalNudges: GoalNudgeItem[];
 }
 
 export interface WeekPlanResponse extends ApiMeta {

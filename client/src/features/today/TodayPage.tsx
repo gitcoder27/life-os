@@ -32,6 +32,7 @@ import {
   useTaskStatusMutation,
   useUpdateDayPrioritiesMutation,
   useUpdatePriorityMutation,
+  type GoalNudgeItem,
   type LinkedGoal,
   type TaskItem,
 } from "../../shared/lib/api";
@@ -46,6 +47,7 @@ import {
 } from "../../shared/ui/PageState";
 import { RecurrenceInfo } from "../../shared/ui/RecurrenceBadge";
 import { SectionCard } from "../../shared/ui/SectionCard";
+import { GoalProgressBar, HealthBadge } from "../goals/GoalDetailPanel";
 
 /* ── Inline icons ─────────────────────────────── */
 
@@ -167,6 +169,43 @@ function GoalChip({ goal }: { goal: LinkedGoal }) {
       <span className={`goal-chip__dot goal-chip__dot--${goal.domain}`} />
       <span>{goal.title}</span>
     </Link>
+  );
+}
+
+function GoalNudgeCard({
+  nudge,
+  canAdd,
+  onAdd,
+}: {
+  nudge: GoalNudgeItem;
+  canAdd: boolean;
+  onAdd: () => void;
+}) {
+  return (
+    <div className="goal-nudge-card">
+      <div className="goal-nudge-card__top">
+        <GoalChip goal={nudge.goal} />
+        <HealthBadge health={nudge.health} />
+      </div>
+      <GoalProgressBar percent={nudge.progressPercent} achieved={nudge.health === "achieved"} />
+      <div className="goal-nba">
+        <span className="goal-nba__icon">→</span>
+        <span>{nudge.nextBestAction}</span>
+      </div>
+      <div className="goal-nudge-card__actions">
+        <button
+          className="button button--primary button--small"
+          type="button"
+          onClick={onAdd}
+          disabled={!canAdd}
+        >
+          {canAdd ? "Add to priorities" : "Top three full"}
+        </button>
+        <Link className="button button--ghost button--small" to="/goals">
+          Open goals
+        </Link>
+      </div>
+    </div>
   );
 }
 
@@ -649,6 +688,7 @@ export function TodayPage() {
 
   const priorities = dayPlanQuery.data?.priorities ?? [];
   const tasks = dayPlanQuery.data?.tasks ?? [];
+  const goalNudges = dayPlanQuery.data?.goalNudges ?? [];
   const overdueTasks = overdueTasksQuery.data?.tasks ?? [];
   const timedTasks = tasks
     .filter((task) => !isQuickCaptureMetadataTask(task))
@@ -658,6 +698,13 @@ export function TodayPage() {
   const currentDay = healthQuery.data?.summary.currentDay;
   const selectedOverdueTask =
     overdueTasks.find((task) => task.id === selectedOverdueTaskId) ?? null;
+  const visibleGoalNudges = useMemo(() => {
+    const linkedDraftGoalIds = new Set(
+      priorityDraft.flatMap((priority) => (priority.goalId ? [priority.goalId] : [])),
+    );
+
+    return goalNudges.filter((nudge) => !linkedDraftGoalIds.has(nudge.goal.id));
+  }, [goalNudges, priorityDraft]);
 
   useEffect(() => {
     if (!dayPlanQuery.data) {
@@ -720,6 +767,9 @@ export function TodayPage() {
     JSON.stringify(draftPrioritySnapshot) !== JSON.stringify(serverPrioritySnapshot);
   const isTaskMutationPending =
     updateTaskMutation.isPending || carryForwardTaskMutation.isPending;
+  const canAddGoalNudge =
+    priorityDraft.length < 3 || priorityDraft.some((priority) => !priority.title.trim());
+  const isLightPlanningDay = priorityDraft.length === 0 && executionTasks.length === 0;
 
   const mutationError =
     updateTaskMutation.error instanceof Error
@@ -776,6 +826,41 @@ export function TodayPage() {
         return current;
       }
       return [...current, { title: "", goalId: null, status: "pending", sortKey: nextDraftKey() }];
+    });
+  }
+
+  function addGoalNudgeToDraft(nudge: GoalNudgeItem) {
+    setPriorityDraft((current) => {
+      if (current.some((priority) => priority.goalId === nudge.goal.id)) {
+        return current;
+      }
+
+      const emptyPriorityIndex = current.findIndex((priority) => !priority.title.trim());
+      if (emptyPriorityIndex >= 0) {
+        return current.map((priority, index) =>
+          index === emptyPriorityIndex
+            ? {
+                ...priority,
+                title: nudge.suggestedPriorityTitle,
+                goalId: nudge.goal.id,
+              }
+            : priority,
+        );
+      }
+
+      if (current.length >= 3) {
+        return current;
+      }
+
+      return [
+        ...current,
+        {
+          title: nudge.suggestedPriorityTitle,
+          goalId: nudge.goal.id,
+          status: "pending",
+          sortKey: nextDraftKey(),
+        },
+      ];
     });
   }
 
@@ -1058,6 +1143,38 @@ export function TodayPage() {
               </button>
             </div>
           ) : null}
+        </SectionCard>
+
+        <SectionCard
+          title="Suggested from goals"
+          subtitle={
+            isLightPlanningDay
+              ? "Today is light. Pull one active goal into the top three before busywork fills the gap."
+              : "Keep active goals visible while you plan the day."
+          }
+        >
+          {visibleGoalNudges.length > 0 ? (
+            <div className="goal-nudges">
+              {visibleGoalNudges.map((nudge) => (
+                <GoalNudgeCard
+                  key={nudge.goal.id}
+                  nudge={nudge}
+                  canAdd={canAddGoalNudge}
+                  onAdd={() => addGoalNudgeToDraft(nudge)}
+                />
+              ))}
+            </div>
+          ) : activeGoals.length === 0 && !goalsListQuery.isLoading ? (
+            <EmptyState
+              title="No active goals yet"
+              description="Set an active goal first and Today will start nudging useful work into view."
+            />
+          ) : (
+            <EmptyState
+              title="Goal work is already represented"
+              description="Today already reflects your active goals, so there is nothing extra to nudge right now."
+            />
+          )}
         </SectionCard>
 
         {/* ── Task Lane ── */}
