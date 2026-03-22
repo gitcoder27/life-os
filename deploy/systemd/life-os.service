@@ -1,0 +1,16 @@
+[Unit]
+Description=Life OS API
+After=network.target docker.service
+Wants=docker.service
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/home/ubuntu/apps/life-os-prod/server
+EnvironmentFile=/home/ubuntu/apps/life-os-prod/server/.env.production
+ExecStart=/usr/bin/npm run start
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
