@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 
 import {
   setPreferredTimezone,
   setPreferredWeekStart,
+  useLogoutMutation,
   useOnboardingStateQuery,
   useSettingsProfileQuery,
   useUpdateSettingsProfileMutation,
@@ -73,8 +74,10 @@ const DEFAULT_NOTIF_PREFS: NotificationCategoryPreferences = {
 };
 
 export function SettingsPage() {
+  const navigate = useNavigate();
   const settingsQuery = useSettingsProfileQuery();
   const updateMutation = useUpdateSettingsProfileMutation();
+  const logoutMutation = useLogoutMutation();
   const onboardingQuery = useOnboardingStateQuery();
 
   const [form, setForm] = useState({
@@ -155,6 +158,11 @@ export function SettingsPage() {
       setPreferredTimezone(form.timezone);
     }
     setDirty(false);
+  }
+
+  async function handleLogout() {
+    await logoutMutation.mutateAsync();
+    navigate("/login", { replace: true });
   }
 
   if (settingsQuery.isLoading && !settingsQuery.data) {
@@ -385,6 +393,29 @@ export function SettingsPage() {
               );
             })}
           </div>
+        </SectionCard>
+
+        <SectionCard title="Session" subtitle="End the current session on this device">
+          <div className="button-row button-row--wrap">
+            <span className="support-copy">
+              Log out and return to the sign-in screen.
+            </span>
+            <button
+              className="button button--ghost"
+              type="button"
+              disabled={logoutMutation.isPending}
+              onClick={() => void handleLogout()}
+            >
+              {logoutMutation.isPending ? "Logging out…" : "Log out"}
+            </button>
+          </div>
+          {logoutMutation.error ? (
+            <div className="inline-state inline-state--error" style={{ marginTop: "0.75rem" }}>
+              {logoutMutation.error instanceof Error
+                ? logoutMutation.error.message
+                : "Log out failed."}
+            </div>
+          ) : null}
         </SectionCard>
       </div>
 

@@ -27,6 +27,11 @@ type LoginResponse = {
   user: SessionUser;
 };
 
+type LogoutResponse = {
+  success: true;
+  generatedAt: string;
+};
+
 type OnboardingDefaults = {
   timezone: string;
   currencyCode: string;
@@ -1864,6 +1869,29 @@ export function useLoginMutation() {
 
       void queryClient.invalidateQueries({ queryKey: queryKeys.session });
       void queryClient.invalidateQueries({ queryKey: queryKeys.onboarding });
+    },
+  });
+}
+
+export function useLogoutMutation() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: () =>
+      apiRequest<LogoutResponse>("/api/auth/logout", {
+        method: "POST",
+      }),
+    meta: {
+      successMessage: "Signed out.",
+      errorMessage: "Sign-out failed.",
+    },
+    onSuccess: () => {
+      queryClient.clear();
+      queryClient.setQueryData<SessionResponse>(queryKeys.session, {
+        authenticated: false,
+        generatedAt: new Date().toISOString(),
+        user: null,
+      });
     },
   });
 }
