@@ -98,6 +98,22 @@ function getActionLabel(action: { type: "open_review" | "open_route"; route: str
   }
 }
 
+function getRadarActionLabel(kind: "overdue_task" | "stale_inbox") {
+  return kind === "overdue_task" ? "Recover task" : "Open Inbox";
+}
+
+function getRadarRoute(kind: "overdue_task" | "stale_inbox", itemId?: string) {
+  if (kind === "stale_inbox") {
+    return "/inbox";
+  }
+
+  if (itemId) {
+    return `/today?view=overdue&taskId=${encodeURIComponent(itemId)}`;
+  }
+
+  return "/today?view=overdue";
+}
+
 export function HomePage() {
   const today = getTodayDate();
   const navigate = useNavigate();
@@ -202,6 +218,7 @@ export function HomePage() {
   const inboxPreviewItems = [...(inboxQuery.data?.tasks ?? [])]
     .sort((left, right) => new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime())
     .slice(0, 3);
+  const accountabilityRadar = home.accountabilityRadar;
 
   return (
     <div className="page">
@@ -417,6 +434,77 @@ export function HomePage() {
               </button>
             </div>
           </div>
+        </SectionCard>
+
+        <SectionCard
+          title="Overdue / Attention Required"
+          subtitle="Catch work that slipped out of view"
+        >
+          {accountabilityRadar.totalCount > 0 ? (
+            <>
+              <div className="radar-summary">
+                <div className="radar-summary__metric">
+                  <span className="radar-summary__label">Overdue tasks</span>
+                  <strong className="radar-summary__value">{accountabilityRadar.overdueTaskCount}</strong>
+                </div>
+                <div className="radar-summary__metric">
+                  <span className="radar-summary__label">Stale inbox</span>
+                  <strong className="radar-summary__value">{accountabilityRadar.staleInboxCount}</strong>
+                </div>
+              </div>
+              <div className="radar-list">
+                {accountabilityRadar.items.map((item) => (
+                  <div key={item.id} className={`radar-item radar-item--${item.kind}`}>
+                    <div className="radar-item__content">
+                      <div className="radar-item__title">
+                        {item.kind === "stale_inbox"
+                          ? getHomeTaskMeta(item, item.title)
+                          : item.title}
+                      </div>
+                      <div className="radar-item__detail">{item.label}</div>
+                    </div>
+                    <button
+                      className="button button--ghost button--small"
+                      type="button"
+                      onClick={() => navigate(getRadarRoute(item.kind, item.id))}
+                    >
+                      {getRadarActionLabel(item.kind)}
+                    </button>
+                  </div>
+                ))}
+              </div>
+              {accountabilityRadar.overflowCount > 0 ? (
+                <p className="support-copy">
+                  {accountabilityRadar.overflowCount} more item{accountabilityRadar.overflowCount === 1 ? "" : "s"} still need review.
+                </p>
+              ) : null}
+              <div className="button-row" style={{ marginTop: "0.75rem" }}>
+                {accountabilityRadar.overdueTaskCount > 0 ? (
+                  <button
+                    className="button button--ghost button--small"
+                    type="button"
+                    onClick={() => navigate(getRadarRoute("overdue_task"))}
+                  >
+                    Open recovery view
+                  </button>
+                ) : null}
+                {accountabilityRadar.staleInboxCount > 0 ? (
+                  <button
+                    className="button button--ghost button--small"
+                    type="button"
+                    onClick={() => navigate("/inbox")}
+                  >
+                    Open Inbox
+                  </button>
+                ) : null}
+              </div>
+            </>
+          ) : (
+            <EmptyState
+              title="Nothing is slipping"
+              description="No overdue tasks or stale inbox captures need recovery right now."
+            />
+          )}
         </SectionCard>
 
         <SectionCard

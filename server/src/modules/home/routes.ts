@@ -1,5 +1,6 @@
 import type { FastifyPluginAsync } from "fastify";
 import type {
+  AccountabilityRadar,
   AttentionItem,
   GoalSummary,
   HabitSummary,
@@ -8,6 +9,7 @@ import type {
   HomeOverviewResponse,
   IsoDateString,
   RoutineSummary,
+  TaskOriginType,
 } from "@life-os/contracts";
 import type {
   GoalDomain as PrismaGoalDomain,
@@ -27,6 +29,7 @@ import {
   normalizeHabitScheduleRule,
 } from "../../lib/habits/schedule.js";
 import { withGeneratedAt } from "../../lib/http/response.js";
+import { materializeRecurringTasksInRange } from "../../lib/recurrence/tasks.js";
 import {
   addIsoDays,
   getMonthStartIsoDate,
@@ -50,6 +53,10 @@ const isoDateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/) as unknown as z.Zo
 const dateQuerySchema = z.object({
   date: isoDateSchema.optional(),
 });
+
+const ACCOUNTABILITY_LOOKBACK_DAYS = 30;
+const STALE_INBOX_THRESHOLD_DAYS = 3;
+const ACCOUNTABILITY_SURFACED_ITEMS = 5;
 
 function currentRoutinePeriod(date: Date, timezone?: string | null): RoutineSummary["currentPeriod"] {
   const hour = getUserLocalHour(date, timezone);
@@ -95,7 +102,7 @@ function fromPrismaGoalStatus(status: PrismaGoalStatus) {
   }
 }
 
-function fromPrismaTaskOriginType(originType: PrismaTaskOriginType) {
+function fromPrismaTaskOriginType(originType: PrismaTaskOriginType): TaskOriginType {
   switch (originType) {
     case "MANUAL":
       return "manual";
@@ -126,6 +133,18 @@ function serializeGoalSummary(goal: {
   };
 }
 
+function getIsoDayDifference(startIsoDate: IsoDateString, endIsoDate: IsoDateString) {
+  return Math.round((parseIsoDate(endIsoDate).getTime() - parseIsoDate(startIsoDate).getTime()) / 86_400_000);
+}
+
+function formatOverdueLabel(ageDays: number) {
+  return `Overdue by ${ageDays} day${ageDays === 1 ? "" : "s"}`;
+}
+
+function formatStaleInboxLabel(ageDays: number) {
+  return `Inbox for ${ageDays} day${ageDays === 1 ? "" : "s"}`;
+}
+
 async function buildHomeOverview(
   app: Parameters<FastifyPluginAsync>[0],
   userId: string,
@@ -140,7 +159,19 @@ async function buildHomeOverview(
   const dayWindow = getDayWindowUtc(targetIsoDate, preferences?.timezone);
   const weekStartIsoDate = getWeekStartIsoDate(targetIsoDate, preferences?.weekStartsOn ?? 1);
   const weekStartDate = parseIsoDate(weekStartIsoDate);
-  const [dayCycle, weekCycle, score, momentum, tasks, habits, recentHabitCheckins, routines, routineCheckins, waterLogs, mealLogs, workoutDay, expenses, adminItems, notifications] =
+  const overdueWindowStartIsoDate = addIsoDays(targetIsoDate, -ACCOUNTABILITY_LOOKBACK_DAYS);
+  const overdueWindowStartDate = parseIsoDate(overdueWindowStartIsoDate);
+  const staleInboxCutoffIsoDate = addIsoDays(targetIsoDate, -STALE_INBOX_THRESHOLD_DAYS);
+  const staleInboxCutoff = getDayWindowUtc(staleInboxCutoffIsoDate, preferences?.timezone);
+
+  await materializeRecurringTasksInRange(
+    app.prisma,
+    userId,
+    overdueWindowStartDate,
+    parseIsoDate(addIsoDays(targetIsoDate, -1)),
+  );
+
+  const [dayCycle, weekCycle, score, momentum, tasks, overdueTasks, staleInboxTasks, habits, recentHabitCheckins, routines, routineCheckins, waterLogs, mealLogs, workoutDay, expenses, adminItems, notifications] =
     await Promise.all([
       ensureCycle(app.prisma, {
         userId,
@@ -165,6 +196,29 @@ async function buildHomeOverview(
         include: {
           goal: true,
         },
+      }),
+      app.prisma.task.findMany({
+        where: {
+          userId,
+          status: "PENDING",
+          scheduledForDate: {
+            gte: overdueWindowStartDate,
+            lt: targetDate,
+          },
+        },
+        orderBy: [{ scheduledForDate: "asc" }, { createdAt: "asc" }],
+      }),
+      app.prisma.task.findMany({
+        where: {
+          userId,
+          status: "PENDING",
+          originType: "QUICK_CAPTURE",
+          scheduledForDate: null,
+          createdAt: {
+            lt: staleInboxCutoff.start,
+          },
+        },
+        orderBy: [{ createdAt: "asc" }],
       }),
       app.prisma.habit.findMany({
         where: {
@@ -321,6 +375,50 @@ async function buildHomeOverview(
             : workoutDay?.actualStatus === "MISSED"
               ? "missed"
               : "none",
+  };
+
+  const accountabilityItems = [
+    ...overdueTasks.map((task) => {
+      const scheduledForDate = toIsoDateString(task.scheduledForDate!);
+      const ageDays = getIsoDayDifference(scheduledForDate, targetIsoDate);
+
+      return {
+        id: task.id,
+        kind: "overdue_task" as const,
+        title: task.title,
+        route: "/today",
+        label: formatOverdueLabel(ageDays),
+        ageDays,
+        scheduledForDate,
+        createdAt: task.createdAt.toISOString(),
+        notes: task.notes,
+        originType: fromPrismaTaskOriginType(task.originType),
+      };
+    }),
+    ...staleInboxTasks.map((task) => {
+      const createdOnIsoDate = getUserLocalDate(task.createdAt, preferences?.timezone);
+      const ageDays = getIsoDayDifference(createdOnIsoDate, targetIsoDate);
+
+      return {
+        id: task.id,
+        kind: "stale_inbox" as const,
+        title: task.title,
+        route: "/inbox",
+        label: formatStaleInboxLabel(ageDays),
+        ageDays,
+        scheduledForDate: null,
+        createdAt: task.createdAt.toISOString(),
+        notes: task.notes,
+        originType: fromPrismaTaskOriginType(task.originType),
+      };
+    }),
+  ];
+  const accountabilityRadar: AccountabilityRadar = {
+    overdueTaskCount: overdueTasks.length,
+    staleInboxCount: staleInboxTasks.length,
+    totalCount: accountabilityItems.length,
+    overflowCount: Math.max(accountabilityItems.length - ACCOUNTABILITY_SURFACED_ITEMS, 0),
+    items: accountabilityItems.slice(0, ACCOUNTABILITY_SURFACED_ITEMS),
   };
 
   const attentionItems: AttentionItem[] = [];
@@ -510,6 +608,7 @@ async function buildHomeOverview(
       budgetLabel: expenses.length === 0 ? "No spend logged" : "Current month spend",
       upcomingBills: adminItems.length,
     },
+    accountabilityRadar,
     attentionItems: attentionItems.slice(0, 6),
     notifications: homeNotifications,
     guidance,

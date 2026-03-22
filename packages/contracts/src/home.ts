@@ -56,6 +56,27 @@ export interface FinanceSummary {
   upcomingBills: number;
 }
 
+export interface AccountabilityRadarItem {
+  id: EntityId;
+  kind: "overdue_task" | "stale_inbox";
+  title: string;
+  route: string;
+  label: string;
+  ageDays: number;
+  scheduledForDate: IsoDateString | null;
+  createdAt: string | null;
+  notes: string | null;
+  originType: TaskOriginType;
+}
+
+export interface AccountabilityRadar {
+  overdueTaskCount: number;
+  staleInboxCount: number;
+  totalCount: number;
+  overflowCount: number;
+  items: AccountabilityRadarItem[];
+}
+
 export interface AttentionItem {
   id: EntityId;
   title: string;
@@ -113,6 +134,7 @@ export interface HomeOverviewResponse extends ApiMeta {
   habitSummary: HabitSummary;
   healthSummary: HealthSummary;
   financeSummary: FinanceSummary;
+  accountabilityRadar: AccountabilityRadar;
   attentionItems: AttentionItem[];
   notifications: HomeNotificationItem[];
   guidance: HomeGuidance;

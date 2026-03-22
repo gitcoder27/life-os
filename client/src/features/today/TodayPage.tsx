@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import {
   DndContext,
   closestCenter,
@@ -19,6 +19,7 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 
 import {
+  daysUntil,
   formatTimeLabel,
   formatWorkoutStatus,
   getTodayDate,
@@ -27,6 +28,7 @@ import {
   useDayPlanQuery,
   useGoalsListQuery,
   useHealthDataQuery,
+  useTasksQuery,
   useTaskStatusMutation,
   useUpdateDayPrioritiesMutation,
   useUpdatePriorityMutation,
@@ -96,6 +98,26 @@ function getTomorrowDate(fromDate: string) {
   const tomorrow = new Date(`${fromDate}T12:00:00`);
   tomorrow.setDate(tomorrow.getDate() + 1);
   return toIsoDate(tomorrow);
+}
+
+function getOffsetDate(fromDate: string, offsetDays: number) {
+  const nextDate = new Date(`${fromDate}T12:00:00`);
+  nextDate.setDate(nextDate.getDate() + offsetDays);
+  return toIsoDate(nextDate);
+}
+
+function formatRecoveryDate(isoDate: string) {
+  return new Date(`${isoDate}T12:00:00`).toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+  });
+}
+
+function getRecoveryTaskDetail(isoDate: string) {
+  const difference = daysUntil(isoDate);
+  const overdueDays = Math.max(Math.abs(difference), 1);
+
+  return `Scheduled ${formatRecoveryDate(isoDate)} · overdue by ${overdueDays} day${overdueDays === 1 ? "" : "s"}`;
 }
 
 type DayPlanTaskLike = {
@@ -458,12 +480,146 @@ function TaskCard({
   );
 }
 
+function RecoveryTaskCard({
+  task,
+  isSelected,
+  isTaskMutationPending,
+  rescheduleDate,
+  onRescheduleDateChange,
+  onSelect,
+  onStatusChange,
+  onMoveToToday,
+  onCarryForward,
+  onReschedule,
+}: {
+  task: TaskItem;
+  isSelected: boolean;
+  isTaskMutationPending: boolean;
+  rescheduleDate: string;
+  onRescheduleDateChange: (date: string) => void;
+  onSelect: () => void;
+  onStatusChange: (status: "pending" | "completed" | "dropped") => void;
+  onMoveToToday: () => void;
+  onCarryForward: () => void;
+  onReschedule: () => void;
+}) {
+  const [showReschedule, setShowReschedule] = useState(false);
+
+  return (
+    <div
+      id={`recovery-task-${task.id}`}
+      className={`recovery-task${isSelected ? " recovery-task--selected" : ""}`}
+    >
+      <div className="recovery-task__main">
+        <button
+          className="recovery-task__focus"
+          type="button"
+          onClick={onSelect}
+          aria-label="Focus overdue task"
+        />
+        <div className="recovery-task__content">
+          <div className="recovery-task__title-row">
+            <div className="recovery-task__title">
+              {task.title}
+              {isRecurring(task.recurrence) ? (
+                <RecurrenceInfo recurrence={task.recurrence} showCarryPolicy />
+              ) : null}
+            </div>
+            {task.goal ? <GoalChip goal={task.goal} /> : null}
+          </div>
+          <div className="recovery-task__meta">
+            <span>{getRecoveryTaskDetail(task.scheduledForDate ?? getTodayDate())}</span>
+          </div>
+          {showReschedule ? (
+            <div className="task-card__reschedule">
+              <input
+                type="date"
+                className="task-card__date-input"
+                value={rescheduleDate}
+                onChange={(event) => onRescheduleDateChange(event.target.value)}
+              />
+              <button
+                className="button button--primary button--small"
+                type="button"
+                disabled={isTaskMutationPending}
+                onClick={() => {
+                  onReschedule();
+                  setShowReschedule(false);
+                }}
+              >
+                Move
+              </button>
+              <button
+                className="button button--ghost button--small"
+                type="button"
+                onClick={() => setShowReschedule(false)}
+              >
+                Cancel
+              </button>
+            </div>
+          ) : null}
+        </div>
+      </div>
+      <div className="recovery-task__actions">
+        <button
+          className="button button--ghost button--small"
+          type="button"
+          disabled={isTaskMutationPending}
+          onClick={onMoveToToday}
+        >
+          Move to today
+        </button>
+        <button
+          className="button button--ghost button--small"
+          type="button"
+          disabled={isTaskMutationPending}
+          onClick={onCarryForward}
+        >
+          Tomorrow
+        </button>
+        <button
+          className="button button--ghost button--small"
+          type="button"
+          disabled={isTaskMutationPending}
+          onClick={() => setShowReschedule((current) => !current)}
+        >
+          Pick date
+        </button>
+        <button
+          className="button button--ghost button--small"
+          type="button"
+          disabled={isTaskMutationPending}
+          onClick={() => onStatusChange("completed")}
+        >
+          Complete
+        </button>
+        <button
+          className="button button--ghost button--small"
+          type="button"
+          disabled={isTaskMutationPending}
+          onClick={() => onStatusChange("dropped")}
+        >
+          Drop
+        </button>
+      </div>
+    </div>
+  );
+}
+
 /* ── Main Page ───────────────────────────────── */
 
 export function TodayPage() {
   const today = getTodayDate();
   const tomorrow = getTomorrowDate(today);
+  const overdueLookbackStart = getOffsetDate(today, -30);
+  const yesterday = getOffsetDate(today, -1);
+  const [searchParams, setSearchParams] = useSearchParams();
   const dayPlanQuery = useDayPlanQuery(today);
+  const overdueTasksQuery = useTasksQuery({
+    from: overdueLookbackStart,
+    to: yesterday,
+    status: "pending",
+  });
   const healthQuery = useHealthDataQuery(today);
   const goalsListQuery = useGoalsListQuery();
   const updateTaskMutation = useTaskStatusMutation(today);
@@ -472,6 +628,8 @@ export function TodayPage() {
   const updateDayPrioritiesMutation = useUpdateDayPrioritiesMutation(today);
   const [priorityDraft, setPriorityDraft] = useState<EditablePriority[]>([]);
   const [rescheduleDates, setRescheduleDates] = useState<Record<string, string>>({});
+  const recoveryView = searchParams.get("view") === "overdue";
+  const selectedOverdueTaskId = searchParams.get("taskId");
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -485,17 +643,21 @@ export function TodayPage() {
 
   const retryAll = () => {
     void dayPlanQuery.refetch();
+    void overdueTasksQuery.refetch();
     void healthQuery.refetch();
   };
 
   const priorities = dayPlanQuery.data?.priorities ?? [];
   const tasks = dayPlanQuery.data?.tasks ?? [];
+  const overdueTasks = overdueTasksQuery.data?.tasks ?? [];
   const timedTasks = tasks
     .filter((task) => !isQuickCaptureMetadataTask(task))
     .filter((task) => task.dueAt);
   const executionTasks = tasks.filter((task) => !isQuickCaptureMetadataTask(task));
   const quickCaptureTasks = tasks.filter(isQuickCaptureMetadataTask);
   const currentDay = healthQuery.data?.summary.currentDay;
+  const selectedOverdueTask =
+    overdueTasks.find((task) => task.id === selectedOverdueTaskId) ?? null;
 
   useEffect(() => {
     if (!dayPlanQuery.data) {
@@ -514,6 +676,22 @@ export function TodayPage() {
 
     setPriorityDraft(nextDraft);
   }, [dayPlanQuery.data, priorities]);
+
+  useEffect(() => {
+    if (!recoveryView || !selectedOverdueTaskId || overdueTasksQuery.isLoading) {
+      return;
+    }
+
+    const taskElement = document.getElementById(`recovery-task-${selectedOverdueTaskId}`);
+    if (!taskElement) {
+      return;
+    }
+
+    taskElement.scrollIntoView({
+      behavior: "smooth",
+      block: "center",
+    });
+  }, [overdueTasksQuery.isLoading, recoveryView, selectedOverdueTaskId]);
 
   const serverPrioritySnapshot = useMemo(
     () =>
@@ -551,8 +729,24 @@ export function TodayPage() {
         : updatePriorityMutation.error instanceof Error
           ? updatePriorityMutation.error.message
           : updateDayPrioritiesMutation.error instanceof Error
-            ? updateDayPrioritiesMutation.error.message
-            : null;
+          ? updateDayPrioritiesMutation.error.message
+          : null;
+
+  function updateRecoverySearchParams(nextTaskId?: string | null) {
+    const nextParams = new URLSearchParams(searchParams);
+
+    if (nextTaskId) {
+      nextParams.set("view", "overdue");
+      nextParams.set("taskId", nextTaskId);
+    } else {
+      nextParams.delete("taskId");
+      if (overdueTasks.length === 0) {
+        nextParams.delete("view");
+      }
+    }
+
+    setSearchParams(nextParams);
+  }
 
   const planBits = [
     `Water progress: ${((currentDay?.waterMl ?? 0) / 1000).toFixed(1)}L / ${((currentDay?.waterTargetMl ?? 0) / 1000).toFixed(1)}L`,
@@ -649,6 +843,140 @@ export function TodayPage() {
       ) : null}
 
       <div className="two-column-grid stagger">
+        {overdueTasks.length > 0 || recoveryView ? (
+          <SectionCard
+            title="Recovery lane"
+            subtitle="Recover overdue work before it disappears into the background again."
+            className="recovery-lane-card"
+          >
+            <div className="recovery-lane__header">
+              <div>
+                <div className="recovery-lane__count">{overdueTasks.length}</div>
+                <p className="recovery-lane__copy">
+                  {overdueTasks.length === 0
+                    ? "No overdue tasks are left to recover."
+                    : `${overdueTasks.length} overdue task${overdueTasks.length === 1 ? "" : "s"} waiting for a clear decision.`}
+                </p>
+              </div>
+              {recoveryView ? (
+                <button
+                  className="button button--ghost button--small"
+                  type="button"
+                  onClick={() => {
+                    const nextParams = new URLSearchParams(searchParams);
+                    nextParams.delete("view");
+                    nextParams.delete("taskId");
+                    setSearchParams(nextParams);
+                  }}
+                >
+                  Return to today
+                </button>
+              ) : null}
+            </div>
+
+            {selectedOverdueTask ? (
+              <p className="support-copy">
+                Focused task: <strong>{selectedOverdueTask.title}</strong>
+              </p>
+            ) : null}
+
+            {overdueTasksQuery.isError ? (
+              <InlineErrorState
+                message={overdueTasksQuery.error instanceof Error ? overdueTasksQuery.error.message : "Overdue tasks could not load."}
+                onRetry={() => void overdueTasksQuery.refetch()}
+              />
+            ) : null}
+
+            {overdueTasksQuery.isLoading && !overdueTasksQuery.data ? (
+              <p className="support-copy">Loading overdue tasks…</p>
+            ) : overdueTasks.length > 0 ? (
+              <div className="recovery-lane">
+                {overdueTasks.map((task) => (
+                  <RecoveryTaskCard
+                    key={task.id}
+                    task={task}
+                    isSelected={selectedOverdueTaskId === task.id}
+                    isTaskMutationPending={isTaskMutationPending}
+                    rescheduleDate={getRescheduleDate(task.id)}
+                    onRescheduleDateChange={(date) =>
+                      setRescheduleDates((current) => ({
+                        ...current,
+                        [task.id]: date,
+                      }))
+                    }
+                    onSelect={() => updateRecoverySearchParams(task.id)}
+                    onStatusChange={(status) =>
+                      updateTaskMutation.mutate(
+                        {
+                          taskId: task.id,
+                          status,
+                        },
+                        {
+                          onSuccess: () => {
+                            if (selectedOverdueTaskId === task.id) {
+                              updateRecoverySearchParams(null);
+                            }
+                          },
+                        },
+                      )
+                    }
+                    onMoveToToday={() =>
+                      carryForwardTaskMutation.mutate(
+                        {
+                          taskId: task.id,
+                          targetDate: today,
+                        },
+                        {
+                          onSuccess: () => {
+                            if (selectedOverdueTaskId === task.id) {
+                              updateRecoverySearchParams(null);
+                            }
+                          },
+                        },
+                      )
+                    }
+                    onCarryForward={() =>
+                      carryForwardTaskMutation.mutate(
+                        {
+                          taskId: task.id,
+                          targetDate: tomorrow,
+                        },
+                        {
+                          onSuccess: () => {
+                            if (selectedOverdueTaskId === task.id) {
+                              updateRecoverySearchParams(null);
+                            }
+                          },
+                        },
+                      )
+                    }
+                    onReschedule={() =>
+                      carryForwardTaskMutation.mutate(
+                        {
+                          taskId: task.id,
+                          targetDate: getRescheduleDate(task.id),
+                        },
+                        {
+                          onSuccess: () => {
+                            if (selectedOverdueTaskId === task.id) {
+                              updateRecoverySearchParams(null);
+                            }
+                          },
+                        },
+                      )
+                    }
+                  />
+                ))}
+              </div>
+            ) : (
+              <EmptyState
+                title="Recovery lane is clear"
+                description="Nothing overdue needs rescuing right now."
+              />
+            )}
+          </SectionCard>
+        ) : null}
+
         {/* ── Priority Stack ── */}
         <SectionCard
           title="Priority stack"

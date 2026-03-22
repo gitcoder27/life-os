@@ -795,7 +795,7 @@ describe("module route smoke tests", () => {
     expect(scoringMock.calculateDailyScore).toHaveBeenCalled();
   });
 
-  it("serves home overview", async () => {
+  it("serves home overview with accountability radar data", async () => {
     scoringMock.ensureCycle.mockImplementation(async (_prisma: unknown, input: { cycleType: string }) => {
       if (input.cycleType === "WEEK") {
         return {
@@ -829,30 +829,66 @@ describe("module route smoke tests", () => {
         plan: [],
       };
     });
+
+    const todayTask = {
+      id: "task-1",
+      userId: "user-1",
+      title: "Open task",
+      notes: null,
+      status: "PENDING",
+      scheduledForDate: new Date("2026-03-14T00:00:00.000Z"),
+      dueAt: null,
+      goalId: "goal-1",
+      goal: {
+        id: "goal-1",
+        title: "Build lifting consistency",
+        domain: "HEALTH",
+        status: "ACTIVE",
+      },
+      originType: "MANUAL",
+      carriedFromTaskId: null,
+      completedAt: null,
+      createdAt: new Date("2026-03-14T08:00:00.000Z"),
+      updatedAt: new Date("2026-03-14T08:00:00.000Z"),
+    };
+    const overdueTask = {
+      id: "task-overdue-1",
+      userId: "user-1",
+      title: "Missed Tuesday task",
+      notes: null,
+      status: "PENDING",
+      scheduledForDate: new Date("2026-03-11T00:00:00.000Z"),
+      dueAt: null,
+      goalId: null,
+      goal: null,
+      originType: "MANUAL",
+      carriedFromTaskId: null,
+      completedAt: null,
+      createdAt: new Date("2026-03-10T10:00:00.000Z"),
+      updatedAt: new Date("2026-03-10T10:00:00.000Z"),
+    };
+    const staleInboxTask = {
+      id: "task-stale-1",
+      userId: "user-1",
+      title: "Inbox reminder",
+      notes: "Follow up with landlord",
+      status: "PENDING",
+      scheduledForDate: null,
+      dueAt: null,
+      goalId: null,
+      goal: null,
+      originType: "QUICK_CAPTURE",
+      carriedFromTaskId: null,
+      completedAt: null,
+      createdAt: new Date("2026-03-09T12:00:00.000Z"),
+      updatedAt: new Date("2026-03-09T12:00:00.000Z"),
+    };
     prisma.task = {
-      findMany: vi.fn().mockResolvedValue([
-        {
-          id: "task-1",
-          userId: "user-1",
-          title: "Open task",
-          notes: null,
-          status: "PENDING",
-          scheduledForDate: new Date("2026-03-14T00:00:00.000Z"),
-          dueAt: null,
-          goalId: "goal-1",
-          goal: {
-            id: "goal-1",
-            title: "Build lifting consistency",
-            domain: "HEALTH",
-            status: "ACTIVE",
-          },
-          originType: "MANUAL",
-          carriedFromTaskId: null,
-          completedAt: null,
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        },
-      ]),
+      findMany: vi
+        .fn()
+        .mockResolvedValueOnce([todayTask])
+        .mockResolvedValueOnce([overdueTask])
+        .mockResolvedValueOnce([staleInboxTask]),
     } as any;
     prisma.habit = {
       findMany: vi.fn().mockResolvedValue([
@@ -913,7 +949,7 @@ describe("module route smoke tests", () => {
     prisma.workoutDay = { findUnique: vi.fn().mockResolvedValue(null) } as any;
     prisma.routineItem = { findMany: vi.fn().mockResolvedValue([]) } as any;
 
-    const response = await app!.inject({ method: "GET", url: "/api/home/overview" });
+    const response = await app!.inject({ method: "GET", url: "/api/home/overview?date=2026-03-14" });
     expect(response.statusCode).toBe(200);
     const payload = JSON.parse(response.body);
     expect(payload.topPriorities[0]).toEqual(
@@ -936,6 +972,30 @@ describe("module route smoke tests", () => {
         }),
       }),
     );
+    expect(payload.accountabilityRadar).toEqual(
+      expect.objectContaining({
+        overdueTaskCount: 1,
+        staleInboxCount: 1,
+        totalCount: 2,
+        overflowCount: 0,
+      }),
+    );
+    expect(payload.accountabilityRadar.items[0]).toEqual(
+      expect.objectContaining({
+        id: "task-overdue-1",
+        kind: "overdue_task",
+        route: "/today",
+        label: "Overdue by 3 days",
+      }),
+    );
+    expect(payload.accountabilityRadar.items[1]).toEqual(
+      expect.objectContaining({
+        id: "task-stale-1",
+        kind: "stale_inbox",
+        route: "/inbox",
+        label: "Inbox for 5 days",
+      }),
+    );
     expect(payload.attentionItems[0]).toEqual(
       expect.objectContaining({
         kind: "task",
@@ -955,6 +1015,131 @@ describe("module route smoke tests", () => {
         kind: "habit",
       }),
     );
+    expect(prisma.recurrenceRule.findMany).toHaveBeenCalled();
+    expect((prisma.task as { findMany: ReturnType<typeof vi.fn> }).findMany).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        where: expect.objectContaining({
+          status: "PENDING",
+          scheduledForDate: expect.objectContaining({
+            lt: new Date("2026-03-14T00:00:00.000Z"),
+          }),
+        }),
+      }),
+    );
+    expect((prisma.task as { findMany: ReturnType<typeof vi.fn> }).findMany).toHaveBeenNthCalledWith(
+      3,
+      expect.objectContaining({
+        where: expect.objectContaining({
+          status: "PENDING",
+          originType: "QUICK_CAPTURE",
+          scheduledForDate: null,
+          createdAt: expect.objectContaining({
+            lt: new Date("2026-03-11T00:00:00.000Z"),
+          }),
+        }),
+      }),
+    );
+  });
+
+  it("limits accountability radar items and materializes recurring task occurrences", async () => {
+    const overdueTasks = Array.from({ length: 6 }, (_, index) => ({
+      id: index === 0 ? "recurring-overdue-1" : `overdue-${index}`,
+      userId: "user-1",
+      title: index === 0 ? "Recurring cleanup" : `Overdue item ${index}`,
+      notes: null,
+      status: "PENDING",
+      scheduledForDate: new Date(`2026-03-${String(2 + index).padStart(2, "0")}T00:00:00.000Z`),
+      dueAt: null,
+      goalId: null,
+      goal: null,
+      originType: index === 0 ? "RECURRING" : "MANUAL",
+      carriedFromTaskId: null,
+      completedAt: null,
+      createdAt: new Date(`2026-03-${String(2 + index).padStart(2, "0")}T08:00:00.000Z`),
+      updatedAt: new Date(`2026-03-${String(2 + index).padStart(2, "0")}T08:00:00.000Z`),
+    }));
+    prisma.recurrenceRule = {
+      ...prisma.recurrenceRule,
+      findMany: vi.fn().mockResolvedValue([
+        {
+          id: "recurrence-1",
+          ownerType: "TASK",
+          ownerId: "prototype-task-1",
+          ruleJson: { frequency: "daily", startsOn: "2026-03-01" },
+          exceptions: [],
+          tasks: [
+            {
+              id: "prototype-task-1",
+              userId: "user-1",
+              title: "Recurring cleanup",
+              notes: null,
+              status: "PENDING",
+              scheduledForDate: new Date("2026-03-01T00:00:00.000Z"),
+              dueAt: null,
+              goalId: null,
+              originType: "RECURRING",
+              carriedFromTaskId: null,
+              recurrenceRuleId: "recurrence-1",
+              completedAt: null,
+              createdAt: new Date("2026-03-01T08:00:00.000Z"),
+              updatedAt: new Date("2026-03-01T08:00:00.000Z"),
+            },
+          ],
+        },
+      ]),
+    } as any;
+    prisma.task = {
+      create: vi.fn().mockResolvedValue({
+        id: "recurring-overdue-1",
+        userId: "user-1",
+        title: "Recurring cleanup",
+        notes: null,
+        status: "PENDING",
+        scheduledForDate: new Date("2026-03-02T00:00:00.000Z"),
+        dueAt: null,
+        goalId: null,
+        goal: null,
+        originType: "RECURRING",
+        carriedFromTaskId: null,
+        completedAt: null,
+        createdAt: new Date("2026-03-02T08:00:00.000Z"),
+        updatedAt: new Date("2026-03-02T08:00:00.000Z"),
+      }),
+      findMany: vi
+        .fn()
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce(overdueTasks)
+        .mockResolvedValueOnce([]),
+    } as any;
+    prisma.habit = { findMany: vi.fn().mockResolvedValue([]) } as any;
+    prisma.habitCheckin = { findMany: vi.fn().mockResolvedValue([]) } as any;
+    prisma.routine = { findMany: vi.fn().mockResolvedValue([]) } as any;
+    prisma.routineItemCheckin = { findMany: vi.fn().mockResolvedValue([]) } as any;
+    prisma.waterLog = { findMany: vi.fn().mockResolvedValue([]) } as any;
+    prisma.mealLog = { findMany: vi.fn().mockResolvedValue([]) } as any;
+    prisma.workoutDay = { findUnique: vi.fn().mockResolvedValue(null) } as any;
+    prisma.expense = { findMany: vi.fn().mockResolvedValue([]) } as any;
+    prisma.adminItem = { findMany: vi.fn().mockResolvedValue([]) } as any;
+    prisma.notification = { findMany: vi.fn().mockResolvedValue([]) } as any;
+    prisma.userPreference = {
+      findUnique: vi.fn().mockResolvedValue({ dailyWaterTargetMl: 2500, timezone: "UTC", weekStartsOn: 1 }),
+    } as any;
+
+    const response = await app!.inject({ method: "GET", url: "/api/home/overview?date=2026-03-14" });
+    expect(response.statusCode).toBe(200);
+
+    const payload = JSON.parse(response.body);
+    expect(payload.accountabilityRadar.totalCount).toBe(6);
+    expect(payload.accountabilityRadar.items).toHaveLength(5);
+    expect(payload.accountabilityRadar.overflowCount).toBe(1);
+    expect(payload.accountabilityRadar.items[0]).toEqual(
+      expect.objectContaining({
+        id: "recurring-overdue-1",
+        kind: "overdue_task",
+      }),
+    );
+    expect((prisma.task as { create: ReturnType<typeof vi.fn> }).create).toHaveBeenCalled();
   });
 
   it("serves auth session status", async () => {

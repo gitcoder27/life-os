@@ -161,6 +161,24 @@ type HomeOverviewResponse = {
     budgetLabel: string;
     upcomingBills: number;
   };
+  accountabilityRadar: {
+    overdueTaskCount: number;
+    staleInboxCount: number;
+    totalCount: number;
+    overflowCount: number;
+    items: Array<{
+      id: string;
+      kind: "overdue_task" | "stale_inbox";
+      title: string;
+      route: string;
+      label: string;
+      ageDays: number;
+      scheduledForDate: string | null;
+      createdAt: string | null;
+      notes: string | null;
+      originType: TaskItem["originType"];
+    }>;
+  };
   attentionItems: Array<{
     id: string;
     title: string;
