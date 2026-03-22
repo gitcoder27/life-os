@@ -4,7 +4,7 @@ import { useLoginMutation } from "../../shared/lib/api";
 
 export function LoginPage() {
   const loginMutation = useLoginMutation();
-  const [email, setEmail] = useState("owner@example.com");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -34,18 +34,18 @@ export function LoginPage() {
           >
             L
           </span>
-          <span className="page-eyebrow">Self-hosted owner access</span>
+          <span className="page-eyebrow">Secure account access</span>
         </div>
         <h1 className="auth-layout__title">Sign in to Life OS</h1>
         <p className="auth-layout__copy">
-          Your personal command center. One account, one login, full visibility across every life domain.
+          Sign in with your account email and password to access your own workspace.
         </p>
 
         <form className="stack-form" onSubmit={handleSubmit}>
           <label className="field">
             <span>Email</span>
             <input
-              placeholder="owner@example.com"
+              placeholder="you@example.com"
               type="email"
               autoComplete="email"
               value={email}

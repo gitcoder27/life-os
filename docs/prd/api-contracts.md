@@ -20,7 +20,7 @@ Request:
 
 ```json
 {
-  "email": "owner@example.com",
+  "email": "user@example.com",
   "password": "string"
 }
 ```
@@ -31,8 +31,8 @@ Response:
 {
   "user": {
     "id": "usr_123",
-    "email": "owner@example.com",
-    "displayName": "Owner"
+    "email": "user@example.com",
+    "displayName": "User"
   }
 }
 ```

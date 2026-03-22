@@ -13,6 +13,8 @@
     "prestart": "npm run prisma:generate",
     "start": "NODE_ENV=production node dist/index.js",
     "worker": "NODE_ENV=production node dist/jobs/worker.js",
+    "users": "tsx src/cli/users.ts",
+    "users:dist": "node dist/cli/users.js",
     "pretypecheck": "npm run prisma:generate",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",

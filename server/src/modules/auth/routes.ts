@@ -22,7 +22,7 @@ import {
   createAuditEvent,
   createUserSession,
   toSessionUser,
-  validateOwnerCredentials,
+  validateUserCredentials,
   revokeAllUserSessions,
   revokeSessionByToken,
 } from "./service.js";
@@ -46,7 +46,7 @@ export const registerAuthRoutes: FastifyPluginAsync<AuthRouteOptions> = async (
       ipAddress: request.ip,
       email: payload.email,
     });
-    const user = await validateOwnerCredentials(app.prisma, payload.email, payload.password);
+    const user = await validateUserCredentials(app.prisma, payload.email, payload.password);
 
     if (!user) {
       recordLoginFailure(options.env, {

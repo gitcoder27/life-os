@@ -28,3 +28,8 @@ Common bootstrap commands:
 - Run schema migrations against each environment URL:
   - Development: `npm run prisma:migrate`
   - Production: `npx prisma migrate deploy`
+- Manage users from the server workspace:
+  - `npm run users -- list`
+  - `npm run users -- create --email user@example.com --password change-me-please --display-name "User"`
+  - `npm run users -- set-password --email user@example.com --password new-password-123`
+  - `npm run users -- disable --email user@example.com`

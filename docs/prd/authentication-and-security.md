@@ -1,15 +1,15 @@
 # Authentication And Security
 
-This document defines the MVP access model for Life OS. The goal is a simple login that fits a private self-hosted single-user product today, while keeping the codebase ready for stronger security later.
+This document defines the access model for Life OS. The current goal is a simple self-hosted email-and-password login with strong per-user data isolation and admin-managed account creation.
 
-## MVP decision
+## Current decision
 
-Life OS MVP uses a single owner account with email-and-password login.
+Life OS uses multiple user accounts with email-and-password login, but keeps account creation private and admin-managed.
 
 ## Why this is the right MVP choice
 
-- It matches the single-user product model.
-- It is much simpler than social auth or multi-user registration.
+- It supports sharing one deployment safely across multiple users.
+- It is much simpler than social auth or public multi-user registration.
 - It avoids the complexity and risk of public sign-up flows.
 - It still creates a real security baseline for personal data.
 
@@ -17,17 +17,17 @@ Life OS MVP uses a single owner account with email-and-password login.
 
 ### Account model
 
-- Exactly one owner account in MVP
+- Multiple user accounts
 - No public sign-up
-- No invites
+- No public invites
 - No role system
 
 ### Account creation
 
-The owner account should be created during deployment through one of these controlled methods:
+Accounts should be created through one of these controlled methods:
 
-1. environment variables on first boot
-2. a local admin CLI or setup command
+1. bootstrap environment variables on first boot for the first account
+2. a local admin CLI or setup command for additional accounts
 
 Public first-run registration should not be part of MVP.
 
@@ -40,7 +40,7 @@ Public first-run registration should not be part of MVP.
 ### Password reset
 
 - No email reset flow in MVP
-- Password resets happen through an admin CLI or deployment-level reset flow
+- Password resets happen through an admin CLI or deployment-level reset flow that revokes existing sessions
 
 This keeps the product simple and appropriate for a private self-hosted app.
 
@@ -54,7 +54,7 @@ Use server-managed sessions with secure cookies.
 
 - Server sessions are simpler to revoke
 - They avoid local-storage token complexity
-- They fit a single-user web app well
+- They fit a self-hosted app with strict per-user isolation well
 
 ### Session requirements
 
@@ -100,9 +100,9 @@ Track at least:
 - Logout everywhere option
 - Manual session invalidation after password reset
 
-## Non-goals for MVP
+## Non-goals
 
-- multi-user support
+- public sign-up
 - OAuth or social login
 - SSO
 - two-factor authentication
@@ -127,4 +127,4 @@ When the product moves beyond a private VPS deployment, the next upgrades should
 3. optional two-factor authentication
 4. IP allowlisting or VPN-only access for private deployments
 5. email reset flow
-6. multi-user and permissions model if the product direction changes
+6. roles and permissions if the product direction changes

@@ -13,7 +13,7 @@ import {
   registerDevelopmentRequestLogging,
 } from "../lib/logger/dev-logger.js";
 import { enforceCsrfProtection } from "../lib/security/csrf.js";
-import { ensureOwnerAccount } from "../modules/auth/service.js";
+import { ensureBootstrapUserAccount } from "../modules/auth/service.js";
 import { registerModules } from "../modules/index.js";
 
 export async function buildApp(env: AppEnv) {
@@ -39,7 +39,7 @@ export async function buildApp(env: AppEnv) {
     await instance.prisma.$disconnect();
   });
 
-  await ensureOwnerAccount(prisma, env, app.log);
+  await ensureBootstrapUserAccount(prisma, env, app.log);
   await registerRequestContext(app, { env });
   registerDevelopmentRequestLogging(app, env);
 
