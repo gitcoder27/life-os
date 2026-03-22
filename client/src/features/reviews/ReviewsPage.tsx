@@ -25,6 +25,12 @@ import {
 import { RecurrenceBadge } from "../../shared/ui/RecurrenceBadge";
 import { SectionCard } from "../../shared/ui/SectionCard";
 import { ReviewWindowBanner } from "./ReviewWindowBanner";
+import {
+  clearStoredReviewDraft,
+  createReviewDraftStorageKey,
+  readStoredReviewDraft,
+  writeStoredReviewDraft,
+} from "./reviewDraftStorage";
 import { deriveReviewWindowPresentation, isAlreadySubmittedError, isOutOfWindowError } from "./reviewWindowModel";
 
 const reviewCadences = {
@@ -72,6 +78,33 @@ type DailyPriorityDraft = {
   title: string;
 };
 
+type DailyInputs = {
+  biggestWin: string;
+  frictionNote: string;
+  energyRating: string;
+  optionalNote: string;
+};
+
+type DailyReviewDraft = {
+  dailyInputs: DailyInputs;
+  dailyTaskDecisions: Record<string, DailyTaskDecision>;
+  dailyTomorrowPriorities: DailyPriorityDraft[];
+};
+
+type WeeklyReviewDraft = {
+  responses: string[];
+  focusHabitId: string | null;
+};
+
+type MonthlyReviewDraft = {
+  responses: string[];
+};
+
+type ReviewDraftState = {
+  hydratedKey: string | null;
+  lastSavedAt: string | null;
+};
+
 const prioritySlots: Array<1 | 2 | 3> = [1, 2, 3];
 
 function detectFrictionTag(value: string): DailyFrictionTag {
@@ -114,6 +147,38 @@ function fillThreePriorityDraft(values: DailyPriorityDraft[]) {
   return next;
 }
 
+function normalizePromptResponses(values: string[] | undefined, count: number) {
+  return Array.from({ length: count }, (_, index) => values?.[index] ?? "");
+}
+
+function hasMeaningfulPromptResponses(values: string[]) {
+  return values.some((value) => value.trim().length > 0);
+}
+
+function hasMeaningfulDailyDraft(draft: DailyReviewDraft) {
+  return (
+    draft.dailyInputs.biggestWin.trim().length > 0 ||
+    draft.dailyInputs.frictionNote.trim().length > 0 ||
+    draft.dailyInputs.optionalNote.trim().length > 0 ||
+    draft.dailyInputs.energyRating.trim() !== "3" ||
+    Object.keys(draft.dailyTaskDecisions).length > 0 ||
+    draft.dailyTomorrowPriorities.some((priority) => priority.title.trim().length > 0)
+  );
+}
+
+function formatDraftStatus(lastSavedAt: string | null) {
+  if (!lastSavedAt) {
+    return "Draft autosaves on this device as you type.";
+  }
+
+  return `Draft autosaves on this device. Last saved ${new Date(lastSavedAt).toLocaleString(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  })}.`;
+}
+
 export function ReviewsPage() {
   const { cadence = "daily" } = useParams();
   const [searchParams] = useSearchParams();
@@ -144,14 +209,51 @@ export function ReviewsPage() {
     { title: "" },
   ]);
   const [focusHabitId, setFocusHabitId] = useState<string | null>(null);
+  const [draftState, setDraftState] = useState<ReviewDraftState>({
+    hydratedKey: null,
+    lastSavedAt: null,
+  });
   const habitsQuery = useHabitsQuery();
   const navigate = useNavigate();
+  const isSubmitting =
+    submitDailyReviewMutation.isPending ||
+    submitWeeklyReviewMutation.isPending ||
+    submitMonthlyReviewMutation.isPending;
+  const submitError =
+    submitDailyReviewMutation.error ??
+    submitWeeklyReviewMutation.error ??
+    submitMonthlyReviewMutation.error;
+  const submitResult =
+    submitDailyReviewMutation.data ??
+    submitWeeklyReviewMutation.data ??
+    submitMonthlyReviewMutation.data;
 
   const submissionWindow = reviewQuery.data?.review.submissionWindow ?? null;
   const windowPresentation = submissionWindow
     ? deriveReviewWindowPresentation(submissionWindow, cadenceKey)
     : null;
   const isWindowOpen = submissionWindow?.isOpen ?? false;
+  const draftStorageKey = useMemo(() => {
+    if (!reviewQuery.data) {
+      return null;
+    }
+
+    if (reviewQuery.data.cadence === "daily") {
+      return createReviewDraftStorageKey("daily", reviewQuery.data.review.date);
+    }
+
+    if (reviewQuery.data.cadence === "weekly") {
+      return createReviewDraftStorageKey(
+        "weekly",
+        `${reviewQuery.data.review.startDate}:${reviewQuery.data.review.endDate}`,
+      );
+    }
+
+    return createReviewDraftStorageKey(
+      "monthly",
+      `${reviewQuery.data.review.startDate}:${reviewQuery.data.review.endDate}`,
+    );
+  }, [reviewQuery.data]);
 
   // Auto-redirect: if no explicit ?date= and the backend says a different date is allowed
   useEffect(() => {
@@ -169,6 +271,7 @@ export function ReviewsPage() {
   const requiredCount = "prompts" in config ? config.prompts.length : 0;
   const completedCount = responses.filter((response) => response.trim().length > 0).length;
   const activeStep = responses.findIndex((response) => response.trim().length === 0);
+  const draftStatusText = formatDraftStatus(draftState.lastSavedAt);
 
   const summaryItems = useMemo(() => {
     if (!reviewQuery.data) {
@@ -211,20 +314,22 @@ export function ReviewsPage() {
   }, [reviewQuery.data]);
 
   useEffect(() => {
-    if (!reviewQuery.data) {
+    if (!reviewQuery.data || !draftStorageKey || draftState.hydratedKey === draftStorageKey) {
       return;
     }
 
     if (reviewQuery.data.cadence === "daily") {
       const review = reviewQuery.data.review;
       const existing = review.existingReview;
-
-      setDailyInputs({
+      const storedDraft = review.isCompleted
+        ? null
+        : readStoredReviewDraft<DailyReviewDraft>(draftStorageKey);
+      const baseDailyInputs: DailyInputs = {
         biggestWin: existing?.biggestWin ?? "",
         frictionNote: existing?.frictionNote ?? "",
         energyRating: existing?.energyRating ? String(existing.energyRating) : "3",
         optionalNote: existing?.optionalNote ?? "",
-      });
+      };
 
       const seededPriorities = [...review.seededTomorrowPriorities]
         .sort((left, right) => left.slot - right.slot)
@@ -237,37 +342,159 @@ export function ReviewsPage() {
         .slice(0, 3)
         .map((task) => ({ title: task.title }));
 
+      if (review.isCompleted) {
+        clearStoredReviewDraft(draftStorageKey);
+      }
+
+      setDailyInputs(storedDraft?.value.dailyInputs ?? baseDailyInputs);
       setDailyTomorrowPriorities(
         fillThreePriorityDraft(
-          seededPriorities.length > 0 ? seededPriorities : fallbackTaskTitles,
+          storedDraft?.value.dailyTomorrowPriorities ??
+            (seededPriorities.length > 0 ? seededPriorities : fallbackTaskTitles),
         ),
       );
-      setDailyTaskDecisions({});
+      setDailyTaskDecisions(storedDraft?.value.dailyTaskDecisions ?? {});
+      setDraftState({
+        hydratedKey: draftStorageKey,
+        lastSavedAt: storedDraft?.savedAt ?? null,
+      });
       return;
     }
 
     if (reviewQuery.data.cadence === "weekly") {
       const existing = reviewQuery.data.review.existingReview;
-      setResponses([
+      const storedDraft = existing
+        ? null
+        : readStoredReviewDraft<WeeklyReviewDraft>(draftStorageKey);
+      const baseResponses = [
         existing?.biggestWin ?? "",
         existing?.biggestMiss ?? "",
         existing?.mainLesson ?? "",
         existing?.keepText ?? "",
         existing?.improveText ?? "",
-      ]);
-      setFocusHabitId(existing?.focusHabitId ?? null);
+      ];
+
+      if (existing) {
+        clearStoredReviewDraft(draftStorageKey);
+      }
+
+      setResponses(
+        normalizePromptResponses(
+          storedDraft?.value.responses ?? baseResponses,
+          reviewCadences.weekly.prompts.length,
+        ),
+      );
+      setFocusHabitId(storedDraft?.value.focusHabitId ?? existing?.focusHabitId ?? null);
+      setDraftState({
+        hydratedKey: draftStorageKey,
+        lastSavedAt: storedDraft?.savedAt ?? null,
+      });
       return;
     }
 
     const existing = reviewQuery.data.review.existingReview;
-    setResponses([
+    const storedDraft = existing
+      ? null
+      : readStoredReviewDraft<MonthlyReviewDraft>(draftStorageKey);
+    const baseResponses = [
       existing?.monthVerdict ?? "",
       existing?.biggestWin ?? "",
       existing?.biggestLeak ?? "",
       existing?.nextMonthTheme ?? "",
       existing?.threeOutcomes.join("\n") ?? "",
-    ]);
-  }, [reviewQuery.data]);
+    ];
+
+    if (existing) {
+      clearStoredReviewDraft(draftStorageKey);
+    }
+
+    setResponses(
+      normalizePromptResponses(
+        storedDraft?.value.responses ?? baseResponses,
+        reviewCadences.monthly.prompts.length,
+      ),
+    );
+    setDraftState({
+      hydratedKey: draftStorageKey,
+      lastSavedAt: storedDraft?.savedAt ?? null,
+    });
+  }, [draftState.hydratedKey, draftStorageKey, reviewQuery.data]);
+
+  useEffect(() => {
+    if (!reviewQuery.data || !draftStorageKey || draftState.hydratedKey !== draftStorageKey || isSubmitting) {
+      return;
+    }
+
+    let shouldPersist = false;
+    let draftPayload: DailyReviewDraft | WeeklyReviewDraft | MonthlyReviewDraft | null = null;
+
+    if (reviewQuery.data.cadence === "daily") {
+      if (reviewQuery.data.review.isCompleted) {
+        return;
+      }
+
+      draftPayload = {
+        dailyInputs,
+        dailyTaskDecisions,
+        dailyTomorrowPriorities: fillThreePriorityDraft(dailyTomorrowPriorities),
+      };
+      shouldPersist = hasMeaningfulDailyDraft(draftPayload);
+    } else if (reviewQuery.data.cadence === "weekly") {
+      if (reviewQuery.data.review.existingReview) {
+        return;
+      }
+
+      draftPayload = {
+        responses: normalizePromptResponses(responses, reviewCadences.weekly.prompts.length),
+        focusHabitId,
+      };
+      shouldPersist =
+        hasMeaningfulPromptResponses(draftPayload.responses) ||
+        Boolean(draftPayload.focusHabitId);
+    } else {
+      if (reviewQuery.data.review.existingReview) {
+        return;
+      }
+
+      draftPayload = {
+        responses: normalizePromptResponses(responses, reviewCadences.monthly.prompts.length),
+      };
+      shouldPersist = hasMeaningfulPromptResponses(draftPayload.responses);
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      if (!draftPayload || !shouldPersist) {
+        clearStoredReviewDraft(draftStorageKey);
+        setDraftState((current) => ({
+          ...current,
+          lastSavedAt: null,
+        }));
+        return;
+      }
+
+      const savedDraft = writeStoredReviewDraft(draftStorageKey, draftPayload);
+      if (!savedDraft) {
+        return;
+      }
+
+      setDraftState((current) => ({
+        ...current,
+        lastSavedAt: savedDraft.savedAt,
+      }));
+    }, 300);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [
+    dailyInputs,
+    dailyTaskDecisions,
+    dailyTomorrowPriorities,
+    draftState.hydratedKey,
+    draftStorageKey,
+    focusHabitId,
+    isSubmitting,
+    responses,
+    reviewQuery.data,
+  ]);
 
   async function handleSubmit() {
     if (!reviewQuery.data) {
@@ -324,6 +551,13 @@ export function ReviewsPage() {
           title: priority.title.trim(),
         })),
       });
+      if (draftStorageKey) {
+        clearStoredReviewDraft(draftStorageKey);
+        setDraftState((current) => ({
+          ...current,
+          lastSavedAt: null,
+        }));
+      }
       return;
     }
 
@@ -344,6 +578,13 @@ export function ReviewsPage() {
           focusHabitId: focusHabitId || null,
           notes: responses.join("\n\n"),
         });
+        if (draftStorageKey) {
+          clearStoredReviewDraft(draftStorageKey);
+          setDraftState((current) => ({
+            ...current,
+            lastSavedAt: null,
+          }));
+        }
       } catch (error) {
         if (isAlreadySubmittedError(error)) {
           void reviewQuery.refetch();
@@ -366,6 +607,13 @@ export function ReviewsPage() {
         simplifyText: responses[2] || "Remove low-signal commitments",
         notes: responses.join("\n\n"),
       });
+      if (draftStorageKey) {
+        clearStoredReviewDraft(draftStorageKey);
+        setDraftState((current) => ({
+          ...current,
+          lastSavedAt: null,
+        }));
+      }
     } catch (error) {
       if (isAlreadySubmittedError(error)) {
         void reviewQuery.refetch();
@@ -392,18 +640,6 @@ export function ReviewsPage() {
     );
   }
 
-  const isSubmitting =
-    submitDailyReviewMutation.isPending ||
-    submitWeeklyReviewMutation.isPending ||
-    submitMonthlyReviewMutation.isPending;
-  const submitError =
-    submitDailyReviewMutation.error ??
-    submitWeeklyReviewMutation.error ??
-    submitMonthlyReviewMutation.error;
-  const submitResult =
-    submitDailyReviewMutation.data ??
-    submitWeeklyReviewMutation.data ??
-    submitMonthlyReviewMutation.data;
   const dailyReview = reviewQuery.data.cadence === "daily" ? reviewQuery.data.review : null;
   const isDailyCompleted = dailyReview?.isCompleted ?? false;
 
@@ -834,6 +1070,9 @@ export function ReviewsPage() {
                   {isSubmitting ? "Submitting..." : "Submit daily review"}
                 </button>
               </div>
+              <p className="support-copy" style={{ marginTop: "0.5rem" }}>
+                {draftStatusText}
+              </p>
               {submitError ? (
                 <div
                   className={`inline-state ${isOutOfWindowError(submitError) ? "inline-state--out-of-window" : "inline-state--error"}`}
@@ -1190,7 +1429,7 @@ export function ReviewsPage() {
             <span className="support-copy">
               {!isWindowOpen
                 ? "Submission is currently disabled — the review window is not open."
-                : "Draft saving is not live yet, so this form only supports full submit."}
+                : "Submit when the reflection is ready."}
             </span>
             <button
               className="button button--primary"
@@ -1201,6 +1440,9 @@ export function ReviewsPage() {
               {isSubmitting ? "Submitting..." : "Submit review"}
             </button>
           </div>
+          <p className="support-copy" style={{ marginTop: "0.5rem" }}>
+            {draftStatusText}
+          </p>
           {submitError ? (
             <div
               className={`inline-state ${isAlreadySubmittedError(submitError) ? "inline-state--already-submitted" : isOutOfWindowError(submitError) ? "inline-state--out-of-window" : "inline-state--error"}`}
