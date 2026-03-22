@@ -55,6 +55,58 @@ const testEnv = {
   OWNER_PASSWORD: "password123",
 } as AppEnv;
 
+function buildTaskRecord(
+  overrides: Partial<{
+    id: string;
+    userId: string;
+    title: string;
+    notes: string | null;
+    status: "PENDING" | "COMPLETED" | "DROPPED";
+    scheduledForDate: Date | null;
+    dueAt: Date | null;
+    goalId: string | null;
+    goal: {
+      id: string;
+      title: string;
+      domain: "HEALTH" | "MONEY" | "WORK_GROWTH" | "HOME_ADMIN" | "DISCIPLINE" | "OTHER";
+      status: "ACTIVE" | "PAUSED" | "COMPLETED" | "ARCHIVED";
+    } | null;
+    originType: "MANUAL" | "QUICK_CAPTURE" | "CARRY_FORWARD" | "REVIEW_SEED" | "RECURRING" | "TEMPLATE";
+    carriedFromTaskId: string | null;
+    recurrenceRuleId: string | null;
+    recurrenceRule: {
+      id: string;
+      ruleJson: Record<string, unknown>;
+      carryPolicy: null;
+      legacyRuleText: null;
+      exceptions: [];
+    } | null;
+    completedAt: Date | null;
+    createdAt: Date;
+    updatedAt: Date;
+  }> = {},
+) {
+  return {
+    id: "task-1",
+    userId: "user-1",
+    title: "Inbox task",
+    notes: null,
+    status: "PENDING" as const,
+    scheduledForDate: null,
+    dueAt: null,
+    goalId: null,
+    goal: null,
+    originType: "QUICK_CAPTURE" as const,
+    carriedFromTaskId: null,
+    recurrenceRuleId: null,
+    recurrenceRule: null,
+    completedAt: null,
+    createdAt: new Date("2026-03-14T08:00:00.000Z"),
+    updatedAt: new Date("2026-03-14T08:00:00.000Z"),
+    ...overrides,
+  };
+}
+
 describe("module route smoke tests", () => {
   let app: Awaited<ReturnType<typeof Fastify>> | undefined;
   let prisma: Record<string, unknown>;
@@ -2519,6 +2571,140 @@ describe("module route smoke tests", () => {
         }),
       }),
     );
+  });
+
+  it("applies bulk scheduling and syncs reminder metadata", async () => {
+    const firstTaskId = "11111111-1111-4111-8111-111111111111";
+    const secondTaskId = "22222222-2222-4222-8222-222222222222";
+    const reminderNotes = JSON.stringify({
+      marker: "life_os_capture",
+      v: 1,
+      kind: "reminder",
+      text: "Call the bank",
+      reminderDate: "2026-03-14",
+    });
+    const findMany = vi
+      .fn()
+      .mockResolvedValueOnce([
+        buildTaskRecord({ id: firstTaskId }),
+        buildTaskRecord({ id: secondTaskId, notes: reminderNotes }),
+      ])
+      .mockResolvedValueOnce([
+        buildTaskRecord({
+          id: firstTaskId,
+          scheduledForDate: new Date("2026-03-16T00:00:00.000Z"),
+        }),
+        buildTaskRecord({
+          id: secondTaskId,
+          notes: JSON.stringify({
+            marker: "life_os_capture",
+            v: 1,
+            kind: "reminder",
+            text: "Call the bank",
+            reminderDate: "2026-03-16",
+          }),
+          scheduledForDate: new Date("2026-03-16T00:00:00.000Z"),
+        }),
+      ]);
+    const update = vi.fn().mockResolvedValue({});
+
+    prisma.task = {
+      findMany,
+      update,
+    } as any;
+
+    const response = await app!.inject({
+      method: "PATCH",
+      url: "/api/tasks/bulk",
+      payload: {
+        taskIds: [firstTaskId, secondTaskId],
+        action: {
+          type: "schedule",
+          scheduledForDate: "2026-03-16",
+        },
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(update).toHaveBeenCalledTimes(2);
+    expect(update).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        where: { id: firstTaskId },
+        data: expect.objectContaining({
+          scheduledForDate: new Date("2026-03-16T00:00:00.000Z"),
+          notes: null,
+        }),
+      }),
+    );
+    expect(update).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        where: { id: secondTaskId },
+        data: expect.objectContaining({
+          scheduledForDate: new Date("2026-03-16T00:00:00.000Z"),
+          notes: JSON.stringify({
+            marker: "life_os_capture",
+            v: 1,
+            kind: "reminder",
+            text: "Call the bank",
+            reminderDate: "2026-03-16",
+          }),
+        }),
+      }),
+    );
+    expect(JSON.parse(response.body).tasks).toHaveLength(2);
+  });
+
+  it("rejects bulk goal linking when the goal is foreign", async () => {
+    prisma.goal = {
+      findFirst: vi.fn().mockResolvedValue(null),
+    } as any;
+
+    const response = await app!.inject({
+      method: "PATCH",
+      url: "/api/tasks/bulk",
+      payload: {
+        taskIds: ["11111111-1111-4111-8111-111111111111"],
+        action: {
+          type: "link_goal",
+          goalId: "22222222-2222-4222-8222-222222222222",
+        },
+      },
+    });
+
+    expect(response.statusCode).toBe(404);
+    expect(JSON.parse(response.body).message).toBe("Goal not found");
+  });
+
+  it("rejects bulk updates when any task is missing", async () => {
+    const findMany = vi.fn().mockResolvedValue([
+      buildTaskRecord({ id: "11111111-1111-4111-8111-111111111111" }),
+    ]);
+    const update = vi.fn().mockResolvedValue({});
+
+    prisma.task = {
+      findMany,
+      update,
+    } as any;
+
+    const response = await app!.inject({
+      method: "PATCH",
+      url: "/api/tasks/bulk",
+      payload: {
+        taskIds: [
+          "11111111-1111-4111-8111-111111111111",
+          "33333333-3333-4333-8333-333333333333",
+        ],
+        action: {
+          type: "archive",
+        },
+      },
+    });
+
+    expect(response.statusCode).toBe(404);
+    expect(JSON.parse(response.body).message).toBe("Task not found");
+    expect(update).not.toHaveBeenCalled();
   });
 
   it("rejects foreign goal references on day priority updates", async () => {

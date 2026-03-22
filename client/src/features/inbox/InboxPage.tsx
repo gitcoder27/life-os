@@ -1,11 +1,14 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
+import { useAppFeedback } from "../../app/providers";
 import {
   getTodayDate,
   toIsoDate,
+  useBulkUpdateTasksMutation,
   useGoalsListQuery,
   useInboxQuery,
   useUpdateTaskMutation,
+  type BulkUpdateTasksInput,
   type LinkedGoal,
   type TaskItem,
 } from "../../shared/lib/api";
@@ -84,6 +87,27 @@ function getKindTagClass(kind: Exclude<InboxFilter, "all">) {
   }
 }
 
+function getBulkSuccessMessage(
+  action: BulkUpdateTasksInput["action"],
+  taskCount: number,
+  goalTitle?: string,
+) {
+  if (action.type === "schedule") {
+    const label = action.scheduledForDate === getTodayDate() ? "Moved" : "Scheduled";
+    return `${label} ${taskCount} inbox item${taskCount === 1 ? "" : "s"}.`;
+  }
+
+  if (action.type === "link_goal") {
+    if (!action.goalId) {
+      return `Removed the goal link from ${taskCount} inbox item${taskCount === 1 ? "" : "s"}.`;
+    }
+
+    return `Linked ${taskCount} inbox item${taskCount === 1 ? "" : "s"} to ${goalTitle ?? "the selected goal"}.`;
+  }
+
+  return `Archived ${taskCount} inbox item${taskCount === 1 ? "" : "s"}.`;
+}
+
 function GoalChip({ goal }: { goal: LinkedGoal }) {
   return (
     <span className="goal-chip">
@@ -96,17 +120,33 @@ function GoalChip({ goal }: { goal: LinkedGoal }) {
 export function InboxPage() {
   const today = getTodayDate();
   const tomorrow = getTomorrowDate(today);
+  const { pushFeedback } = useAppFeedback();
   const inboxQuery = useInboxQuery();
   const goalsListQuery = useGoalsListQuery();
   const updateTaskMutation = useUpdateTaskMutation(today);
+  const bulkSuccessMessageRef = useRef("Inbox updated.");
+  const bulkUpdateTasksMutation = useBulkUpdateTasksMutation(today, {
+    onSuccess: () => {
+      setSelectedTaskIds([]);
+      pushFeedback(bulkSuccessMessageRef.current, "success");
+    },
+  });
   const [activeFilter, setActiveFilter] = useState<InboxFilter>("all");
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
+  const [selectedTaskIds, setSelectedTaskIds] = useState<string[]>([]);
   const [scheduleDate, setScheduleDate] = useState(tomorrow);
   const [selectedGoalId, setSelectedGoalId] = useState("");
+  const [bulkScheduleDate, setBulkScheduleDate] = useState(tomorrow);
+  const [bulkGoalId, setBulkGoalId] = useState("");
 
   const activeGoals = useMemo(
     () => (goalsListQuery.data?.goals ?? []).filter((goal) => goal.status === "active"),
     [goalsListQuery.data],
+  );
+
+  const goalTitleById = useMemo(
+    () => new Map(activeGoals.map((goal) => [goal.id, goal.title])),
+    [activeGoals],
   );
 
   const inboxItems = useMemo(
@@ -135,6 +175,11 @@ export function InboxPage() {
   const selectedTaskText = selectedTask
     ? getQuickCaptureText(selectedTask.notes, selectedTask.notes?.trim() || selectedTask.title)
     : "";
+  const selectedTaskIdsSet = useMemo(() => new Set(selectedTaskIds), [selectedTaskIds]);
+  const bulkSelectedItems = filteredItems.filter((item) => selectedTaskIdsSet.has(item.id));
+  const hasBulkSelection = bulkSelectedItems.length > 0;
+  const allFilteredItemsSelected =
+    filteredItems.length > 0 && filteredItems.every((item) => selectedTaskIdsSet.has(item.id));
 
   useEffect(() => {
     const nextId = filteredItems[0]?.id ?? null;
@@ -143,6 +188,12 @@ export function InboxPage() {
       setSelectedTaskId(nextId);
     }
   }, [filteredItems, selectedTaskId]);
+
+  useEffect(() => {
+    const visibleIds = new Set(filteredItems.map((item) => item.id));
+
+    setSelectedTaskIds((current) => current.filter((taskId) => visibleIds.has(taskId)));
+  }, [filteredItems]);
 
   useEffect(() => {
     if (!selectedTask) {
@@ -165,7 +216,13 @@ export function InboxPage() {
     [inboxItems],
   );
 
-  const mutationError = updateTaskMutation.error instanceof Error ? updateTaskMutation.error.message : null;
+  const mutationError =
+    updateTaskMutation.error instanceof Error
+      ? updateTaskMutation.error.message
+      : bulkUpdateTasksMutation.error instanceof Error
+        ? bulkUpdateTasksMutation.error.message
+        : null;
+  const isMutating = updateTaskMutation.isPending || bulkUpdateTasksMutation.isPending;
   const retryAll = () => {
     void inboxQuery.refetch();
     void goalsListQuery.refetch();
@@ -175,6 +232,38 @@ export function InboxPage() {
     return getInboxItemKind(task) === "reminder"
       ? syncQuickCaptureReminderDate(task.notes, targetDate)
       : task.notes;
+  }
+
+  function toggleTaskSelection(taskId: string) {
+    setSelectedTaskIds((current) =>
+      current.includes(taskId) ? current.filter((id) => id !== taskId) : [...current, taskId],
+    );
+  }
+
+  function selectAllVisibleItems() {
+    setSelectedTaskIds(filteredItems.map((item) => item.id));
+  }
+
+  function clearSelection() {
+    setSelectedTaskIds([]);
+  }
+
+  function runBulkAction(action: BulkUpdateTasksInput["action"]) {
+    if (bulkSelectedItems.length === 0) {
+      return;
+    }
+
+    bulkSuccessMessageRef.current = getBulkSuccessMessage(
+      action,
+      bulkSelectedItems.length,
+      action.type === "link_goal" ? goalTitleById.get(action.goalId ?? "") : undefined,
+    );
+    const payload = {
+      taskIds: bulkSelectedItems.map((task) => task.id),
+      action,
+    } as BulkUpdateTasksInput;
+
+    bulkUpdateTasksMutation.mutate(payload);
   }
 
   function handleDoToday() {
@@ -237,6 +326,37 @@ export function InboxPage() {
     });
   }
 
+  function handleBulkDoToday() {
+    runBulkAction({
+      type: "schedule",
+      scheduledForDate: today,
+    });
+  }
+
+  function handleBulkSchedule() {
+    if (!bulkScheduleDate) {
+      return;
+    }
+
+    runBulkAction({
+      type: "schedule",
+      scheduledForDate: bulkScheduleDate,
+    });
+  }
+
+  function handleBulkLinkGoal() {
+    runBulkAction({
+      type: "link_goal",
+      goalId: bulkGoalId || null,
+    });
+  }
+
+  function handleBulkArchive() {
+    runBulkAction({
+      type: "archive",
+    });
+  }
+
   if (inboxQuery.isLoading && !inboxQuery.data) {
     return (
       <PageLoadingState
@@ -287,7 +407,7 @@ export function InboxPage() {
         <SectionCard
           className="inbox-panel inbox-panel--queue"
           title={`Queue (${filteredItems.length})`}
-          subtitle="Newest inbox items first. Filter the lane, then open one item at a time."
+          subtitle="Newest inbox items first. Open one item to inspect it, or use checkboxes to triage a batch."
         >
           <div className="inbox-filter-bar" role="tablist" aria-label="Inbox filters">
             {filterOptions.map((option) => (
@@ -304,34 +424,74 @@ export function InboxPage() {
           </div>
 
           {filteredItems.length > 0 ? (
-            <ul className="inbox-list">
-              {filteredItems.map((item) => {
-                const itemKind = getInboxItemKind(item);
-                const itemMeta = parseQuickCaptureNotes(item.notes);
-                const isSelected = item.id === selectedTask?.id;
-                const preview = getQuickCaptureDisplayText(item.notes, item.title);
-
-                return (
-                  <li key={item.id}>
+            <>
+              <div className="inbox-selection-bar">
+                <div className="inbox-selection-bar__summary">
+                  <strong>{bulkSelectedItems.length}</strong>
+                  <span>{bulkSelectedItems.length === 1 ? "item selected" : "items selected"}</span>
+                </div>
+                <div className="button-row button-row--wrap">
+                  <button
+                    className="button button--ghost"
+                    type="button"
+                    onClick={allFilteredItemsSelected ? clearSelection : selectAllVisibleItems}
+                    disabled={isMutating}
+                  >
+                    {allFilteredItemsSelected ? "Clear visible" : "Select all visible"}
+                  </button>
+                  {hasBulkSelection ? (
                     <button
-                      className={`inbox-item${isSelected ? " inbox-item--active" : ""}`}
+                      className="button button--ghost"
                       type="button"
-                      onClick={() => setSelectedTaskId(item.id)}
+                      onClick={clearSelection}
+                      disabled={isMutating}
                     >
-                      <div className="inbox-item__topline">
-                        <span className={getKindTagClass(itemKind)}>{getKindLabel(itemKind)}</span>
-                        <span className="inbox-item__time">{formatCreatedAt(item.createdAt)}</span>
-                      </div>
-                      <strong className="inbox-item__title">{preview}</strong>
-                      <div className="inbox-item__meta">
-                        {itemMeta?.reminderDate ? <span>Reminder date {itemMeta.reminderDate}</span> : null}
-                        {item.goal ? <GoalChip goal={item.goal} /> : <span>Unlinked</span>}
-                      </div>
+                      Clear selection
                     </button>
-                  </li>
-                );
-              })}
-            </ul>
+                  ) : null}
+                </div>
+              </div>
+
+              <ul className="inbox-list">
+                {filteredItems.map((item) => {
+                  const itemKind = getInboxItemKind(item);
+                  const itemMeta = parseQuickCaptureNotes(item.notes);
+                  const isSelected = item.id === selectedTask?.id;
+                  const isChecked = selectedTaskIdsSet.has(item.id);
+                  const preview = getQuickCaptureDisplayText(item.notes, item.title);
+
+                  return (
+                    <li key={item.id} className={`inbox-row${isChecked ? " inbox-row--checked" : ""}`}>
+                      <label className="inbox-row__checkbox">
+                        <input
+                          type="checkbox"
+                          checked={isChecked}
+                          onChange={() => toggleTaskSelection(item.id)}
+                          disabled={isMutating}
+                          aria-label={`Select ${preview}`}
+                        />
+                        <span>Select</span>
+                      </label>
+                      <button
+                        className={`inbox-item${isSelected ? " inbox-item--active" : ""}`}
+                        type="button"
+                        onClick={() => setSelectedTaskId(item.id)}
+                      >
+                        <div className="inbox-item__topline">
+                          <span className={getKindTagClass(itemKind)}>{getKindLabel(itemKind)}</span>
+                          <span className="inbox-item__time">{formatCreatedAt(item.createdAt)}</span>
+                        </div>
+                        <strong className="inbox-item__title">{preview}</strong>
+                        <div className="inbox-item__meta">
+                          {itemMeta?.reminderDate ? <span>Reminder date {itemMeta.reminderDate}</span> : null}
+                          {item.goal ? <GoalChip goal={item.goal} /> : <span>Unlinked</span>}
+                        </div>
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            </>
           ) : (
             <EmptyState
               title="Inbox is clear"
@@ -342,14 +502,128 @@ export function InboxPage() {
 
         <SectionCard
           className="inbox-panel inbox-panel--detail"
-          title={selectedTask ? "Inspector" : "Triage"}
+          title={hasBulkSelection ? "Bulk actions" : selectedTask ? "Inspector" : "Triage"}
           subtitle={
-            selectedTask
-              ? "Promote, schedule, link, convert, or archive without leaving the queue."
-              : "Select an item to decide where it belongs."
+            hasBulkSelection
+              ? "Apply one decision across the checked items. Clear selection to return to single-item triage."
+              : selectedTask
+                ? "Promote, schedule, link, convert, or archive without leaving the queue."
+                : "Select an item to decide where it belongs."
           }
         >
-          {selectedTask ? (
+          {hasBulkSelection ? (
+            <div className="inbox-detail">
+              <div className="inbox-detail__hero">
+                <div className="inbox-detail__hero-main">
+                  <span className="tag tag--neutral">Batch mode</span>
+                  <strong>{bulkSelectedItems.length} selected</strong>
+                </div>
+                <span className="inbox-detail__time">Visible selection only</span>
+              </div>
+
+              <div className="inbox-detail__content">
+                <h2 className="inbox-detail__title">Process this group together</h2>
+                <p className="inbox-detail__body">
+                  Use one action when these captures belong on the same day, under the same goal, or should all leave the queue together.
+                </p>
+              </div>
+
+              <div className="inbox-detail__meta-grid">
+                <div>
+                  <span className="inbox-detail__meta-label">Selection</span>
+                  <strong>{bulkSelectedItems.length} items</strong>
+                </div>
+                <div>
+                  <span className="inbox-detail__meta-label">Tasks</span>
+                  <strong>{bulkSelectedItems.filter((item) => getInboxItemKind(item) === "task").length}</strong>
+                </div>
+                <div>
+                  <span className="inbox-detail__meta-label">Notes</span>
+                  <strong>{bulkSelectedItems.filter((item) => getInboxItemKind(item) === "note").length}</strong>
+                </div>
+                <div>
+                  <span className="inbox-detail__meta-label">Reminders</span>
+                  <strong>{bulkSelectedItems.filter((item) => getInboxItemKind(item) === "reminder").length}</strong>
+                </div>
+              </div>
+
+              <div className="inbox-detail__actions">
+                <div className="inbox-action-block">
+                  <div className="inbox-action-block__header">
+                    <h3>Promote</h3>
+                    <p>Move the whole selection onto today or another date in one step.</p>
+                  </div>
+                  <div className="button-row button-row--wrap inbox-action-row">
+                    <button
+                      className="button button--primary"
+                      type="button"
+                      onClick={handleBulkDoToday}
+                      disabled={isMutating}
+                    >
+                      Do today
+                    </button>
+                    <label className="field inbox-schedule-field">
+                      <span>Schedule date</span>
+                      <input
+                        type="date"
+                        min={today}
+                        value={bulkScheduleDate}
+                        onChange={(event) => setBulkScheduleDate(event.target.value)}
+                      />
+                    </label>
+                    <button
+                      className="button button--ghost"
+                      type="button"
+                      onClick={handleBulkSchedule}
+                      disabled={isMutating || !bulkScheduleDate}
+                    >
+                      Schedule
+                    </button>
+                  </div>
+                </div>
+
+                <div className="inbox-action-block">
+                  <div className="inbox-action-block__header">
+                    <h3>Organize</h3>
+                    <p>Apply the same context or archive decision across the selected group.</p>
+                  </div>
+                  <div className="button-row button-row--wrap inbox-action-row">
+                    <label className="field inbox-goal-field">
+                      <span>Linked goal</span>
+                      <select
+                        value={bulkGoalId}
+                        onChange={(event) => setBulkGoalId(event.target.value)}
+                        disabled={goalsListQuery.isLoading || isMutating}
+                      >
+                        <option value="">No goal</option>
+                        {activeGoals.map((goal) => (
+                          <option key={goal.id} value={goal.id}>
+                            {goal.title}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <button
+                      className="button button--ghost"
+                      type="button"
+                      onClick={handleBulkLinkGoal}
+                      disabled={isMutating}
+                    >
+                      {bulkGoalId ? "Link to goal" : "Remove goal"}
+                    </button>
+                    <button
+                      className="button button--ghost"
+                      type="button"
+                      onClick={handleBulkArchive}
+                      disabled={isMutating}
+                    >
+                      Archive
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : selectedTask ? (
             <div className="inbox-detail">
               <div className="inbox-detail__hero">
                 <div className="inbox-detail__hero-main">
@@ -396,7 +670,7 @@ export function InboxPage() {
                       className="button button--primary"
                       type="button"
                       onClick={handleDoToday}
-                      disabled={updateTaskMutation.isPending}
+                      disabled={isMutating}
                     >
                       Do today
                     </button>
@@ -413,7 +687,7 @@ export function InboxPage() {
                       className="button button--ghost"
                       type="button"
                       onClick={handleSchedule}
-                      disabled={updateTaskMutation.isPending || !scheduleDate}
+                      disabled={isMutating || !scheduleDate}
                     >
                       Schedule
                     </button>
@@ -431,7 +705,7 @@ export function InboxPage() {
                       <select
                         value={selectedGoalId}
                         onChange={(event) => setSelectedGoalId(event.target.value)}
-                        disabled={goalsListQuery.isLoading}
+                        disabled={goalsListQuery.isLoading || isMutating}
                       >
                         <option value="">No goal</option>
                         {activeGoals.map((goal) => (
@@ -445,7 +719,7 @@ export function InboxPage() {
                       className="button button--ghost"
                       type="button"
                       onClick={handleLinkGoal}
-                      disabled={updateTaskMutation.isPending}
+                      disabled={isMutating}
                     >
                       Link to goal
                     </button>
@@ -454,7 +728,7 @@ export function InboxPage() {
                         className="button button--ghost"
                         type="button"
                         onClick={handleConvertToNote}
-                        disabled={updateTaskMutation.isPending}
+                        disabled={isMutating}
                       >
                         Convert to note
                       </button>
@@ -463,7 +737,7 @@ export function InboxPage() {
                       className="button button--ghost"
                       type="button"
                       onClick={handleArchive}
-                      disabled={updateTaskMutation.isPending}
+                      disabled={isMutating}
                     >
                       Archive
                     </button>

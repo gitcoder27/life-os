@@ -119,12 +119,34 @@ export interface UpdateTaskRequest {
   carryPolicy?: RecurringTaskCarryPolicy | null;
 }
 
+export type BulkUpdateTaskAction =
+  | {
+      type: "schedule";
+      scheduledForDate: IsoDateString;
+    }
+  | {
+      type: "link_goal";
+      goalId: EntityId | null;
+    }
+  | {
+      type: "archive";
+    };
+
+export interface BulkUpdateTasksRequest {
+  taskIds: EntityId[];
+  action: BulkUpdateTaskAction;
+}
+
 export interface CarryForwardTaskRequest {
   targetDate: IsoDateString;
 }
 
 export interface TaskMutationResponse extends ApiMeta {
   task: PlanningTaskItem;
+}
+
+export interface BulkTaskMutationResponse extends ApiMeta {
+  tasks: PlanningTaskItem[];
 }
 
 export interface TaskTemplateTask {

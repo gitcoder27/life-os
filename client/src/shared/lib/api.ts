@@ -359,6 +359,11 @@ type TaskMutationResponse = {
   task: TaskItem;
 };
 
+type BulkTaskMutationResponse = {
+  generatedAt: string;
+  tasks: TaskItem[];
+};
+
 type TasksResponse = {
   generatedAt: string;
   tasks: TaskItem[];
@@ -388,6 +393,28 @@ export type TasksQueryFilters = {
   originType?: "manual" | "quick_capture" | "carry_forward" | "review_seed" | "recurring" | "template";
   scheduledState?: "all" | "scheduled" | "unscheduled";
 };
+
+export type BulkUpdateTasksInput =
+  | {
+      taskIds: string[];
+      action: {
+        type: "schedule";
+        scheduledForDate: string;
+      };
+    }
+  | {
+      taskIds: string[];
+      action: {
+        type: "link_goal";
+        goalId: string | null;
+      };
+    }
+  | {
+      taskIds: string[];
+      action: {
+        type: "archive";
+      };
+    };
 
 type HabitsResponse = {
   generatedAt: string;
@@ -2099,6 +2126,30 @@ export function useUpdateTaskMutation(date: string) {
       errorMessage: "Task update failed.",
     },
     onSuccess: () => invalidateCoreData(queryClient, date),
+  });
+}
+
+export function useBulkUpdateTasksMutation(
+  date: string,
+  options?: {
+    onSuccess?: (response: BulkTaskMutationResponse) => void;
+  },
+) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (payload: BulkUpdateTasksInput) =>
+      apiRequest<BulkTaskMutationResponse>("/api/tasks/bulk", {
+        method: "PATCH",
+        body: payload,
+      }),
+    meta: {
+      errorMessage: "Bulk inbox update failed.",
+    },
+    onSuccess: (response) => {
+      invalidateCoreData(queryClient, date);
+      options?.onSuccess?.(response);
+    },
   });
 }
 

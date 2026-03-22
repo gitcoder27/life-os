@@ -1,6 +1,8 @@
 import type { FastifyPluginAsync } from "fastify";
 import type {
   ApplyTaskTemplateResponse,
+  BulkTaskMutationResponse,
+  BulkUpdateTasksRequest,
   CreateGoalRequest,
   CreateTaskRequest,
   CreateTaskTemplateRequest,
@@ -68,6 +70,7 @@ import { AppError } from "../../lib/errors/app-error.js";
 import { calculateHabitActiveStreak, calculateHabitRisk } from "../../lib/habits/guidance.js";
 import { isHabitDueOnIsoDate, resolveHabitRecurrence } from "../../lib/habits/schedule.js";
 import { withGeneratedAt } from "../../lib/http/response.js";
+import { syncQuickCaptureReminderDate } from "../../lib/quick-capture.js";
 import { applyRecurringTaskCarryForward, materializeNextRecurringTaskOccurrence, materializeRecurringTasksInRange } from "../../lib/recurrence/tasks.js";
 import { serializeRecurrenceDefinition, upsertRecurrenceRuleRecord } from "../../lib/recurrence/store.js";
 import { addDays, getMonthEndDate, getMonthStartIsoDate, getWeekEndDate, getWeekStartIsoDate, parseIsoDate } from "../../lib/time/cycle.js";
@@ -221,6 +224,44 @@ const updateTaskSchema = z
     carryPolicy: carryPolicySchema.nullable().optional(),
   })
   .refine((value) => Object.keys(value).length > 0, "At least one field must be updated");
+
+const bulkTaskActionSchema = z.discriminatedUnion("type", [
+  z.object({
+    type: z.literal("schedule"),
+    scheduledForDate: isoDateSchema,
+  }),
+  z.object({
+    type: z.literal("link_goal"),
+    goalId: z.string().uuid().nullable(),
+  }),
+  z.object({
+    type: z.literal("archive"),
+  }),
+]);
+
+const bulkUpdateTasksSchema = z.object({
+  taskIds: z
+    .array(z.string().uuid())
+    .min(1)
+    .max(100)
+    .superRefine((taskIds, context) => {
+      const seen = new Set<string>();
+
+      taskIds.forEach((taskId, index) => {
+        if (seen.has(taskId)) {
+          context.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: [index],
+            message: "Task ids must be unique",
+          });
+          return;
+        }
+
+        seen.add(taskId);
+      });
+    }),
+  action: bulkTaskActionSchema,
+});
 
 const carryForwardTaskSchema = z.object({
   targetDate: isoDateSchema,
@@ -596,6 +637,29 @@ function serializeGoalLinkedTask(task: Task): GoalLinkedTaskItem {
     completedAt: task.completedAt?.toISOString() ?? null,
     createdAt: task.createdAt.toISOString(),
     updatedAt: task.updatedAt.toISOString(),
+  };
+}
+
+function buildBulkTaskUpdateData(
+  task: Pick<Task, "notes">,
+  action: BulkUpdateTasksRequest["action"],
+) {
+  if (action.type === "schedule") {
+    return {
+      scheduledForDate: parseIsoDate(action.scheduledForDate),
+      notes: syncQuickCaptureReminderDate(task.notes, action.scheduledForDate),
+    };
+  }
+
+  if (action.type === "link_goal") {
+    return {
+      goalId: action.goalId,
+    };
+  }
+
+  return {
+    status: toPrismaTaskStatus("dropped"),
+    completedAt: null,
   };
 }
 
@@ -1975,6 +2039,90 @@ export const registerPlanningRoutes: FastifyPluginAsync = async (app) => {
     });
 
     return reply.status(201).send(response);
+  });
+
+  app.patch("/tasks/bulk", async (request, reply) => {
+    const user = requireAuthenticatedUser(request);
+    const payload = parseOrThrow(bulkUpdateTasksSchema, request.body as BulkUpdateTasksRequest);
+
+    if (payload.action.type === "link_goal") {
+      await assertOwnedGoalReference(app, user.id, payload.action.goalId);
+    }
+
+    const existingTasks = await app.prisma.task.findMany({
+      where: {
+        id: {
+          in: payload.taskIds,
+        },
+        userId: user.id,
+      },
+      select: {
+        id: true,
+        notes: true,
+      },
+    });
+
+    if (existingTasks.length !== payload.taskIds.length) {
+      throw new AppError({
+        statusCode: 404,
+        code: "NOT_FOUND",
+        message: "Task not found",
+      });
+    }
+
+    const taskById = new Map(existingTasks.map((task) => [task.id, task]));
+
+    const tasks = await app.prisma.$transaction(async (tx) => {
+      await Promise.all(
+        payload.taskIds.map((taskId) => {
+          const task = taskById.get(taskId);
+
+          if (!task) {
+            throw new AppError({
+              statusCode: 404,
+              code: "NOT_FOUND",
+              message: "Task not found",
+            });
+          }
+
+          return tx.task.update({
+            where: {
+              id: taskId,
+            },
+            data: buildBulkTaskUpdateData(task, payload.action),
+          });
+        }),
+      );
+
+      return tx.task.findMany({
+        where: {
+          id: {
+            in: payload.taskIds,
+          },
+        },
+        include: {
+          goal: true,
+          recurrenceRule: {
+            include: {
+              exceptions: {
+                orderBy: {
+                  occurrenceDate: "asc",
+                },
+              },
+            },
+          },
+        },
+      });
+    });
+
+    const serializedTasksById = new Map(tasks.map((task) => [task.id, serializeTask(task)]));
+    const response: BulkTaskMutationResponse = withGeneratedAt({
+      tasks: payload.taskIds
+        .map((taskId) => serializedTasksById.get(taskId))
+        .filter((task): task is PlanningTaskItem => Boolean(task)),
+    });
+
+    return reply.send(response);
   });
 
   app.patch("/tasks/:taskId", async (request, reply) => {
