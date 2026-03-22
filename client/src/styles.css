@@ -3469,6 +3469,23 @@ img { max-width: 100%; display: block; }
   opacity: 0.8;
 }
 
+.recurrence-editor__preview {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  padding: 0.15rem 0;
+  font-size: var(--fs-small);
+  line-height: 1.5;
+}
+
+.recurrence-editor__preview-label {
+  color: var(--text-tertiary);
+}
+
+.recurrence-editor__preview-value {
+  color: var(--text-secondary);
+}
+
 .recurrence-editor__frequency {
   display: flex;
   gap: 0.25rem;
@@ -3731,6 +3748,11 @@ img { max-width: 100%; display: block; }
 @media (max-width: 640px) {
   .recurrence-editor {
     padding: 0.6rem;
+  }
+
+  .recurrence-editor__preview {
+    flex-direction: column;
+    gap: 0.1rem;
   }
 
   .recurrence-editor__frequency {

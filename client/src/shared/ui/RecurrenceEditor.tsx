@@ -1,4 +1,5 @@
-import { type FormEvent, useState } from "react";
+import { useState } from "react";
+import { formatShortDate, getTodayDate } from "../lib/api";
 import {
   type RecurrenceContext,
   type RecurrenceEndCondition,
@@ -10,6 +11,7 @@ import {
   DAY_LABELS_SHORT,
   formatFullRecurrenceSummary,
   getDefaultRecurrenceRule,
+  listUpcomingRecurrenceDates,
 } from "../lib/recurrence";
 
 type RecurrenceEditorProps = {
@@ -44,6 +46,9 @@ export function RecurrenceEditor({ value, onChange, context, startsOn }: Recurre
   const [showEndCondition, setShowEndCondition] = useState(
     rule.end != null && rule.end.type !== "never",
   );
+  const today = getTodayDate();
+  const previewStartDate = today > rule.startsOn ? today : rule.startsOn;
+  const previewDates = listUpcomingRecurrenceDates(rule, 3, previewStartDate);
 
   function updateFrequency(frequency: RecurrenceFrequency) {
     const base: RecurrenceRuleInput = {
@@ -106,6 +111,13 @@ export function RecurrenceEditor({ value, onChange, context, startsOn }: Recurre
       <div className="recurrence-editor__summary">
         <span className="recurrence-editor__summary-icon">↻</span>
         <span>{summary}</span>
+      </div>
+
+      <div className="recurrence-editor__preview" aria-live="polite">
+        <span className="recurrence-editor__preview-label">Next 3 occurrences:</span>
+        <span className="recurrence-editor__preview-value">
+          {previewDates.length > 0 ? previewDates.map((date) => formatShortDate(date)).join(", ") : "No future occurrences"}
+        </span>
       </div>
 
       {/* Frequency selector */}

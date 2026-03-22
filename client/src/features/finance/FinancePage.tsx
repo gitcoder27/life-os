@@ -17,9 +17,12 @@ import {
   useUpdateRecurringExpenseMutation,
 } from "../../shared/lib/api";
 import {
+  formatLegacyFinanceRecurrenceRule,
   type RecurrenceRuleInput,
   formatFullRecurrenceSummary,
+  getDefaultRecurrenceRule,
   isRecurring,
+  parseLegacyFinanceRecurrenceRule,
 } from "../../shared/lib/recurrence";
 import { PageHeader } from "../../shared/ui/PageHeader";
 import {
@@ -202,20 +205,31 @@ export function FinancePage() {
 
   // Recurring CRUD
   function openCreateRecurring() {
+    const defaultRule = getDefaultRecurrenceRule("finance", today);
     setEditingRecId(null);
-    setRecForm(emptyRecurring);
+    setRecForm({
+      ...emptyRecurring,
+      nextDueOn: today,
+      recurrenceInput: defaultRule,
+      recurrenceRule: formatLegacyFinanceRecurrenceRule(defaultRule),
+    });
     setShowRecForm(true);
   }
 
   function openEditRecurring(item: typeof recurringExpenses[number]) {
+    const recurrenceInput = item.recurrence?.rule
+      ?? parseLegacyFinanceRecurrenceRule(item.recurrenceRule, item.nextDueOn)
+      ?? getDefaultRecurrenceRule("finance", item.nextDueOn);
+    const nextDueOn = recurrenceInput.startsOn;
+
     setEditingRecId(item.id);
     setRecForm({
       title: item.title,
       expenseCategoryId: item.expenseCategoryId ?? "",
       defaultAmount: item.defaultAmountMinor ? String(item.defaultAmountMinor / 100) : "",
-      recurrenceRule: item.recurrenceRule,
-      recurrenceInput: item.recurrence?.rule ?? null,
-      nextDueOn: item.nextDueOn,
+      recurrenceRule: formatLegacyFinanceRecurrenceRule(recurrenceInput),
+      recurrenceInput,
+      nextDueOn,
       remindDaysBefore: String(item.remindDaysBefore),
     });
     setShowRecForm(true);
@@ -224,18 +238,20 @@ export function FinancePage() {
   async function handleRecurringSave() {
     if (!recForm.title.trim() || !recForm.nextDueOn) return;
     const amountMinor = recForm.defaultAmount ? parseAmountToMinor(recForm.defaultAmount) : null;
-    const recurrence = recForm.recurrenceInput
-      ? buildRecurrenceInput(recForm.recurrenceInput)
-      : undefined;
+    const recurrenceRuleInput = recForm.recurrenceInput
+      ?? parseLegacyFinanceRecurrenceRule(recForm.recurrenceRule, recForm.nextDueOn)
+      ?? getDefaultRecurrenceRule("finance", recForm.nextDueOn);
+    const recurrence = buildRecurrenceInput(recurrenceRuleInput);
+    const recurrenceRule = formatLegacyFinanceRecurrenceRule(recurrenceRuleInput);
     if (editingRecId) {
       await updateRecurringMutation.mutateAsync({
         recurringExpenseId: editingRecId,
         title: recForm.title.trim(),
         expenseCategoryId: recForm.expenseCategoryId || null,
         defaultAmountMinor: amountMinor,
-        recurrenceRule: recForm.recurrenceRule,
+        recurrenceRule,
         recurrence,
-        nextDueOn: recForm.nextDueOn,
+        nextDueOn: recurrenceRuleInput.startsOn,
         remindDaysBefore: Number(recForm.remindDaysBefore) || 3,
       });
     } else {
@@ -243,9 +259,9 @@ export function FinancePage() {
         title: recForm.title.trim(),
         expenseCategoryId: recForm.expenseCategoryId || undefined,
         defaultAmountMinor: amountMinor,
-        recurrenceRule: recForm.recurrenceRule,
+        recurrenceRule,
         recurrence,
-        nextDueOn: recForm.nextDueOn,
+        nextDueOn: recurrenceRuleInput.startsOn,
         remindDaysBefore: Number(recForm.remindDaysBefore) || 3,
       });
     }
@@ -542,14 +558,37 @@ export function FinancePage() {
                 <span className="manage-form__section-label">Recurrence</span>
                 <RecurrenceEditor
                   value={recForm.recurrenceInput}
-                  onChange={(rule) => setRecForm((p) => ({ ...p, recurrenceInput: rule }))}
+                  onChange={(rule) => setRecForm((p) => ({
+                    ...p,
+                    recurrenceInput: rule,
+                    recurrenceRule: formatLegacyFinanceRecurrenceRule(rule),
+                    nextDueOn: rule.startsOn,
+                  }))}
                   context="finance"
                   startsOn={recForm.nextDueOn || today}
                 />
               </div>
               <label className="field">
                 <span>Next due date</span>
-                <input type="date" value={recForm.nextDueOn} onChange={(e) => setRecForm((p) => ({ ...p, nextDueOn: e.target.value }))} />
+                <input
+                  type="date"
+                  value={recForm.nextDueOn}
+                  onChange={(e) => setRecForm((p) => {
+                    const nextDueOn = e.target.value;
+                    const recurrenceInput = p.recurrenceInput
+                      ? { ...p.recurrenceInput, startsOn: nextDueOn }
+                      : nextDueOn
+                        ? getDefaultRecurrenceRule("finance", nextDueOn)
+                        : p.recurrenceInput;
+
+                    return {
+                      ...p,
+                      nextDueOn,
+                      recurrenceInput,
+                      recurrenceRule: recurrenceInput ? formatLegacyFinanceRecurrenceRule(recurrenceInput) : p.recurrenceRule,
+                    };
+                  })}
+                />
               </label>
               <label className="field">
                 <span>Remind days before</span>
