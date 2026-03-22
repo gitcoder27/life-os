@@ -29,6 +29,7 @@ import type {
   PlanningPriorityMutationResponse,
   PriorityMutationResponse,
   PlanningTaskItem,
+  TaskKind,
   TasksResponse,
   TaskMutationResponse,
   TaskTemplateItem,
@@ -59,6 +60,7 @@ import type {
   PlanningCycleType,
   PriorityStatus as PrismaPriorityStatus,
   Task,
+  TaskKind as PrismaTaskKind,
   TaskOriginType as PrismaTaskOriginType,
   TaskStatus as PrismaTaskStatus,
   TaskTemplate,
@@ -70,7 +72,6 @@ import { AppError } from "../../lib/errors/app-error.js";
 import { calculateHabitActiveStreak, calculateHabitRisk } from "../../lib/habits/guidance.js";
 import { isHabitDueOnIsoDate, isHabitPermanentlyInactive, resolveHabitRecurrence } from "../../lib/habits/schedule.js";
 import { withGeneratedAt } from "../../lib/http/response.js";
-import { syncQuickCaptureReminderDate } from "../../lib/quick-capture.js";
 import { applyRecurringTaskCarryForward, materializeNextRecurringTaskOccurrence, materializeRecurringTasksInRange } from "../../lib/recurrence/tasks.js";
 import { serializeRecurrenceDefinition, upsertRecurrenceRuleRecord } from "../../lib/recurrence/store.js";
 import { addDays, getMonthEndDate, getMonthStartIsoDate, getWeekEndDate, getWeekStartIsoDate, parseIsoDate } from "../../lib/time/cycle.js";
@@ -95,6 +96,7 @@ const goalStatusSchema = z.enum(["active", "paused", "completed", "archived"]);
 const goalMilestoneStatusSchema = z.enum(["pending", "completed"]);
 const priorityStatusSchema = z.enum(["pending", "completed", "dropped"]);
 const taskStatusSchema = z.enum(["pending", "completed", "dropped"]);
+const taskKindSchema = z.enum(["task", "note", "reminder"]);
 const taskOriginSchema = z.enum([
   "manual",
   "quick_capture",
@@ -205,6 +207,8 @@ const updatePrioritySchema = z
 const createTaskSchema = z.object({
   title: z.string().min(1).max(200),
   notes: z.string().max(4000).nullable().optional(),
+  kind: taskKindSchema.optional(),
+  reminderDate: isoDateSchema.nullable().optional(),
   scheduledForDate: isoDateSchema.nullable().optional(),
   dueAt: isoDateTimeSchema.nullable().optional(),
   goalId: z.string().uuid().nullable().optional(),
@@ -217,6 +221,8 @@ const updateTaskSchema = z
   .object({
     title: z.string().min(1).max(200).optional(),
     notes: z.string().max(4000).nullable().optional(),
+    kind: taskKindSchema.optional(),
+    reminderDate: isoDateSchema.nullable().optional(),
     status: taskStatusSchema.optional(),
     scheduledForDate: isoDateSchema.nullable().optional(),
     dueAt: isoDateTimeSchema.nullable().optional(),
@@ -293,6 +299,7 @@ const taskListQuerySchema = z
     from: isoDateSchema.optional(),
     to: isoDateSchema.optional(),
     status: taskStatusSchema.optional(),
+    kind: taskKindSchema.optional(),
     originType: taskOriginSchema.optional(),
     scheduledState: z.enum(["all", "scheduled", "unscheduled"]).optional(),
   })
@@ -438,6 +445,28 @@ function fromPrismaTaskStatus(status: PrismaTaskStatus): PlanningTaskItem["statu
   }
 }
 
+function toPrismaTaskKind(kind: TaskKind): PrismaTaskKind {
+  switch (kind) {
+    case "task":
+      return "TASK";
+    case "note":
+      return "NOTE";
+    case "reminder":
+      return "REMINDER";
+  }
+}
+
+function fromPrismaTaskKind(kind: PrismaTaskKind): TaskKind {
+  switch (kind) {
+    case "TASK":
+      return "task";
+    case "NOTE":
+      return "note";
+    case "REMINDER":
+      return "reminder";
+  }
+}
+
 function toPrismaTaskOriginType(originType: PlanningTaskItem["originType"]): PrismaTaskOriginType {
   switch (originType) {
     case "manual":
@@ -488,6 +517,27 @@ function serializeGoal(goal: Goal): GoalItem {
 function normalizeTaskTemplateDescription(value: string | null | undefined) {
   const trimmed = value?.trim() ?? "";
   return trimmed ? trimmed : null;
+}
+
+function toTaskReminderDate(isoDate: IsoDateString | null | undefined) {
+  if (isoDate === undefined) {
+    return undefined;
+  }
+
+  return isoDate === null ? null : parseIsoDate(isoDate);
+}
+
+function resolveReminderDateForUpdate(
+  payload: Pick<UpdateTaskRequest, "kind" | "reminderDate">,
+  existingKind: PrismaTaskKind,
+) {
+  const nextKind = payload.kind ? toPrismaTaskKind(payload.kind) : existingKind;
+
+  if (nextKind !== "REMINDER") {
+    return payload.kind !== undefined || payload.reminderDate !== undefined ? null : undefined;
+  }
+
+  return toTaskReminderDate(payload.reminderDate);
 }
 
 function parseTaskTemplateTasks(payload: unknown): TaskTemplateItem["tasks"] {
@@ -574,6 +624,8 @@ function serializeTask(task: Task & {
     id: task.id,
     title: task.title,
     notes: task.notes,
+    kind: fromPrismaTaskKind(task.kind),
+    reminderDate: task.reminderDate ? toIsoDateString(task.reminderDate) : null,
     status: fromPrismaTaskStatus(task.status),
     scheduledForDate: task.scheduledForDate ? toIsoDateString(task.scheduledForDate) : null,
     dueAt: task.dueAt?.toISOString() ?? null,
@@ -631,6 +683,8 @@ function serializeGoalLinkedTask(task: Task): GoalLinkedTaskItem {
     id: task.id,
     title: task.title,
     notes: task.notes,
+    kind: fromPrismaTaskKind(task.kind),
+    reminderDate: task.reminderDate ? toIsoDateString(task.reminderDate) : null,
     status: fromPrismaTaskStatus(task.status),
     scheduledForDate: task.scheduledForDate ? toIsoDateString(task.scheduledForDate) : null,
     dueAt: task.dueAt?.toISOString() ?? null,
@@ -642,13 +696,13 @@ function serializeGoalLinkedTask(task: Task): GoalLinkedTaskItem {
 }
 
 function buildBulkTaskUpdateData(
-  task: Pick<Task, "notes">,
+  task: Pick<Task, "kind">,
   action: BulkUpdateTasksRequest["action"],
 ) {
   if (action.type === "schedule") {
     return {
       scheduledForDate: parseIsoDate(action.scheduledForDate),
-      notes: syncQuickCaptureReminderDate(task.notes, action.scheduledForDate),
+      reminderDate: task.kind === "REMINDER" ? parseIsoDate(action.scheduledForDate) : undefined,
     };
   }
 
@@ -2072,6 +2126,7 @@ export const registerPlanningRoutes: FastifyPluginAsync = async (app) => {
       where: {
         userId: user.id,
         status: query.status ? toPrismaTaskStatus(query.status) : undefined,
+        kind: query.kind ? toPrismaTaskKind(query.kind) : undefined,
         originType: query.originType ? toPrismaTaskOriginType(query.originType) : undefined,
         scheduledForDate: scheduledDateFilter,
       },
@@ -2107,6 +2162,9 @@ export const registerPlanningRoutes: FastifyPluginAsync = async (app) => {
           userId: user.id,
           title: payload.title,
           notes: payload.notes ?? null,
+          kind: toPrismaTaskKind(payload.kind ?? "task"),
+          reminderDate:
+            payload.kind === "reminder" ? (payload.reminderDate ? parseIsoDate(payload.reminderDate) : null) : null,
           scheduledForDate: payload.scheduledForDate ? parseIsoDate(payload.scheduledForDate) : null,
           dueAt: payload.dueAt ? new Date(payload.dueAt) : null,
           goalId: payload.goalId ?? null,
@@ -2161,7 +2219,7 @@ export const registerPlanningRoutes: FastifyPluginAsync = async (app) => {
       },
       select: {
         id: true,
-        notes: true,
+        kind: true,
       },
     });
 
@@ -2265,6 +2323,8 @@ export const registerPlanningRoutes: FastifyPluginAsync = async (app) => {
         data: {
           title: payload.title,
           notes: payload.notes,
+          kind: payload.kind ? toPrismaTaskKind(payload.kind) : undefined,
+          reminderDate: resolveReminderDateForUpdate(payload, existingTask.kind),
           status: payload.status ? toPrismaTaskStatus(payload.status) : undefined,
           scheduledForDate:
             payload.scheduledForDate === undefined
@@ -2387,6 +2447,8 @@ export const registerPlanningRoutes: FastifyPluginAsync = async (app) => {
           userId: user.id,
           title: existingTask.title,
           notes: existingTask.notes,
+          kind: existingTask.kind,
+          reminderDate: existingTask.reminderDate,
           scheduledForDate: parseIsoDate(payload.targetDate),
           dueAt: existingTask.dueAt,
           goalId: existingTask.goalId,

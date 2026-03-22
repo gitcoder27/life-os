@@ -4,6 +4,7 @@ import type { RecurrenceDefinition, RecurrenceInput, RecurringTaskCarryPolicy } 
 
 export type PriorityStatus = "pending" | "completed" | "dropped";
 export type TaskStatus = "pending" | "completed" | "dropped";
+export type TaskKind = "task" | "note" | "reminder";
 export type TaskOriginType =
   | "manual"
   | "quick_capture"
@@ -34,6 +35,8 @@ export interface PlanningTaskItem {
   id: EntityId;
   title: string;
   notes: string | null;
+  kind: TaskKind;
+  reminderDate: IsoDateString | null;
   status: TaskStatus;
   scheduledForDate: IsoDateString | null;
   dueAt: string | null;
@@ -109,6 +112,8 @@ export interface MonthFocusMutationResponse extends ApiMeta {
 export interface CreateTaskRequest {
   title: string;
   notes?: string | null;
+  kind?: TaskKind;
+  reminderDate?: IsoDateString | null;
   scheduledForDate?: IsoDateString | null;
   dueAt?: string | null;
   goalId?: EntityId | null;
@@ -120,6 +125,8 @@ export interface CreateTaskRequest {
 export interface UpdateTaskRequest {
   title?: string;
   notes?: string | null;
+  kind?: TaskKind;
+  reminderDate?: IsoDateString | null;
   status?: TaskStatus;
   scheduledForDate?: IsoDateString | null;
   dueAt?: string | null;
@@ -204,6 +211,7 @@ export interface TasksQuery {
   from?: IsoDateString;
   to?: IsoDateString;
   status?: TaskStatus;
+  kind?: TaskKind;
   originType?: TaskOriginType;
   scheduledState?: TaskScheduledState;
 }

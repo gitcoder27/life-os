@@ -61,6 +61,8 @@ function buildTaskRecord(
     userId: string;
     title: string;
     notes: string | null;
+    kind: "TASK" | "NOTE" | "REMINDER";
+    reminderDate: Date | null;
     status: "PENDING" | "COMPLETED" | "DROPPED";
     scheduledForDate: Date | null;
     dueAt: Date | null;
@@ -91,6 +93,8 @@ function buildTaskRecord(
     userId: "user-1",
     title: "Inbox task",
     notes: null,
+    kind: "TASK" as const,
+    reminderDate: null,
     status: "PENDING" as const,
     scheduledForDate: null,
     dueAt: null,
@@ -2793,21 +2797,19 @@ describe("module route smoke tests", () => {
     );
   });
 
-  it("applies bulk scheduling and syncs reminder metadata", async () => {
+  it("applies bulk scheduling and updates reminder dates directly", async () => {
     const firstTaskId = "11111111-1111-4111-8111-111111111111";
     const secondTaskId = "22222222-2222-4222-8222-222222222222";
-    const reminderNotes = JSON.stringify({
-      marker: "life_os_capture",
-      v: 1,
-      kind: "reminder",
-      text: "Call the bank",
-      reminderDate: "2026-03-14",
-    });
     const findMany = vi
       .fn()
       .mockResolvedValueOnce([
         buildTaskRecord({ id: firstTaskId }),
-        buildTaskRecord({ id: secondTaskId, notes: reminderNotes }),
+        buildTaskRecord({
+          id: secondTaskId,
+          kind: "REMINDER",
+          notes: "Call the bank",
+          reminderDate: new Date("2026-03-14T00:00:00.000Z"),
+        }),
       ])
       .mockResolvedValueOnce([
         buildTaskRecord({
@@ -2816,13 +2818,9 @@ describe("module route smoke tests", () => {
         }),
         buildTaskRecord({
           id: secondTaskId,
-          notes: JSON.stringify({
-            marker: "life_os_capture",
-            v: 1,
-            kind: "reminder",
-            text: "Call the bank",
-            reminderDate: "2026-03-16",
-          }),
+          kind: "REMINDER",
+          notes: "Call the bank",
+          reminderDate: new Date("2026-03-16T00:00:00.000Z"),
           scheduledForDate: new Date("2026-03-16T00:00:00.000Z"),
         }),
       ]);
@@ -2853,7 +2851,6 @@ describe("module route smoke tests", () => {
         where: { id: firstTaskId },
         data: expect.objectContaining({
           scheduledForDate: new Date("2026-03-16T00:00:00.000Z"),
-          notes: null,
         }),
       }),
     );
@@ -2863,13 +2860,7 @@ describe("module route smoke tests", () => {
         where: { id: secondTaskId },
         data: expect.objectContaining({
           scheduledForDate: new Date("2026-03-16T00:00:00.000Z"),
-          notes: JSON.stringify({
-            marker: "life_os_capture",
-            v: 1,
-            kind: "reminder",
-            text: "Call the bank",
-            reminderDate: "2026-03-16",
-          }),
+          reminderDate: new Date("2026-03-16T00:00:00.000Z"),
         }),
       }),
     );

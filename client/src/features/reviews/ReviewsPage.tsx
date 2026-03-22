@@ -14,7 +14,7 @@ import {
   useSubmitWeeklyReviewMutation,
 } from "../../shared/lib/api";
 import { isRecurring } from "../../shared/lib/recurrence";
-import { getQuickCaptureDisplayText, parseQuickCaptureNotes } from "../../shared/lib/quickCapture";
+import { getQuickCaptureDisplayText, isQuickCaptureReferenceTask } from "../../shared/lib/quickCapture";
 import { PageHeader } from "../../shared/ui/PageHeader";
 import {
   EmptyState,
@@ -134,8 +134,11 @@ function getTomorrowDate(isoDate: string) {
   return toIsoDate(tomorrow);
 }
 
-function isQuickCaptureMetadataTask(task: { originType: string; notes: string | null }) {
-  return task.originType === "quick_capture" && parseQuickCaptureNotes(task.notes) !== null;
+function isQuickCaptureMetadataTask(task: {
+  originType: string;
+  kind: "task" | "note" | "reminder";
+}) {
+  return isQuickCaptureReferenceTask(task);
 }
 
 function fillThreePriorityDraft(values: DailyPriorityDraft[]) {
@@ -794,7 +797,7 @@ export function ReviewsPage() {
                           <div className="list__subtle">
                             {isRecurring(task.recurrence)
                               ? "Recurring — your decision updates the series"
-                              : getQuickCaptureDisplayText(task.notes, task.title)}
+                              : getQuickCaptureDisplayText(task, task.title)}
                           </div>
                         </div>
                         {isDailyCompleted ? (

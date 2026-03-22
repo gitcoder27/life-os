@@ -11,7 +11,7 @@ import {
   useWeeklyMomentumQuery,
   type LinkedGoal,
 } from "../../shared/lib/api";
-import { parseQuickCaptureNotes } from "../../shared/lib/quickCapture";
+import { getQuickCaptureDisplayText, isQuickCaptureReferenceTask } from "../../shared/lib/quickCapture";
 import { MetricPill } from "../../shared/ui/MetricPill";
 import {
   EmptyState,
@@ -55,26 +55,17 @@ function ChallengeProgressRing({ completions, target }: { completions: number; t
 
 type HomeTaskLike = {
   originType: string;
+  kind: "task" | "note" | "reminder";
   notes: string | null;
-  title: string;
+  reminderDate: string | null;
 };
 
 function isQuickCaptureMetadataTask(task: HomeTaskLike) {
-  return task.originType === "quick_capture" && parseQuickCaptureNotes(task.notes) !== null;
+  return isQuickCaptureReferenceTask(task);
 }
 
 function getHomeTaskMeta(task: HomeTaskLike, fallback: string) {
-  const parsed = parseQuickCaptureNotes(task.notes);
-
-  if (!parsed) {
-    return fallback;
-  }
-
-  if (parsed.kind === "note") {
-    return parsed.text.trim() || fallback;
-  }
-
-  return `Reminder${parsed.reminderDate ? ` for ${parsed.reminderDate}` : ""}: ${parsed.text.trim() || "Reminder"}`;
+  return getQuickCaptureDisplayText(task, fallback);
 }
 
 function getActionLabel(action: { type: "open_review" | "open_route"; route: string }) {
@@ -458,7 +449,14 @@ export function HomePage() {
                     <div className="radar-item__content">
                       <div className="radar-item__title">
                         {item.kind === "stale_inbox"
-                          ? getHomeTaskMeta(item, item.title)
+                          ? getQuickCaptureDisplayText(
+                              {
+                                kind: item.taskKind,
+                                notes: item.notes,
+                                reminderDate: item.reminderDate,
+                              },
+                              item.title,
+                            )
                           : item.title}
                       </div>
                       <div className="radar-item__detail">{item.label}</div>

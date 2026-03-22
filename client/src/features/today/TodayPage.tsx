@@ -37,7 +37,7 @@ import {
   type TaskItem,
 } from "../../shared/lib/api";
 import { isRecurring } from "../../shared/lib/recurrence";
-import { getQuickCaptureDisplayText, parseQuickCaptureNotes } from "../../shared/lib/quickCapture";
+import { getQuickCaptureDisplayText, isQuickCaptureReferenceTask } from "../../shared/lib/quickCapture";
 import { PageHeader } from "../../shared/ui/PageHeader";
 import {
   EmptyState,
@@ -124,15 +124,17 @@ function getRecoveryTaskDetail(isoDate: string) {
 
 type DayPlanTaskLike = {
   originType: string;
+  kind: "task" | "note" | "reminder";
   notes: string | null;
+  reminderDate: string | null;
 };
 
 function isQuickCaptureMetadataTask(task: DayPlanTaskLike) {
-  return task.originType === "quick_capture" && parseQuickCaptureNotes(task.notes) !== null;
+  return isQuickCaptureReferenceTask(task);
 }
 
-function getTaskDayMetaText(notes: string | null, fallback: string) {
-  return getQuickCaptureDisplayText(notes, fallback);
+function getTaskDayMetaText(task: Pick<DayPlanTaskLike, "kind" | "notes" | "reminderDate">, fallback: string) {
+  return getQuickCaptureDisplayText(task, fallback);
 }
 
 let draftKeyCounter = 0;
@@ -425,7 +427,7 @@ function TaskCard({
           ) : null}
         </div>
         <div className="task-card__meta">
-          <span>{getTaskDayMetaText(task.notes, task.scheduledForDate ?? "Scheduled today")}</span>
+          <span>{getTaskDayMetaText(task, task.scheduledForDate ?? "Scheduled today")}</span>
           {task.goal ? <GoalChip goal={task.goal} /> : null}
         </div>
 
@@ -1234,7 +1236,7 @@ export function TodayPage() {
               {quickCaptureTasks.map((noteTask) => (
                 <li key={noteTask.id}>
                   <div>
-                    <strong>{getTaskDayMetaText(noteTask.notes, noteTask.title)}</strong>
+                    <strong>{getTaskDayMetaText(noteTask, noteTask.title)}</strong>
                     <span className="list__subtle">
                       {noteTask.status === "completed" ? "Completed" : "Open"}
                     </span>

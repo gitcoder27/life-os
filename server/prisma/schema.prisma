@@ -66,6 +66,12 @@ enum TaskOriginType {
   TEMPLATE
 }
 
+enum TaskKind {
+  TASK
+  NOTE
+  REMINDER
+}
+
 enum RecurrenceOwnerType {
   TASK
   HABIT
@@ -334,6 +340,8 @@ model Task {
   userId            String
   title             String
   notes             String?
+  kind              TaskKind       @default(TASK)
+  reminderDate      DateTime?
   status            TaskStatus     @default(PENDING)
   scheduledForDate  DateTime?
   dueAt             DateTime?
@@ -352,6 +360,7 @@ model Task {
   recurrenceRule    RecurrenceRule? @relation(fields: [recurrenceRuleId], references: [id], onDelete: SetNull)
 
   @@index([userId, scheduledForDate, status])
+  @@index([userId, status, scheduledForDate, kind])
   @@index([userId, recurrenceRuleId, scheduledForDate])
 }
 

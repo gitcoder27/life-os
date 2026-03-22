@@ -138,6 +138,8 @@ type HomeOverviewResponse = {
     goalId: string | null;
     goal: LinkedGoal | null;
     notes: string | null;
+    kind: TaskItem["kind"];
+    reminderDate: string | null;
     originType: TaskItem["originType"];
   }>;
   routineSummary: {
@@ -176,6 +178,8 @@ type HomeOverviewResponse = {
       scheduledForDate: string | null;
       createdAt: string | null;
       notes: string | null;
+      taskKind: TaskItem["kind"];
+      reminderDate: string | null;
       originType: TaskItem["originType"];
     }>;
   };
@@ -294,6 +298,8 @@ export type TaskItem = {
   id: string;
   title: string;
   notes: string | null;
+  kind: "task" | "note" | "reminder";
+  reminderDate: string | null;
   status: "pending" | "completed" | "dropped";
   scheduledForDate: string | null;
   dueAt: string | null;
@@ -399,6 +405,7 @@ export type TasksQueryFilters = {
   from?: string;
   to?: string;
   status?: "pending" | "completed" | "dropped";
+  kind?: TaskItem["kind"];
   originType?: "manual" | "quick_capture" | "carry_forward" | "review_seed" | "recurring" | "template";
   scheduledState?: "all" | "scheduled" | "unscheduled";
 };
@@ -888,6 +895,8 @@ export type GoalLinkedTaskItem = {
   id: string;
   title: string;
   notes: string | null;
+  kind: TaskItem["kind"];
+  reminderDate: string | null;
   status: "pending" | "completed" | "dropped";
   scheduledForDate: string | null;
   dueAt: string | null;
@@ -1732,6 +1741,7 @@ export function useTasksQuery(filters: TasksQueryFilters = {}) {
           from: filters.from,
           to: filters.to,
           status: filters.status,
+          kind: filters.kind,
           originType: filters.originType,
           scheduledState: filters.scheduledState,
         },
@@ -2116,6 +2126,8 @@ export function useUpdateTaskMutation(date: string) {
       taskId,
       title,
       notes,
+      kind,
+      reminderDate,
       status,
       scheduledForDate,
       goalId,
@@ -2126,6 +2138,8 @@ export function useUpdateTaskMutation(date: string) {
       taskId: string;
       title?: string;
       notes?: string | null;
+      kind?: TaskItem["kind"];
+      reminderDate?: string | null;
       status?: "pending" | "completed" | "dropped";
       scheduledForDate?: string | null;
       goalId?: string | null;
@@ -2138,6 +2152,8 @@ export function useUpdateTaskMutation(date: string) {
         body: {
           title,
           notes,
+          kind,
+          reminderDate,
           status,
           scheduledForDate,
           goalId,
@@ -2185,6 +2201,8 @@ export function useCreateTaskMutation(date: string) {
     mutationFn: (payload: {
       title: string;
       notes?: string | null;
+      kind?: TaskItem["kind"];
+      reminderDate?: string | null;
       scheduledForDate?: string | null;
       originType?: "manual" | "quick_capture" | "carry_forward" | "review_seed" | "recurring" | "template";
       goalId?: string | null;

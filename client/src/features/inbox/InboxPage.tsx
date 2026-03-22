@@ -15,9 +15,6 @@ import {
 import {
   getQuickCaptureDisplayText,
   getQuickCaptureText,
-  parseQuickCaptureNotes,
-  stringifyQuickCaptureNotes,
-  syncQuickCaptureReminderDate,
 } from "../../shared/lib/quickCapture";
 import { PageHeader } from "../../shared/ui/PageHeader";
 import {
@@ -45,8 +42,7 @@ function getTomorrowDate(isoDate: string) {
 }
 
 function getInboxItemKind(task: TaskItem): Exclude<InboxFilter, "all"> {
-  const parsed = parseQuickCaptureNotes(task.notes);
-  return parsed?.kind ?? "task";
+  return task.kind;
 }
 
 function formatCreatedAt(isoDateTime: string) {
@@ -171,10 +167,7 @@ export function InboxPage() {
 
   const selectedTask = filteredItems.find((item) => item.id === selectedTaskId) ?? filteredItems[0] ?? null;
   const selectedTaskKind = selectedTask ? getInboxItemKind(selectedTask) : null;
-  const selectedTaskMeta = selectedTask ? parseQuickCaptureNotes(selectedTask.notes) : null;
-  const selectedTaskText = selectedTask
-    ? getQuickCaptureText(selectedTask.notes, selectedTask.notes?.trim() || selectedTask.title)
-    : "";
+  const selectedTaskText = selectedTask ? getQuickCaptureText(selectedTask, selectedTask.title) : "";
   const selectedTaskIdsSet = useMemo(() => new Set(selectedTaskIds), [selectedTaskIds]);
   const bulkSelectedItems = filteredItems.filter((item) => selectedTaskIdsSet.has(item.id));
   const hasBulkSelection = bulkSelectedItems.length > 0;
@@ -202,9 +195,9 @@ export function InboxPage() {
       return;
     }
 
-    setScheduleDate(selectedTaskMeta?.reminderDate ?? selectedTask.scheduledForDate ?? tomorrow);
+    setScheduleDate(selectedTask.reminderDate ?? selectedTask.scheduledForDate ?? tomorrow);
     setSelectedGoalId(selectedTask.goalId ?? "");
-  }, [selectedTask, selectedTaskMeta?.reminderDate, tomorrow]);
+  }, [selectedTask, tomorrow]);
 
   const counts = useMemo(
     () => ({
@@ -227,12 +220,6 @@ export function InboxPage() {
     void inboxQuery.refetch();
     void goalsListQuery.refetch();
   };
-
-  function buildScheduledNotes(task: TaskItem, targetDate: string) {
-    return getInboxItemKind(task) === "reminder"
-      ? syncQuickCaptureReminderDate(task.notes, targetDate)
-      : task.notes;
-  }
 
   function toggleTaskSelection(taskId: string) {
     setSelectedTaskIds((current) =>
@@ -274,7 +261,7 @@ export function InboxPage() {
     updateTaskMutation.mutate({
       taskId: selectedTask.id,
       scheduledForDate: today,
-      notes: buildScheduledNotes(selectedTask, today),
+      reminderDate: selectedTask.kind === "reminder" ? today : undefined,
     });
   }
 
@@ -286,7 +273,7 @@ export function InboxPage() {
     updateTaskMutation.mutate({
       taskId: selectedTask.id,
       scheduledForDate: scheduleDate,
-      notes: buildScheduledNotes(selectedTask, scheduleDate),
+      reminderDate: selectedTask.kind === "reminder" ? scheduleDate : undefined,
     });
   }
 
@@ -308,10 +295,9 @@ export function InboxPage() {
 
     updateTaskMutation.mutate({
       taskId: selectedTask.id,
-      notes: stringifyQuickCaptureNotes({
-        kind: "note",
-        text: selectedTaskText || selectedTask.title,
-      }),
+      kind: "note",
+      notes: selectedTaskText || selectedTask.title,
+      reminderDate: null,
     });
   }
 
@@ -455,10 +441,9 @@ export function InboxPage() {
               <ul className="inbox-list">
                 {filteredItems.map((item) => {
                   const itemKind = getInboxItemKind(item);
-                  const itemMeta = parseQuickCaptureNotes(item.notes);
                   const isSelected = item.id === selectedTask?.id;
                   const isChecked = selectedTaskIdsSet.has(item.id);
-                  const preview = getQuickCaptureDisplayText(item.notes, item.title);
+                  const preview = getQuickCaptureDisplayText(item, item.title);
 
                   return (
                     <li key={item.id} className={`inbox-row${isChecked ? " inbox-row--checked" : ""}`}>
@@ -483,7 +468,7 @@ export function InboxPage() {
                         </div>
                         <strong className="inbox-item__title">{preview}</strong>
                         <div className="inbox-item__meta">
-                          {itemMeta?.reminderDate ? <span>Reminder date {itemMeta.reminderDate}</span> : null}
+                          {item.reminderDate ? <span>Reminder date {item.reminderDate}</span> : null}
                           {item.goal ? <GoalChip goal={item.goal} /> : <span>Unlinked</span>}
                         </div>
                       </button>
@@ -636,7 +621,7 @@ export function InboxPage() {
               </div>
 
               <div className="inbox-detail__content">
-                <h2 className="inbox-detail__title">{getQuickCaptureDisplayText(selectedTask.notes, selectedTask.title)}</h2>
+                <h2 className="inbox-detail__title">{getQuickCaptureDisplayText(selectedTask, selectedTask.title)}</h2>
                 <p className="inbox-detail__body">{selectedTaskText || "No detail saved for this capture."}</p>
               </div>
 
@@ -647,7 +632,7 @@ export function InboxPage() {
                 </div>
                 <div>
                   <span className="inbox-detail__meta-label">Reminder date</span>
-                  <strong>{selectedTaskMeta?.reminderDate ?? "None"}</strong>
+                  <strong>{selectedTask.reminderDate ?? "None"}</strong>
                 </div>
                 <div>
                   <span className="inbox-detail__meta-label">Goal link</span>

@@ -16,7 +16,6 @@ import {
   useWorkoutMutation,
 } from "../../shared/lib/api";
 import { type RecurrenceRuleInput } from "../../shared/lib/recurrence";
-import { stringifyQuickCaptureNotes } from "../../shared/lib/quickCapture";
 import { RecurrenceToggle, buildRecurrenceInput } from "../../shared/ui/RecurrenceEditor";
 
 const LAST_EXPENSE_CATEGORY_KEY = "lifeos_last_expense_category";
@@ -144,6 +143,7 @@ export function QuickCaptureSheet({
       await createTaskMutation.mutateAsync({
         title: title.split("\n")[0],
         notes: title,
+        kind: "task",
         scheduledForDate: null,
         originType: "quick_capture",
       });
@@ -181,11 +181,9 @@ export function QuickCaptureSheet({
 
       await createTaskMutation.mutateAsync({
         title: title.split("\n")[0].trim() || (activeType === "Reminder" ? "Reminder" : "Note"),
-        notes: stringifyQuickCaptureNotes({
-          kind: activeType === "Reminder" ? "reminder" : "note",
-          text: title,
-          reminderDate: activeType === "Reminder" ? reminderDate : undefined,
-        }),
+        notes: title,
+        kind: activeType === "Reminder" ? "reminder" : "note",
+        reminderDate: activeType === "Reminder" ? reminderDate : null,
         scheduledForDate: null,
         originType: "quick_capture",
         recurrence: recurrenceEnabled && recurrenceRule ? buildRecurrenceInput(recurrenceRule) : undefined,

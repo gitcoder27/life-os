@@ -8,6 +8,7 @@ import type {
   HomeNotificationItem,
   HomeOverviewResponse,
   IsoDateString,
+  TaskKind,
   RoutineSummary,
   TaskOriginType,
 } from "@life-os/contracts";
@@ -117,6 +118,17 @@ function fromPrismaTaskOriginType(originType: PrismaTaskOriginType): TaskOriginT
       return "recurring";
     case "TEMPLATE":
       return "template";
+  }
+}
+
+function fromPrismaTaskKind(kind: "TASK" | "NOTE" | "REMINDER"): TaskKind {
+  switch (kind) {
+    case "TASK":
+      return "task";
+    case "NOTE":
+      return "note";
+    case "REMINDER":
+      return "reminder";
   }
 }
 
@@ -413,6 +425,8 @@ async function buildHomeOverview(
         scheduledForDate,
         createdAt: task.createdAt.toISOString(),
         notes: task.notes,
+        taskKind: fromPrismaTaskKind(task.kind),
+        reminderDate: task.reminderDate ? toIsoDateString(task.reminderDate) : null,
         originType: fromPrismaTaskOriginType(task.originType),
       };
     }),
@@ -430,6 +444,8 @@ async function buildHomeOverview(
         scheduledForDate: null,
         createdAt: task.createdAt.toISOString(),
         notes: task.notes,
+        taskKind: fromPrismaTaskKind(task.kind),
+        reminderDate: task.reminderDate ? toIsoDateString(task.reminderDate) : null,
         originType: fromPrismaTaskOriginType(task.originType),
       };
     }),
@@ -623,6 +639,8 @@ async function buildHomeOverview(
       goalId: task.goalId,
       goal: task.goal ? serializeGoalSummary(task.goal) : null,
       notes: task.notes,
+      kind: fromPrismaTaskKind(task.kind),
+      reminderDate: task.reminderDate ? toIsoDateString(task.reminderDate) : null,
       originType: fromPrismaTaskOriginType(task.originType),
     })),
     routineSummary,

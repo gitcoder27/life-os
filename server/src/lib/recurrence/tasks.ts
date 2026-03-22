@@ -34,6 +34,8 @@ async function createTaskOccurrence(
       userId: prototype.userId,
       title: prototype.title,
       notes: prototype.notes,
+      kind: prototype.kind,
+      reminderDate: prototype.reminderDate,
       scheduledForDate: new Date(`${scheduledForDate}T00:00:00.000Z`),
       dueAt: prototype.dueAt,
       goalId: prototype.goalId,
