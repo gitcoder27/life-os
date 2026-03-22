@@ -1,7 +1,9 @@
+import { getReminderDate } from "./api";
+
 type QuickCaptureTaskLike = {
   kind: "task" | "note" | "reminder";
   notes: string | null;
-  reminderDate: string | null;
+  reminderAt: string | null;
 };
 
 type QuickCaptureReferenceTaskLike = {
@@ -18,13 +20,14 @@ export function getQuickCaptureText(task: Pick<QuickCaptureTaskLike, "notes">, f
 }
 
 export function getQuickCaptureDisplayText(
-  task: Pick<QuickCaptureTaskLike, "kind" | "notes" | "reminderDate">,
+  task: Pick<QuickCaptureTaskLike, "kind" | "notes" | "reminderAt">,
   fallback = "",
 ): string {
   const text = getQuickCaptureText(task, fallback);
+  const reminderDate = getReminderDate(task.reminderAt);
 
   if (task.kind === "reminder") {
-    return `Reminder${task.reminderDate ? ` for ${task.reminderDate}` : ""}: ${text || "Reminder"}`;
+    return `Reminder${reminderDate ? ` for ${reminderDate}` : ""}: ${text || "Reminder"}`;
   }
 
   return text || fallback;

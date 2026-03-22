@@ -36,7 +36,7 @@ export interface PlanningTaskItem {
   title: string;
   notes: string | null;
   kind: TaskKind;
-  reminderDate: IsoDateString | null;
+  reminderAt: string | null;
   status: TaskStatus;
   scheduledForDate: IsoDateString | null;
   dueAt: string | null;
@@ -113,7 +113,7 @@ export interface CreateTaskRequest {
   title: string;
   notes?: string | null;
   kind?: TaskKind;
-  reminderDate?: IsoDateString | null;
+  reminderAt?: string | null;
   scheduledForDate?: IsoDateString | null;
   dueAt?: string | null;
   goalId?: EntityId | null;
@@ -126,7 +126,7 @@ export interface UpdateTaskRequest {
   title?: string;
   notes?: string | null;
   kind?: TaskKind;
-  reminderDate?: IsoDateString | null;
+  reminderAt?: string | null;
   status?: TaskStatus;
   scheduledForDate?: IsoDateString | null;
   dueAt?: string | null;

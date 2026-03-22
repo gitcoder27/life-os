@@ -76,13 +76,14 @@ import { applyRecurringTaskCarryForward, materializeNextRecurringTaskOccurrence,
 import { serializeRecurrenceDefinition, upsertRecurrenceRuleRecord } from "../../lib/recurrence/store.js";
 import { addDays, getMonthEndDate, getMonthStartIsoDate, getWeekEndDate, getWeekStartIsoDate, parseIsoDate } from "../../lib/time/cycle.js";
 import { toIsoDateString } from "../../lib/time/date.js";
-import { getUserLocalDate } from "../../lib/time/user-time.js";
+import { getUserLocalDate, getUtcDateForLocalTime } from "../../lib/time/user-time.js";
 import { parseOrThrow } from "../../lib/validation/parse.js";
 import { buildGoalInsights } from "./goal-insights.js";
 import { buildGoalNudges } from "./goal-nudges.js";
 
 const isoDateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/) as unknown as z.ZodType<IsoDateString>;
 const isoDateTimeSchema = z.string().datetime({ offset: true });
+const reminderAtSchema = z.union([isoDateSchema, isoDateTimeSchema]);
 
 const goalDomainSchema = z.enum([
   "health",
@@ -208,7 +209,7 @@ const createTaskSchema = z.object({
   title: z.string().min(1).max(200),
   notes: z.string().max(4000).nullable().optional(),
   kind: taskKindSchema.optional(),
-  reminderDate: isoDateSchema.nullable().optional(),
+  reminderAt: reminderAtSchema.nullable().optional(),
   scheduledForDate: isoDateSchema.nullable().optional(),
   dueAt: isoDateTimeSchema.nullable().optional(),
   goalId: z.string().uuid().nullable().optional(),
@@ -222,7 +223,7 @@ const updateTaskSchema = z
     title: z.string().min(1).max(200).optional(),
     notes: z.string().max(4000).nullable().optional(),
     kind: taskKindSchema.optional(),
-    reminderDate: isoDateSchema.nullable().optional(),
+    reminderAt: reminderAtSchema.nullable().optional(),
     status: taskStatusSchema.optional(),
     scheduledForDate: isoDateSchema.nullable().optional(),
     dueAt: isoDateTimeSchema.nullable().optional(),
@@ -519,25 +520,54 @@ function normalizeTaskTemplateDescription(value: string | null | undefined) {
   return trimmed ? trimmed : null;
 }
 
-function toTaskReminderDate(isoDate: IsoDateString | null | undefined) {
-  if (isoDate === undefined) {
+function isIsoDateInput(value: string): value is IsoDateString {
+  return /^\d{4}-\d{2}-\d{2}$/.test(value);
+}
+
+function toTaskReminderAt(reminderAt: string | null | undefined, timezone?: string | null) {
+  if (reminderAt === undefined) {
     return undefined;
   }
 
-  return isoDate === null ? null : parseIsoDate(isoDate);
+  if (reminderAt === null) {
+    return null;
+  }
+
+  if (isIsoDateInput(reminderAt)) {
+    return getUtcDateForLocalTime(reminderAt, "00:00", timezone);
+  }
+
+  return new Date(reminderAt);
 }
 
-function resolveReminderDateForUpdate(
-  payload: Pick<UpdateTaskRequest, "kind" | "reminderDate">,
+async function getUserTimezone(
+  app: Parameters<FastifyPluginAsync>[0],
+  userId: string,
+) {
+  const preferences = await app.prisma.userPreference.findUnique({
+    where: {
+      userId,
+    },
+    select: {
+      timezone: true,
+    },
+  });
+
+  return preferences?.timezone ?? null;
+}
+
+function resolveReminderAtForUpdate(
+  payload: Pick<UpdateTaskRequest, "kind" | "reminderAt">,
   existingKind: PrismaTaskKind,
+  timezone?: string | null,
 ) {
   const nextKind = payload.kind ? toPrismaTaskKind(payload.kind) : existingKind;
 
   if (nextKind !== "REMINDER") {
-    return payload.kind !== undefined || payload.reminderDate !== undefined ? null : undefined;
+    return payload.kind !== undefined || payload.reminderAt !== undefined ? null : undefined;
   }
 
-  return toTaskReminderDate(payload.reminderDate);
+  return toTaskReminderAt(payload.reminderAt, timezone);
 }
 
 function parseTaskTemplateTasks(payload: unknown): TaskTemplateItem["tasks"] {
@@ -625,7 +655,7 @@ function serializeTask(task: Task & {
     title: task.title,
     notes: task.notes,
     kind: fromPrismaTaskKind(task.kind),
-    reminderDate: task.reminderDate ? toIsoDateString(task.reminderDate) : null,
+    reminderAt: task.reminderAt?.toISOString() ?? null,
     status: fromPrismaTaskStatus(task.status),
     scheduledForDate: task.scheduledForDate ? toIsoDateString(task.scheduledForDate) : null,
     dueAt: task.dueAt?.toISOString() ?? null,
@@ -684,7 +714,7 @@ function serializeGoalLinkedTask(task: Task): GoalLinkedTaskItem {
     title: task.title,
     notes: task.notes,
     kind: fromPrismaTaskKind(task.kind),
-    reminderDate: task.reminderDate ? toIsoDateString(task.reminderDate) : null,
+    reminderAt: task.reminderAt?.toISOString() ?? null,
     status: fromPrismaTaskStatus(task.status),
     scheduledForDate: task.scheduledForDate ? toIsoDateString(task.scheduledForDate) : null,
     dueAt: task.dueAt?.toISOString() ?? null,
@@ -698,11 +728,14 @@ function serializeGoalLinkedTask(task: Task): GoalLinkedTaskItem {
 function buildBulkTaskUpdateData(
   task: Pick<Task, "kind">,
   action: BulkUpdateTasksRequest["action"],
+  timezone?: string | null,
 ) {
   if (action.type === "schedule") {
     return {
       scheduledForDate: parseIsoDate(action.scheduledForDate),
-      reminderDate: task.kind === "REMINDER" ? parseIsoDate(action.scheduledForDate) : undefined,
+      reminderAt:
+        task.kind === "REMINDER" ? toTaskReminderAt(action.scheduledForDate, timezone) : undefined,
+      reminderTriggeredAt: task.kind === "REMINDER" ? null : undefined,
     };
   }
 
@@ -2156,6 +2189,7 @@ export const registerPlanningRoutes: FastifyPluginAsync = async (app) => {
     const user = requireAuthenticatedUser(request);
     const payload = parseOrThrow(createTaskSchema, request.body as CreateTaskRequest);
     await assertOwnedGoalReference(app, user.id, payload.goalId);
+    const timezone = await getUserTimezone(app, user.id);
     const task = await app.prisma.$transaction(async (tx) => {
       const createdTask = await tx.task.create({
         data: {
@@ -2163,8 +2197,8 @@ export const registerPlanningRoutes: FastifyPluginAsync = async (app) => {
           title: payload.title,
           notes: payload.notes ?? null,
           kind: toPrismaTaskKind(payload.kind ?? "task"),
-          reminderDate:
-            payload.kind === "reminder" ? (payload.reminderDate ? parseIsoDate(payload.reminderDate) : null) : null,
+          reminderAt:
+            payload.kind === "reminder" ? (toTaskReminderAt(payload.reminderAt, timezone) ?? null) : null,
           scheduledForDate: payload.scheduledForDate ? parseIsoDate(payload.scheduledForDate) : null,
           dueAt: payload.dueAt ? new Date(payload.dueAt) : null,
           goalId: payload.goalId ?? null,
@@ -2205,6 +2239,7 @@ export const registerPlanningRoutes: FastifyPluginAsync = async (app) => {
   app.patch("/tasks/bulk", async (request, reply) => {
     const user = requireAuthenticatedUser(request);
     const payload = parseOrThrow(bulkUpdateTasksSchema, request.body as BulkUpdateTasksRequest);
+    const timezone = await getUserTimezone(app, user.id);
 
     if (payload.action.type === "link_goal") {
       await assertOwnedGoalReference(app, user.id, payload.action.goalId);
@@ -2250,7 +2285,7 @@ export const registerPlanningRoutes: FastifyPluginAsync = async (app) => {
             where: {
               id: taskId,
             },
-            data: buildBulkTaskUpdateData(task, payload.action),
+            data: buildBulkTaskUpdateData(task, payload.action, timezone),
           });
         }),
       );
@@ -2290,6 +2325,7 @@ export const registerPlanningRoutes: FastifyPluginAsync = async (app) => {
     const user = requireAuthenticatedUser(request);
     const payload = parseOrThrow(updateTaskSchema, request.body as UpdateTaskRequest);
     const { taskId } = request.params as { taskId: string };
+    const timezone = await getUserTimezone(app, user.id);
     const existingTask = await app.prisma.task.findFirst({
       where: {
         id: taskId,
@@ -2324,7 +2360,9 @@ export const registerPlanningRoutes: FastifyPluginAsync = async (app) => {
           title: payload.title,
           notes: payload.notes,
           kind: payload.kind ? toPrismaTaskKind(payload.kind) : undefined,
-          reminderDate: resolveReminderDateForUpdate(payload, existingTask.kind),
+          reminderAt: resolveReminderAtForUpdate(payload, existingTask.kind, timezone),
+          reminderTriggeredAt:
+            payload.kind !== undefined || payload.reminderAt !== undefined ? null : undefined,
           status: payload.status ? toPrismaTaskStatus(payload.status) : undefined,
           scheduledForDate:
             payload.scheduledForDate === undefined
@@ -2394,6 +2432,7 @@ export const registerPlanningRoutes: FastifyPluginAsync = async (app) => {
     const user = requireAuthenticatedUser(request);
     const payload = parseOrThrow(carryForwardTaskSchema, request.body as CarryForwardTaskRequest);
     const { taskId } = request.params as { taskId: string };
+    const timezone = await getUserTimezone(app, user.id);
     const existingTask = await app.prisma.task.findFirst({
       where: {
         id: taskId,
@@ -2448,7 +2487,11 @@ export const registerPlanningRoutes: FastifyPluginAsync = async (app) => {
           title: existingTask.title,
           notes: existingTask.notes,
           kind: existingTask.kind,
-          reminderDate: existingTask.reminderDate,
+          reminderAt:
+            existingTask.kind === "REMINDER"
+              ? toTaskReminderAt(payload.targetDate, timezone) ?? null
+              : existingTask.reminderAt,
+          reminderTriggeredAt: null,
           scheduledForDate: parseIsoDate(payload.targetDate),
           dueAt: existingTask.dueAt,
           goalId: existingTask.goalId,

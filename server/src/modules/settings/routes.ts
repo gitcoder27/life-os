@@ -41,6 +41,7 @@ const notificationPreferenceUpdateSchema = z
 
 const notificationPreferencesUpdateSchema = z
   .object({
+    task: notificationPreferenceUpdateSchema.optional(),
     review: notificationPreferenceUpdateSchema.optional(),
     finance: notificationPreferenceUpdateSchema.optional(),
     health: notificationPreferenceUpdateSchema.optional(),

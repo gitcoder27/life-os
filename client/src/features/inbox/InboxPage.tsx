@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import { useAppFeedback } from "../../app/providers";
 import {
+  getReminderDate,
   getTodayDate,
   toIsoDate,
   useBulkUpdateTasksMutation,
@@ -195,7 +196,7 @@ export function InboxPage() {
       return;
     }
 
-    setScheduleDate(selectedTask.reminderDate ?? selectedTask.scheduledForDate ?? tomorrow);
+    setScheduleDate(getReminderDate(selectedTask.reminderAt) ?? selectedTask.scheduledForDate ?? tomorrow);
     setSelectedGoalId(selectedTask.goalId ?? "");
   }, [selectedTask, tomorrow]);
 
@@ -261,7 +262,7 @@ export function InboxPage() {
     updateTaskMutation.mutate({
       taskId: selectedTask.id,
       scheduledForDate: today,
-      reminderDate: selectedTask.kind === "reminder" ? today : undefined,
+      reminderAt: selectedTask.kind === "reminder" ? today : undefined,
     });
   }
 
@@ -273,7 +274,7 @@ export function InboxPage() {
     updateTaskMutation.mutate({
       taskId: selectedTask.id,
       scheduledForDate: scheduleDate,
-      reminderDate: selectedTask.kind === "reminder" ? scheduleDate : undefined,
+      reminderAt: selectedTask.kind === "reminder" ? scheduleDate : undefined,
     });
   }
 
@@ -297,7 +298,7 @@ export function InboxPage() {
       taskId: selectedTask.id,
       kind: "note",
       notes: selectedTaskText || selectedTask.title,
-      reminderDate: null,
+      reminderAt: null,
     });
   }
 
@@ -468,7 +469,9 @@ export function InboxPage() {
                         </div>
                         <strong className="inbox-item__title">{preview}</strong>
                         <div className="inbox-item__meta">
-                          {item.reminderDate ? <span>Reminder date {item.reminderDate}</span> : null}
+                          {getReminderDate(item.reminderAt) ? (
+                            <span>Reminder date {getReminderDate(item.reminderAt)}</span>
+                          ) : null}
                           {item.goal ? <GoalChip goal={item.goal} /> : <span>Unlinked</span>}
                         </div>
                       </button>
@@ -632,7 +635,7 @@ export function InboxPage() {
                 </div>
                 <div>
                   <span className="inbox-detail__meta-label">Reminder date</span>
-                  <strong>{selectedTask.reminderDate ?? "None"}</strong>
+                  <strong>{getReminderDate(selectedTask.reminderAt) ?? "None"}</strong>
                 </div>
                 <div>
                   <span className="inbox-detail__meta-label">Goal link</span>

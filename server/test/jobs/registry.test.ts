@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 const materializeRecurringExpenseItems = vi.fn();
+const executeDueReminders = vi.fn();
 const generateRuleNotifications = vi.fn();
 const cleanupOldNotifications = vi.fn();
 const finalizeClosedDayScores = vi.fn();
@@ -12,6 +13,9 @@ vi.mock("../../src/modules/finance/service.js", () => ({
 vi.mock("../../src/modules/notifications/service.js", () => ({
   generateRuleNotifications: (...args: unknown[]) => generateRuleNotifications(...args),
   cleanupOldNotifications: (...args: unknown[]) => cleanupOldNotifications(...args),
+}));
+vi.mock("../../src/modules/planning/reminder-execution.js", () => ({
+  executeDueReminders: (...args: unknown[]) => executeDueReminders(...args),
 }));
 vi.mock("../../src/modules/scoring/service.js", () => ({
   ensureCycle: (...args: unknown[]) => ensureCycle(...args),
@@ -30,6 +34,7 @@ describe("jobs registry", () => {
       "cycle-seeding",
       "score-finalizer",
       "recurring-expense-materializer",
+      "reminder-executor",
       "notification-evaluator",
       "notification-cleanup",
     ]);
@@ -41,6 +46,11 @@ describe("jobs registry", () => {
       createdAdminItems: 1,
       advancedTemplates: 1,
       unsupportedTemplates: 0,
+    });
+    executeDueReminders.mockResolvedValue({
+      promoted: 2,
+      notified: 2,
+      skippedNotifications: 0,
     });
     generateRuleNotifications.mockResolvedValue({
       created: 3,
@@ -72,6 +82,7 @@ describe("jobs registry", () => {
     expect(sessionDeleteMany).toHaveBeenCalled();
     expect(userFindMany).toHaveBeenCalled();
     expect(materializeRecurringExpenseItems).toHaveBeenCalled();
+    expect(executeDueReminders).toHaveBeenCalled();
     expect(generateRuleNotifications).toHaveBeenCalled();
     expect(cleanupOldNotifications).toHaveBeenCalled();
     expect(finalizeClosedDayScores).toHaveBeenCalled();

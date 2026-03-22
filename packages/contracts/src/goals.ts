@@ -97,7 +97,7 @@ export interface GoalLinkedTaskItem {
   title: string;
   notes: string | null;
   kind: TaskKind;
-  reminderDate: IsoDateString | null;
+  reminderAt: string | null;
   status: "pending" | "completed" | "dropped";
   scheduledForDate: IsoDateString | null;
   dueAt: string | null;

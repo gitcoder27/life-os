@@ -111,7 +111,7 @@ interface PlanningTaskItem {
   title: string;
   notes: string | null;
   kind: "task" | "note" | "reminder";
-  reminderDate: string | null;
+  reminderAt: string | null;
   status: "pending" | "completed" | "dropped";
   scheduledForDate: string | null;
   dueAt: string | null;
@@ -686,7 +686,7 @@ async function getDailySummary(prisma: PrismaClient, userId: string, date: Date)
         notes: task.notes,
         kind:
           task.kind === "NOTE" ? "note" : task.kind === "REMINDER" ? "reminder" : "task",
-        reminderDate: task.reminderDate ? toIsoDateString(task.reminderDate) : null,
+        reminderAt: task.reminderAt?.toISOString() ?? null,
         status:
           task.status === "DROPPED" ? "dropped" : task.status === "COMPLETED" ? "completed" : "pending",
         scheduledForDate: task.scheduledForDate ? toIsoDateString(task.scheduledForDate) : null,
@@ -976,7 +976,7 @@ export async function submitDailyReview(
           title: task.title,
           notes: task.notes,
           kind: task.kind,
-          reminderDate: task.reminderDate,
+          reminderAt: task.reminderAt,
           scheduledForDate: tomorrowDate,
           dueAt: task.dueAt,
           goalId: task.goalId,
@@ -1014,7 +1014,7 @@ export async function submitDailyReview(
           title: task.title,
           notes: task.notes,
           kind: task.kind,
-          reminderDate: task.reminderDate,
+          reminderAt: task.reminderAt,
           scheduledForDate: targetDate,
           dueAt: task.dueAt,
           goalId: task.goalId,

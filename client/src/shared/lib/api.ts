@@ -139,7 +139,7 @@ type HomeOverviewResponse = {
     goal: LinkedGoal | null;
     notes: string | null;
     kind: TaskItem["kind"];
-    reminderDate: string | null;
+    reminderAt: string | null;
     originType: TaskItem["originType"];
   }>;
   routineSummary: {
@@ -179,7 +179,7 @@ type HomeOverviewResponse = {
       createdAt: string | null;
       notes: string | null;
       taskKind: TaskItem["kind"];
-      reminderDate: string | null;
+      reminderAt: string | null;
       originType: TaskItem["originType"];
     }>;
   };
@@ -299,7 +299,7 @@ export type TaskItem = {
   title: string;
   notes: string | null;
   kind: "task" | "note" | "reminder";
-  reminderDate: string | null;
+  reminderAt: string | null;
   status: "pending" | "completed" | "dropped";
   scheduledForDate: string | null;
   dueAt: string | null;
@@ -740,7 +740,7 @@ type DeleteExpenseMutationResponse = {
   expenseId: string;
 };
 
-export type NotificationCategory = "review" | "finance" | "health" | "habit" | "routine";
+export type NotificationCategory = "task" | "review" | "finance" | "health" | "habit" | "routine";
 export type NotificationMinSeverity = "info" | "warning" | "critical";
 export type NotificationRepeatCadence = "off" | "hourly" | "every_3_hours";
 
@@ -896,7 +896,7 @@ export type GoalLinkedTaskItem = {
   title: string;
   notes: string | null;
   kind: TaskItem["kind"];
-  reminderDate: string | null;
+  reminderAt: string | null;
   status: "pending" | "completed" | "dropped";
   scheduledForDate: string | null;
   dueAt: string | null;
@@ -1501,6 +1501,20 @@ function formatIsoDateInTimezone(date: Date, timezone?: string) {
 export function getTodayDate() {
   const timezone = getResolvedTimezone();
   return formatIsoDateInTimezone(new Date(), timezone);
+}
+
+export function getReminderDate(reminderAt: string | null | undefined) {
+  if (!reminderAt) {
+    return null;
+  }
+
+  const timezone = getResolvedTimezone();
+
+  try {
+    return formatIsoDateInTimezone(new Date(reminderAt), timezone);
+  } catch {
+    return reminderAt.slice(0, 10);
+  }
 }
 
 export function getMonthString(isoDate: string) {
@@ -2127,7 +2141,7 @@ export function useUpdateTaskMutation(date: string) {
       title,
       notes,
       kind,
-      reminderDate,
+      reminderAt,
       status,
       scheduledForDate,
       goalId,
@@ -2139,7 +2153,7 @@ export function useUpdateTaskMutation(date: string) {
       title?: string;
       notes?: string | null;
       kind?: TaskItem["kind"];
-      reminderDate?: string | null;
+      reminderAt?: string | null;
       status?: "pending" | "completed" | "dropped";
       scheduledForDate?: string | null;
       goalId?: string | null;
@@ -2153,7 +2167,7 @@ export function useUpdateTaskMutation(date: string) {
           title,
           notes,
           kind,
-          reminderDate,
+          reminderAt,
           status,
           scheduledForDate,
           goalId,
@@ -2202,7 +2216,7 @@ export function useCreateTaskMutation(date: string) {
       title: string;
       notes?: string | null;
       kind?: TaskItem["kind"];
-      reminderDate?: string | null;
+      reminderAt?: string | null;
       scheduledForDate?: string | null;
       originType?: "manual" | "quick_capture" | "carry_forward" | "review_seed" | "recurring" | "template";
       goalId?: string | null;

@@ -62,7 +62,8 @@ function buildTaskRecord(
     title: string;
     notes: string | null;
     kind: "TASK" | "NOTE" | "REMINDER";
-    reminderDate: Date | null;
+    reminderAt: Date | null;
+    reminderTriggeredAt: Date | null;
     status: "PENDING" | "COMPLETED" | "DROPPED";
     scheduledForDate: Date | null;
     dueAt: Date | null;
@@ -94,7 +95,8 @@ function buildTaskRecord(
     title: "Inbox task",
     notes: null,
     kind: "TASK" as const,
-    reminderDate: null,
+    reminderAt: null,
+    reminderTriggeredAt: null,
     status: "PENDING" as const,
     scheduledForDate: null,
     dueAt: null,
@@ -2797,7 +2799,7 @@ describe("module route smoke tests", () => {
     );
   });
 
-  it("applies bulk scheduling and updates reminder dates directly", async () => {
+  it("applies bulk scheduling and updates reminder timestamps directly", async () => {
     const firstTaskId = "11111111-1111-4111-8111-111111111111";
     const secondTaskId = "22222222-2222-4222-8222-222222222222";
     const findMany = vi
@@ -2808,7 +2810,7 @@ describe("module route smoke tests", () => {
           id: secondTaskId,
           kind: "REMINDER",
           notes: "Call the bank",
-          reminderDate: new Date("2026-03-14T00:00:00.000Z"),
+          reminderAt: new Date("2026-03-14T00:00:00.000Z"),
         }),
       ])
       .mockResolvedValueOnce([
@@ -2820,7 +2822,7 @@ describe("module route smoke tests", () => {
           id: secondTaskId,
           kind: "REMINDER",
           notes: "Call the bank",
-          reminderDate: new Date("2026-03-16T00:00:00.000Z"),
+          reminderAt: new Date("2026-03-16T00:00:00.000Z"),
           scheduledForDate: new Date("2026-03-16T00:00:00.000Z"),
         }),
       ]);
@@ -2860,7 +2862,8 @@ describe("module route smoke tests", () => {
         where: { id: secondTaskId },
         data: expect.objectContaining({
           scheduledForDate: new Date("2026-03-16T00:00:00.000Z"),
-          reminderDate: new Date("2026-03-16T00:00:00.000Z"),
+          reminderAt: new Date("2026-03-16T00:00:00.000Z"),
+          reminderTriggeredAt: null,
         }),
       }),
     );

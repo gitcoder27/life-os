@@ -11,6 +11,7 @@ import {
 import { getUserLocalDate, normalizeTimezone } from "../lib/time/user-time.js";
 import { materializeRecurringExpenseItems } from "../modules/finance/service.js";
 import { cleanupOldNotifications, generateRuleNotifications } from "../modules/notifications/service.js";
+import { executeDueReminders } from "../modules/planning/reminder-execution.js";
 import { ensureCycle, finalizeClosedDayScores } from "../modules/scoring/service.js";
 
 export interface JobRunContext {
@@ -143,6 +144,19 @@ const recurringExpenseMaterializerJob: JobDefinition = {
   },
 };
 
+const reminderExecutorJob: JobDefinition = {
+  name: "reminder-executor",
+  schedule: "every-15-minutes",
+  description: "Promote due reminders into Today and create in-app reminder notifications",
+  async run({ prisma, now }) {
+    const result = await executeDueReminders(prisma, now);
+
+    return {
+      summary: `promoted ${result.promoted} reminder(s), created ${result.notified} notification(s), skipped ${result.skippedNotifications} notification(s)`,
+    };
+  },
+};
+
 const notificationEvaluatorJob: JobDefinition = {
   name: "notification-evaluator",
   schedule: "every-15-minutes",
@@ -188,6 +202,7 @@ export function getRegisteredJobs(): JobDefinition[] {
     cycleSeedingJob,
     scoreFinalizerJob,
     recurringExpenseMaterializerJob,
+    reminderExecutorJob,
     notificationEvaluatorJob,
     notificationCleanupJob,
   ];

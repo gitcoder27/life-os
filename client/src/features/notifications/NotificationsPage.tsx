@@ -37,6 +37,7 @@ const SEVERITY_CONFIG: Record<string, { label: string; className: string }> = {
 };
 
 const CATEGORY_LABELS: Record<string, string> = {
+  task: "Task",
   review: "Review",
   finance: "Finance",
   health: "Health",
@@ -51,6 +52,7 @@ function resolveEntityRoute(
   if (!entityType) return null;
 
   if (entityType === "admin_item") return "/finance";
+  if (entityType === "task") return "/today";
   if (entityType === "health_day") return "/health";
   if (entityType === "workout_day") return "/health";
   if (entityType === "habit") return "/habits";
@@ -76,6 +78,7 @@ function resolveEntityRoute(
 
 function resolveActionLabel(entityType: string | null): string {
   if (!entityType) return "Open";
+  if (entityType === "task") return "Open today";
   if (entityType === "admin_item") return "View finances";
   if (entityType === "health_day" || entityType === "workout_day") return "View health";
   if (entityType === "habit" || entityType === "routine_day") return "View habits";

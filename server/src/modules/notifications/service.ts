@@ -34,13 +34,13 @@ interface NotificationCleanupResult {
   deleted: number;
 }
 
-type NotificationClient = PrismaClient | Prisma.TransactionClient;
+export type NotificationClient = PrismaClient | Prisma.TransactionClient;
 
 function startOfDay(date: Date) {
   return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
 }
 
-async function ensureGeneratedNotification(
+export async function ensureGeneratedNotification(
   prisma: NotificationClient,
   input: {
     userId: string;

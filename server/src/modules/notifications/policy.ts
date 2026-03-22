@@ -24,6 +24,11 @@ const notificationSeverityRank: Record<NotificationSeverity, number> = {
 };
 
 const notificationCategoryDefaults: NotificationCategoryPreferences = {
+  task: {
+    enabled: true,
+    minSeverity: "warning",
+    repeatCadence: "off",
+  },
   review: {
     enabled: true,
     minSeverity: "info",

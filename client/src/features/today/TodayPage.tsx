@@ -126,14 +126,14 @@ type DayPlanTaskLike = {
   originType: string;
   kind: "task" | "note" | "reminder";
   notes: string | null;
-  reminderDate: string | null;
+  reminderAt: string | null;
 };
 
 function isQuickCaptureMetadataTask(task: DayPlanTaskLike) {
   return isQuickCaptureReferenceTask(task);
 }
 
-function getTaskDayMetaText(task: Pick<DayPlanTaskLike, "kind" | "notes" | "reminderDate">, fallback: string) {
+function getTaskDayMetaText(task: Pick<DayPlanTaskLike, "kind" | "notes" | "reminderAt">, fallback: string) {
   return getQuickCaptureDisplayText(task, fallback);
 }
 

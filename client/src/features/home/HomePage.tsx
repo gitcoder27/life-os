@@ -57,7 +57,7 @@ type HomeTaskLike = {
   originType: string;
   kind: "task" | "note" | "reminder";
   notes: string | null;
-  reminderDate: string | null;
+  reminderAt: string | null;
 };
 
 function isQuickCaptureMetadataTask(task: HomeTaskLike) {
@@ -453,7 +453,7 @@ export function HomePage() {
                               {
                                 kind: item.taskKind,
                                 notes: item.notes,
-                                reminderDate: item.reminderDate,
+                                reminderAt: item.reminderAt,
                               },
                               item.title,
                             )

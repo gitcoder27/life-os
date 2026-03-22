@@ -183,7 +183,7 @@ export function QuickCaptureSheet({
         title: title.split("\n")[0].trim() || (activeType === "Reminder" ? "Reminder" : "Note"),
         notes: title,
         kind: activeType === "Reminder" ? "reminder" : "note",
-        reminderDate: activeType === "Reminder" ? reminderDate : null,
+        reminderAt: activeType === "Reminder" ? reminderDate : null,
         scheduledForDate: null,
         originType: "quick_capture",
         recurrence: recurrenceEnabled && recurrenceRule ? buildRecurrenceInput(recurrenceRule) : undefined,

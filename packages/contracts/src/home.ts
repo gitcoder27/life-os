@@ -29,7 +29,7 @@ export interface TaskItem {
   goal: GoalSummary | null;
   notes: string | null;
   kind: TaskKind;
-  reminderDate: IsoDateString | null;
+  reminderAt: string | null;
   originType: TaskOriginType;
 }
 
@@ -69,7 +69,7 @@ export interface AccountabilityRadarItem {
   createdAt: string | null;
   notes: string | null;
   taskKind: TaskKind;
-  reminderDate: IsoDateString | null;
+  reminderAt: string | null;
   originType: TaskOriginType;
 }
 

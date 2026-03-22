@@ -2,6 +2,7 @@ import type { IsoDateString } from "@life-os/contracts";
 import type { Prisma, PrismaClient, RecurrenceException, RecurrenceRule, Task } from "@prisma/client";
 
 import { toIsoDateString } from "../time/date.js";
+import { getUtcDateForLocalTime } from "../time/user-time.js";
 import { getNextRecurrenceDateAfter, listRecurrenceDatesInRange, normalizeRecurrenceRule } from "./rules.js";
 import { coerceExceptionItems, fromPrismaCarryPolicy, upsertRecurrenceException } from "./store.js";
 
@@ -29,13 +30,26 @@ async function createTaskOccurrence(
   scheduledForDate: IsoDateString,
   carriedFromTaskId: string | null,
 ) {
+  const preferences = await tx.userPreference.findUnique({
+    where: {
+      userId: prototype.userId,
+    },
+    select: {
+      timezone: true,
+    },
+  });
+
   return tx.task.create({
     data: {
       userId: prototype.userId,
       title: prototype.title,
       notes: prototype.notes,
       kind: prototype.kind,
-      reminderDate: prototype.reminderDate,
+      reminderAt:
+        prototype.kind === "REMINDER"
+          ? getUtcDateForLocalTime(scheduledForDate, "00:00", preferences?.timezone)
+          : prototype.reminderAt,
+      reminderTriggeredAt: null,
       scheduledForDate: new Date(`${scheduledForDate}T00:00:00.000Z`),
       dueAt: prototype.dueAt,
       goalId: prototype.goalId,
@@ -199,12 +213,26 @@ export async function applyRecurringTaskCarryForward(
 
   const carryPolicy = fromPrismaCarryPolicy(ruleRecord.carryPolicy) ?? "complete_and_clone";
   if (carryPolicy === "move_due_date") {
+    const preferences = await tx.userPreference.findUnique({
+      where: {
+        userId,
+      },
+      select: {
+        timezone: true,
+      },
+    });
+
     return tx.task.update({
       where: {
         id: task.id,
       },
       data: {
         scheduledForDate: new Date(`${targetDate}T00:00:00.000Z`),
+        reminderAt:
+          task.kind === "REMINDER"
+            ? getUtcDateForLocalTime(targetDate, "00:00", preferences?.timezone)
+            : undefined,
+        reminderTriggeredAt: task.kind === "REMINDER" ? null : undefined,
         status: "PENDING",
         completedAt: null,
       },

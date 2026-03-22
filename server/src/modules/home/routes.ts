@@ -426,7 +426,7 @@ async function buildHomeOverview(
         createdAt: task.createdAt.toISOString(),
         notes: task.notes,
         taskKind: fromPrismaTaskKind(task.kind),
-        reminderDate: task.reminderDate ? toIsoDateString(task.reminderDate) : null,
+        reminderAt: task.reminderAt?.toISOString() ?? null,
         originType: fromPrismaTaskOriginType(task.originType),
       };
     }),
@@ -445,7 +445,7 @@ async function buildHomeOverview(
         createdAt: task.createdAt.toISOString(),
         notes: task.notes,
         taskKind: fromPrismaTaskKind(task.kind),
-        reminderDate: task.reminderDate ? toIsoDateString(task.reminderDate) : null,
+        reminderAt: task.reminderAt?.toISOString() ?? null,
         originType: fromPrismaTaskOriginType(task.originType),
       };
     }),
@@ -640,7 +640,7 @@ async function buildHomeOverview(
       goal: task.goal ? serializeGoalSummary(task.goal) : null,
       notes: task.notes,
       kind: fromPrismaTaskKind(task.kind),
-      reminderDate: task.reminderDate ? toIsoDateString(task.reminderDate) : null,
+      reminderAt: task.reminderAt?.toISOString() ?? null,
       originType: fromPrismaTaskOriginType(task.originType),
     })),
     routineSummary,
