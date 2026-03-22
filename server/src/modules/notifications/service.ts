@@ -4,7 +4,7 @@ import type { NotificationCategory, NotificationSeverity } from "@life-os/contra
 import {
   calculateHabitStreak,
   isHabitDueOnIsoDate,
-  normalizeHabitScheduleRule,
+  resolveHabitRecurrence,
 } from "../../lib/habits/schedule.js";
 import { addDays, addIsoDays, getMonthEndDate, getMonthStartIsoDate, getWeekEndDate, getWeekStartIsoDate, parseIsoDate } from "../../lib/time/cycle.js";
 import { toIsoDateString } from "../../lib/time/date.js";
@@ -255,6 +255,22 @@ export async function generateRuleNotifications(
           status: "ACTIVE",
           archivedAt: null,
         },
+        include: {
+          recurrenceRule: {
+            include: {
+              exceptions: {
+                orderBy: {
+                  occurrenceDate: "asc",
+                },
+              },
+            },
+          },
+          pauseWindows: {
+            orderBy: {
+              startsOn: "asc",
+            },
+          },
+        },
       }),
       prisma.habitCheckin.findMany({
         where: {
@@ -360,7 +376,7 @@ export async function generateRuleNotifications(
       const atRiskHabits = activeHabits
         .map((habit) => {
           const habitCheckins = recentHabitCheckins.filter((checkin) => checkin.habitId === habit.id);
-          const scheduleRule = normalizeHabitScheduleRule(habit.scheduleRuleJson);
+          const scheduleRule = resolveHabitRecurrence(habit, todayIso);
           const completedToday = habitCheckins.some(
             (checkin) =>
               toIsoDateString(checkin.occurredOn) === todayIso && checkin.status === "COMPLETED",
@@ -369,8 +385,8 @@ export async function generateRuleNotifications(
           return {
             habit,
             completedToday,
-            dueToday: isHabitDueOnIsoDate(scheduleRule, todayIso),
-            streak: calculateHabitStreak(habitCheckins, scheduleRule, todayIso, 1),
+            dueToday: isHabitDueOnIsoDate(scheduleRule, todayIso, habit.pauseWindows),
+            streak: calculateHabitStreak(habitCheckins, scheduleRule, todayIso, 1, habit.pauseWindows),
           };
         })
         .filter((item) => item.dueToday && !item.completedToday && item.streak >= 2)

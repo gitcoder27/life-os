@@ -2,8 +2,10 @@ import { type FormEvent, useState } from "react";
 
 import {
   getTodayDate,
+  useCreateHabitPauseWindowMutation,
   useCreateHabitMutation,
   useCreateRoutineMutation,
+  useDeleteHabitPauseWindowMutation,
   useGoalsListQuery,
   useHabitCheckinMutation,
   useHabitsQuery,
@@ -159,6 +161,49 @@ type RoutineFormValues = {
 
 const emptyRoutineForm: RoutineFormValues = { name: "", period: "morning", itemsText: "" };
 
+type HabitPauseFormValues = {
+  startsOn: string;
+  endsOn: string;
+  note: string;
+};
+
+function formatPauseDate(isoDate: string) {
+  try {
+    return new Date(`${isoDate}T12:00:00`).toLocaleDateString(undefined, {
+      month: "short",
+      day: "numeric",
+    });
+  } catch {
+    return isoDate;
+  }
+}
+
+function formatPauseWindowLabel(window: {
+  kind: "rest_day" | "vacation";
+  startsOn: string;
+  endsOn: string;
+  isActiveToday: boolean;
+}) {
+  const kindLabel = window.kind === "rest_day" ? "Rest day" : "Vacation";
+  const dateLabel =
+    window.startsOn === window.endsOn
+      ? formatPauseDate(window.startsOn)
+      : `${formatPauseDate(window.startsOn)} to ${formatPauseDate(window.endsOn)}`;
+
+  return `${kindLabel}${window.isActiveToday ? " now" : ""} · ${dateLabel}`;
+}
+
+function getPauseWindowActionLabel(window: {
+  kind: "rest_day" | "vacation";
+  isActiveToday: boolean;
+}) {
+  if (window.kind === "vacation") {
+    return window.isActiveToday ? "End vacation" : "Remove vacation";
+  }
+
+  return window.isActiveToday ? "End rest day" : "Remove rest day";
+}
+
 function RoutineForm({
   initial = emptyRoutineForm,
   submitLabel,
@@ -238,11 +283,19 @@ export function HabitsPage() {
   const routineCheckinMutation = useRoutineCheckinMutation(today);
   const createHabitMutation = useCreateHabitMutation();
   const updateHabitMutation = useUpdateHabitMutation();
+  const createHabitPauseWindowMutation = useCreateHabitPauseWindowMutation();
+  const deleteHabitPauseWindowMutation = useDeleteHabitPauseWindowMutation();
   const createRoutineMutation = useCreateRoutineMutation();
   const updateRoutineMutation = useUpdateRoutineMutation();
 
   const [showAddHabit, setShowAddHabit] = useState(false);
   const [editingHabitId, setEditingHabitId] = useState<string | null>(null);
+  const [vacationHabitId, setVacationHabitId] = useState<string | null>(null);
+  const [vacationForm, setVacationForm] = useState<HabitPauseFormValues>({
+    startsOn: today,
+    endsOn: today,
+    note: "",
+  });
   const [showAddRoutine, setShowAddRoutine] = useState(false);
   const [editingRoutineId, setEditingRoutineId] = useState<string | null>(null);
 
@@ -302,8 +355,54 @@ export function HabitsPage() {
     );
   }
 
+  function handlePermanentHabitStatusChange(habitId: string, status: "active" | "paused" | "archived") {
+    updateHabitMutation.mutate({ habitId, status });
+  }
+
+  function handleRestDay(habitId: string) {
+    createHabitPauseWindowMutation.mutate({
+      habitId,
+      kind: "rest_day",
+      startsOn: today,
+      endsOn: today,
+    });
+  }
+
+  function handleOpenVacation(habitId: string) {
+    setVacationHabitId(habitId);
+    setVacationForm({
+      startsOn: today,
+      endsOn: today,
+      note: "",
+    });
+    setEditingHabitId(null);
+    setShowAddHabit(false);
+  }
+
+  function handleSaveVacation(habitId: string) {
+    createHabitPauseWindowMutation.mutate(
+      {
+        habitId,
+        kind: "vacation",
+        startsOn: vacationForm.startsOn,
+        endsOn: vacationForm.endsOn,
+        note: vacationForm.note.trim() || null,
+      },
+      {
+        onSuccess: () => {
+          setVacationHabitId(null);
+          setVacationForm({ startsOn: today, endsOn: today, note: "" });
+        },
+      },
+    );
+  }
+
+  function handleDeletePauseWindow(habitId: string, pauseWindowId: string) {
+    deleteHabitPauseWindowMutation.mutate({ habitId, pauseWindowId });
+  }
+
   function handleArchiveHabit(habitId: string) {
-    updateHabitMutation.mutate({ habitId, status: "archived" });
+    handlePermanentHabitStatusChange(habitId, "archived");
   }
 
   function handleCreateRoutine(values: RoutineFormValues) {
@@ -422,7 +521,19 @@ export function HabitsPage() {
                         <div className="habit-item__risk-msg">{habit.risk.message}</div>
                       ) : null}
                     </div>
-                    <span className="streak-badge">{habit.streakCount} streak</span>
+                    <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                      {!habit.completedToday ? (
+                        <button
+                          className="button button--ghost button--small"
+                          type="button"
+                          onClick={() => handleRestDay(habit.id)}
+                          disabled={createHabitPauseWindowMutation.isPending}
+                        >
+                          Rest day
+                        </button>
+                      ) : null}
+                      <span className="streak-badge">{habit.streakCount} streak</span>
+                    </div>
                   </div>
                 );
               })}
@@ -545,13 +656,13 @@ export function HabitsPage() {
         <div className="manage-section__header">
           <div>
             <h2 className="manage-section__title">Manage habits</h2>
-            <p className="manage-section__subtitle">Create, edit, or archive your tracked habits</p>
+            <p className="manage-section__subtitle">Create, edit, pause, and temporarily freeze your tracked habits</p>
           </div>
           {!showAddHabit ? (
             <button
               className="button button--ghost button--small"
               type="button"
-              onClick={() => { setShowAddHabit(true); setEditingHabitId(null); }}
+              onClick={() => { setShowAddHabit(true); setEditingHabitId(null); setVacationHabitId(null); }}
             >
               + Add habit
             </button>
@@ -592,40 +703,190 @@ export function HabitsPage() {
                     onCancel={() => setEditingHabitId(null)}
                   />
                 ) : (
-                  <div className="manage-list__row">
-                    <div className="manage-list__info">
-                      <div className="manage-list__name">
-                        {habit.title}
-                        <span className={`tag tag--neutral`} style={{ marginLeft: "0.4rem" }}>{habit.status}</span>
+                  <div>
+                    <div className="manage-list__row">
+                      <div className="manage-list__info">
+                        <div className="manage-list__name">
+                          {habit.title}
+                          <span className={`tag tag--neutral`} style={{ marginLeft: "0.4rem" }}>{habit.status}</span>
+                          {habit.pauseWindows.some((window) => window.isActiveToday) ? (
+                            <span className="tag tag--warning" style={{ marginLeft: "0.3rem" }}>temporarily paused</span>
+                          ) : null}
+                        </div>
+                        <div className="manage-list__meta">
+                          {habit.category ?? "General"} · target {habit.targetPerDay}/day · {habit.streakCount} streak
+                          {habit.goal ? ` · ${habit.goal.title}` : ""}
+                          {isRecurring(habit.recurrence) && (
+                            <span className="manage-list__recurrence"> · ↻ {formatFullRecurrenceSummary(habit.recurrence!.rule)}</span>
+                          )}
+                        </div>
+                        {habit.pauseWindows.length > 0 ? (
+                          <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem", marginTop: "0.7rem" }}>
+                            {habit.pauseWindows.map((window) => (
+                              <div
+                                key={window.id}
+                                style={{
+                                  display: "inline-flex",
+                                  alignItems: "center",
+                                  gap: "0.5rem",
+                                  padding: "0.35rem 0.45rem 0.35rem 0.7rem",
+                                  borderRadius: "999px",
+                                  border: window.isActiveToday
+                                    ? "1px solid rgba(217,153,58,0.35)"
+                                    : "1px solid rgba(255,255,255,0.08)",
+                                  background: window.isActiveToday
+                                    ? "rgba(217,153,58,0.16)"
+                                    : "rgba(255,255,255,0.05)",
+                                  maxWidth: "100%",
+                                }}
+                              >
+                                <span
+                                  style={{
+                                    fontSize: "0.82rem",
+                                    color: window.isActiveToday ? "var(--text-primary)" : "var(--text-muted)",
+                                    whiteSpace: "nowrap",
+                                  }}
+                                  title={window.note ?? undefined}
+                                >
+                                  {formatPauseWindowLabel(window)}
+                                </span>
+                                <button
+                                  className="button button--small"
+                                  type="button"
+                                  style={{
+                                    whiteSpace: "nowrap",
+                                    minHeight: "1.9rem",
+                                    padding: "0.2rem 0.55rem",
+                                    borderRadius: "999px",
+                                    background: "rgba(210, 72, 72, 0.18)",
+                                    border: "1px solid rgba(210, 72, 72, 0.32)",
+                                    color: "#ffd7d7",
+                                    boxShadow: "none",
+                                  }}
+                                  onClick={() => handleDeletePauseWindow(habit.id, window.id)}
+                                  disabled={deleteHabitPauseWindowMutation.isPending}
+                                >
+                                  {getPauseWindowActionLabel(window)}
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        ) : null}
                       </div>
-                      <div className="manage-list__meta">
-                        {habit.category ?? "General"} · target {habit.targetPerDay}/day · {habit.streakCount} streak
-                        {habit.goal ? ` · ${habit.goal.title}` : ""}
-                        {isRecurring(habit.recurrence) && (
-                          <span className="manage-list__recurrence"> · ↻ {formatFullRecurrenceSummary(habit.recurrence!.rule)}</span>
-                        )}
-                      </div>
-                    </div>
-                    <div className="button-row button-row--tight">
-                      <button
-                        className="button button--ghost button--small"
-                        type="button"
-                        onClick={() => { setEditingHabitId(habit.id); setShowAddHabit(false); }}
-                      >
-                        Edit
-                      </button>
-                      {habit.status !== "archived" ? (
+                      <div className="button-row button-row--tight">
                         <button
                           className="button button--ghost button--small"
                           type="button"
-                          style={{ color: "var(--negative)" }}
-                          onClick={() => handleArchiveHabit(habit.id)}
-                          disabled={updateHabitMutation.isPending}
+                          onClick={() => { setEditingHabitId(habit.id); setShowAddHabit(false); setVacationHabitId(null); }}
                         >
-                          Archive
+                          Edit
                         </button>
-                      ) : null}
+                        {habit.status === "active" ? (
+                          <>
+                            <button
+                              className="button button--ghost button--small"
+                              type="button"
+                              onClick={() => handleRestDay(habit.id)}
+                              disabled={createHabitPauseWindowMutation.isPending}
+                            >
+                              Rest day
+                            </button>
+                            <button
+                              className="button button--ghost button--small"
+                              type="button"
+                              onClick={() => handleOpenVacation(habit.id)}
+                            >
+                              Vacation
+                            </button>
+                            <button
+                              className="button button--ghost button--small"
+                              type="button"
+                              onClick={() => handlePermanentHabitStatusChange(habit.id, "paused")}
+                              disabled={updateHabitMutation.isPending}
+                            >
+                              Pause
+                            </button>
+                          </>
+                        ) : habit.status === "paused" ? (
+                          <button
+                            className="button button--ghost button--small"
+                            type="button"
+                            onClick={() => handlePermanentHabitStatusChange(habit.id, "active")}
+                            disabled={updateHabitMutation.isPending}
+                          >
+                            Resume
+                          </button>
+                        ) : null}
+                        {habit.status !== "archived" ? (
+                          <button
+                            className="button button--ghost button--small"
+                            type="button"
+                            style={{ color: "var(--negative)" }}
+                            onClick={() => handleArchiveHabit(habit.id)}
+                            disabled={updateHabitMutation.isPending}
+                          >
+                            Archive
+                          </button>
+                        ) : null}
+                      </div>
                     </div>
+                    {vacationHabitId === habit.id ? (
+                      <form
+                        className="manage-form"
+                        style={{ marginTop: "0.85rem" }}
+                        onSubmit={(event) => {
+                          event.preventDefault();
+                          handleSaveVacation(habit.id);
+                        }}
+                      >
+                        <div className="manage-form__row">
+                          <label className="field" style={{ flex: 1 }}>
+                            <span>Start date</span>
+                            <input
+                              type="date"
+                              value={vacationForm.startsOn}
+                              onChange={(e) => setVacationForm((current) => {
+                                const startsOn = e.target.value;
+                                const endsOn = current.endsOn < startsOn ? startsOn : current.endsOn;
+                                return { ...current, startsOn, endsOn };
+                              })}
+                              required
+                            />
+                          </label>
+                          <label className="field" style={{ flex: 1 }}>
+                            <span>End date</span>
+                            <input
+                              type="date"
+                              value={vacationForm.endsOn}
+                              min={vacationForm.startsOn}
+                              onChange={(e) => setVacationForm((current) => ({ ...current, endsOn: e.target.value }))}
+                              required
+                            />
+                          </label>
+                        </div>
+                        <label className="field">
+                          <span>Note (optional)</span>
+                          <input
+                            type="text"
+                            value={vacationForm.note}
+                            placeholder="Out of town, sick day, recovery week…"
+                            onChange={(e) => setVacationForm((current) => ({ ...current, note: e.target.value }))}
+                          />
+                        </label>
+                        <div className="button-row button-row--tight">
+                          <button className="button button--primary button--small" type="submit" disabled={createHabitPauseWindowMutation.isPending}>
+                            {createHabitPauseWindowMutation.isPending ? "Saving…" : "Save vacation"}
+                          </button>
+                          <button
+                            className="button button--ghost button--small"
+                            type="button"
+                            onClick={() => setVacationHabitId(null)}
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </form>
+                    ) : null}
                   </div>
                 )}
               </div>
@@ -636,13 +897,27 @@ export function HabitsPage() {
             title="No habits yet"
             description="Add your first habit to start tracking daily consistency."
             actionLabel="+ Add your first habit"
-            onAction={() => setShowAddHabit(true)}
+            onAction={() => { setShowAddHabit(true); setVacationHabitId(null); }}
           />
         ) : null}
 
         {updateHabitMutation.error ? (
           <div className="inline-state inline-state--error" style={{ marginTop: "0.5rem" }}>
             {updateHabitMutation.error instanceof Error ? updateHabitMutation.error.message : "Could not update habit."}
+          </div>
+        ) : null}
+        {createHabitPauseWindowMutation.error ? (
+          <div className="inline-state inline-state--error" style={{ marginTop: "0.5rem" }}>
+            {createHabitPauseWindowMutation.error instanceof Error
+              ? createHabitPauseWindowMutation.error.message
+              : "Could not save the temporary pause."}
+          </div>
+        ) : null}
+        {deleteHabitPauseWindowMutation.error ? (
+          <div className="inline-state inline-state--error" style={{ marginTop: "0.5rem" }}>
+            {deleteHabitPauseWindowMutation.error instanceof Error
+              ? deleteHabitPauseWindowMutation.error.message
+              : "Could not remove the temporary pause."}
           </div>
         ) : null}
       </div>

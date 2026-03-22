@@ -68,7 +68,7 @@ import { z } from "zod";
 import { requireAuthenticatedUser } from "../../lib/auth/require-auth.js";
 import { AppError } from "../../lib/errors/app-error.js";
 import { calculateHabitActiveStreak, calculateHabitRisk } from "../../lib/habits/guidance.js";
-import { isHabitDueOnIsoDate, resolveHabitRecurrence } from "../../lib/habits/schedule.js";
+import { isHabitDueOnIsoDate, isHabitPermanentlyInactive, resolveHabitRecurrence } from "../../lib/habits/schedule.js";
 import { withGeneratedAt } from "../../lib/http/response.js";
 import { syncQuickCaptureReminderDate } from "../../lib/quick-capture.js";
 import { applyRecurringTaskCarryForward, materializeNextRecurringTaskOccurrence, materializeRecurringTasksInRange } from "../../lib/recurrence/tasks.js";
@@ -673,16 +673,29 @@ function serializeGoalLinkedHabit(
       carryPolicy?: unknown;
       legacyRuleText?: string | null;
     } | null;
+    pauseWindows?: Array<{ startsOn: Date; endsOn: Date }>;
     checkins: Array<{ occurredOn: Date; status: "COMPLETED" | "SKIPPED" }>;
   },
   targetIsoDate: IsoDateString,
 ): GoalLinkedHabitItem {
   const recurrence = resolveHabitRecurrence(habit, targetIsoDate);
-  const dueToday = isHabitDueOnIsoDate(recurrence, targetIsoDate);
+  const dueToday = isHabitPermanentlyInactive(habit)
+    ? false
+    : isHabitDueOnIsoDate(recurrence, targetIsoDate, habit.pauseWindows);
   const completedToday = habit.checkins.some(
     (checkin) => toIsoDateString(checkin.occurredOn) === targetIsoDate && checkin.status === "COMPLETED",
   );
-  const risk = calculateHabitRisk(habit.checkins, recurrence, targetIsoDate);
+  const risk: {
+    level: GoalLinkedHabitItem["riskLevel"];
+    message: string | null;
+    completionRate7d: number;
+  } = isHabitPermanentlyInactive(habit)
+    ? {
+        level: "none",
+        message: null,
+        completionRate7d: 100,
+      }
+    : calculateHabitRisk(habit.checkins, recurrence, targetIsoDate, habit.pauseWindows);
 
   return {
     id: habit.id,
@@ -692,7 +705,7 @@ function serializeGoalLinkedHabit(
     targetPerDay: habit.targetPerDay,
     dueToday,
     completedToday,
-    streakCount: calculateHabitActiveStreak(habit.checkins, recurrence, targetIsoDate),
+    streakCount: calculateHabitActiveStreak(habit.checkins, recurrence, targetIsoDate, habit.pauseWindows),
     completionRate7d: risk.completionRate7d,
     riskLevel: risk.level,
     riskMessage: risk.message,
@@ -839,6 +852,11 @@ async function buildGoalOverviews(
         },
       },
       include: {
+        pauseWindows: {
+          orderBy: {
+            startsOn: "asc",
+          },
+        },
         recurrenceRule: {
           include: {
             exceptions: {
@@ -1563,7 +1581,12 @@ export const registerPlanningRoutes: FastifyPluginAsync = async (app) => {
           goalId,
           status: "ACTIVE",
         },
-        include: {
+      include: {
+          pauseWindows: {
+            orderBy: {
+              startsOn: "asc",
+            },
+          },
           recurrenceRule: {
             include: {
               exceptions: {

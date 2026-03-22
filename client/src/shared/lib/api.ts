@@ -459,6 +459,14 @@ type HabitsResponse = {
       completedCount7d: number;
       completionRate7d: number;
     };
+    pauseWindows: Array<{
+      id: string;
+      kind: "rest_day" | "vacation";
+      startsOn: string;
+      endsOn: string;
+      note: string | null;
+      isActiveToday: boolean;
+    }>;
   }>;
   dueHabits: Array<{
     id: string;
@@ -481,6 +489,14 @@ type HabitsResponse = {
       completedCount7d: number;
       completionRate7d: number;
     };
+    pauseWindows: Array<{
+      id: string;
+      kind: "rest_day" | "vacation";
+      startsOn: string;
+      endsOn: string;
+      note: string | null;
+      isActiveToday: boolean;
+    }>;
   }>;
   routines: Array<{
     id: string;
@@ -2351,6 +2367,55 @@ export function useUpdateHabitMutation() {
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.habits });
+      invalidateCoreData(queryClient, getTodayDate());
+    },
+  });
+}
+
+export function useCreateHabitPauseWindowMutation() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      habitId,
+      ...payload
+    }: {
+      habitId: string;
+      kind: "rest_day" | "vacation";
+      startsOn: string;
+      endsOn?: string;
+      note?: string | null;
+    }) =>
+      apiRequest<HabitMutationResponse>(`/api/habits/${habitId}/pause-windows`, {
+        method: "POST",
+        body: payload,
+      }),
+    meta: {
+      successMessage: "Temporary habit pause saved.",
+      errorMessage: "Temporary habit pause failed.",
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.habits });
+      invalidateCoreData(queryClient, getTodayDate());
+    },
+  });
+}
+
+export function useDeleteHabitPauseWindowMutation() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ habitId, pauseWindowId }: { habitId: string; pauseWindowId: string }) =>
+      apiRequest<HabitMutationResponse>(`/api/habits/${habitId}/pause-windows/${pauseWindowId}`, {
+        method: "DELETE",
+      }),
+    meta: {
+      successMessage: "Temporary habit pause removed.",
+      errorMessage: "Temporary habit pause removal failed.",
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.habits });
+      invalidateCoreData(queryClient, getTodayDate());
     },
   });
 }

@@ -17,7 +17,7 @@ import { AppError } from "../../lib/errors/app-error.js";
 import {
   filterDueHabits,
   isHabitDueOnIsoDate,
-  normalizeHabitScheduleRule,
+  resolveHabitRecurrence,
 } from "../../lib/habits/schedule.js";
 import { buildWaterTotalsByLocalDate, countWaterTargetHits } from "../../lib/health/water.js";
 import { applyRecurringTaskCarryForward, applyRecurringTaskSkip, materializeRecurringTasksInRange } from "../../lib/recurrence/tasks.js";
@@ -581,6 +581,22 @@ async function getDailySummary(prisma: PrismaClient, userId: string, date: Date)
           status: "ACTIVE",
           archivedAt: null,
         },
+        include: {
+          recurrenceRule: {
+            include: {
+              exceptions: {
+                orderBy: {
+                  occurrenceDate: "asc",
+                },
+              },
+            },
+          },
+          pauseWindows: {
+            orderBy: {
+              startsOn: "asc",
+            },
+          },
+        },
       }),
       prisma.habitCheckin.findMany({
         where: {
@@ -1062,6 +1078,20 @@ export async function getWeeklyReviewModel(
           archivedAt: null,
         },
         include: {
+          recurrenceRule: {
+            include: {
+              exceptions: {
+                orderBy: {
+                  occurrenceDate: "asc",
+                },
+              },
+            },
+          },
+          pauseWindows: {
+            orderBy: {
+              startsOn: "asc",
+            },
+          },
           checkins: {
             where: {
               occurredOn: {
@@ -1191,7 +1221,7 @@ export async function getWeeklyReviewModel(
   }, {});
   const habitTotals = habits.reduce(
     (totals, habit) => {
-      const scheduleRule = normalizeHabitScheduleRule(habit.scheduleRuleJson);
+      const scheduleRule = resolveHabitRecurrence(habit, startIsoDate);
       const completedDates = new Set<string>(
         habit.checkins
           .filter((checkin) => checkin.status === "COMPLETED")
@@ -1199,7 +1229,7 @@ export async function getWeeklyReviewModel(
       );
 
       for (const isoDate of scopedIsoDates) {
-        if (!isHabitDueOnIsoDate(scheduleRule, isoDate as `${number}-${number}-${number}`)) {
+        if (!isHabitDueOnIsoDate(scheduleRule, isoDate as `${number}-${number}-${number}`, habit.pauseWindows)) {
           continue;
         }
 
@@ -1353,6 +1383,20 @@ export async function getMonthlyReviewModel(
         archivedAt: null,
       },
       include: {
+        recurrenceRule: {
+          include: {
+            exceptions: {
+              orderBy: {
+                occurrenceDate: "asc",
+              },
+            },
+          },
+        },
+        pauseWindows: {
+          orderBy: {
+            startsOn: "asc",
+          },
+        },
         checkins: {
           where: {
             occurredOn: {
@@ -1434,14 +1478,14 @@ export async function getMonthlyReviewModel(
   const waterTargetHitCount = countWaterTargetHits(waterLogs, timezone, waterTargetMl);
   const topHabits = habits
     .map((habit) => {
-      const scheduleRule = normalizeHabitScheduleRule(habit.scheduleRuleJson);
+      const scheduleRule = resolveHabitRecurrence(habit, startIsoDate);
       const completedDates = new Set<string>(
         habit.checkins
           .filter((checkin) => checkin.status === "COMPLETED")
           .map((checkin) => toIsoDateString(checkin.occurredOn)),
       );
       const dueCount = scopedIsoDates.filter((isoDate) =>
-        isHabitDueOnIsoDate(scheduleRule, isoDate as `${number}-${number}-${number}`),
+        isHabitDueOnIsoDate(scheduleRule, isoDate as `${number}-${number}-${number}`, habit.pauseWindows),
       ).length;
       const completedCount = scopedIsoDates.filter((isoDate) => completedDates.has(isoDate)).length;
 
@@ -1749,6 +1793,20 @@ async function buildWeeklyHistoryMetricsMap(
         archivedAt: null,
       },
       include: {
+        recurrenceRule: {
+          include: {
+            exceptions: {
+              orderBy: {
+                occurrenceDate: "asc",
+              },
+            },
+          },
+        },
+        pauseWindows: {
+          orderBy: {
+            startsOn: "asc",
+          },
+        },
         checkins: {
           where: {
             occurredOn: {
@@ -1819,7 +1877,7 @@ async function buildWeeklyHistoryMetricsMap(
     );
     const habitTotals = habits.reduce(
       (totals, habit) => {
-        const scheduleRule = normalizeHabitScheduleRule(habit.scheduleRuleJson);
+        const scheduleRule = resolveHabitRecurrence(habit, toIsoDateString(startDate));
         const completedDates = new Set(
           habit.checkins
             .filter((checkin) => checkin.status === "COMPLETED")
@@ -1827,7 +1885,7 @@ async function buildWeeklyHistoryMetricsMap(
         );
 
         for (const isoDate of scopedIsoDates) {
-          if (!isHabitDueOnIsoDate(scheduleRule, isoDate as `${number}-${number}-${number}`)) {
+          if (!isHabitDueOnIsoDate(scheduleRule, isoDate as `${number}-${number}-${number}`, habit.pauseWindows)) {
             continue;
           }
 

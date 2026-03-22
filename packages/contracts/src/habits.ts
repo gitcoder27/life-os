@@ -4,6 +4,7 @@ import type { RecurrenceDefinition, RecurrenceInput } from "./recurrence.js";
 
 export type HabitStatus = "active" | "paused" | "archived";
 export type HabitCheckinStatus = "completed" | "skipped";
+export type HabitPauseKind = "rest_day" | "vacation";
 export type RoutinePeriod = "morning" | "evening";
 export type RoutineStatus = "active" | "archived";
 export type HabitRiskLevel = "none" | "at_risk" | "drifting";
@@ -27,6 +28,16 @@ export interface HabitItem {
   completedToday: boolean;
   streakCount: number;
   risk: HabitRiskState;
+  pauseWindows: HabitPauseWindow[];
+}
+
+export interface HabitPauseWindow {
+  id: EntityId;
+  kind: HabitPauseKind;
+  startsOn: IsoDateString;
+  endsOn: IsoDateString;
+  note: string | null;
+  isActiveToday: boolean;
 }
 
 export interface HabitRiskState {
@@ -101,6 +112,13 @@ export interface UpdateHabitRequest {
 
 export interface HabitMutationResponse extends ApiMeta {
   habit: HabitItem;
+}
+
+export interface CreateHabitPauseWindowRequest {
+  kind: HabitPauseKind;
+  startsOn: IsoDateString;
+  endsOn?: IsoDateString;
+  note?: string | null;
 }
 
 export interface HabitCheckinRequest {

@@ -219,6 +219,22 @@ async function getDayContext(prisma: PrismaClient, userId: string, date: Date) {
         status: "ACTIVE",
         archivedAt: null,
       },
+      include: {
+        recurrenceRule: {
+          include: {
+            exceptions: {
+              orderBy: {
+                occurrenceDate: "asc",
+              },
+            },
+          },
+        },
+        pauseWindows: {
+          orderBy: {
+            startsOn: "asc",
+          },
+        },
+      },
     }),
     prisma.habitCheckin.findMany({
       where: {

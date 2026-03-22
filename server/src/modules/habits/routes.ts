@@ -1,10 +1,12 @@
 import type { FastifyPluginAsync } from "fastify";
 import type {
+  CreateHabitPauseWindowRequest,
   CreateHabitRequest,
   CreateRoutineRequest,
   HabitCheckinRequest,
   HabitItem,
   HabitMutationResponse,
+  HabitPauseWindow,
   HabitScheduleRule,
   HabitsResponse,
   IsoDateString,
@@ -24,6 +26,7 @@ import type {
   GoalStatus as PrismaGoalStatus,
   Habit,
   HabitCheckin,
+  HabitPauseKind as PrismaHabitPauseKind,
   HabitStatus as PrismaHabitStatus,
   Routine,
   RoutineItem,
@@ -42,6 +45,8 @@ import {
 } from "../../lib/habits/guidance.js";
 import {
   isHabitDueOnIsoDate,
+  isHabitPausedOnIsoDate,
+  isHabitPermanentlyInactive,
   normalizeHabitScheduleRule,
   resolveHabitRecurrence,
 } from "../../lib/habits/schedule.js";
@@ -56,6 +61,7 @@ import { ensureCycle } from "../scoring/service.js";
 
 const isoDateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/) as unknown as z.ZodType<IsoDateString>;
 const habitStatusSchema = z.enum(["active", "paused", "archived"]);
+const habitPauseKindSchema = z.enum(["rest_day", "vacation"]);
 const habitCheckinStatusSchema = z.enum(["completed", "skipped"]);
 const routinePeriodSchema = z.enum(["morning", "evening"]);
 const routineStatusSchema = z.enum(["active", "archived"]);
@@ -127,6 +133,22 @@ const habitCheckinSchema = z.object({
   status: habitCheckinStatusSchema.optional(),
   note: z.string().max(4000).nullable().optional(),
 });
+
+const createHabitPauseWindowSchema = z
+  .object({
+    kind: habitPauseKindSchema,
+    startsOn: isoDateSchema,
+    endsOn: isoDateSchema.optional(),
+    note: z.string().max(4000).nullable().optional(),
+  })
+  .refine((value) => value.kind !== "rest_day" || !value.endsOn || value.endsOn === value.startsOn, {
+    message: "Rest day pauses must be a single date",
+    path: ["endsOn"],
+  })
+  .refine((value) => (value.endsOn ?? value.startsOn) >= value.startsOn, {
+    message: "Pause window end date must be on or after the start date",
+    path: ["endsOn"],
+  });
 
 const createRoutineSchema = z.object({
   name: z.string().min(1).max(200),
@@ -241,6 +263,47 @@ function toPrismaCheckinStatus(status: NonNullable<HabitCheckinRequest["status"]
   }
 }
 
+function toPrismaHabitPauseKind(kind: CreateHabitPauseWindowRequest["kind"]): PrismaHabitPauseKind {
+  switch (kind) {
+    case "rest_day":
+      return "REST_DAY";
+    case "vacation":
+      return "VACATION";
+  }
+}
+
+function fromPrismaHabitPauseKind(kind: PrismaHabitPauseKind): HabitPauseWindow["kind"] {
+  switch (kind) {
+    case "REST_DAY":
+      return "rest_day";
+    case "VACATION":
+      return "vacation";
+  }
+}
+
+function serializeHabitPauseWindow(
+  pauseWindow: {
+    id: string;
+    kind: PrismaHabitPauseKind;
+    startsOn: Date;
+    endsOn: Date;
+    note: string | null;
+  },
+  targetIsoDate: IsoDateString,
+): HabitPauseWindow {
+  const startsOn = toIsoDateString(pauseWindow.startsOn);
+  const endsOn = toIsoDateString(pauseWindow.endsOn);
+
+  return {
+    id: pauseWindow.id,
+    kind: fromPrismaHabitPauseKind(pauseWindow.kind),
+    startsOn,
+    endsOn,
+    note: pauseWindow.note,
+    isActiveToday: startsOn <= targetIsoDate && targetIsoDate <= endsOn,
+  };
+}
+
 function toPrismaRoutinePeriod(period: CreateRoutineRequest["period"]): PrismaRoutinePeriod {
   switch (period) {
     case "morning":
@@ -318,13 +381,22 @@ async function serializeHabit(
       carryPolicy?: unknown;
       legacyRuleText?: string | null;
     } | null;
+    pauseWindows?: Array<{
+      id: string;
+      kind: PrismaHabitPauseKind;
+      startsOn: Date;
+      endsOn: Date;
+      note: string | null;
+    }>;
   },
   checkins: HabitCheckin[],
   targetIsoDate: IsoDateString,
 ): Promise<HabitItem> {
   const recurrence = resolveHabitRecurrence(habit, targetIsoDate);
   const scheduleRule = deriveHabitScheduleFromRecurrence(recurrence.rule);
-  const dueToday = isHabitDueOnIsoDate(recurrence, targetIsoDate);
+  const dueToday = isHabitPermanentlyInactive(habit)
+    ? false
+    : isHabitDueOnIsoDate(recurrence, targetIsoDate, habit.pauseWindows);
   const completedToday = checkins.some(
     (checkin) =>
       toIsoDateString(checkin.occurredOn) === targetIsoDate && checkin.status === "COMPLETED",
@@ -342,8 +414,20 @@ async function serializeHabit(
     status: fromPrismaHabitStatus(habit.status),
     dueToday,
     completedToday,
-    streakCount: calculateHabitActiveStreak(checkins, recurrence, targetIsoDate),
-    risk: calculateHabitRisk(checkins, recurrence, targetIsoDate),
+    streakCount: calculateHabitActiveStreak(checkins, recurrence, targetIsoDate, habit.pauseWindows),
+    risk: isHabitPermanentlyInactive(habit)
+      ? {
+          level: "none",
+          reason: null,
+          message: null,
+          dueCount7d: 0,
+          completedCount7d: 0,
+          completionRate7d: 100,
+        }
+      : calculateHabitRisk(checkins, recurrence, targetIsoDate, habit.pauseWindows),
+    pauseWindows: (habit.pauseWindows ?? [])
+      .filter((pauseWindow) => toIsoDateString(pauseWindow.endsOn) >= targetIsoDate)
+      .map((pauseWindow) => serializeHabitPauseWindow(pauseWindow, targetIsoDate)),
   };
 }
 
@@ -352,6 +436,13 @@ async function findOwnedHabit(app: Parameters<FastifyPluginAsync>[0], userId: st
     where: {
       id: habitId,
       userId,
+    },
+    include: {
+      pauseWindows: {
+        orderBy: {
+          startsOn: "asc",
+        },
+      },
     },
   });
 
@@ -364,6 +455,54 @@ async function findOwnedHabit(app: Parameters<FastifyPluginAsync>[0], userId: st
   }
 
   return habit;
+}
+
+async function findOverlappingPauseWindow(
+  app: Parameters<FastifyPluginAsync>[0],
+  input: {
+    habitId: string;
+    startsOn: Date;
+    endsOn: Date;
+  },
+) {
+  return app.prisma.habitPauseWindow.findFirst({
+    where: {
+      habitId: input.habitId,
+      startsOn: {
+        lte: input.endsOn,
+      },
+      endsOn: {
+        gte: input.startsOn,
+      },
+    },
+  });
+}
+
+async function findOwnedPauseWindow(
+  app: Parameters<FastifyPluginAsync>[0],
+  userId: string,
+  habitId: string,
+  pauseWindowId: string,
+) {
+  const pauseWindow = await app.prisma.habitPauseWindow.findFirst({
+    where: {
+      id: pauseWindowId,
+      habitId,
+      habit: {
+        userId,
+      },
+    },
+  });
+
+  if (!pauseWindow) {
+    throw new AppError({
+      statusCode: 404,
+      code: "NOT_FOUND",
+      message: "Habit pause window not found",
+    });
+  }
+
+  return pauseWindow;
 }
 
 async function assertOwnedGoalReference(
@@ -486,6 +625,11 @@ export const registerHabitsRoutes: FastifyPluginAsync = async (app) => {
       },
       include: {
         goal: true,
+        pauseWindows: {
+          orderBy: {
+            startsOn: "asc",
+          },
+        },
         recurrenceRule: {
           include: {
             exceptions: {
@@ -537,16 +681,25 @@ export const registerHabitsRoutes: FastifyPluginAsync = async (app) => {
       ? habits.find((habit) => habit.id === weekCycle.weeklyReview?.focusHabitId)
       : null;
     const weeklyChallenge = focusHabit
-      ? calculateWeeklyHabitChallenge({
-          habit: {
-            id: focusHabit.id,
-            title: focusHabit.title,
-          },
-          checkins: focusHabit.checkins,
-          scheduleInput: resolveHabitRecurrence(focusHabit, targetIsoDate),
-          weekStartIsoDate: getWeekStartIsoDate(targetIsoDate, weekStartsOn),
-          targetIsoDate,
-        })
+      ? (() => {
+          if (isHabitPermanentlyInactive(focusHabit)) {
+            return null;
+          }
+
+          const challenge = calculateWeeklyHabitChallenge({
+            habit: {
+              id: focusHabit.id,
+              title: focusHabit.title,
+            },
+            checkins: focusHabit.checkins,
+            scheduleInput: resolveHabitRecurrence(focusHabit, targetIsoDate),
+            weekStartIsoDate: getWeekStartIsoDate(targetIsoDate, weekStartsOn),
+            targetIsoDate,
+            pauseWindows: focusHabit.pauseWindows,
+          });
+
+          return challenge.weekTarget > 0 ? challenge : null;
+        })()
       : null;
 
     const response: HabitsResponse = withGeneratedAt({
@@ -599,6 +752,11 @@ export const registerHabitsRoutes: FastifyPluginAsync = async (app) => {
         },
         include: {
           goal: true,
+          pauseWindows: {
+            orderBy: {
+              startsOn: "asc",
+            },
+          },
           recurrenceRule: {
             include: {
               exceptions: {
@@ -671,6 +829,147 @@ export const registerHabitsRoutes: FastifyPluginAsync = async (app) => {
         },
         include: {
           goal: true,
+          pauseWindows: {
+            orderBy: {
+              startsOn: "asc",
+            },
+          },
+          recurrenceRule: {
+            include: {
+              exceptions: {
+                orderBy: {
+                  occurrenceDate: "asc",
+                },
+              },
+            },
+          },
+          checkins: {
+            where: {
+              occurredOn: {
+                gte: parseIsoDate(addIsoDays(targetIsoDate, -30)),
+                lte: todayDate,
+              },
+            },
+          },
+        },
+      });
+    });
+
+    const response: HabitMutationResponse = withGeneratedAt({
+      habit: await serializeHabit(habit, habit.checkins, targetIsoDate),
+    });
+
+    return reply.send(response);
+  });
+
+  app.post("/habits/:habitId/pause-windows", async (request, reply) => {
+    const user = requireAuthenticatedUser(request);
+    const payload = parseOrThrow(createHabitPauseWindowSchema, request.body as CreateHabitPauseWindowRequest);
+    const { habitId } = request.params as { habitId: string };
+    const existingHabit = await findOwnedHabit(app, user.id, habitId);
+
+    if (isHabitPermanentlyInactive(existingHabit)) {
+      throw new AppError({
+        statusCode: 409,
+        code: "CONFLICT",
+        message: "Only active habits can use temporary pause windows",
+      });
+    }
+
+    const startsOn = parseIsoDate(payload.startsOn);
+    const endsOn = parseIsoDate(payload.endsOn ?? payload.startsOn);
+    const overlap = await findOverlappingPauseWindow(app, {
+      habitId,
+      startsOn,
+      endsOn,
+    });
+
+    if (overlap) {
+      throw new AppError({
+        statusCode: 409,
+        code: "CONFLICT",
+        message: "This habit already has a temporary pause during that time",
+      });
+    }
+
+    const { targetIsoDate } = await getTodayIsoDate(app, user.id);
+    const todayDate = parseIsoDate(targetIsoDate);
+    const habit = await app.prisma.$transaction(async (tx) => {
+      await tx.habitPauseWindow.create({
+        data: {
+          habitId,
+          kind: toPrismaHabitPauseKind(payload.kind),
+          startsOn,
+          endsOn,
+          note: payload.note ?? null,
+        },
+      });
+
+      return tx.habit.findUniqueOrThrow({
+        where: {
+          id: habitId,
+        },
+        include: {
+          goal: true,
+          pauseWindows: {
+            orderBy: {
+              startsOn: "asc",
+            },
+          },
+          recurrenceRule: {
+            include: {
+              exceptions: {
+                orderBy: {
+                  occurrenceDate: "asc",
+                },
+              },
+            },
+          },
+          checkins: {
+            where: {
+              occurredOn: {
+                gte: parseIsoDate(addIsoDays(targetIsoDate, -30)),
+                lte: todayDate,
+              },
+            },
+          },
+        },
+      });
+    });
+
+    const response: HabitMutationResponse = withGeneratedAt({
+      habit: await serializeHabit(habit, habit.checkins, targetIsoDate),
+    });
+
+    return reply.status(201).send(response);
+  });
+
+  app.delete("/habits/:habitId/pause-windows/:pauseWindowId", async (request, reply) => {
+    const user = requireAuthenticatedUser(request);
+    const { habitId, pauseWindowId } = request.params as { habitId: string; pauseWindowId: string };
+    await findOwnedHabit(app, user.id, habitId);
+    await findOwnedPauseWindow(app, user.id, habitId, pauseWindowId);
+    const { targetIsoDate } = await getTodayIsoDate(app, user.id);
+    const todayDate = parseIsoDate(targetIsoDate);
+
+    const habit = await app.prisma.$transaction(async (tx) => {
+      await tx.habitPauseWindow.delete({
+        where: {
+          id: pauseWindowId,
+        },
+      });
+
+      return tx.habit.findUniqueOrThrow({
+        where: {
+          id: habitId,
+        },
+        include: {
+          goal: true,
+          pauseWindows: {
+            orderBy: {
+              startsOn: "asc",
+            },
+          },
           recurrenceRule: {
             include: {
               exceptions: {
@@ -705,7 +1004,24 @@ export const registerHabitsRoutes: FastifyPluginAsync = async (app) => {
     const { habitId } = request.params as { habitId: string };
     const targetIsoDate = payload.date ?? (await getTodayIsoDate(app, user.id)).targetIsoDate;
     const targetDate = parseIsoDate(targetIsoDate);
-    await findOwnedHabit(app, user.id, habitId);
+    const habitRecord = await findOwnedHabit(app, user.id, habitId);
+
+    if (isHabitPermanentlyInactive(habitRecord)) {
+      throw new AppError({
+        statusCode: 409,
+        code: "CONFLICT",
+        message: "This habit is not currently active",
+      });
+    }
+
+    if (isHabitPausedOnIsoDate(habitRecord.pauseWindows, targetIsoDate)) {
+      throw new AppError({
+        statusCode: 409,
+        code: "CONFLICT",
+        message: "This habit is temporarily paused for that date",
+      });
+    }
+
     await app.prisma.habitCheckin.upsert({
       where: {
         habitId_occurredOn: {
@@ -733,6 +1049,11 @@ export const registerHabitsRoutes: FastifyPluginAsync = async (app) => {
         id: habitId,
       },
       include: {
+        pauseWindows: {
+          orderBy: {
+            startsOn: "asc",
+          },
+        },
         recurrenceRule: {
           include: {
             exceptions: {

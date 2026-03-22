@@ -1637,6 +1637,150 @@ describe("module route smoke tests", () => {
     expect(routineItemCheckin.statusCode).toBe(200);
   });
 
+  it("supports temporary habit pause windows", async () => {
+    prisma.userPreference = {
+      findUnique: vi.fn().mockResolvedValue({ timezone: "UTC", weekStartsOn: 1 }),
+    } as any;
+    prisma.habit = {
+      findFirst: vi.fn().mockResolvedValue({
+        id: "habit-1",
+        userId: "user-1",
+        title: "Morning stretch",
+        category: "Health",
+        scheduleRuleJson: {},
+        targetPerDay: 1,
+        status: "ACTIVE",
+        archivedAt: null,
+        pauseWindows: [],
+      }),
+      findUniqueOrThrow: vi.fn()
+        .mockResolvedValueOnce({
+          id: "habit-1",
+          userId: "user-1",
+          title: "Morning stretch",
+          category: "Health",
+          scheduleRuleJson: {},
+          targetPerDay: 1,
+          status: "ACTIVE",
+          archivedAt: null,
+          createdAt: new Date("2026-03-01T00:00:00.000Z"),
+          updatedAt: new Date("2026-03-22T00:00:00.000Z"),
+          goal: null,
+          recurrenceRule: null,
+          checkins: [],
+          pauseWindows: [
+            {
+              id: "pause-1",
+              kind: "VACATION",
+              startsOn: new Date("2026-03-22T00:00:00.000Z"),
+              endsOn: new Date("2026-03-24T00:00:00.000Z"),
+              note: "Trip",
+            },
+          ],
+        })
+        .mockResolvedValueOnce({
+          id: "habit-1",
+          userId: "user-1",
+          title: "Morning stretch",
+          category: "Health",
+          scheduleRuleJson: {},
+          targetPerDay: 1,
+          status: "ACTIVE",
+          archivedAt: null,
+          createdAt: new Date("2026-03-01T00:00:00.000Z"),
+          updatedAt: new Date("2026-03-22T00:00:00.000Z"),
+          goal: null,
+          recurrenceRule: null,
+          checkins: [],
+          pauseWindows: [],
+        }),
+    } as any;
+    prisma.habitPauseWindow = {
+      findFirst: vi.fn()
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce({
+          id: "pause-1",
+          habitId: "habit-1",
+          kind: "VACATION",
+          startsOn: new Date("2026-03-22T00:00:00.000Z"),
+          endsOn: new Date("2026-03-24T00:00:00.000Z"),
+          note: "Trip",
+        }),
+      create: vi.fn().mockResolvedValue({}),
+      delete: vi.fn().mockResolvedValue({}),
+    } as any;
+    prisma.$transaction = vi.fn(async (callback: any) => callback(prisma)) as any;
+
+    const created = await app!.inject({
+      method: "POST",
+      url: "/api/habits/habit-1/pause-windows",
+      payload: {
+        kind: "vacation",
+        startsOn: "2026-03-22",
+        endsOn: "2026-03-24",
+        note: "Trip",
+      },
+    });
+    const removed = await app!.inject({
+      method: "DELETE",
+      url: "/api/habits/habit-1/pause-windows/pause-1",
+    });
+
+    expect(created.statusCode).toBe(201);
+    expect(JSON.parse(created.body).habit.pauseWindows).toEqual([
+      expect.objectContaining({
+        id: "pause-1",
+        kind: "vacation",
+        startsOn: "2026-03-22",
+        endsOn: "2026-03-24",
+      }),
+    ]);
+    expect(removed.statusCode).toBe(200);
+    expect(JSON.parse(removed.body).habit.pauseWindows).toEqual([]);
+  });
+
+  it("rejects habit checkins during a temporary pause", async () => {
+    prisma.userPreference = {
+      findUnique: vi.fn().mockResolvedValue({ timezone: "UTC", weekStartsOn: 1 }),
+    } as any;
+    prisma.habit = {
+      findFirst: vi.fn().mockResolvedValue({
+        id: "habit-1",
+        userId: "user-1",
+        title: "Morning stretch",
+        category: "Health",
+        scheduleRuleJson: {},
+        targetPerDay: 1,
+        status: "ACTIVE",
+        archivedAt: null,
+        pauseWindows: [
+          {
+            id: "pause-1",
+            kind: "REST_DAY",
+            startsOn: new Date("2026-03-22T00:00:00.000Z"),
+            endsOn: new Date("2026-03-22T00:00:00.000Z"),
+            note: null,
+          },
+        ],
+      }),
+    } as any;
+    prisma.habitCheckin = {
+      upsert: vi.fn(),
+    } as any;
+
+    const response = await app!.inject({
+      method: "POST",
+      url: "/api/habits/habit-1/checkins",
+      payload: {
+        date: "2026-03-22",
+        status: "completed",
+      },
+    });
+
+    expect(response.statusCode).toBe(409);
+    expect(prisma.habitCheckin.upsert).not.toHaveBeenCalled();
+  });
+
   it("covers health write and read endpoints", async () => {
     prisma.waterLog = {
       findMany: vi.fn().mockResolvedValue([]),

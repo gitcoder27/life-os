@@ -91,9 +91,12 @@ describe("notifications service", () => {
           {
             id: "habit-1",
             userId: "user-1",
+            title: "Hydrate",
             scheduleRuleJson: {},
             status: "ACTIVE",
             archivedAt: null,
+            createdAt: new Date("2026-03-01T00:00:00.000Z"),
+            pauseWindows: [],
           },
         ]),
       },

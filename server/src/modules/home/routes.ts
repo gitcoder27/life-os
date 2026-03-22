@@ -26,7 +26,8 @@ import {
 } from "../../lib/habits/guidance.js";
 import {
   isHabitDueOnIsoDate,
-  normalizeHabitScheduleRule,
+  isHabitPermanentlyInactive,
+  resolveHabitRecurrence,
 } from "../../lib/habits/schedule.js";
 import { withGeneratedAt } from "../../lib/http/response.js";
 import { materializeRecurringTasksInRange } from "../../lib/recurrence/tasks.js";
@@ -226,6 +227,22 @@ async function buildHomeOverview(
           status: "ACTIVE",
           archivedAt: null,
         },
+        include: {
+          recurrenceRule: {
+            include: {
+              exceptions: {
+                orderBy: {
+                  occurrenceDate: "asc",
+                },
+              },
+            },
+          },
+          pauseWindows: {
+            orderBy: {
+              startsOn: "asc",
+            },
+          },
+        },
       }),
       app.prisma.habitCheckin.findMany({
         where: {
@@ -317,7 +334,8 @@ async function buildHomeOverview(
     ]);
 
   const dueHabits = habits.filter((habit) =>
-    isHabitDueOnIsoDate(normalizeHabitScheduleRule(habit.scheduleRuleJson), targetIsoDate),
+    !isHabitPermanentlyInactive(habit) &&
+    isHabitDueOnIsoDate(resolveHabitRecurrence(habit, targetIsoDate), targetIsoDate, habit.pauseWindows),
   );
   const completedHabits = dueHabits.filter((habit) =>
     recentHabitCheckins.some(
@@ -326,8 +344,8 @@ async function buildHomeOverview(
   );
   const habitItems = habits.map((habit) => {
     const habitCheckins = recentHabitCheckins.filter((checkin) => checkin.habitId === habit.id);
-    const scheduleRule = normalizeHabitScheduleRule(habit.scheduleRuleJson);
-    const risk = calculateHabitRisk(habitCheckins, scheduleRule, targetIsoDate);
+    const recurrence = resolveHabitRecurrence(habit, targetIsoDate);
+    const risk = calculateHabitRisk(habitCheckins, recurrence, targetIsoDate, habit.pauseWindows);
     const completedToday = habitCheckins.some(
       (checkin) =>
         toIsoDateString(checkin.occurredOn) === targetIsoDate && checkin.status === "COMPLETED",
@@ -336,11 +354,14 @@ async function buildHomeOverview(
     return {
       id: habit.id,
       title: habit.title,
-      dueToday: isHabitDueOnIsoDate(scheduleRule, targetIsoDate),
+      dueToday:
+        !isHabitPermanentlyInactive(habit) &&
+        isHabitDueOnIsoDate(recurrence, targetIsoDate, habit.pauseWindows),
       completedToday,
-      streakCount: calculateHabitActiveStreak(habitCheckins, scheduleRule, targetIsoDate),
+      streakCount: calculateHabitActiveStreak(habitCheckins, recurrence, targetIsoDate, habit.pauseWindows),
       risk,
-      scheduleRule,
+      scheduleRule: habit.scheduleRuleJson,
+      pauseWindows: habit.pauseWindows,
       checkins: habitCheckins,
     };
   });
@@ -504,22 +525,26 @@ async function buildHomeOverview(
     createdAt: notification.createdAt.toISOString(),
   }));
   const weeklyChallengeHabit = weekCycle.weeklyReview?.focusHabitId
-    ? habitItems.find((habit) => habit.id === weekCycle.weeklyReview?.focusHabitId)
+    ? habits.find((habit) => habit.id === weekCycle.weeklyReview?.focusHabitId)
     : null;
   const weeklyChallenge =
-    weeklyChallengeHabit &&
-    weeklyChallengeHabit.checkins &&
-    weeklyChallengeHabit.scheduleRule
-      ? calculateWeeklyHabitChallenge({
+    weeklyChallengeHabit && !isHabitPermanentlyInactive(weeklyChallengeHabit)
+      ? (() => {
+          const checkins = recentHabitCheckins.filter((checkin) => checkin.habitId === weeklyChallengeHabit.id);
+          const challenge = calculateWeeklyHabitChallenge({
           habit: {
             id: weeklyChallengeHabit.id,
             title: weeklyChallengeHabit.title,
           },
-          checkins: weeklyChallengeHabit.checkins,
-          scheduleInput: weeklyChallengeHabit.scheduleRule,
+          checkins,
+          scheduleInput: resolveHabitRecurrence(weeklyChallengeHabit, targetIsoDate),
           weekStartIsoDate,
           targetIsoDate,
-        })
+          pauseWindows: weeklyChallengeHabit.pauseWindows,
+          });
+
+          return challenge.weekTarget > 0 ? challenge : null;
+        })()
       : null;
   const guidance = buildHomeGuidance({
     score: {

@@ -1,5 +1,6 @@
 import type {
   HabitScheduleRule,
+  HabitStatus,
   IsoDateString,
   RecurrenceDefinition,
 } from "@life-os/contracts";
@@ -18,8 +19,18 @@ interface HabitCheckinLike {
   status: "COMPLETED" | "SKIPPED";
 }
 
+export interface HabitPauseWindowLike {
+  startsOn: Date;
+  endsOn: Date;
+}
+
+type HabitLifecycleStatus = HabitStatus | "ACTIVE" | "PAUSED" | "ARCHIVED";
+
 interface HabitRecurrenceCarrier {
   scheduleRuleJson: unknown;
+  status?: HabitLifecycleStatus;
+  archivedAt?: Date | null;
+  pauseWindows?: HabitPauseWindowLike[];
   recurrenceRule?: {
     id?: string;
     ruleJson: unknown;
@@ -84,7 +95,9 @@ export function resolveHabitRecurrence(
     }
   }
 
-  const startsOn = fallbackIsoDate ?? fallbackStartsOnFromDate(habit.createdAt ?? new Date());
+  const startsOn = habit.createdAt
+    ? fallbackStartsOnFromDate(habit.createdAt)
+    : (fallbackIsoDate ?? fallbackStartsOnFromDate(new Date()));
   return {
     id: recurrenceRule?.id ?? "habit-legacy-recurrence",
     rule: buildLegacyHabitRecurrence(normalizeHabitScheduleRule(habit.scheduleRuleJson), startsOn),
@@ -94,6 +107,36 @@ export function resolveHabitRecurrence(
   };
 }
 
+function isHabitArchivedStatus(status: HabitLifecycleStatus | null | undefined) {
+  return status === "archived" || status === "ARCHIVED";
+}
+
+function isHabitPausedStatus(status: HabitLifecycleStatus | null | undefined) {
+  return status === "paused" || status === "PAUSED";
+}
+
+export function isHabitPermanentlyInactive(input: {
+  status?: HabitLifecycleStatus;
+  archivedAt?: Date | null;
+}) {
+  return isHabitPausedStatus(input.status) || isHabitArchivedStatus(input.status) || Boolean(input.archivedAt);
+}
+
+export function isHabitPausedOnIsoDate(
+  pauseWindows: HabitPauseWindowLike[] | null | undefined,
+  isoDate: IsoDateString,
+) {
+  if (!pauseWindows || pauseWindows.length === 0) {
+    return false;
+  }
+
+  return pauseWindows.some((window) => {
+    const startsOn = toIsoDateString(window.startsOn);
+    const endsOn = toIsoDateString(window.endsOn);
+    return startsOn <= isoDate && isoDate <= endsOn;
+  });
+}
+
 export function getIsoDateWeekday(isoDate: IsoDateString) {
   return new Date(`${isoDate}T00:00:00.000Z`).getUTCDay();
 }
@@ -101,7 +144,12 @@ export function getIsoDateWeekday(isoDate: IsoDateString) {
 export function isHabitDueOnIsoDate(
   scheduleInput: HabitScheduleRule | RecurrenceDefinition,
   isoDate: IsoDateString,
+  pauseWindows: HabitPauseWindowLike[] = [],
 ) {
+  if (isHabitPausedOnIsoDate(pauseWindows, isoDate)) {
+    return false;
+  }
+
   if ("rule" in scheduleInput) {
     return isRecurrenceDueOnIsoDate(scheduleInput.rule, isoDate, scheduleInput.exceptions);
   }
@@ -119,7 +167,13 @@ export function isHabitDueOnIsoDate(
 }
 
 export function filterDueHabits<T extends HabitRecurrenceCarrier>(habits: T[], isoDate: IsoDateString) {
-  return habits.filter((habit) => isHabitDueOnIsoDate(resolveHabitRecurrence(habit, isoDate), isoDate));
+  return habits.filter((habit) => {
+    if (isHabitPermanentlyInactive(habit)) {
+      return false;
+    }
+
+    return isHabitDueOnIsoDate(resolveHabitRecurrence(habit, isoDate), isoDate, habit.pauseWindows);
+  });
 }
 
 export function calculateHabitStreak(
@@ -127,6 +181,7 @@ export function calculateHabitStreak(
   scheduleInput: HabitScheduleRule | RecurrenceDefinition,
   onDate: IsoDateString,
   startOffset = 0,
+  pauseWindows: HabitPauseWindowLike[] = [],
 ) {
   const completedDates = new Set(
     checkins
@@ -138,7 +193,7 @@ export function calculateHabitStreak(
   for (let offset = startOffset; offset < startOffset + 30; offset += 1) {
     const targetDate = addIsoDays(onDate, -offset);
 
-    if (!isHabitDueOnIsoDate(scheduleInput, targetDate)) {
+    if (!isHabitDueOnIsoDate(scheduleInput, targetDate, pauseWindows)) {
       continue;
     }
 

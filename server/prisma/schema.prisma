@@ -90,6 +90,11 @@ enum HabitStatus {
   ARCHIVED
 }
 
+enum HabitPauseKind {
+  REST_DAY
+  VACATION
+}
+
 enum CheckinStatus {
   COMPLETED
   SKIPPED
@@ -381,10 +386,25 @@ model Habit {
   user             User           @relation(fields: [userId], references: [id], onDelete: Cascade)
   goal             Goal?          @relation(fields: [goalId], references: [id], onDelete: SetNull)
   checkins         HabitCheckin[]
+  pauseWindows     HabitPauseWindow[]
   weeklyReviewFocuses WeeklyReview[] @relation("WeeklyReviewFocusHabit")
   recurrenceRule   RecurrenceRule? @relation(fields: [recurrenceRuleId], references: [id], onDelete: SetNull)
 
   @@index([goalId, status])
+}
+
+model HabitPauseWindow {
+  id        String         @id @default(uuid())
+  habitId    String
+  kind      HabitPauseKind
+  startsOn  DateTime
+  endsOn    DateTime
+  note      String?
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+  habit     Habit          @relation(fields: [habitId], references: [id], onDelete: Cascade)
+
+  @@index([habitId, startsOn, endsOn])
 }
 
 model HabitCheckin {

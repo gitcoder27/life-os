@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  calculateHabitActiveStreak,
   calculateHabitRisk,
   calculateWeeklyHabitChallenge,
 } from "../../src/lib/habits/guidance.js";
@@ -67,6 +68,42 @@ describe("habit guidance helpers", () => {
         status: "due_today",
         weekCompletions: 3,
         weekTarget: 7,
+      }),
+    );
+  });
+
+  it("freezes streaks across a paused rest day", () => {
+    const streak = calculateHabitActiveStreak(
+      [
+        { occurredOn: new Date("2026-03-12T00:00:00.000Z"), status: "COMPLETED" },
+        { occurredOn: new Date("2026-03-13T00:00:00.000Z"), status: "COMPLETED" },
+      ],
+      {},
+      "2026-03-14",
+      [{ startsOn: new Date("2026-03-14T00:00:00.000Z"), endsOn: new Date("2026-03-14T00:00:00.000Z") }],
+    );
+
+    expect(streak).toBe(2);
+  });
+
+  it("ignores vacation dates when calculating recent risk", () => {
+    const risk = calculateHabitRisk(
+      [
+        { occurredOn: new Date("2026-03-08T00:00:00.000Z"), status: "COMPLETED" },
+        { occurredOn: new Date("2026-03-09T00:00:00.000Z"), status: "COMPLETED" },
+        { occurredOn: new Date("2026-03-10T00:00:00.000Z"), status: "COMPLETED" },
+        { occurredOn: new Date("2026-03-11T00:00:00.000Z"), status: "COMPLETED" },
+      ],
+      {},
+      "2026-03-14",
+      [{ startsOn: new Date("2026-03-12T00:00:00.000Z"), endsOn: new Date("2026-03-14T00:00:00.000Z") }],
+    );
+
+    expect(risk).toEqual(
+      expect.objectContaining({
+        level: "none",
+        dueCount7d: 4,
+        completedCount7d: 4,
       }),
     );
   });
