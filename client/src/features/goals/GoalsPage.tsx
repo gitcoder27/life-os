@@ -31,6 +31,10 @@ import {
   HealthBadge,
   MomentumSpark,
 } from "./GoalDetailPanel";
+import {
+  SortablePlanningEditor,
+  type RankedPlanningDraft,
+} from "./SortablePlanningEditor";
 
 const domainLabels: Record<string, string> = {
   health: "Health",
@@ -81,8 +85,43 @@ const emptyGoalForm: GoalFormData = {
   notes: "",
 };
 
-type WeekPriorityDraft = { id?: string; title: string; goalId: string };
-type MonthOutcomeDraft = { id?: string; title: string; goalId: string };
+const planningSlots: Array<1 | 2 | 3> = [1, 2, 3];
+
+let planningDraftKeyCounter = 0;
+
+function nextPlanningDraftKey() {
+  planningDraftKeyCounter += 1;
+  return `planning-draft-${planningDraftKeyCounter}`;
+}
+
+function createPlanningDraft(): RankedPlanningDraft {
+  return {
+    sortKey: nextPlanningDraftKey(),
+    title: "",
+    goalId: "",
+  };
+}
+
+function toRankedPlanningDrafts<T extends { id: string; slot: 1 | 2 | 3; title: string; goalId: string | null }>(
+  items: T[],
+): RankedPlanningDraft[] {
+  return [...items]
+    .sort((left, right) => left.slot - right.slot)
+    .map((item) => ({
+      id: item.id,
+      sortKey: item.id,
+      title: item.title,
+      goalId: item.goalId ?? "",
+    }));
+}
+
+function buildPlanningSnapshot(drafts: RankedPlanningDraft[]) {
+  return drafts.map((draft) => ({
+    id: draft.id,
+    title: draft.title.trim(),
+    goalId: draft.goalId || null,
+  }));
+}
 
 /* ── Active Goal Overview Card ── */
 
@@ -203,20 +242,12 @@ export function GoalsPage() {
 
   // Weekly priorities editing
   const [editingWeek, setEditingWeek] = useState(false);
-  const [weekDrafts, setWeekDrafts] = useState<WeekPriorityDraft[]>([
-    { title: "", goalId: "" },
-    { title: "", goalId: "" },
-    { title: "", goalId: "" },
-  ]);
+  const [weekDrafts, setWeekDrafts] = useState<RankedPlanningDraft[]>([]);
 
   // Monthly focus editing
   const [editingMonth, setEditingMonth] = useState(false);
   const [monthTheme, setMonthTheme] = useState("");
-  const [monthOutcomes, setMonthOutcomes] = useState<MonthOutcomeDraft[]>([
-    { title: "", goalId: "" },
-    { title: "", goalId: "" },
-    { title: "", goalId: "" },
-  ]);
+  const [monthOutcomes, setMonthOutcomes] = useState<RankedPlanningDraft[]>([]);
 
   if (goalsQuery.isLoading && !goalsQuery.data) {
     return (
@@ -246,6 +277,19 @@ export function GoalsPage() {
   const activeGoals = allGoals.filter((g) => g.status === "active");
   const weeklyPriorities = goalsQuery.data.weekPlan?.priorities ?? [];
   const monthPlan = goalsQuery.data.monthPlan;
+  const savedWeekSnapshot = buildPlanningSnapshot(toRankedPlanningDrafts(weeklyPriorities));
+  const weekDraftSnapshot = buildPlanningSnapshot(weekDrafts);
+  const savedMonthOutcomeSnapshot = buildPlanningSnapshot(
+    toRankedPlanningDrafts(monthPlan?.topOutcomes ?? []),
+  );
+  const monthDraftSnapshot = buildPlanningSnapshot(monthOutcomes);
+  const savedMonthTheme = monthPlan?.theme ?? "";
+  const weekDraftsHaveBlankTitle = weekDrafts.some((draft) => !draft.title.trim());
+  const monthOutcomesHaveBlankTitle = monthOutcomes.some((outcome) => !outcome.title.trim());
+  const isWeekDirty = JSON.stringify(weekDraftSnapshot) !== JSON.stringify(savedWeekSnapshot);
+  const isMonthDirty =
+    monthTheme.trim() !== savedMonthTheme.trim()
+    || JSON.stringify(monthDraftSnapshot) !== JSON.stringify(savedMonthOutcomeSnapshot);
 
   function openCreateGoal() {
     setEditingGoalId(null);
@@ -296,17 +340,13 @@ export function GoalsPage() {
   }
 
   function openEditWeek() {
-    setWeekDrafts(
-      [0, 1, 2].map((i) => {
-        const existing = weeklyPriorities[i];
-        return {
-          id: existing?.id,
-          title: existing?.title ?? "",
-          goalId: existing?.goalId ?? "",
-        };
-      }),
-    );
+    setWeekDrafts(toRankedPlanningDrafts(weeklyPriorities));
     setEditingWeek(true);
+  }
+
+  function cancelEditWeek() {
+    setWeekDrafts(toRankedPlanningDrafts(weeklyPriorities));
+    setEditingWeek(false);
   }
 
   async function handleWeekSave() {
@@ -314,7 +354,7 @@ export function GoalsPage() {
       .filter((d) => d.title.trim())
       .map((d, i) => ({
         id: d.id,
-        slot: ([1, 2, 3] as const)[i],
+        slot: planningSlots[i],
         title: d.title.trim(),
         goalId: d.goalId || null,
       }));
@@ -324,17 +364,14 @@ export function GoalsPage() {
 
   function openEditMonth() {
     setMonthTheme(monthPlan?.theme ?? "");
-    setMonthOutcomes(
-      [0, 1, 2].map((i) => {
-        const existing = monthPlan?.topOutcomes[i];
-        return {
-          id: existing?.id,
-          title: existing?.title ?? "",
-          goalId: existing?.goalId ?? "",
-        };
-      }),
-    );
+    setMonthOutcomes(toRankedPlanningDrafts(monthPlan?.topOutcomes ?? []));
     setEditingMonth(true);
+  }
+
+  function cancelEditMonth() {
+    setMonthTheme(monthPlan?.theme ?? "");
+    setMonthOutcomes(toRankedPlanningDrafts(monthPlan?.topOutcomes ?? []));
+    setEditingMonth(false);
   }
 
   async function handleMonthSave() {
@@ -342,12 +379,12 @@ export function GoalsPage() {
       .filter((o) => o.title.trim())
       .map((o, i) => ({
         id: o.id,
-        slot: ([1, 2, 3] as const)[i],
+        slot: planningSlots[i],
         title: o.title.trim(),
         goalId: o.goalId || null,
       }));
     await updateMonthFocusMutation.mutateAsync({
-      theme: monthTheme.trim() || undefined,
+      theme: monthTheme.trim() || null,
       topOutcomes,
     });
     setEditingMonth(false);
@@ -379,6 +416,19 @@ export function GoalsPage() {
             />
           ) : editingMonth ? (
             <div className="stack-form">
+              <div className="goals-planning-editor__toolbar">
+                <p className="goals-planning-editor__hint">
+                  Drag to reorder outcomes and keep the most important work at the top.
+                </p>
+                <button
+                  className="button button--ghost button--small"
+                  type="button"
+                  onClick={cancelEditMonth}
+                  disabled={updateMonthFocusMutation.isPending}
+                >
+                  Cancel
+                </button>
+              </div>
               <label className="field">
                 <span>Theme</span>
                 <input
@@ -386,58 +436,54 @@ export function GoalsPage() {
                   value={monthTheme}
                   placeholder="What is this month about?"
                   onChange={(e) => setMonthTheme(e.target.value)}
+                  disabled={updateMonthFocusMutation.isPending}
                 />
               </label>
-              {monthOutcomes.map((outcome, i) => (
-                <div key={i} className="management-row">
-                  <label className="field" style={{ flex: 1 }}>
-                    <span>Outcome {i + 1}</span>
-                    <input
-                      type="text"
-                      value={outcome.title}
-                      placeholder="Key outcome"
-                      onChange={(e) =>
-                        setMonthOutcomes((prev) =>
-                          prev.map((o, j) => (j === i ? { ...o, title: e.target.value } : o)),
-                        )
-                      }
-                    />
-                  </label>
-                  <label className="field" style={{ width: "10rem" }}>
-                    <span>Goal link</span>
-                    <select
-                      value={outcome.goalId}
-                      onChange={(e) =>
-                        setMonthOutcomes((prev) =>
-                          prev.map((o, j) => (j === i ? { ...o, goalId: e.target.value } : o)),
-                        )
-                      }
-                    >
-                      <option value="">None</option>
-                      {activeGoals.map((g) => (
-                        <option key={g.id} value={g.id}>{g.title}</option>
-                      ))}
-                    </select>
-                  </label>
+              <SortablePlanningEditor
+                drafts={monthOutcomes}
+                onChangeDrafts={setMonthOutcomes}
+                createDraft={createPlanningDraft}
+                activeGoals={activeGoals}
+                slotPrefix="M"
+                itemLabel="outcome"
+                titlePlaceholder="Key outcome"
+                addLabel="+ Add outcome"
+                emptyMessage="No monthly outcomes added yet."
+                disabled={updateMonthFocusMutation.isPending}
+              />
+              {updateMonthFocusMutation.error instanceof Error ? (
+                <InlineErrorState
+                  message={updateMonthFocusMutation.error.message}
+                  onRetry={() => void handleMonthSave()}
+                />
+              ) : null}
+              {isMonthDirty ? (
+                <div className="priority-stack__save-bar">
+                  <span className="priority-stack__save-hint">
+                    {monthOutcomesHaveBlankTitle
+                      ? "Fill every outcome title before saving"
+                      : "Unsaved changes"}
+                  </span>
+                  <button
+                    className="button button--primary button--small"
+                    type="button"
+                    onClick={() => void handleMonthSave()}
+                    disabled={updateMonthFocusMutation.isPending || monthOutcomesHaveBlankTitle}
+                  >
+                    {updateMonthFocusMutation.isPending ? "Saving…" : "Save"}
+                  </button>
                 </div>
-              ))}
-              <div className="button-row">
-                <button
-                  className="button button--primary button--small"
-                  type="button"
-                  onClick={() => void handleMonthSave()}
-                  disabled={updateMonthFocusMutation.isPending}
-                >
-                  {updateMonthFocusMutation.isPending ? "Saving…" : "Save"}
-                </button>
+              ) : (
                 <button
                   className="button button--ghost button--small"
                   type="button"
-                  onClick={() => setEditingMonth(false)}
+                  onClick={cancelEditMonth}
+                  disabled={updateMonthFocusMutation.isPending}
+                  style={{ alignSelf: "flex-start" }}
                 >
-                  Cancel
+                  Done editing
                 </button>
-              </div>
+              )}
             </div>
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: "0.6rem" }}>
@@ -482,56 +528,64 @@ export function GoalsPage() {
             />
           ) : editingWeek ? (
             <div className="stack-form">
-              {weekDrafts.map((draft, i) => (
-                <div key={i} className="management-row">
-                  <label className="field" style={{ flex: 1 }}>
-                    <span>Priority {i + 1}</span>
-                    <input
-                      type="text"
-                      value={draft.title}
-                      placeholder="Weekly priority"
-                      onChange={(e) =>
-                        setWeekDrafts((prev) =>
-                          prev.map((d, j) => (j === i ? { ...d, title: e.target.value } : d)),
-                        )
-                      }
-                    />
-                  </label>
-                  <label className="field" style={{ width: "10rem" }}>
-                    <span>Goal link</span>
-                    <select
-                      value={draft.goalId}
-                      onChange={(e) =>
-                        setWeekDrafts((prev) =>
-                          prev.map((d, j) => (j === i ? { ...d, goalId: e.target.value } : d)),
-                        )
-                      }
-                    >
-                      <option value="">None</option>
-                      {activeGoals.map((g) => (
-                        <option key={g.id} value={g.id}>{g.title}</option>
-                      ))}
-                    </select>
-                  </label>
-                </div>
-              ))}
-              <div className="button-row">
-                <button
-                  className="button button--primary button--small"
-                  type="button"
-                  onClick={() => void handleWeekSave()}
-                  disabled={updateWeekPrioritiesMutation.isPending}
-                >
-                  {updateWeekPrioritiesMutation.isPending ? "Saving…" : "Save"}
-                </button>
+              <div className="goals-planning-editor__toolbar">
+                <p className="goals-planning-editor__hint">
+                  Reorder the week visually before you lock in what matters most.
+                </p>
                 <button
                   className="button button--ghost button--small"
                   type="button"
-                  onClick={() => setEditingWeek(false)}
+                  onClick={cancelEditWeek}
+                  disabled={updateWeekPrioritiesMutation.isPending}
                 >
                   Cancel
                 </button>
               </div>
+              <SortablePlanningEditor
+                drafts={weekDrafts}
+                onChangeDrafts={setWeekDrafts}
+                createDraft={createPlanningDraft}
+                activeGoals={activeGoals}
+                slotPrefix="W"
+                itemLabel="priority"
+                titlePlaceholder="Weekly priority"
+                addLabel="+ Add priority"
+                emptyMessage="No weekly priorities added yet."
+                disabled={updateWeekPrioritiesMutation.isPending}
+              />
+              {updateWeekPrioritiesMutation.error instanceof Error ? (
+                <InlineErrorState
+                  message={updateWeekPrioritiesMutation.error.message}
+                  onRetry={() => void handleWeekSave()}
+                />
+              ) : null}
+              {isWeekDirty ? (
+                <div className="priority-stack__save-bar">
+                  <span className="priority-stack__save-hint">
+                    {weekDraftsHaveBlankTitle
+                      ? "Fill every priority title before saving"
+                      : "Unsaved changes"}
+                  </span>
+                  <button
+                    className="button button--primary button--small"
+                    type="button"
+                    onClick={() => void handleWeekSave()}
+                    disabled={updateWeekPrioritiesMutation.isPending || weekDraftsHaveBlankTitle}
+                  >
+                    {updateWeekPrioritiesMutation.isPending ? "Saving…" : "Save"}
+                  </button>
+                </div>
+              ) : (
+                <button
+                  className="button button--ghost button--small"
+                  type="button"
+                  onClick={cancelEditWeek}
+                  disabled={updateWeekPrioritiesMutation.isPending}
+                  style={{ alignSelf: "flex-start" }}
+                >
+                  Done editing
+                </button>
+              )}
             </div>
           ) : (
             <>

@@ -3097,8 +3097,8 @@ export function useUpdateMonthFocusMutation(monthStartDate: string) {
 
   return useMutation({
     mutationFn: (payload: {
-      theme?: string;
-      topOutcomes?: Array<{
+      theme: string | null;
+      topOutcomes: Array<{
         id?: string;
         slot: 1 | 2 | 3;
         title: string;
