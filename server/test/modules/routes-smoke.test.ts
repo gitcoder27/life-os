@@ -552,6 +552,11 @@ describe("module route smoke tests", () => {
           timezone: "America/New_York",
           dailyWaterTargetMl: 2800,
           notificationPreferences: expect.objectContaining({
+            inbox: expect.objectContaining({
+              enabled: true,
+              minSeverity: "info",
+              repeatCadence: "off",
+            }),
             review: expect.objectContaining({
               enabled: true,
               minSeverity: "info",
@@ -2333,6 +2338,8 @@ describe("module route smoke tests", () => {
             userId: "user-1",
             title: "Task one",
             notes: null,
+            kind: "TASK",
+            reminderAt: null,
             status: "PENDING",
             scheduledForDate: new Date("2026-03-14T00:00:00.000Z"),
             dueAt: null,
@@ -2355,6 +2362,8 @@ describe("module route smoke tests", () => {
         id: "task-1",
         userId: "user-1",
         title: "Task one",
+        kind: "TASK",
+        reminderAt: null,
         status: "PENDING",
         notes: null,
         scheduledForDate: new Date("2026-03-14T00:00:00.000Z"),
@@ -2378,6 +2387,8 @@ describe("module route smoke tests", () => {
         userId: "user-1",
         title: data.title,
         notes: data.notes ?? null,
+        kind: data.kind ?? "TASK",
+        reminderAt: data.reminderAt ?? null,
         status: "PENDING",
         scheduledForDate:
           data.scheduledForDate ?? (data.originType === "TEMPLATE" ? null : new Date("2026-03-15T00:00:00.000Z")),
@@ -2403,6 +2414,8 @@ describe("module route smoke tests", () => {
         userId: "user-1",
         title: "Task one",
         notes: null,
+        kind: "TASK",
+        reminderAt: null,
         status: "COMPLETED",
         scheduledForDate: new Date("2026-03-14T00:00:00.000Z"),
         dueAt: null,
@@ -2424,6 +2437,8 @@ describe("module route smoke tests", () => {
         userId: "user-1",
         title: "New task",
         notes: null,
+        kind: "TASK",
+        reminderAt: null,
         status: "PENDING",
         scheduledForDate: null,
         dueAt: null,
@@ -2435,6 +2450,7 @@ describe("module route smoke tests", () => {
         createdAt: new Date(),
         updatedAt: new Date(),
       }),
+      count: vi.fn().mockResolvedValue(0),
     } as any;
     prisma.habit = {
       findMany: vi.fn().mockResolvedValue([]),
@@ -2667,6 +2683,7 @@ describe("module route smoke tests", () => {
     prisma.userPreference = {
       findUnique: vi.fn().mockResolvedValue({
         notificationPreferences: {
+          inbox: { enabled: true, minSeverity: "info", repeatCadence: "off" },
           review: { enabled: true, minSeverity: "info", repeatCadence: "hourly" },
         },
       }),
@@ -2678,6 +2695,7 @@ describe("module route smoke tests", () => {
         dailyReviewStartTime: "19:00",
         dailyReviewEndTime: "22:00",
         notificationPreferences: {
+          inbox: { enabled: true, minSeverity: "info", repeatCadence: "off" },
           review: { enabled: true, minSeverity: "warning", repeatCadence: "hourly" },
           finance: { enabled: false, minSeverity: "critical", repeatCadence: "every_3_hours" },
           health: { enabled: true, minSeverity: "warning", repeatCadence: "off" },
@@ -2729,6 +2747,11 @@ describe("module route smoke tests", () => {
           currencyCode: "USD",
           weekStartsOn: 0,
           notificationPreferences: expect.objectContaining({
+            inbox: expect.objectContaining({
+              enabled: true,
+              minSeverity: "info",
+              repeatCadence: "off",
+            }),
             review: expect.objectContaining({
               enabled: true,
               minSeverity: "warning",
@@ -2960,9 +2983,11 @@ describe("module route smoke tests", () => {
         }),
       ]);
     const update = vi.fn().mockResolvedValue({});
+    const count = vi.fn().mockResolvedValue(0);
 
     prisma.task = {
       findMany,
+      count,
       update,
     } as any;
 
@@ -3001,6 +3026,100 @@ describe("module route smoke tests", () => {
       }),
     );
     expect(JSON.parse(response.body).tasks).toHaveLength(2);
+  });
+
+  it("records Inbox Zero when bulk scheduling clears the last stale capture", async () => {
+    const taskId = "11111111-1111-4111-8111-111111111111";
+    const findMany = vi
+      .fn()
+      .mockResolvedValueOnce([
+        buildTaskRecord({
+          id: taskId,
+          createdAt: new Date("2026-03-09T08:00:00.000Z"),
+        }),
+      ])
+      .mockResolvedValueOnce([
+        buildTaskRecord({
+          id: taskId,
+          createdAt: new Date("2026-03-09T08:00:00.000Z"),
+          scheduledForDate: new Date("2026-03-16T00:00:00.000Z"),
+        }),
+      ]);
+    const count = vi
+      .fn()
+      .mockResolvedValueOnce(1)
+      .mockResolvedValueOnce(0);
+    const update = vi.fn().mockResolvedValue({});
+    const notificationFindFirst = vi.fn().mockResolvedValue(null);
+    const notificationCreate = vi.fn().mockResolvedValue({});
+    const auditEventCreate = vi.fn().mockResolvedValue({});
+
+    prisma.task = {
+      findMany,
+      count,
+      update,
+    } as any;
+    prisma.userPreference = {
+      findUnique: vi.fn().mockResolvedValue({
+        timezone: "UTC",
+        notificationPreferences: {
+          inbox: {
+            enabled: true,
+            minSeverity: "info",
+            repeatCadence: "off",
+          },
+        },
+      }),
+    } as any;
+    prisma.notification = {
+      findFirst: notificationFindFirst,
+      create: notificationCreate,
+    } as any;
+    prisma.auditEvent = {
+      create: auditEventCreate,
+    } as any;
+
+    const response = await app!.inject({
+      method: "PATCH",
+      url: "/api/tasks/bulk",
+      payload: {
+        taskIds: [taskId],
+        action: {
+          type: "schedule",
+          scheduledForDate: "2026-03-16",
+        },
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(count).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        where: expect.objectContaining({
+          userId: "user-1",
+          originType: "QUICK_CAPTURE",
+          scheduledForDate: null,
+          status: "PENDING",
+        }),
+      }),
+    );
+    expect(auditEventCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          eventType: "inbox.zero_achieved",
+        }),
+      }),
+    );
+    expect(notificationCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          notificationType: "inbox",
+          entityType: "inbox_zero",
+          entityId: expect.any(String),
+        }),
+      }),
+    );
+    expect(notificationFindFirst).toHaveBeenCalled();
   });
 
   it("rejects bulk goal linking when the goal is foreign", async () => {

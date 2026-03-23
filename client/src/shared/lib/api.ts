@@ -752,7 +752,7 @@ type DeleteExpenseMutationResponse = {
   expenseId: string;
 };
 
-export type NotificationCategory = "task" | "review" | "finance" | "health" | "habit" | "routine";
+export type NotificationCategory = "task" | "inbox" | "review" | "finance" | "health" | "habit" | "routine";
 export type NotificationMinSeverity = "info" | "warning" | "critical";
 export type NotificationRepeatCadence = "off" | "hourly" | "every_3_hours";
 

@@ -29,6 +29,11 @@ const notificationCategoryDefaults: NotificationCategoryPreferences = {
     minSeverity: "warning",
     repeatCadence: "off",
   },
+  inbox: {
+    enabled: true,
+    minSeverity: "info",
+    repeatCadence: "off",
+  },
   review: {
     enabled: true,
     minSeverity: "info",

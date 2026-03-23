@@ -2,6 +2,7 @@ import type { ApiMeta, EntityId } from "./common.js";
 
 export type NotificationCategory =
   | "task"
+  | "inbox"
   | "review"
   | "finance"
   | "health"

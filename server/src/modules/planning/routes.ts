@@ -70,6 +70,7 @@ import { z } from "zod";
 import { requireAuthenticatedUser } from "../../lib/auth/require-auth.js";
 import { AppError } from "../../lib/errors/app-error.js";
 import { calculateHabitActiveStreak, calculateHabitRisk } from "../../lib/habits/guidance.js";
+import { countStaleInboxTasks, recordInboxZeroIfEarned } from "./inbox-zero.js";
 import { isHabitDueOnIsoDate, isHabitPermanentlyInactive, resolveHabitRecurrence } from "../../lib/habits/schedule.js";
 import { withGeneratedAt } from "../../lib/http/response.js";
 import { applyRecurringTaskCarryForward, materializeNextRecurringTaskOccurrence, materializeRecurringTasksInRange } from "../../lib/recurrence/tasks.js";
@@ -2357,6 +2358,7 @@ export const registerPlanningRoutes: FastifyPluginAsync = async (app) => {
     const user = requireAuthenticatedUser(request);
     const payload = parseOrThrow(bulkUpdateTasksSchema, request.body as BulkUpdateTasksRequest);
     const timezone = await getUserTimezone(app, user.id);
+    const now = new Date();
 
     if (payload.action.type === "link_goal") {
       await assertOwnedGoalReference(app, user.id, payload.action.goalId);
@@ -2384,8 +2386,17 @@ export const registerPlanningRoutes: FastifyPluginAsync = async (app) => {
     }
 
     const taskById = new Map(existingTasks.map((task) => [task.id, task]));
+    const shouldTrackInboxZero = payload.action.type === "schedule" || payload.action.type === "archive";
 
     const tasks = await app.prisma.$transaction(async (tx) => {
+      const staleCountBefore = shouldTrackInboxZero
+        ? await countStaleInboxTasks(tx, {
+            userId: user.id,
+            targetDate: now,
+            timezone,
+          })
+        : 0;
+
       await Promise.all(
         payload.taskIds.map((taskId) => {
           const task = taskById.get(taskId);
@@ -2406,6 +2417,18 @@ export const registerPlanningRoutes: FastifyPluginAsync = async (app) => {
           });
         }),
       );
+
+      if (shouldTrackInboxZero) {
+        await recordInboxZeroIfEarned(tx, {
+          userId: user.id,
+          targetDate: now,
+          timezone,
+          staleCountBefore,
+          mutationSource:
+            payload.action.type === "schedule" ? "task_bulk_schedule" : "task_bulk_archive",
+          affectedTaskIds: payload.taskIds,
+        });
+      }
 
       return tx.task.findMany({
         where: {
@@ -2443,6 +2466,7 @@ export const registerPlanningRoutes: FastifyPluginAsync = async (app) => {
     const payload = parseOrThrow(updateTaskSchema, request.body as UpdateTaskRequest);
     const { taskId } = request.params as { taskId: string };
     const timezone = await getUserTimezone(app, user.id);
+    const now = new Date();
     const existingTask = await app.prisma.task.findFirst({
       where: {
         id: taskId,
@@ -2468,7 +2492,16 @@ export const registerPlanningRoutes: FastifyPluginAsync = async (app) => {
       });
     }
     await assertOwnedGoalReference(app, user.id, payload.goalId);
+    const shouldTrackInboxZero = payload.status !== undefined || payload.scheduledForDate !== undefined;
     const task = await app.prisma.$transaction(async (tx) => {
+      const staleCountBefore = shouldTrackInboxZero
+        ? await countStaleInboxTasks(tx, {
+            userId: user.id,
+            targetDate: now,
+            timezone,
+          })
+        : 0;
+
       await tx.task.update({
         where: {
           id: taskId,
@@ -2519,6 +2552,17 @@ export const registerPlanningRoutes: FastifyPluginAsync = async (app) => {
         );
       }
 
+      if (shouldTrackInboxZero) {
+        await recordInboxZeroIfEarned(tx, {
+          userId: user.id,
+          targetDate: now,
+          timezone,
+          staleCountBefore,
+          mutationSource: "task_update",
+          affectedTaskIds: [taskId],
+        });
+      }
+
       return tx.task.findUniqueOrThrow({
         where: {
           id: taskId,
@@ -2550,6 +2594,7 @@ export const registerPlanningRoutes: FastifyPluginAsync = async (app) => {
     const payload = parseOrThrow(carryForwardTaskSchema, request.body as CarryForwardTaskRequest);
     const { taskId } = request.params as { taskId: string };
     const timezone = await getUserTimezone(app, user.id);
+    const now = new Date();
     const existingTask = await app.prisma.task.findFirst({
       where: {
         id: taskId,
@@ -2577,6 +2622,12 @@ export const registerPlanningRoutes: FastifyPluginAsync = async (app) => {
     }
 
     const task = await app.prisma.$transaction(async (tx) => {
+      const staleCountBefore = await countStaleInboxTasks(tx, {
+        userId: user.id,
+        targetDate: now,
+        timezone,
+      });
+
       if (existingTask.recurrenceRuleId) {
         const recurringTask = await applyRecurringTaskCarryForward(
           tx,
@@ -2598,7 +2649,7 @@ export const registerPlanningRoutes: FastifyPluginAsync = async (app) => {
         },
       });
 
-      return tx.task.create({
+      const nextTask = await tx.task.create({
         data: {
           userId: user.id,
           title: existingTask.title,
@@ -2628,6 +2679,17 @@ export const registerPlanningRoutes: FastifyPluginAsync = async (app) => {
           },
         },
       });
+
+      await recordInboxZeroIfEarned(tx, {
+        userId: user.id,
+        targetDate: now,
+        timezone,
+        staleCountBefore,
+        mutationSource: "task_carry_forward",
+        affectedTaskIds: [existingTask.id, nextTask.id],
+      });
+
+      return nextTask;
     });
 
     const response: TaskMutationResponse = withGeneratedAt({

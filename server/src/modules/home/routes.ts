@@ -25,6 +25,7 @@ import {
   calculateHabitRisk,
   calculateWeeklyHabitChallenge,
 } from "../../lib/habits/guidance.js";
+import { buildStaleInboxTaskWhere } from "../../lib/inbox/stale.js";
 import {
   isHabitDueOnIsoDate,
   isHabitPermanentlyInactive,
@@ -57,7 +58,6 @@ const dateQuerySchema = z.object({
 });
 
 const ACCOUNTABILITY_LOOKBACK_DAYS = 30;
-const STALE_INBOX_THRESHOLD_DAYS = 3;
 const ACCOUNTABILITY_SURFACED_ITEMS = 5;
 
 function currentRoutinePeriod(date: Date, timezone?: string | null): RoutineSummary["currentPeriod"] {
@@ -174,9 +174,6 @@ async function buildHomeOverview(
   const weekStartDate = parseIsoDate(weekStartIsoDate);
   const overdueWindowStartIsoDate = addIsoDays(targetIsoDate, -ACCOUNTABILITY_LOOKBACK_DAYS);
   const overdueWindowStartDate = parseIsoDate(overdueWindowStartIsoDate);
-  const staleInboxCutoffIsoDate = addIsoDays(targetIsoDate, -STALE_INBOX_THRESHOLD_DAYS);
-  const staleInboxCutoff = getDayWindowUtc(staleInboxCutoffIsoDate, preferences?.timezone);
-
   await materializeRecurringTasksInRange(
     app.prisma,
     userId,
@@ -222,15 +219,11 @@ async function buildHomeOverview(
         orderBy: [{ scheduledForDate: "asc" }, { createdAt: "asc" }],
       }),
       app.prisma.task.findMany({
-        where: {
+        where: buildStaleInboxTaskWhere({
           userId,
-          status: "PENDING",
-          originType: "QUICK_CAPTURE",
-          scheduledForDate: null,
-          createdAt: {
-            lt: staleInboxCutoff.start,
-          },
-        },
+          targetDate,
+          timezone: preferences?.timezone,
+        }),
         orderBy: [{ createdAt: "asc" }],
       }),
       app.prisma.habit.findMany({

@@ -341,7 +341,7 @@ export async function revokeAllUserSessions(prisma: PrismaClient, userId: string
 }
 
 export async function createAuditEvent(
-  prisma: PrismaClient,
+  prisma: PrismaClient | Prisma.TransactionClient,
   input: {
     userId?: string | null;
     eventType: string;

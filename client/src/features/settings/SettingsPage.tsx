@@ -47,6 +47,7 @@ const NOTIF_CATEGORIES: {
   hasRepeatCadence: boolean;
 }[] = [
   { key: "task", label: "Task", description: "Reminder tasks promoted into Today", hasRepeatCadence: false },
+  { key: "inbox", label: "Inbox", description: "Inbox Zero updates and stale capture recovery feedback", hasRepeatCadence: false },
   { key: "review", label: "Review", description: "Daily, weekly, and monthly review reminders", hasRepeatCadence: true },
   { key: "finance", label: "Finance", description: "Bill due dates, budget warnings, spending alerts", hasRepeatCadence: true },
   { key: "health", label: "Health", description: "Hydration, workout, and meal tracking nudges", hasRepeatCadence: false },
@@ -68,6 +69,7 @@ const CADENCE_OPTIONS: { value: NotificationRepeatCadence; label: string }[] = [
 
 const DEFAULT_NOTIF_PREFS: NotificationCategoryPreferences = {
   task: { enabled: true, minSeverity: "warning", repeatCadence: "off" },
+  inbox: { enabled: true, minSeverity: "info", repeatCadence: "off" },
   review: { enabled: true, minSeverity: "info", repeatCadence: "hourly" },
   finance: { enabled: true, minSeverity: "warning", repeatCadence: "every_3_hours" },
   health: { enabled: true, minSeverity: "warning", repeatCadence: "off" },
