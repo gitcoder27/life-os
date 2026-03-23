@@ -18,6 +18,7 @@ import {
   getQuickCaptureDisplayText,
   getQuickCaptureText,
 } from "../../shared/lib/quickCapture";
+import { GoalCombobox } from "../../shared/ui/GoalCombobox";
 import { PageHeader } from "../../shared/ui/PageHeader";
 import {
   EmptyState,
@@ -26,6 +27,7 @@ import {
   PageLoadingState,
 } from "../../shared/ui/PageState";
 import { SectionCard } from "../../shared/ui/SectionCard";
+import { SmartDatePicker } from "../../shared/ui/SmartDatePicker";
 import { WorkflowTemplatesSection } from "./WorkflowTemplatesSection";
 
 type InboxFilter = "all" | "task" | "note" | "reminder";
@@ -138,6 +140,7 @@ export function InboxPage() {
   const [activeFilter, setActiveFilter] = useState<InboxFilter>("all");
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [selectedTaskIds, setSelectedTaskIds] = useState<string[]>([]);
+  const [inspectorTab, setInspectorTab] = useState<"inspector" | "templates">("inspector");
   const [loadedItems, setLoadedItems] = useState<TaskItem[]>([]);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
@@ -411,8 +414,6 @@ export function InboxPage() {
 
       {mutationError ? <InlineErrorState message={mutationError} onRetry={retryAll} /> : null}
 
-      <WorkflowTemplatesSection />
-
       <section className="inbox-summary">
         <div className="inbox-summary__headline">
           <span className="inbox-summary__count">{counts.all}</span>
@@ -485,32 +486,39 @@ export function InboxPage() {
                   const preview = getQuickCaptureDisplayText(item, item.title);
 
                   return (
-                    <li key={item.id} className={`inbox-row${isChecked ? " inbox-row--checked" : ""}`}>
-                      <label className="inbox-row__checkbox">
-                        <input
-                          type="checkbox"
-                          checked={isChecked}
-                          onChange={() => toggleTaskSelection(item.id)}
-                          disabled={isMutating}
-                          aria-label={`Select ${preview}`}
-                        />
-                        <span>Select</span>
-                      </label>
+                    <li key={item.id}>
                       <button
-                        className={`inbox-item${isSelected ? " inbox-item--active" : ""}`}
+                        className={`inbox-item${isSelected ? " inbox-item--active" : ""}${isChecked ? " inbox-item--checked" : ""}`}
                         type="button"
-                        onClick={() => setSelectedTaskId(item.id)}
+                        onClick={() => {
+                          setSelectedTaskId(item.id);
+                          setInspectorTab("inspector");
+                        }}
                       >
                         <div className="inbox-item__topline">
-                          <span className={getKindTagClass(itemKind)}>{getKindLabel(itemKind)}</span>
+                          <div className="inbox-item__topline-left">
+                            <label
+                              className="inbox-item__check"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={isChecked}
+                                onChange={() => toggleTaskSelection(item.id)}
+                                disabled={isMutating}
+                                aria-label={`Select ${preview}`}
+                              />
+                            </label>
+                            <span className={getKindTagClass(itemKind)}>{getKindLabel(itemKind)}</span>
+                          </div>
                           <span className="inbox-item__time">{formatCreatedAt(item.createdAt)}</span>
                         </div>
                         <strong className="inbox-item__title">{preview}</strong>
                         <div className="inbox-item__meta">
                           {getReminderDate(item.reminderAt) ? (
-                            <span>Reminder date {getReminderDate(item.reminderAt)}</span>
+                            <span>⏰ {getReminderDate(item.reminderAt)}</span>
                           ) : null}
-                          {item.goal ? <GoalChip goal={item.goal} /> : <span>Unlinked</span>}
+                          {item.goal ? <GoalChip goal={item.goal} /> : <span className="inbox-item__unlinked">Unlinked</span>}
                         </div>
                       </button>
                     </li>
@@ -548,15 +556,40 @@ export function InboxPage() {
 
         <SectionCard
           className="inbox-panel inbox-panel--detail"
-          title={hasBulkSelection ? "Bulk actions" : selectedTask ? "Inspector" : "Triage"}
+          title={hasBulkSelection ? "Bulk actions" : inspectorTab === "templates" ? "Templates" : selectedTask ? "Inspector" : "Triage"}
           subtitle={
             hasBulkSelection
               ? "Apply one decision across the checked items. Clear selection to return to single-item triage."
-              : selectedTask
-                ? "Promote, schedule, link, convert, or archive without leaving the queue."
-                : "Select an item to decide where it belongs."
+              : inspectorTab === "templates"
+                ? "Reusable checklists you can drop into your inbox."
+                : selectedTask
+                  ? "Promote, schedule, link, convert, or archive without leaving the queue."
+                  : "Select an item to decide where it belongs."
           }
         >
+          {!hasBulkSelection ? (
+            <div className="inbox-tab-bar" role="tablist" aria-label="Inspector tabs">
+              <button
+                className={`inbox-tab${inspectorTab === "inspector" ? " inbox-tab--active" : ""}`}
+                type="button"
+                role="tab"
+                aria-selected={inspectorTab === "inspector"}
+                onClick={() => setInspectorTab("inspector")}
+              >
+                Inspector
+              </button>
+              <button
+                className={`inbox-tab${inspectorTab === "templates" ? " inbox-tab--active" : ""}`}
+                type="button"
+                role="tab"
+                aria-selected={inspectorTab === "templates"}
+                onClick={() => setInspectorTab("templates")}
+              >
+                Templates
+              </button>
+            </div>
+          ) : null}
+
           {hasBulkSelection ? (
             <div className="inbox-detail">
               <div className="inbox-detail__hero">
@@ -608,15 +641,12 @@ export function InboxPage() {
                     >
                       Do today
                     </button>
-                    <label className="field inbox-schedule-field">
-                      <span>Schedule date</span>
-                      <input
-                        type="date"
-                        min={today}
-                        value={bulkScheduleDate}
-                        onChange={(event) => setBulkScheduleDate(event.target.value)}
-                      />
-                    </label>
+                    <SmartDatePicker
+                      value={bulkScheduleDate}
+                      onChange={setBulkScheduleDate}
+                      minDate={today}
+                      disabled={isMutating}
+                    />
                     <button
                       className="button button--ghost"
                       type="button"
@@ -634,21 +664,12 @@ export function InboxPage() {
                     <p>Apply the same context or archive decision across the selected group.</p>
                   </div>
                   <div className="button-row button-row--wrap inbox-action-row">
-                    <label className="field inbox-goal-field">
-                      <span>Linked goal</span>
-                      <select
-                        value={bulkGoalId}
-                        onChange={(event) => setBulkGoalId(event.target.value)}
-                        disabled={goalsListQuery.isLoading || isMutating}
-                      >
-                        <option value="">No goal</option>
-                        {activeGoals.map((goal) => (
-                          <option key={goal.id} value={goal.id}>
-                            {goal.title}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
+                    <GoalCombobox
+                      goals={activeGoals}
+                      value={bulkGoalId}
+                      onChange={setBulkGoalId}
+                      disabled={goalsListQuery.isLoading || isMutating}
+                    />
                     <button
                       className="button button--ghost"
                       type="button"
@@ -669,6 +690,8 @@ export function InboxPage() {
                 </div>
               </div>
             </div>
+          ) : inspectorTab === "templates" ? (
+            <WorkflowTemplatesSection />
           ) : selectedTask ? (
             <div className="inbox-detail">
               <div className="inbox-detail__hero">
@@ -720,15 +743,12 @@ export function InboxPage() {
                     >
                       Do today
                     </button>
-                    <label className="field inbox-schedule-field">
-                      <span>Schedule date</span>
-                      <input
-                        type="date"
-                        min={today}
-                        value={scheduleDate}
-                        onChange={(event) => setScheduleDate(event.target.value)}
-                      />
-                    </label>
+                    <SmartDatePicker
+                      value={scheduleDate}
+                      onChange={setScheduleDate}
+                      minDate={today}
+                      disabled={isMutating}
+                    />
                     <button
                       className="button button--ghost"
                       type="button"
@@ -746,21 +766,12 @@ export function InboxPage() {
                     <p>Attach context before this item leaves the queue.</p>
                   </div>
                   <div className="button-row button-row--wrap inbox-action-row">
-                    <label className="field inbox-goal-field">
-                      <span>Linked goal</span>
-                      <select
-                        value={selectedGoalId}
-                        onChange={(event) => setSelectedGoalId(event.target.value)}
-                        disabled={goalsListQuery.isLoading || isMutating}
-                      >
-                        <option value="">No goal</option>
-                        {activeGoals.map((goal) => (
-                          <option key={goal.id} value={goal.id}>
-                            {goal.title}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
+                    <GoalCombobox
+                      goals={activeGoals}
+                      value={selectedGoalId}
+                      onChange={setSelectedGoalId}
+                      disabled={goalsListQuery.isLoading || isMutating}
+                    />
                     <button
                       className="button button--ghost"
                       type="button"
