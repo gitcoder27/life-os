@@ -301,6 +301,9 @@ const taskListQuerySchema = z
     to: isoDateSchema.optional(),
     status: taskStatusSchema.optional(),
     kind: taskKindSchema.optional(),
+    cursor: z.string().min(1).max(500).optional(),
+    limit: z.coerce.number().int().min(1).max(100).optional(),
+    includeSummary: z.enum(["true", "false"]).optional(),
     originType: taskOriginSchema.optional(),
     scheduledState: z.enum(["all", "scheduled", "unscheduled"]).optional(),
   })
@@ -524,6 +527,13 @@ function isIsoDateInput(value: string): value is IsoDateString {
   return /^\d{4}-\d{2}-\d{2}$/.test(value);
 }
 
+const TASK_LIST_DEFAULT_LIMIT = 50;
+
+interface TaskListCursorPayload {
+  createdAt: string;
+  id: string;
+}
+
 function toTaskReminderAt(reminderAt: string | null | undefined, timezone?: string | null) {
   if (reminderAt === undefined) {
     return undefined;
@@ -568,6 +578,59 @@ function resolveReminderAtForUpdate(
   }
 
   return toTaskReminderAt(payload.reminderAt, timezone);
+}
+
+function encodeTaskListCursor(task: Pick<Task, "id" | "createdAt">) {
+  return Buffer.from(
+    JSON.stringify({
+      id: task.id,
+      createdAt: task.createdAt.toISOString(),
+    } satisfies TaskListCursorPayload),
+  ).toString("base64url");
+}
+
+function decodeTaskListCursor(cursor: string): TaskListCursorPayload {
+  try {
+    const parsed = JSON.parse(Buffer.from(cursor, "base64url").toString("utf8")) as Partial<TaskListCursorPayload>;
+
+    if (
+      !parsed ||
+      typeof parsed.id !== "string" ||
+      typeof parsed.createdAt !== "string" ||
+      Number.isNaN(new Date(parsed.createdAt).getTime())
+    ) {
+      throw new Error("Invalid cursor payload");
+    }
+
+    return parsed as TaskListCursorPayload;
+  } catch {
+    throw new AppError({
+      statusCode: 400,
+      code: "BAD_REQUEST",
+      message: "Invalid task cursor",
+    });
+  }
+}
+
+function buildTaskListCursorWhere(cursor: string) {
+  const decoded = decodeTaskListCursor(cursor);
+  const createdAt = new Date(decoded.createdAt);
+
+  return {
+    OR: [
+      {
+        createdAt: {
+          lt: createdAt,
+        },
+      },
+      {
+        createdAt,
+        id: {
+          lt: decoded.id,
+        },
+      },
+    ],
+  };
 }
 
 function parseTaskTemplateTasks(payload: unknown): TaskTemplateItem["tasks"] {
@@ -2134,6 +2197,8 @@ export const registerPlanningRoutes: FastifyPluginAsync = async (app) => {
   app.get("/tasks", async (request, reply) => {
     const user = requireAuthenticatedUser(request);
     const query = parseOrThrow(taskListQuerySchema, request.query);
+    const includeSummary = query.includeSummary === "true";
+    const limit = query.limit ?? (query.cursor ? TASK_LIST_DEFAULT_LIMIT : undefined);
     const scheduledForDate = query.scheduledForDate ? parseIsoDate(query.scheduledForDate) : null;
     const fromDate = query.from ? parseIsoDate(query.from) : null;
     const toDateExclusive = query.to ? addDays(parseIsoDate(query.to), 1) : null;
@@ -2155,31 +2220,83 @@ export const registerPlanningRoutes: FastifyPluginAsync = async (app) => {
     } else if (fromDate && toDateExclusive) {
       await materializeRecurringTasksInRange(app.prisma, user.id, fromDate, addDays(toDateExclusive, -1));
     }
-    const tasks = await app.prisma.task.findMany({
-      where: {
-        userId: user.id,
-        status: query.status ? toPrismaTaskStatus(query.status) : undefined,
-        kind: query.kind ? toPrismaTaskKind(query.kind) : undefined,
-        originType: query.originType ? toPrismaTaskOriginType(query.originType) : undefined,
-        scheduledForDate: scheduledDateFilter,
-      },
-      orderBy: [{ scheduledForDate: "asc" }, { createdAt: "asc" }],
-      include: {
-        goal: true,
-        recurrenceRule: {
-          include: {
-            exceptions: {
-              orderBy: {
-                occurrenceDate: "asc",
+
+    const summaryWhere = {
+      userId: user.id,
+      status: query.status ? toPrismaTaskStatus(query.status) : undefined,
+      originType: query.originType ? toPrismaTaskOriginType(query.originType) : undefined,
+      scheduledForDate: scheduledDateFilter,
+    };
+    const listWhere = query.cursor
+      ? {
+          AND: [
+            {
+              ...summaryWhere,
+              kind: query.kind ? toPrismaTaskKind(query.kind) : undefined,
+            },
+            buildTaskListCursorWhere(query.cursor),
+          ],
+        }
+      : {
+          ...summaryWhere,
+          kind: query.kind ? toPrismaTaskKind(query.kind) : undefined,
+        };
+
+    const [tasks, counts] = await Promise.all([
+      app.prisma.task.findMany({
+        where: listWhere,
+        take: limit ? limit + 1 : undefined,
+        orderBy: limit ? [{ createdAt: "desc" }, { id: "desc" }] : [{ scheduledForDate: "asc" }, { createdAt: "asc" }],
+        include: {
+          goal: true,
+          recurrenceRule: {
+            include: {
+              exceptions: {
+                orderBy: {
+                  occurrenceDate: "asc",
+                },
               },
             },
           },
         },
-      },
-    });
+      }),
+      includeSummary
+        ? Promise.all([
+            app.prisma.task.count({ where: summaryWhere }),
+            app.prisma.task.count({
+              where: {
+                ...summaryWhere,
+                kind: "TASK",
+              },
+            }),
+            app.prisma.task.count({
+              where: {
+                ...summaryWhere,
+                kind: "NOTE",
+              },
+            }),
+            app.prisma.task.count({
+              where: {
+                ...summaryWhere,
+                kind: "REMINDER",
+              },
+            }),
+          ]).then(([all, task, note, reminder]) => ({
+            all,
+            task,
+            note,
+            reminder,
+          }))
+        : Promise.resolve(undefined),
+    ]);
+
+    const page = limit ? tasks.slice(0, limit) : tasks;
+    const nextCursor = limit && tasks.length > limit ? encodeTaskListCursor(page[page.length - 1]!) : null;
 
     const response: TasksResponse = withGeneratedAt({
-      tasks: tasks.map(serializeTask),
+      tasks: page.map(serializeTask),
+      nextCursor,
+      counts,
     });
 
     return reply.send(response);

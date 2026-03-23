@@ -212,10 +212,22 @@ export interface TasksQuery {
   to?: IsoDateString;
   status?: TaskStatus;
   kind?: TaskKind;
+  cursor?: string;
+  limit?: number;
+  includeSummary?: boolean;
   originType?: TaskOriginType;
   scheduledState?: TaskScheduledState;
 }
 
+export interface TaskListCounts {
+  all: number;
+  task: number;
+  note: number;
+  reminder: number;
+}
+
 export interface TasksResponse extends ApiMeta {
   tasks: PlanningTaskItem[];
+  nextCursor: string | null;
+  counts?: TaskListCounts;
 }

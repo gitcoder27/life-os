@@ -2776,18 +2776,39 @@ describe("module route smoke tests", () => {
     expect(JSON.parse(response.body).message).toBe("Goal not found");
   });
 
-  it("filters task list for inbox-style queries", async () => {
+  it("filters task list for inbox-style queries and returns exact counts", async () => {
+    const findMany = vi.fn().mockResolvedValue([]);
+    const count = vi
+      .fn()
+      .mockResolvedValueOnce(12)
+      .mockResolvedValueOnce(5)
+      .mockResolvedValueOnce(4)
+      .mockResolvedValueOnce(3);
+
     prisma.task = {
-      findMany: vi.fn().mockResolvedValue([]),
+      findMany,
+      count,
     } as any;
 
     const response = await app!.inject({
       method: "GET",
-      url: "/api/tasks?status=pending&originType=quick_capture&scheduledState=unscheduled",
+      url: "/api/tasks?status=pending&originType=quick_capture&scheduledState=unscheduled&includeSummary=true",
     });
 
     expect(response.statusCode).toBe(200);
-    expect(prisma.task.findMany).toHaveBeenCalledWith(
+    expect(JSON.parse(response.body)).toEqual(
+      expect.objectContaining({
+        tasks: [],
+        nextCursor: null,
+        counts: {
+          all: 12,
+          task: 5,
+          note: 4,
+          reminder: 3,
+        },
+      }),
+    );
+    expect(findMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: expect.objectContaining({
           userId: "user-1",
@@ -2797,6 +2818,118 @@ describe("module route smoke tests", () => {
         }),
       }),
     );
+    expect(count).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        where: expect.objectContaining({
+          userId: "user-1",
+          status: "PENDING",
+          originType: "QUICK_CAPTURE",
+          scheduledForDate: null,
+        }),
+      }),
+    );
+    expect(count).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        where: expect.objectContaining({
+          kind: "TASK",
+        }),
+      }),
+    );
+    expect(count).toHaveBeenNthCalledWith(
+      3,
+      expect.objectContaining({
+        where: expect.objectContaining({
+          kind: "NOTE",
+        }),
+      }),
+    );
+    expect(count).toHaveBeenNthCalledWith(
+      4,
+      expect.objectContaining({
+        where: expect.objectContaining({
+          kind: "REMINDER",
+        }),
+      }),
+    );
+  });
+
+  it("paginates task lists with a cursor", async () => {
+    const firstTask = buildTaskRecord({
+      id: "33333333-3333-4333-8333-333333333333",
+      createdAt: new Date("2026-03-16T08:00:00.000Z"),
+    });
+    const secondTask = buildTaskRecord({
+      id: "22222222-2222-4222-8222-222222222222",
+      createdAt: new Date("2026-03-15T08:00:00.000Z"),
+    });
+    const thirdTask = buildTaskRecord({
+      id: "11111111-1111-4111-8111-111111111111",
+      createdAt: new Date("2026-03-14T08:00:00.000Z"),
+    });
+    const findMany = vi
+      .fn()
+      .mockResolvedValueOnce([firstTask, secondTask, thirdTask])
+      .mockResolvedValueOnce([thirdTask]);
+
+    prisma.task = {
+      findMany,
+    } as any;
+
+    const firstResponse = await app!.inject({
+      method: "GET",
+      url: "/api/tasks?status=pending&originType=quick_capture&scheduledState=unscheduled&limit=2",
+    });
+
+    expect(firstResponse.statusCode).toBe(200);
+    const firstBody = JSON.parse(firstResponse.body);
+    expect(firstBody.tasks).toHaveLength(2);
+    expect(firstBody.nextCursor).toEqual(expect.any(String));
+    expect(findMany).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        take: 3,
+        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      }),
+    );
+
+    const secondResponse = await app!.inject({
+      method: "GET",
+      url: `/api/tasks?status=pending&originType=quick_capture&scheduledState=unscheduled&limit=2&cursor=${encodeURIComponent(firstBody.nextCursor)}`,
+    });
+
+    expect(secondResponse.statusCode).toBe(200);
+    expect(JSON.parse(secondResponse.body)).toEqual(
+      expect.objectContaining({
+        tasks: [expect.objectContaining({ id: thirdTask.id })],
+        nextCursor: null,
+      }),
+    );
+    expect(findMany).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        where: expect.objectContaining({
+          AND: expect.any(Array),
+        }),
+        take: 3,
+        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      }),
+    );
+  });
+
+  it("rejects invalid task cursors", async () => {
+    prisma.task = {
+      findMany: vi.fn(),
+    } as any;
+
+    const response = await app!.inject({
+      method: "GET",
+      url: "/api/tasks?status=pending&originType=quick_capture&scheduledState=unscheduled&limit=2&cursor=not-a-valid-cursor",
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(JSON.parse(response.body).message).toBe("Invalid task cursor");
   });
 
   it("applies bulk scheduling and updates reminder timestamps directly", async () => {

@@ -11,6 +11,7 @@ import {
   useUpdateTaskMutation,
   type BulkUpdateTasksInput,
   type LinkedGoal,
+  type TaskListCounts,
   type TaskItem,
 } from "../../shared/lib/api";
 import {
@@ -35,6 +36,13 @@ const filterOptions: Array<{ id: InboxFilter; label: string }> = [
   { id: "note", label: "Notes" },
   { id: "reminder", label: "Reminders" },
 ];
+const INBOX_PAGE_SIZE = 50;
+const EMPTY_COUNTS: TaskListCounts = {
+  all: 0,
+  task: 0,
+  note: 0,
+  reminder: 0,
+};
 
 function getTomorrowDate(isoDate: string) {
   const tomorrow = new Date(`${isoDate}T12:00:00`);
@@ -118,7 +126,6 @@ export function InboxPage() {
   const today = getTodayDate();
   const tomorrow = getTomorrowDate(today);
   const { pushFeedback } = useAppFeedback();
-  const inboxQuery = useInboxQuery();
   const goalsListQuery = useGoalsListQuery();
   const updateTaskMutation = useUpdateTaskMutation(today);
   const bulkSuccessMessageRef = useRef("Inbox updated.");
@@ -131,10 +138,29 @@ export function InboxPage() {
   const [activeFilter, setActiveFilter] = useState<InboxFilter>("all");
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [selectedTaskIds, setSelectedTaskIds] = useState<string[]>([]);
+  const [loadedItems, setLoadedItems] = useState<TaskItem[]>([]);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [scheduleDate, setScheduleDate] = useState(tomorrow);
   const [selectedGoalId, setSelectedGoalId] = useState("");
   const [bulkScheduleDate, setBulkScheduleDate] = useState(tomorrow);
   const [bulkGoalId, setBulkGoalId] = useState("");
+  const activeKind = activeFilter === "all" ? undefined : activeFilter;
+  const inboxQuery = useInboxQuery({
+    kind: activeKind,
+    limit: INBOX_PAGE_SIZE,
+    includeSummary: true,
+  });
+  const loadMoreQuery = useInboxQuery(
+    {
+      kind: activeKind,
+      cursor: nextCursor ?? undefined,
+      limit: INBOX_PAGE_SIZE,
+    },
+    {
+      enabled: false,
+    },
+  );
 
   const activeGoals = useMemo(
     () => (goalsListQuery.data?.goals ?? []).filter((goal) => goal.status === "active"),
@@ -146,25 +172,7 @@ export function InboxPage() {
     [activeGoals],
   );
 
-  const inboxItems = useMemo(
-    () =>
-      [...(inboxQuery.data?.tasks ?? [])].sort(
-        (left, right) => new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime(),
-      ),
-    [inboxQuery.data?.tasks],
-  );
-
-  const filteredItems = useMemo(
-    () =>
-      inboxItems.filter((item) => {
-        if (activeFilter === "all") {
-          return true;
-        }
-
-        return getInboxItemKind(item) === activeFilter;
-      }),
-    [activeFilter, inboxItems],
-  );
+  const filteredItems = loadedItems;
 
   const selectedTask = filteredItems.find((item) => item.id === selectedTaskId) ?? filteredItems[0] ?? null;
   const selectedTaskKind = selectedTask ? getInboxItemKind(selectedTask) : null;
@@ -176,6 +184,24 @@ export function InboxPage() {
     filteredItems.length > 0 && filteredItems.every((item) => selectedTaskIdsSet.has(item.id));
 
   useEffect(() => {
+    setLoadedItems([]);
+    setNextCursor(null);
+    setSelectedTaskId(null);
+    setSelectedTaskIds([]);
+    setIsLoadingMore(false);
+  }, [activeKind]);
+
+  useEffect(() => {
+    if (!inboxQuery.data) {
+      return;
+    }
+
+    setLoadedItems(inboxQuery.data.tasks);
+    setNextCursor(inboxQuery.data.nextCursor);
+    setIsLoadingMore(false);
+  }, [inboxQuery.data]);
+
+  useEffect(() => {
     const nextId = filteredItems[0]?.id ?? null;
 
     if (!selectedTaskId || !filteredItems.some((item) => item.id === selectedTaskId)) {
@@ -185,7 +211,6 @@ export function InboxPage() {
 
   useEffect(() => {
     const visibleIds = new Set(filteredItems.map((item) => item.id));
-
     setSelectedTaskIds((current) => current.filter((taskId) => visibleIds.has(taskId)));
   }, [filteredItems]);
 
@@ -200,15 +225,7 @@ export function InboxPage() {
     setSelectedGoalId(selectedTask.goalId ?? "");
   }, [selectedTask, tomorrow]);
 
-  const counts = useMemo(
-    () => ({
-      all: inboxItems.length,
-      task: inboxItems.filter((item) => getInboxItemKind(item) === "task").length,
-      note: inboxItems.filter((item) => getInboxItemKind(item) === "note").length,
-      reminder: inboxItems.filter((item) => getInboxItemKind(item) === "reminder").length,
-    }),
-    [inboxItems],
-  );
+  const counts = inboxQuery.data?.counts ?? EMPTY_COUNTS;
 
   const mutationError =
     updateTaskMutation.error instanceof Error
@@ -221,6 +238,27 @@ export function InboxPage() {
     void inboxQuery.refetch();
     void goalsListQuery.refetch();
   };
+
+  async function handleLoadMore() {
+    if (!nextCursor || isLoadingMore) {
+      return;
+    }
+
+    setIsLoadingMore(true);
+
+    try {
+      const result = await loadMoreQuery.refetch();
+
+      if (!result.data) {
+        return;
+      }
+
+      setLoadedItems((current) => [...current, ...result.data.tasks]);
+      setNextCursor(result.data.nextCursor);
+    } finally {
+      setIsLoadingMore(false);
+    }
+  }
 
   function toggleTaskSelection(taskId: string) {
     setSelectedTaskIds((current) =>
@@ -393,7 +431,7 @@ export function InboxPage() {
       <div className="two-column-grid inbox-grid">
         <SectionCard
           className="inbox-panel inbox-panel--queue"
-          title={`Queue (${filteredItems.length})`}
+          title={`Queue (${counts[activeFilter]})`}
           subtitle="Newest inbox items first. Open one item to inspect it, or use checkboxes to triage a batch."
         >
           <div className="inbox-filter-bar" role="tablist" aria-label="Inbox filters">
@@ -479,6 +517,26 @@ export function InboxPage() {
                   );
                 })}
               </ul>
+
+              {loadMoreQuery.isError ? (
+                <InlineErrorState
+                  message={loadMoreQuery.error instanceof Error ? loadMoreQuery.error.message : "More inbox items could not load."}
+                  onRetry={() => void handleLoadMore()}
+                />
+              ) : null}
+
+              {nextCursor ? (
+                <div className="button-row" style={{ marginTop: "0.75rem" }}>
+                  <button
+                    className="button button--ghost"
+                    type="button"
+                    onClick={() => void handleLoadMore()}
+                    disabled={isLoadingMore}
+                  >
+                    {isLoadingMore ? "Loading more..." : "Load more"}
+                  </button>
+                </div>
+              ) : null}
             </>
           ) : (
             <EmptyState

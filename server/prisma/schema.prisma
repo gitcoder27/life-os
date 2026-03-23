@@ -361,6 +361,7 @@ model Task {
   recurrenceRule    RecurrenceRule? @relation(fields: [recurrenceRuleId], references: [id], onDelete: SetNull)
 
   @@index([userId, scheduledForDate, status])
+  @@index([userId, status, originType, scheduledForDate, kind, createdAt, id])
   @@index([userId, kind, status, reminderAt, reminderTriggeredAt])
   @@index([userId, recurrenceRuleId, scheduledForDate])
 }

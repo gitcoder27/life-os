@@ -109,7 +109,7 @@ export function HomePage() {
   const today = getTodayDate();
   const navigate = useNavigate();
   const homeQuery = useHomeOverviewQuery(today);
-  const inboxQuery = useInboxQuery();
+  const inboxQuery = useInboxQuery({ limit: 3 });
   const scoreQuery = useDailyScoreQuery(today);
   const weeklyMomentumQuery = useWeeklyMomentumQuery(today);
   const retryAll = () => {
@@ -206,9 +206,7 @@ export function HomePage() {
     .filter((task) => Boolean(task.dueAt))
     .sort((left, right) => new Date(left.dueAt ?? "").getTime() - new Date(right.dueAt ?? "").getTime())[0] ?? null;
   const quickCaptureDayNotes = allTasks.filter(isQuickCaptureMetadataTask);
-  const inboxPreviewItems = [...(inboxQuery.data?.tasks ?? [])]
-    .sort((left, right) => new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime())
-    .slice(0, 3);
+  const inboxPreviewItems = inboxQuery.data?.tasks ?? [];
   const accountabilityRadar = home.accountabilityRadar;
 
   return (

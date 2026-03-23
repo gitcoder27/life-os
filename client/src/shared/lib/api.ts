@@ -313,6 +313,13 @@ export type TaskItem = {
   updatedAt: string;
 };
 
+export type TaskListCounts = {
+  all: number;
+  task: number;
+  note: number;
+  reminder: number;
+};
+
 export type TaskTemplateTask = {
   title: string;
 };
@@ -382,6 +389,8 @@ type BulkTaskMutationResponse = {
 type TasksResponse = {
   generatedAt: string;
   tasks: TaskItem[];
+  nextCursor: string | null;
+  counts?: TaskListCounts;
 };
 
 type TaskTemplatesResponse = {
@@ -406,6 +415,9 @@ export type TasksQueryFilters = {
   to?: string;
   status?: "pending" | "completed" | "dropped";
   kind?: TaskItem["kind"];
+  cursor?: string;
+  limit?: number;
+  includeSummary?: boolean;
   originType?: "manual" | "quick_capture" | "carry_forward" | "review_seed" | "recurring" | "template";
   scheduledState?: "all" | "scheduled" | "unscheduled";
 };
@@ -1319,6 +1331,10 @@ const queryKeys = {
       filters.from ?? "all",
       filters.to ?? "all",
       filters.status ?? "all",
+      filters.kind ?? "all",
+      filters.cursor ?? "",
+      filters.limit ?? "all",
+      filters.includeSummary ? "summary" : "no-summary",
       filters.originType ?? "all",
       filters.scheduledState ?? "all",
     ] as const,
@@ -1745,7 +1761,12 @@ export function useDayPlanQuery(date: string) {
   });
 }
 
-export function useTasksQuery(filters: TasksQueryFilters = {}) {
+export function useTasksQuery(
+  filters: TasksQueryFilters = {},
+  options?: {
+    enabled?: boolean;
+  },
+) {
   return useQuery({
     queryKey: queryKeys.tasks(filters),
     queryFn: () =>
@@ -1756,19 +1777,33 @@ export function useTasksQuery(filters: TasksQueryFilters = {}) {
           to: filters.to,
           status: filters.status,
           kind: filters.kind,
+          cursor: filters.cursor,
+          limit: filters.limit ? String(filters.limit) : undefined,
+          includeSummary: filters.includeSummary ? "true" : undefined,
           originType: filters.originType,
           scheduledState: filters.scheduledState,
         },
       }),
+    enabled: options?.enabled,
     retry: false,
   });
 }
 
-export function useInboxQuery() {
+export function useInboxQuery(
+  filters: Omit<TasksQueryFilters, "status" | "originType" | "scheduledState"> = {},
+  options?: {
+    enabled?: boolean;
+  },
+) {
   return useTasksQuery({
     status: "pending",
+    kind: filters.kind,
+    cursor: filters.cursor,
+    limit: filters.limit,
+    includeSummary: filters.includeSummary,
     scheduledState: "unscheduled",
-  });
+    originType: "quick_capture",
+  }, options);
 }
 
 export function useTaskTemplatesQuery() {
