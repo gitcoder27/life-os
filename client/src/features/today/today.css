@@ -171,6 +171,22 @@
   font-weight: 700;
   color: var(--text);
   line-height: 1;
+  transition: color 0.6s var(--ease);
+}
+
+/* Score bump animation — applied via JS when score changes */
+@keyframes scoreBump {
+  0% { transform: scale(1); }
+  30% { transform: scale(1.08); }
+  100% { transform: scale(1); }
+}
+
+.today-score-strip--bumped .today-mini-ring {
+  animation: scoreBump 0.5s var(--ease);
+}
+
+.today-score-strip--bumped .today-score-strip__label {
+  animation: scoreBump 0.5s var(--ease);
 }
 
 /* ── Priority Stack Hero ─────────────────────────────── */
@@ -939,6 +955,231 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* ── Routines & Habits ────────────────────────────────── */
+
+.today-routines-habits {
+  padding: 0.9rem 1rem;
+  border-radius: var(--r);
+  border: 1px solid var(--border);
+  background: linear-gradient(180deg, var(--panel-elevated), var(--panel));
+}
+
+.today-routines-habits__empty {
+  color: var(--text-tertiary);
+  font-size: var(--fs-small);
+}
+
+.today-rh__group {
+  margin-bottom: 0.6rem;
+}
+
+.today-rh__group:last-child {
+  margin-bottom: 0;
+}
+
+.today-rh__group-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.35rem;
+}
+
+.today-rh__group-label {
+  font-size: var(--fs-micro);
+  font-weight: 650;
+  color: var(--text-secondary);
+  letter-spacing: 0.02em;
+}
+
+.today-rh__group-count {
+  font-size: var(--fs-micro);
+  font-weight: 600;
+  color: var(--text-tertiary);
+  padding: 0.05rem 0.4rem;
+  border-radius: var(--r-pill);
+  background: rgba(255,255,255,0.04);
+}
+
+.today-rh__group-count--done {
+  color: var(--positive);
+  background: var(--positive-soft);
+}
+
+.today-rh__items {
+  display: flex;
+  flex-direction: column;
+}
+
+.today-rh__item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.3rem 0.25rem;
+  border: none;
+  background: none;
+  color: var(--text);
+  font-size: var(--fs-small);
+  font-family: inherit;
+  cursor: pointer;
+  border-radius: var(--r-xs);
+  transition: background var(--dur-fast) var(--ease), opacity var(--dur-fast) var(--ease);
+  text-align: left;
+  width: 100%;
+}
+
+.today-rh__item:hover:not(:disabled) {
+  background: rgba(255,255,255,0.04);
+}
+
+.today-rh__item:disabled {
+  cursor: default;
+}
+
+.today-rh__item--done {
+  opacity: 0.55;
+}
+
+.today-rh__item--done .today-rh__item-title {
+  text-decoration: line-through;
+  text-decoration-color: var(--positive);
+}
+
+.today-rh__check {
+  width: 1.1rem;
+  height: 1.1rem;
+  border-radius: 50%;
+  border: 1.5px solid var(--border-active);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: all var(--dur-fast) var(--ease);
+  color: transparent;
+}
+
+.today-rh__check--done {
+  border-color: var(--positive);
+  background: var(--positive);
+  color: var(--bg);
+}
+
+.today-rh__item-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.today-rh__item-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex-shrink: 0;
+}
+
+.today-rh__streak {
+  font-size: var(--fs-micro);
+  color: var(--accent);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.today-rh__risk {
+  font-size: var(--fs-micro);
+  font-weight: 700;
+}
+
+/* ── Finance & Admin ─────────────────────────────────── */
+
+.today-finance-admin {
+  padding: 0.9rem 1rem;
+  border-radius: var(--r);
+  border: 1px solid var(--border);
+  background: linear-gradient(180deg, var(--panel-elevated), var(--panel));
+}
+
+.today-finance-admin__empty {
+  color: var(--text-tertiary);
+  font-size: var(--fs-small);
+}
+
+.today-fa__rows {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+
+.today-fa__row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.3rem 0.15rem;
+  font-size: var(--fs-small);
+}
+
+.today-fa__row--summary {
+  margin-top: 0.25rem;
+  padding-top: 0.4rem;
+  border-top: 1px solid rgba(255,255,255,0.04);
+}
+
+.today-fa__indicator {
+  width: 1.2rem;
+  flex-shrink: 0;
+  text-align: center;
+  font-size: var(--fs-micro);
+  color: var(--text-tertiary);
+}
+
+.today-fa__indicator--done {
+  color: var(--positive);
+  font-weight: 700;
+}
+
+.today-fa__indicator--alert {
+  color: var(--negative);
+  font-weight: 700;
+}
+
+.today-fa__label {
+  flex: 1;
+  min-width: 0;
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.today-fa__row--alert .today-fa__label {
+  color: var(--text);
+}
+
+.today-fa__due {
+  font-size: var(--fs-micro);
+  color: var(--text-tertiary);
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.today-fa__row--alert .today-fa__due {
+  color: var(--negative);
+  font-weight: 600;
+}
+
+.today-fa__link {
+  font-size: var(--fs-micro);
+  font-weight: 600;
+  color: var(--accent);
+  text-decoration: none;
+  flex-shrink: 0;
+}
+
+.today-fa__link:hover {
+  color: var(--accent-bright);
+  text-decoration: underline;
 }
 
 /* ── Recovery Lane (bottom placement) ───────────────── */

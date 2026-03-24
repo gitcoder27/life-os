@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from "react";
 import { useDailyScoreQuery, getTodayDate } from "../../../shared/lib/api";
 
 const BUCKET_META: Record<string, { label: string; icon: string }> = {
@@ -20,6 +21,18 @@ export function ScoreProgressStrip() {
   const scoreQuery = useDailyScoreQuery(today);
   const score = scoreQuery.data;
 
+  const prevValueRef = useRef<number | null>(null);
+  const [bumped, setBumped] = useState(false);
+
+  useEffect(() => {
+    if (score && prevValueRef.current !== null && score.value !== prevValueRef.current) {
+      setBumped(true);
+      const timer = setTimeout(() => setBumped(false), 600);
+      return () => clearTimeout(timer);
+    }
+    if (score) prevValueRef.current = score.value;
+  }, [score?.value]);
+
   if (!score) {
     return (
       <div className="today-score-strip today-score-strip--loading">
@@ -37,7 +50,7 @@ export function ScoreProgressStrip() {
   const ringColor = getScoreColor(score.value);
 
   return (
-    <div className="today-score-strip">
+    <div className={`today-score-strip${bumped ? " today-score-strip--bumped" : ""}`}>
       <div className="today-score-strip__ring-wrap">
         <MiniScoreRing value={score.value} color={ringColor} />
       </div>

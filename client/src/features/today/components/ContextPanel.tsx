@@ -1,4 +1,6 @@
+import { RoutinesHabits } from "./RoutinesHabits";
 import { HealthPulse } from "./HealthPulse";
+import { FinanceAdmin } from "./FinanceAdmin";
 import { TimeBlocks } from "./TimeBlocks";
 import { DayNotes } from "./DayNotes";
 import { GoalNudges } from "./GoalNudges";
@@ -31,7 +33,9 @@ export function ContextPanel({
 }) {
   return (
     <aside className="today-context-panel">
+      <RoutinesHabits />
       <HealthPulse currentDay={currentDay} />
+      <FinanceAdmin />
       <TimeBlocks tasks={timedTasks} />
       <DayNotes tasks={quickCaptureTasks} />
       <GoalNudges

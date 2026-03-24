@@ -1,8 +1,9 @@
-# Today Page — Redesign Analysis & Recommendations
+# Today Page — Redesign Analysis, Recommendations & Implementation Status
 
 **Date:** 2026-03-23  
-**Scope:** `client/src/features/today/TodayPage.tsx` (1,292 lines), associated CSS (~540 lines across styles.css), shared UI components  
-**Purpose:** Comprehensive UX/UI audit of the current Today page with detailed recommendations for a full redesign
+**Updated:** 2026-03-24  
+**Scope:** Original audit of `client/src/features/today/TodayPage.tsx` (1,292 lines) plus Phase 1 and Phase 2 implementation across `client/src/features/today/`, `client/src/features/today/today.css`, and shared UI/data hooks  
+**Purpose:** Comprehensive UX/UI audit of the Today page, with redesign recommendations and a record of what has now been implemented
 
 ---
 
@@ -12,20 +13,59 @@ The Today page is the most critical surface in Life OS — it's where the user *
 
 **Core verdict:** The page tries to be a *dashboard* instead of an *execution workspace*. It shows too many equal-weight sections with no clear flow, no progress feedback, and no urgency signaling. A user opening this page has to scan 7 sections to figure out what to do first.
 
+### Implementation update — 2026-03-24
+
+Phase 1 and the first Phase 2 follow-up have now been implemented and validated in-app.
+
+**Implemented in Phase 1**
+
+- `TodayPage.tsx` was decomposed from **1,292 lines to 93 lines**, with the page split into focused components, hooks, and helpers under `client/src/features/today/`
+- The rigid flat grid was replaced with a **Focus Zone + Context Panel** layout
+- A **Daily Score Progress Strip** was added at the top, powered by the real daily-score API and showing the five scoring buckets
+- The **Priority Stack** received hero treatment with visible point values and **debounced auto-save**
+- The **Task Lane** was refactored into a grouped **Task Queue** with completion counts and progress feedback
+- The old text-only health section was replaced by a **Health Pulse** with visual meters
+- **Day Notes**, **Time Blocks**, and **Goal Suggestions** were moved into a quieter context panel
+- The **Recovery Lane** was moved below the main workspace so overdue work no longer hijacks the top of the page
+
+**Implemented in Phase 2**
+
+- A dedicated **Routines & Habits** surface was added to the Context Panel with one-tap routine-item and habit check-ins
+- A compact **Finance & Admin** surface was added to the Context Panel showing expense logging status, overdue/upcoming bills, and monthly spend context
+- The **Daily Score Progress Strip** now animates when the score changes so completions feel visible and immediate
+- The Today page now has direct execution affordances for the **Routines/Habits** and **Finance/Admin** score buckets instead of only passive score-strip visibility
+
+**Still not implemented**
+
+- Dedicated **Review/Reset** execution surface
+- Collapsible recovery tray with batch actions
+- Keyboard shortcuts, time-aware day phasing, and richer mobile interaction patterns
+- Inline note capture, quick capture entry from Today, and richer review affordances
+
+**Validation**
+
+- `npm run typecheck` passes
+- `npm run build` passes
+- `npm test -w server` passes (`24` files, `138` tests)
+
 ### Key problems at a glance
 
-| Problem | Severity | Impact |
-|---------|----------|--------|
-| No daily score or progress feedback | Critical | User has no sense of "how am I doing today" |
-| All sections equal visual weight | Critical | Nothing pulls attention to what matters most |
-| 1,292-line monolith component | High | Unmaintainable, impossible to iterate on individual sections |
-| Recovery lane dominates when present | High | Overdue tasks hijack the entire page |
-| No routines/habits visibility | High | 25% of daily score invisible on execution page |
-| No time-awareness or day phasing | High | Page looks identical at 7am and 9pm |
-| Two-column grid wastes vertical space | Medium | Forces equal-height card pairs; mobile collapses poorly |
-| Health section is a dumb list of strings | Medium | No visual affordance, no interaction |
-| No keyboard shortcuts or quick actions | Medium | Every action requires menu navigation |
-| Goal nudges take full column for minor feature | Low | Disproportionate real estate for suggestive content |
+| Problem | Severity | Impact | Status |
+|---------|----------|--------|--------|
+| No daily score or progress feedback | Critical | User has no sense of "how am I doing today" | **Implemented** |
+| All sections equal visual weight | Critical | Nothing pulls attention to what matters most | **Largely improved** |
+| 1,292-line monolith component | High | Unmaintainable, impossible to iterate on individual sections | **Implemented** |
+| Recovery lane dominates when present | High | Overdue tasks hijack the entire page | **Improved, not complete** |
+| No routines/habits visibility | High | 25% of daily score invisible on execution page | **Implemented** |
+| No finance/admin visibility | High | 10% of daily score invisible on execution page | **Implemented** |
+| No time-awareness or day phasing | High | Page looks identical at 7am and 9pm | **Still missing** |
+| Two-column grid wastes vertical space | Medium | Forces equal-height card pairs; mobile collapses poorly | **Implemented** |
+| Health section is a dumb list of strings | Medium | No visual affordance, no interaction | **Implemented** |
+| No keyboard shortcuts or quick actions | Medium | Every action requires menu navigation | **Still missing** |
+| Score changes lack motion feedback | Medium | Completions do not feel rewarding or noticeable enough | **Implemented** |
+| Goal nudges take full column for minor feature | Low | Disproportionate real estate for suggestive content | **Improved** |
+
+The detailed sections below preserve the original audit of the pre-redesign page. Use the status callouts above and the implementation notes later in this document to understand what has now changed.
 
 ---
 
@@ -388,37 +428,37 @@ The current mobile layout simply stacks all sections vertically (960px breakpoin
 
 ### 4.1 Break Up the Monolith
 
-Split `TodayPage.tsx` (1,292 lines) into focused modules:
+This work is now complete. `TodayPage.tsx` has been split into focused modules:
 
 ```
 features/today/
-├── TodayPage.tsx               (~120 lines — layout orchestrator only)
+├── TodayPage.tsx               (93 lines — layout orchestrator only)
+├── today.css                   (co-located Today styles)
 ├── components/
-│   ├── ScoreProgressStrip.tsx   (~80 lines)
-│   ├── PriorityStack.tsx        (~200 lines)
-│   ├── PriorityCard.tsx         (~120 lines)
-│   ├── TaskQueue.tsx            (~150 lines)
-│   ├── TaskCard.tsx             (~100 lines)
-│   ├── RecoveryTray.tsx         (~150 lines)
-│   ├── RecoveryTaskCard.tsx     (~100 lines)
-│   ├── ContextPanel.tsx         (~80 lines — sub-layout)
-│   ├── DaySchedule.tsx          (~80 lines)
-│   ├── HealthPulse.tsx          (~100 lines)
-│   ├── DayNotes.tsx             (~80 lines)
-│   └── GoalPulse.tsx            (~60 lines)
+│   ├── ScoreProgressStrip.tsx
+│   ├── PriorityStack.tsx
+│   ├── PriorityCard.tsx
+│   ├── TaskQueue.tsx
+│   ├── TaskCard.tsx
+│   ├── RecoveryLane.tsx
+│   ├── RecoveryTaskCard.tsx
+│   ├── ContextPanel.tsx
+│   ├── TimeBlocks.tsx
+│   ├── HealthPulse.tsx
+│   ├── DayNotes.tsx
+│   └── GoalNudges.tsx
 ├── hooks/
-│   ├── useTodayData.ts          (consolidate all queries)
-│   ├── usePriorityDraft.ts      (priority editing state)
-│   ├── useTaskActions.ts        (mutations + reschedule state)
-│   └── useRecoveryTray.ts       (overdue query + UI state)
+│   ├── useTodayData.ts
+│   ├── usePriorityDraft.ts
+│   └── useTaskActions.ts
 └── helpers/
     ├── date-helpers.ts
-    └── score-helpers.ts
+    └── icons.tsx
 ```
 
 ### 4.2 Co-locate Styles
 
-Move Today page CSS from the global `styles.css` monolith to a co-located CSS module or scoped stylesheet:
+This work is also complete. Today-specific styling has been moved out of the global `styles.css` monolith into a co-located stylesheet:
 
 ```
 features/today/
@@ -429,59 +469,56 @@ Or use CSS modules for component-level scoping.
 
 ### 4.3 State Management Cleanup
 
-Current page has too many `useState` + `useMemo` + `useEffect` hooks in one scope. Extract:
+Most of this cleanup is now complete:
 
-- **`usePriorityDraft` hook:** Encapsulates draft state, dirty detection, save function, goal nudge integration
-- **`useTodayData` hook:** Combines `useDayPlanQuery`, `useHealthDataQuery`, `useGoalsListQuery` with derived computations
-- **`useTaskActions` hook:** Encapsulates task/carry mutations with reschedule date state
-- **`useRecoveryTray` hook:** Encapsulates overdue query, search params, selection state
+- **`usePriorityDraft` hook:** Implemented. Encapsulates priority draft state, auto-save scheduling, and goal nudge insertion.
+- **`useTodayData` hook:** Implemented. Consolidates Today queries and derived task grouping.
+- **`useTaskActions` hook:** Implemented. Encapsulates task status, carry-forward, and reschedule behavior.
+- **Recovery lane UI state:** Simplified and extracted into `RecoveryLane.tsx`, though it is not yet the fully planned tray-style implementation.
 
 ---
 
-## 5. Missing Features To Add
+## 5. Features Still Missing After Phase 2
 
-These features are specified in the PRD/scoring system but completely absent from the current Today page:
+These features are still absent or only partially represented after the Phase 2 rollout:
 
 | Feature | PRD Source | Score Impact | Priority |
 |---------|-----------|--------------|----------|
-| Daily score display | scoring-system.md | Shows 0–100 score | P0 |
-| Score bucket breakdown | scoring-system.md | Shows 5 bucket progress | P0 |
-| Routines/habits section | features-by-module.md | 25% of daily score | P0 |
-| Finance/admin snapshot | features-by-module.md | 10% of daily score | P1 |
 | "Tomorrow prepared" indicator | scoring-system.md | 4 points in Review bucket | P1 |
 | Quick capture from Today | features-by-module.md | Entry point on page | P1 |
 | Attention panel | features-by-module.md | What needs attention now | P1 |
 | Daily review trigger | scoring-system.md | 6 points in Review bucket | P2 |
-| Streak indicators | scoring-system.md | Habit/routine/strong-day | P2 |
+| Strong-day and review streak indicators | scoring-system.md | Habit/routine/strong-day | P2 |
 
 ---
 
 ## 6. Prioritized Implementation Plan
 
-### Phase 1 — Structural Overhaul (Highest Impact)
-1. Decompose monolith into separate components and hooks
-2. Replace flat two-column grid with Focus Zone + Context Panel layout
-3. Add Daily Score Progress Strip at the top
-4. Elevate Priority Stack to hero treatment with auto-save
-5. Refactor Task Lane into grouped Task Queue with completion counter
+### Phase 1 — Structural Overhaul (Implemented 2026-03-24)
+1. ✅ Decompose monolith into separate components and hooks
+2. ✅ Replace flat two-column grid with Focus Zone + Context Panel layout
+3. ✅ Add Daily Score Progress Strip at the top
+4. ✅ Elevate Priority Stack to hero treatment with auto-save
+5. ✅ Refactor Task Lane into grouped Task Queue with completion counter
+6. ✅ Replace text-only health summary with a visual Health Pulse
+7. ⚠️ Co-locate Today styling in `features/today/today.css` — done, but the stylesheet is still oversized and should be split further in a later cleanup pass
 
-### Phase 2 — Missing Score Visibility
-6. Add Routines/Habits section to Context Panel or Focus Zone
-7. Add Health Pulse with visual meters (replace text strings)
-8. Add Finance/Admin compact indicator
-9. Connect completion actions to score animation
+### Phase 2 — Missing Score Visibility (Implemented 2026-03-24)
+8. ✅ Add Routines/Habits section to Context Panel or Focus Zone
+9. ✅ Add Finance/Admin compact indicator
+10. ✅ Connect completion actions to score animation
 
 ### Phase 3 — Recovery & Interaction
-10. Move Recovery Lane to collapsible bottom tray with batch actions
-11. Add micro-interactions for task/priority completion
-12. Implement keyboard shortcuts
-13. Add time-aware day phasing
+11. Upgrade Recovery Lane into a collapsible bottom tray with batch actions
+12. Add micro-interactions for task/priority completion
+13. Implement keyboard shortcuts
+14. Add time-aware day phasing
 
 ### Phase 4 — Mobile & Polish
-14. Mobile tab-based layout
-15. Touch-optimized interactions (swipe, long-press)
-16. Goal nudge integration into Priority Stack (remove separate section)
-17. Inline day notes with capture input
+15. Mobile tab-based layout
+16. Touch-optimized interactions (swipe, long-press)
+17. Integrate goal nudges more tightly into Priority Stack
+18. Add inline day notes with capture input
 
 ---
 
@@ -489,13 +526,20 @@ These features are specified in the PRD/scoring system but completely absent fro
 
 The redesigned Today page should be validated against:
 
-1. **Time to first action:** User can start completing tasks within 3 seconds of page load (reduced from current ~8 seconds of scanning)
-2. **Score visibility:** User can see current daily score and breakdown without scrolling
-3. **Completion rate visibility:** User can see task/priority progress (X/Y done) at a glance
-4. **Mobile scroll depth:** Full page content accessible within 2 screen-heights on mobile (down from 4+)
-5. **Component size:** No single file exceeds 200 lines
-6. **Score coverage:** All 5 scoring buckets have some representation on the Today page
-7. **Interaction count:** Common actions (complete task, complete priority) require 1 tap, not 2+
+1. **Time to first action:** User can start completing tasks within 3 seconds of page load (reduced from current ~8 seconds of scanning)  
+   **Status:** Improved, but not yet formally measured
+2. **Score visibility:** User can see current daily score and breakdown without scrolling  
+   **Status:** Achieved
+3. **Completion rate visibility:** User can see task/priority progress (X/Y done) at a glance  
+   **Status:** Achieved
+4. **Mobile scroll depth:** Full page content accessible within 2 screen-heights on mobile (down from 4+)  
+   **Status:** Not yet validated
+5. **Component size:** No single file exceeds 200 lines  
+   **Status:** Achieved for the new TypeScript modules; **not yet achieved for `today.css`**
+6. **Score coverage:** All 5 scoring buckets have some representation on the Today page  
+   **Status:** Achieved; routines/habits and finance/admin now have dedicated Today-page execution surfaces, while review/reset remains score-strip-only
+7. **Interaction count:** Common actions (complete task, complete priority) require 1 tap, not 2+  
+   **Status:** Achieved
 
 ---
 
@@ -503,11 +547,23 @@ The redesigned Today page should be validated against:
 
 | File | Lines | Purpose |
 |------|-------|---------|
-| `client/src/features/today/TodayPage.tsx` | 1,292 | Monolith page component |
-| `client/src/styles.css` ~L4232–4765 | ~540 | Priority, task, recovery, nudge CSS |
+| `client/src/features/today/TodayPage.tsx` | 93 | Layout orchestrator only |
+| `client/src/features/today/today.css` | 1227 | Co-located Today page styling |
+| `client/src/features/today/components/ScoreProgressStrip.tsx` | 137 | Daily score strip + bucket progress + score-change animation |
+| `client/src/features/today/components/PriorityStack.tsx` | 105 | Hero priority stack wrapper |
+| `client/src/features/today/components/PriorityCard.tsx` | 163 | Sortable auto-save priority card |
+| `client/src/features/today/components/TaskQueue.tsx` | 99 | Grouped task queue + completion counter |
+| `client/src/features/today/components/TaskCard.tsx` | 137 | Task row with primary/secondary actions |
+| `client/src/features/today/components/ContextPanel.tsx` | 49 | Right-column context layout including routines/habits and finance/admin |
+| `client/src/features/today/components/RoutinesHabits.tsx` | 192 | Routine and habit execution surface with one-tap check-ins |
+| `client/src/features/today/components/FinanceAdmin.tsx` | 112 | Compact finance/admin status surface for expense logging and bills |
+| `client/src/features/today/components/HealthPulse.tsx` | 109 | Visual health meters |
+| `client/src/features/today/components/RecoveryLane.tsx` | 122 | Bottom-positioned recovery section |
+| `client/src/features/today/hooks/useTodayData.ts` | 122 | Consolidates Today queries and derived state |
+| `client/src/features/today/hooks/usePriorityDraft.ts` | 180 | Priority draft state + auto-save |
+| `client/src/features/today/hooks/useTaskActions.ts` | 64 | Shared task mutation helpers |
 | `client/src/shared/ui/SectionCard.tsx` | 23 | Generic section wrapper |
-| `client/src/shared/ui/PageHeader.tsx` | 17 | Page title/description |
 | `client/src/shared/ui/PageState.tsx` | 87 | Loading/error/empty states |
 | `client/src/shared/ui/RecurrenceBadge.tsx` | 65 | Recurrence indicator |
 | `client/src/features/goals/GoalDetailPanel.tsx` | ~600 | Exports HealthBadge, GoalProgressBar |
-| `client/src/shared/lib/api.ts` ~L1756–2171 | | Query/mutation hooks |
+| `client/src/shared/lib/api.ts` | | Query/mutation hooks including daily score, planning, health, and task actions |
