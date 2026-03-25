@@ -23,6 +23,10 @@ Run on the server from a privileged shell:
 ```bash
 cd /home/ubuntu/apps/life-os-prod
 
+# 0) Confirm backend and frontend production cookie names match before building
+grep '^CSRF_COOKIE_NAME=' server/.env.production
+cat client/.env.production
+
 # 1) Update source
 git pull
 
@@ -38,6 +42,9 @@ sudo rsync -a --delete client/dist/ /var/www/personal.daycommand.online/
 # 5) Restart API service so updated server code is loaded
 sudo systemctl restart life-os.service
 ```
+
+The production client build now reads `client/.env.production` via `vite build --mode production`.
+Keep `server/.env.production` `CSRF_COOKIE_NAME` and `client/.env.production` `VITE_CSRF_COOKIE_NAME` set to the same production value before every deploy.
 
 ## Optional but recommended verification
 
@@ -60,6 +67,7 @@ If only client files changed, you can skip `npm ci` and still run:
 
 ```bash
 cd /home/ubuntu/apps/life-os-prod
+cat client/.env.production
 npm run build:client
 sudo rsync -a --delete client/dist/ /var/www/personal.daycommand.online/
 ```
@@ -79,8 +87,10 @@ sudo systemctl restart life-os.service
 ## Notes
 
 - `npm run build` currently runs contracts + server + client build.
+- `npm run build:client` uses `vite build --mode production`, so the shipped bundle reads `client/.env.production`.
 - Nginx only proxies `/api/*` to the backend; everything else is static frontend files.
 - Keep `server/.env.production` in place as it contains `PORT=3104` and production DB/secret values.
+- Keep `client/.env.development` on the dev CSRF cookie and `client/.env.production` on the prod CSRF cookie; do not swap them.
 - If `life-os.service` fails with `Failed to load environment files` or `Failed to spawn 'start' task`, verify that `WorkingDirectory` and `EnvironmentFile` point to `/home/ubuntu/apps/life-os-prod/server` and `/home/ubuntu/apps/life-os-prod/server/.env.production`.
 
 ## Development service setup
@@ -112,3 +122,14 @@ sudo systemctl status life-os-dev.service --no-pager
 curl -fsS http://127.0.0.1:3105/healthz
 sudo journalctl -u life-os-dev.service -n 80 --no-pager
 ```
+
+If you point the local Vite frontend at the dev service backend, override the frontend cookie name to match `server/.env.production` before starting the client:
+
+```bash
+cd /home/ubuntu/Development/life-os
+VITE_API_PROXY_TARGET=http://127.0.0.1:3105 \
+VITE_CSRF_COOKIE_NAME=life_os_csrf_dev_service \
+npm run dev:client
+```
+
+The default local frontend env (`client/.env.development`) stays on `life_os_csrf_dev`, which is correct for the normal local backend on port `3004`.

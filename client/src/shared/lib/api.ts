@@ -1310,11 +1310,7 @@ type SectionError = {
 };
 
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? "").replace(/\/$/, "");
-const CSRF_COOKIE_NAMES = [
-  import.meta.env.VITE_CSRF_COOKIE_NAME,
-  "life_os_csrf_dev",
-  "life_os_csrf",
-].filter((value, index, values): value is string => Boolean(value) && values.indexOf(value) === index);
+const CSRF_COOKIE_NAME = (import.meta.env.VITE_CSRF_COOKIE_NAME ?? "").trim();
 const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 
 const queryKeys = {
@@ -1381,14 +1377,11 @@ function getCookie(name: string) {
 }
 
 function getCsrfToken() {
-  for (const cookieName of CSRF_COOKIE_NAMES) {
-    const token = getCookie(cookieName);
-    if (token) {
-      return token;
-    }
+  if (!CSRF_COOKIE_NAME) {
+    throw new Error("Missing VITE_CSRF_COOKIE_NAME in the frontend build configuration.");
   }
 
-  return null;
+  return getCookie(CSRF_COOKIE_NAME);
 }
 
 async function readErrorPayload(response: Response) {

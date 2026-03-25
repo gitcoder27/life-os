@@ -9,11 +9,15 @@ Run on the production server:
 ```bash
 cd /home/ubuntu/apps/life-os-prod
 git pull
+grep '^CSRF_COOKIE_NAME=' server/.env.production
+cat client/.env.production
 npm ci
 npm run build
 sudo rsync -a --delete client/dist/ /var/www/personal.daycommand.online/
 sudo systemctl restart life-os.service
 ```
+
+`client/.env.production` is now the source of truth for the frontend CSRF cookie name during production builds. It must match `server/.env.production`.
 
 ## Quick checks
 
@@ -35,6 +39,7 @@ Frontend only:
 
 ```bash
 cd /home/ubuntu/apps/life-os-prod
+cat client/.env.production
 npm run build:client
 sudo rsync -a --delete client/dist/ /var/www/personal.daycommand.online/
 ```

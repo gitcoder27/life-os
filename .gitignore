@@ -4,6 +4,8 @@ build
 .env
 .env.*
 !.env.example
+!client/.env.development
+!client/.env.production
 !server/.env.production.dev.example
 .DS_Store
 coverage
