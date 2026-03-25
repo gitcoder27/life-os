@@ -57,7 +57,16 @@ export function PlannerBlockForm({
   }
 
   return (
-    <form className="planner-form" onSubmit={handleSubmit}>
+    <form
+      className="planner-form"
+      onSubmit={handleSubmit}
+      onKeyDown={(event) => {
+        if (event.key === "Escape") {
+          event.preventDefault();
+          onCancel();
+        }
+      }}
+    >
       <div className="planner-form__title-label">New time block</div>
 
       <input

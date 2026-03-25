@@ -2,6 +2,10 @@ import { useEffect, useMemo, useState } from "react";
 import { formatTimeLabel, type DayPlannerBlockItem, type TaskItem } from "../../../shared/lib/api";
 import {
   addMinutes,
+  getDuplicateBlockWindow,
+  getPlannerBlockDate,
+  getPlannerBlockTimezoneOffset,
+  getSplitBlockTime,
   formatDurationMinutes,
   minutesToTimeString,
   toTimeInputValue,
@@ -113,6 +117,53 @@ export function DayPlanner({
     }
 
     actions.editBlock(block.id, { endsAt: validation.endsAt });
+  }
+
+  function handleDuplicateBlock(block: DayPlannerBlockItem) {
+    const duplicateWindow = getDuplicateBlockWindow({
+      block,
+      existingBlocks: orderedBlocks,
+    });
+
+    if (duplicateWindow) {
+      void actions.duplicateBlock({
+        title: block.title,
+        startsAt: `${getPlannerBlockDate(block)}T${duplicateWindow.startTime}:00${getPlannerBlockTimezoneOffset(block)}`,
+        endsAt: `${getPlannerBlockDate(block)}T${duplicateWindow.endTime}:00${getPlannerBlockTimezoneOffset(block)}`,
+      });
+      return;
+    }
+
+    if (formDraft) {
+      return;
+    }
+
+    const durationMinutes = Math.max(15, Math.round((new Date(block.endsAt).getTime() - new Date(block.startsAt).getTime()) / 60_000));
+    openBlockForm({
+      title: block.title ?? "",
+      startTime: toTimeInputValue(block.endsAt),
+      endTime: addMinutes(toTimeInputValue(block.endsAt), durationMinutes),
+    });
+  }
+
+  function handleSplitBlock(block: DayPlannerBlockItem) {
+    const splitTime = getSplitBlockTime(block);
+    if (!splitTime) {
+      return;
+    }
+
+    void actions.splitBlock(
+      block,
+      `${getPlannerBlockDate(block)}T${splitTime}:00${getPlannerBlockTimezoneOffset(block)}`,
+    );
+  }
+
+  function handleCarryPendingToNext(block: DayPlannerBlockItem, nextBlock: DayPlannerBlockItem | null) {
+    if (!nextBlock) {
+      return;
+    }
+
+    void actions.carryPendingTasksToBlock(block, nextBlock);
   }
 
   function handleSaveVisibleHours() {
@@ -300,7 +351,7 @@ export function DayPlanner({
                         direction,
                       )
                     }
-                    onAddTask={(taskId) => actions.assignTaskToBlock(segment.block!, taskId)}
+                    onAddTasks={(taskIds) => actions.assignTasksToBlock(segment.block!, taskIds)}
                     onMoveTaskToBlock={(taskId, targetBlock) =>
                       actions.moveTaskToBlock(targetBlock, taskId)
                     }
@@ -309,6 +360,14 @@ export function DayPlanner({
                     onRemoveTask={(taskId) => actions.removeTaskFromBlock(segment.block!.id, taskId)}
                     onReorderTasks={(taskIds) => actions.reorderTasksInBlock(segment.block!, taskIds)}
                     onNudgeDuration={(direction) => handleNudgeBlock(segment.block!, direction)}
+                    onDuplicateBlock={() => handleDuplicateBlock(segment.block!)}
+                    onSplitBlock={() => handleSplitBlock(segment.block!)}
+                    onCarryPendingToNext={() =>
+                      handleCarryPendingToNext(
+                        segment.block!,
+                        orderedBlocks[(blockIndexMap.get(segment.block!.id) ?? -1) + 1] ?? null,
+                      )
+                    }
                     timelineStatus={segment.status}
                     isUpNext={timeline.nextBlockId === segment.block!.id}
                     durationLabel={segment.durationLabel}
@@ -317,6 +376,8 @@ export function DayPlanner({
                     hourMarkers={segment.hourMarkers}
                     currentMarkerPercent={segment.currentMarkerPercent}
                     minHeight={segment.minHeight}
+                    nextBlock={orderedBlocks[(blockIndexMap.get(segment.block!.id) ?? -1) + 1] ?? null}
+                    canDuplicate={!formDraft}
                     isPending={actions.isPending}
                   />
                 ),
@@ -328,7 +389,9 @@ export function DayPlanner({
         <UnplannedTasks
           tasks={unplannedTasks}
           blocks={orderedBlocks}
+          isPending={actions.isPending}
           onQuickAssign={(taskId, block) => actions.assignTaskToBlock(block, taskId)}
+          onBulkAssign={(taskIds, block) => actions.assignTasksToBlock(block, taskIds)}
         />
       </div>
     </div>

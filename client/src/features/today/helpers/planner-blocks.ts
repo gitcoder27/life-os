@@ -8,6 +8,9 @@ export const QUICK_BLOCK_PRESETS = [
   { label: "Wind down", icon: "🌙", start: "20:00", end: "21:00" },
 ] as const;
 
+const PLANNER_QUICK_ACTION_INCREMENT_MINUTES = 15;
+const DAY_END_MINUTES = 23 * 60 + 59;
+
 export const toTimeInputValue = (isoDateTime: string): string => {
   try {
     const date = new Date(isoDateTime);
@@ -90,6 +93,75 @@ export const getNextAvailableTime = (blocks: DayPlannerBlockItem[]): string => {
   )[0];
 
   return latestBlock ? toTimeInputValue(latestBlock.endsAt) : "09:00";
+};
+
+export const getPlannerBlockDate = (block: DayPlannerBlockItem) => block.startsAt.slice(0, 10);
+
+export const getPlannerBlockTimezoneOffset = (block: DayPlannerBlockItem) =>
+  block.startsAt.slice(-6);
+
+export const getDuplicateBlockWindow = (input: {
+  block: DayPlannerBlockItem;
+  existingBlocks: DayPlannerBlockItem[];
+}) => {
+  const durationMinutes = getDurationMinutes(input.block.startsAt, input.block.endsAt);
+  if (durationMinutes <= 0) {
+    return null;
+  }
+
+  const blockId = input.block.id;
+  const candidateStartMinutes = timeStringToMinutes(toTimeInputValue(input.block.endsAt));
+  let nextStartMinutes = candidateStartMinutes;
+  const orderedBlocks = [...input.existingBlocks]
+    .filter((block) => block.id !== blockId)
+    .sort((left, right) => new Date(left.startsAt).getTime() - new Date(right.startsAt).getTime());
+
+  for (const block of orderedBlocks) {
+    const blockStartMinutes = timeStringToMinutes(toTimeInputValue(block.startsAt));
+    const blockEndMinutes = timeStringToMinutes(toTimeInputValue(block.endsAt));
+
+    if (blockEndMinutes <= nextStartMinutes) {
+      continue;
+    }
+
+    if (nextStartMinutes + durationMinutes <= blockStartMinutes) {
+      return {
+        startTime: minutesToTimeString(nextStartMinutes),
+        endTime: minutesToTimeString(nextStartMinutes + durationMinutes),
+      };
+    }
+
+    nextStartMinutes = blockEndMinutes;
+  }
+
+  if (nextStartMinutes + durationMinutes <= DAY_END_MINUTES) {
+    return {
+      startTime: minutesToTimeString(nextStartMinutes),
+      endTime: minutesToTimeString(nextStartMinutes + durationMinutes),
+    };
+  }
+
+  return null;
+};
+
+export const getSplitBlockTime = (block: DayPlannerBlockItem) => {
+  const startMinutes = timeStringToMinutes(toTimeInputValue(block.startsAt));
+  const endMinutes = timeStringToMinutes(toTimeInputValue(block.endsAt));
+  const durationMinutes = endMinutes - startMinutes;
+
+  if (durationMinutes < PLANNER_QUICK_ACTION_INCREMENT_MINUTES * 2) {
+    return null;
+  }
+
+  const roundedMidpoint =
+    Math.round(((startMinutes + endMinutes) / 2) / PLANNER_QUICK_ACTION_INCREMENT_MINUTES) *
+    PLANNER_QUICK_ACTION_INCREMENT_MINUTES;
+  const boundedMidpoint = Math.min(
+    Math.max(roundedMidpoint, startMinutes + PLANNER_QUICK_ACTION_INCREMENT_MINUTES),
+    endMinutes - PLANNER_QUICK_ACTION_INCREMENT_MINUTES,
+  );
+
+  return minutesToTimeString(boundedMidpoint);
 };
 
 export const validatePlannerBlockDraft = (input: {

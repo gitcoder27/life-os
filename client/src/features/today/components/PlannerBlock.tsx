@@ -1,8 +1,9 @@
-import { Fragment, useEffect, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import type { DayPlannerBlockItem, TaskItem } from "../../../shared/lib/api";
 import { formatTimeLabel } from "../../../shared/lib/api";
 import {
   addMinutes,
+  getSplitBlockTime,
   minutesToTimeString,
   toTimeInputValue,
   validatePlannerBlockDraft,
@@ -17,13 +18,16 @@ export function PlannerBlock({
   canMoveUp,
   canMoveDown,
   onMoveBlock,
-  onAddTask,
+  onAddTasks,
   onMoveTaskToBlock,
   onEditBlock,
   onDeleteBlock,
   onRemoveTask,
   onReorderTasks,
   onNudgeDuration,
+  onDuplicateBlock,
+  onSplitBlock,
+  onCarryPendingToNext,
   timelineStatus,
   isUpNext,
   durationLabel,
@@ -32,6 +36,8 @@ export function PlannerBlock({
   hourMarkers,
   currentMarkerPercent,
   minHeight,
+  nextBlock,
+  canDuplicate,
   isPending,
 }: {
   block: DayPlannerBlockItem;
@@ -41,13 +47,16 @@ export function PlannerBlock({
   canMoveUp: boolean;
   canMoveDown: boolean;
   onMoveBlock: (direction: -1 | 1) => void;
-  onAddTask: (taskId: string) => void;
+  onAddTasks: (taskIds: string[]) => Promise<void> | void;
   onMoveTaskToBlock: (taskId: string, targetBlock: DayPlannerBlockItem) => void;
   onEditBlock: (updates: { title?: string | null; startsAt?: string; endsAt?: string }) => void;
   onDeleteBlock: () => void;
   onRemoveTask: (taskId: string) => void;
   onReorderTasks: (taskIds: string[]) => void;
   onNudgeDuration: (direction: -1 | 1) => void;
+  onDuplicateBlock: () => void;
+  onSplitBlock: () => void;
+  onCarryPendingToNext: () => void;
   timelineStatus: "past" | "current" | "upcoming";
   isUpNext: boolean;
   durationLabel: string;
@@ -56,6 +65,8 @@ export function PlannerBlock({
   hourMarkers: number[];
   currentMarkerPercent: number | null;
   minHeight: number;
+  nextBlock: DayPlannerBlockItem | null;
+  canDuplicate: boolean;
   isPending: boolean;
 }) {
   const [editing, setEditing] = useState(false);
@@ -64,10 +75,18 @@ export function PlannerBlock({
   const [editEnd, setEditEnd] = useState(toTimeInputValue(block.endsAt));
   const [showAddTaskPicker, setShowAddTaskPicker] = useState(false);
   const [movingTaskId, setMovingTaskId] = useState<string | null>(null);
+  const [selectedTaskIds, setSelectedTaskIds] = useState<string[]>([]);
 
   const isEmpty = block.tasks.length === 0;
   const sortedTasks = [...block.tasks].sort((a, b) => a.sortOrder - b.sortOrder);
   const completedCount = sortedTasks.filter((bt) => bt.task.status === "completed").length;
+  const pendingCount = sortedTasks.filter((bt) => bt.task.status === "pending").length;
+  const canCarryPending = Boolean(nextBlock) && pendingCount > 0;
+  const canSplit = Boolean(getSplitBlockTime(block));
+  const quickBatchSizes = useMemo(() => {
+    const sizes = [Math.min(3, availableTasks.length), Math.min(5, availableTasks.length)];
+    return [...new Set(sizes)].filter((size) => size > 1);
+  }, [availableTasks.length]);
   const validation = validatePlannerBlockDraft({
     date: block.startsAt.slice(0, 10),
     startTime: editStart,
@@ -98,6 +117,12 @@ export function PlannerBlock({
     setEditStart(toTimeInputValue(block.startsAt));
     setEditEnd(toTimeInputValue(block.endsAt));
   }, [block.endsAt, block.startsAt, block.title]);
+
+  useEffect(() => {
+    setSelectedTaskIds((current) =>
+      current.filter((taskId) => availableTasks.some((task) => task.id === taskId)),
+    );
+  }, [availableTasks]);
 
   function handleSaveEdit() {
     if (validation.error) {
@@ -132,8 +157,36 @@ export function PlannerBlock({
     onReorderTasks(ids);
   }
 
+  function toggleSelectedTask(taskId: string) {
+    setSelectedTaskIds((current) =>
+      current.includes(taskId)
+        ? current.filter((id) => id !== taskId)
+        : [...current, taskId],
+    );
+  }
+
+  async function handleAddSelectedTasks(taskIds: string[]) {
+    if (taskIds.length === 0) {
+      return;
+    }
+
+    const orderedTaskIds = availableTasks
+      .filter((task) => taskIds.includes(task.id))
+      .map((task) => task.id);
+
+    await Promise.resolve(onAddTasks(orderedTaskIds));
+    setSelectedTaskIds([]);
+    setShowAddTaskPicker(false);
+  }
+
   const statusLabel =
-    timelineStatus === "current" ? "Now" : isUpNext ? "Up next" : timelineStatus === "past" ? "Past" : "Later";
+    timelineStatus === "current"
+      ? "Now"
+      : isUpNext
+        ? "Up next"
+        : timelineStatus === "past"
+          ? "Past"
+          : "Later";
 
   return (
     <div
@@ -174,7 +227,21 @@ export function PlannerBlock({
 
       <div className="planner-block__header">
         {editing ? (
-          <div className="planner-block__edit-form">
+          <div
+            className="planner-block__edit-form"
+            onKeyDown={(event) => {
+              if (event.key === "Escape") {
+                event.preventDefault();
+                handleCancelEdit();
+                return;
+              }
+
+              if (event.key === "Enter" && !event.shiftKey) {
+                event.preventDefault();
+                handleSaveEdit();
+              }
+            }}
+          >
             <input
               className="planner-block__edit-title"
               type="text"
@@ -244,6 +311,11 @@ export function PlannerBlock({
                 ) : (
                   <span className="planner-block__task-count">Open block</span>
                 )}
+                {canCarryPending && nextBlock ? (
+                  <span className="planner-block__task-count">
+                    Carry open into {nextBlock.title || formatTimeLabel(nextBlock.startsAt)}
+                  </span>
+                ) : null}
               </div>
             </div>
             <div className="planner-block__actions">
@@ -295,6 +367,33 @@ export function PlannerBlock({
                 + Task
               </button>
               <button
+                className="planner-block__action-btn planner-block__action-btn--text"
+                type="button"
+                onClick={onCarryPendingToNext}
+                disabled={!canCarryPending || isPending}
+                aria-label="Carry unfinished tasks into the next block"
+              >
+                Carry
+              </button>
+              <button
+                className="planner-block__action-btn planner-block__action-btn--text"
+                type="button"
+                onClick={onDuplicateBlock}
+                disabled={!canDuplicate || isPending}
+                aria-label="Duplicate block"
+              >
+                Duplicate
+              </button>
+              <button
+                className="planner-block__action-btn planner-block__action-btn--text"
+                type="button"
+                onClick={onSplitBlock}
+                disabled={!canSplit || isPending}
+                aria-label="Split block in two"
+              >
+                Split
+              </button>
+              <button
                 className="planner-block__action-btn"
                 type="button"
                 onClick={() => setEditing(true)}
@@ -319,35 +418,112 @@ export function PlannerBlock({
       </div>
 
       {showAddTaskPicker ? (
-        <div className="planner-block__picker">
+        <div
+          className="planner-block__picker"
+          onKeyDown={(event) => {
+            if (event.key === "Escape") {
+              event.preventDefault();
+              setShowAddTaskPicker(false);
+              setSelectedTaskIds([]);
+              return;
+            }
+
+            if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "a") {
+              event.preventDefault();
+              setSelectedTaskIds(availableTasks.map((task) => task.id));
+            }
+          }}
+        >
           <div className="planner-block__picker-header">
-            <span>Add tasks to this block</span>
+            <span>Plan several tasks into this block</span>
             <button
               className="button button--ghost button--small"
               type="button"
-              onClick={() => setShowAddTaskPicker(false)}
+              onClick={() => {
+                setShowAddTaskPicker(false);
+                setSelectedTaskIds([]);
+              }}
             >
               Close
             </button>
           </div>
           {availableTasks.length > 0 ? (
-            <div className="planner-block__picker-list">
-              {availableTasks.map((task) => (
+            <>
+              <div className="planner-block__picker-shortcuts">
+                {quickBatchSizes.map((size) => (
+                  <button
+                    key={size}
+                    className="planner-block__picker-shortcut"
+                    type="button"
+                    onClick={() => {
+                      void handleAddSelectedTasks(
+                        availableTasks.slice(0, size).map((task) => task.id),
+                      );
+                    }}
+                    disabled={isPending}
+                  >
+                    Next {size}
+                  </button>
+                ))}
                 <button
-                  key={task.id}
-                  className="planner-block__picker-item"
+                  className="planner-block__picker-shortcut"
                   type="button"
-                  onClick={() => {
-                    onAddTask(task.id);
-                    setShowAddTaskPicker(false);
-                  }}
+                  onClick={() => setSelectedTaskIds(availableTasks.map((task) => task.id))}
                   disabled={isPending}
                 >
-                  <span className="planner-block__picker-title">{task.title}</span>
-                  <span className="planner-block__picker-action">Add</span>
+                  Select all
                 </button>
-              ))}
-            </div>
+                {selectedTaskIds.length > 0 ? (
+                  <button
+                    className="planner-block__picker-shortcut"
+                    type="button"
+                    onClick={() => setSelectedTaskIds([])}
+                    disabled={isPending}
+                  >
+                    Clear
+                  </button>
+                ) : null}
+              </div>
+              <div className="planner-block__picker-list">
+                {availableTasks.map((task) => {
+                  const checked = selectedTaskIds.includes(task.id);
+                  return (
+                    <label
+                      key={task.id}
+                      className={`planner-block__picker-option${checked ? " planner-block__picker-option--checked" : ""}`}
+                    >
+                      <input
+                        className="planner-block__picker-checkbox"
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() => toggleSelectedTask(task.id)}
+                        disabled={isPending}
+                      />
+                      <span className="planner-block__picker-option-copy">
+                        <span className="planner-block__picker-title">{task.title}</span>
+                        {task.goal ? (
+                          <span className="planner-block__picker-goal">
+                            {task.goal.title}
+                          </span>
+                        ) : null}
+                      </span>
+                    </label>
+                  );
+                })}
+              </div>
+              <div className="planner-block__picker-actions">
+                <button
+                  className="button button--primary button--small"
+                  type="button"
+                  onClick={() => {
+                    void handleAddSelectedTasks(selectedTaskIds);
+                  }}
+                  disabled={isPending || selectedTaskIds.length === 0}
+                >
+                  Add selected
+                </button>
+              </div>
+            </>
           ) : (
             <div className="planner-block__picker-empty">
               All pending tasks are already planned.

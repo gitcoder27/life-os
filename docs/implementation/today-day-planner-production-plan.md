@@ -218,15 +218,19 @@ Definition of done for Phase 3:
 
 This phase should make the feature pleasant enough for everyday repeated use.
 
-- starter templates or suggested starter blocks
 - bulk assignment actions
+- block-level “assign next few tasks” shortcuts
 - quick duplicate and split block actions
-- faster block duration adjustment controls
-- keyboard-friendly interactions where practical
+- quick carry unfinished work into the next block
+- keyboard-friendly planning interactions inside Plan mode
+- tighter mobile layouts for the highest-frequency planner controls
+- keep starter-template expansion deferred until the speed layer is proven
 
 Definition of done for Phase 4:
 
-- planning ten tasks into a full day feels fast instead of tedious
+- a user can plan five to ten tasks into blocks in one pass without repeated picker churn
+- a user can duplicate, split, or carry open block work forward from the planner itself
+- Plan mode remains keyboard-friendly and mobile-usable without adding drag-and-drop
 
 ## Proposed Product Decisions To Confirm
 
@@ -237,8 +241,9 @@ The following decisions should be made explicitly before polishing the feature:
 - Phase 2 decision: mobile keeps the unplanned lane below the timeline instead of using a bottom sheet.
 - Phase 3 decision: Execute mode supports task-level move and assign actions in place, but block creation and block time edits stay in Plan mode.
 - Phase 3 decision: drift signals use both time passage and unfinished tasks instead of task completion alone.
-- Should the app suggest starter blocks based on existing timed tasks or common routines?
-- Should the planner support quick block templates in v1.1, or stay fully manual for now?
+- Phase 4 decision: bulk assignment stays inside the existing unplanned lane instead of introducing a separate planner inbox or modal.
+- Phase 4 decision: duplicate block copies structure and timing only, not tasks.
+- Phase 4 decision: carry-forward speed actions in the planner move pending work into the next block; carry-to-tomorrow remains the existing task-level path elsewhere in Today.
 
 ## Recommended Acceptance Criteria For "Production-Ready"
 

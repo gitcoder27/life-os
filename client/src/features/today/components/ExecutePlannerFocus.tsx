@@ -195,6 +195,8 @@ function CurrentBlockCard({
   plannerActions: PlannerActions;
   taskActions: TaskActions;
 }) {
+  const nextTarget = targets[0] ?? null;
+
   return (
     <section className="execute-focus__card execute-focus__card--current">
       <div className="execute-focus__card-head">
@@ -222,6 +224,19 @@ function CurrentBlockCard({
           tone={block.pendingCount === 0 ? "positive" : "default"}
         />
       </div>
+
+      {nextTarget && block.pendingCount > 0 ? (
+        <div className="execute-focus__quick-actions">
+          <button
+            className="button button--ghost button--small"
+            type="button"
+            onClick={() => plannerActions.carryPendingTasksToBlock(block.block, nextTarget)}
+            disabled={plannerActions.isPending}
+          >
+            Carry open to {nextTarget.title || formatTimeLabel(nextTarget.startsAt)}
+          </button>
+        </div>
+      ) : null}
 
       {block.pendingTasks.length > 0 ? (
         <div className="execute-focus__task-list">
@@ -256,6 +271,8 @@ function SlippedBlockCard({
   plannerActions: PlannerActions;
   taskActions: TaskActions;
 }) {
+  const nextTarget = targets[0] ?? null;
+
   return (
     <section className="execute-focus__card execute-focus__card--slipped">
       <div className="execute-focus__card-head">
@@ -272,6 +289,18 @@ function SlippedBlockCard({
       <div className="execute-focus__helper">
         {block.pendingCount} task{block.pendingCount === 1 ? "" : "s"} still open from this block.
       </div>
+      {nextTarget && block.pendingCount > 0 ? (
+        <div className="execute-focus__quick-actions">
+          <button
+            className="button button--ghost button--small"
+            type="button"
+            onClick={() => plannerActions.carryPendingTasksToBlock(block.block, nextTarget)}
+            disabled={plannerActions.isPending}
+          >
+            Carry open to {nextTarget.title || formatTimeLabel(nextTarget.startsAt)}
+          </button>
+        </div>
+      ) : null}
       <div className="execute-focus__task-list">
         {block.pendingTasks.map((task) => (
           <PlannedTaskRow

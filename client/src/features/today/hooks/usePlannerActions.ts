@@ -60,12 +60,40 @@ export function usePlannerActions(date: string) {
     reorderBlocks.mutate(blockIds);
   }
 
+  async function duplicateBlock(payload: {
+    title?: string | null;
+    startsAt: string;
+    endsAt: string;
+  }) {
+    await createBlock.mutateAsync(payload);
+  }
+
   function assignTaskToBlock(block: DayPlannerBlockItem, taskId: string) {
     const existingTaskIds = block.tasks.map((bt) => bt.taskId);
     if (existingTaskIds.includes(taskId)) return;
     replaceBlockTasks.mutate({
       blockId: block.id,
       taskIds: [...existingTaskIds, taskId],
+    });
+  }
+
+  async function assignTasksToBlock(block: DayPlannerBlockItem, taskIds: string[]) {
+    const existingTaskIds = block.tasks.map((bt) => bt.taskId);
+    const nextTaskIds = [...existingTaskIds];
+
+    for (const taskId of taskIds) {
+      if (!nextTaskIds.includes(taskId)) {
+        nextTaskIds.push(taskId);
+      }
+    }
+
+    if (nextTaskIds.length === existingTaskIds.length) {
+      return;
+    }
+
+    await replaceBlockTasks.mutateAsync({
+      blockId: block.id,
+      taskIds: nextTaskIds,
     });
   }
 
@@ -86,16 +114,71 @@ export function usePlannerActions(date: string) {
     });
   }
 
+  async function splitBlock(block: DayPlannerBlockItem, splitStartsAt: string) {
+    const originalEnd = block.endsAt;
+
+    await updateBlock.mutateAsync({
+      blockId: block.id,
+      endsAt: splitStartsAt,
+    });
+
+    try {
+      await createBlock.mutateAsync({
+        title: block.title,
+        startsAt: splitStartsAt,
+        endsAt: originalEnd,
+      });
+    } catch (error) {
+      await updateBlock.mutateAsync({
+        blockId: block.id,
+        endsAt: originalEnd,
+      });
+      throw error;
+    }
+  }
+
+  async function carryPendingTasksToBlock(
+    sourceBlock: DayPlannerBlockItem,
+    targetBlock: DayPlannerBlockItem,
+  ) {
+    const pendingTaskIds = sourceBlock.tasks
+      .filter((bt) => bt.task.status === "pending")
+      .sort((left, right) => left.sortOrder - right.sortOrder)
+      .map((bt) => bt.taskId);
+
+    if (pendingTaskIds.length === 0) {
+      return;
+    }
+
+    const targetTaskIds = targetBlock.tasks.map((bt) => bt.taskId);
+    const nextTaskIds = [...targetTaskIds];
+
+    for (const taskId of pendingTaskIds) {
+      if (!nextTaskIds.includes(taskId)) {
+        nextTaskIds.push(taskId);
+      }
+    }
+
+    await replaceBlockTasks.mutateAsync({
+      blockId: targetBlock.id,
+      taskIds: nextTaskIds,
+    });
+  }
+
   return {
     isPending,
     mutationError,
     addBlock,
+    duplicateBlock,
     editBlock,
     removeBlock,
     reorder,
     assignTaskToBlock,
+    assignTasksToBlock,
     removeTaskFromBlock,
     reorderTasksInBlock,
     moveTaskToBlock,
+    splitBlock,
+    carryPendingTasksToBlock,
   };
 }
