@@ -310,6 +310,7 @@ model PlanningCycle {
   updatedAt      DateTime            @updatedAt
   user           User                @relation(fields: [userId], references: [id], onDelete: Cascade)
   priorities     CyclePriority[]
+  plannerBlocks  DayPlannerBlock[]
   dailyReview    DailyReview?
   weeklyReview   WeeklyReview?
   monthlyReview  MonthlyReview?
@@ -335,6 +336,37 @@ model CyclePriority {
   @@unique([planningCycleId, slot])
 }
 
+model DayPlannerBlock {
+  id              String               @id @default(uuid())
+  planningCycleId String
+  title           String?
+  startsAt        DateTime
+  endsAt          DateTime
+  sortOrder       Int
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+  planningCycle   PlanningCycle        @relation(fields: [planningCycleId], references: [id], onDelete: Cascade)
+  taskLinks       DayPlannerBlockTask[]
+
+  @@unique([planningCycleId, sortOrder])
+  @@index([planningCycleId, startsAt, endsAt])
+}
+
+model DayPlannerBlockTask {
+  id        String          @id @default(uuid())
+  blockId    String
+  taskId     String          @unique
+  sortOrder Int
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
+  block     DayPlannerBlock @relation(fields: [blockId], references: [id], onDelete: Cascade)
+  task      Task            @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@unique([blockId, sortOrder])
+  @@unique([blockId, taskId])
+  @@index([taskId, blockId])
+}
+
 model Task {
   id                String         @id @default(uuid())
   userId            String
@@ -357,6 +389,7 @@ model Task {
   goal              Goal?          @relation(fields: [goalId], references: [id], onDelete: SetNull)
   carriedFromTask   Task?          @relation("TaskCarryForward", fields: [carriedFromTaskId], references: [id], onDelete: SetNull)
   carriedTasks      Task[]         @relation("TaskCarryForward")
+  plannerBlockTask  DayPlannerBlockTask?
   adminItems        AdminItem[]    @relation("AdminItemTask")
   recurrenceRule    RecurrenceRule? @relation(fields: [recurrenceRuleId], references: [id], onDelete: SetNull)
 

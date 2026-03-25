@@ -7,6 +7,7 @@ import {
   useHealthDataQuery,
   useTasksQuery,
   type TaskItem,
+  type DayPlannerBlockItem,
 } from "../../../shared/lib/api";
 import { isQuickCaptureReferenceTask } from "../../../shared/lib/quickCapture";
 import { getOffsetDate } from "../helpers/date-helpers";
@@ -29,6 +30,7 @@ export function useTodayData() {
   const priorities = dayPlanQuery.data?.priorities ?? [];
   const allTasks = dayPlanQuery.data?.tasks ?? [];
   const goalNudges = dayPlanQuery.data?.goalNudges ?? [];
+  const plannerBlocks = dayPlanQuery.data?.plannerBlocks ?? [];
   const overdueTasks = overdueTasksQuery.data?.tasks ?? [];
   const currentDay = healthQuery.data?.summary.currentDay;
   const score = scoreQuery.data;
@@ -51,6 +53,21 @@ export function useTodayData() {
   const timedTasks = useMemo(
     () => executionTasks.filter((t) => t.dueAt),
     [executionTasks],
+  );
+
+  const plannedTaskIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const block of plannerBlocks) {
+      for (const bt of block.tasks) {
+        ids.add(bt.taskId);
+      }
+    }
+    return ids;
+  }, [plannerBlocks]);
+
+  const unplannedTasks = useMemo(
+    () => executionTasks.filter((t) => t.status === "pending" && !plannedTaskIds.has(t.id)),
+    [executionTasks, plannedTaskIds],
   );
 
   const taskGroups = useMemo(() => groupTasks(executionTasks), [executionTasks]);
@@ -80,6 +97,9 @@ export function useTodayData() {
     quickCaptureTasks,
     timedTasks,
     goalNudges,
+    plannerBlocks,
+    plannedTaskIds,
+    unplannedTasks,
     overdueTasks,
     overdueTasksQuery,
     currentDay,

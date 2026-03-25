@@ -2322,6 +2322,12 @@ describe("module route smoke tests", () => {
         completedAt: new Date(),
       }),
     } as any;
+    prisma.dayPlannerBlock = {
+      findMany: vi.fn().mockResolvedValue([]),
+    } as any;
+    prisma.dayPlannerBlockTask = {
+      findUnique: vi.fn().mockResolvedValue(null),
+    } as any;
     prisma.task = {
       findMany: vi.fn().mockImplementation(async (args: any) => {
         if (args?.select?.createdAt) {
@@ -2656,6 +2662,7 @@ describe("module route smoke tests", () => {
         suggestedPriorityTitle: "Plan training block",
       }),
     );
+    expect(JSON.parse(planningDay.body).plannerBlocks).toEqual([]);
     expect(JSON.parse(taskTemplateApply.body)).toEqual(
       expect.objectContaining({
         taskTemplate: expect.objectContaining({

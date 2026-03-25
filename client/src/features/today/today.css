@@ -1190,6 +1190,928 @@
     linear-gradient(180deg, rgba(217,153,58,0.03), var(--panel));
 }
 
+/* ═══════════════════════════════════════════════════════
+   DAY PLANNER — Mode Toggle · Timeline · Blocks · Unplanned Lane
+   ═══════════════════════════════════════════════════════ */
+
+/* ── Top Bar ────────────────────────────────────────── */
+
+.today-top-bar {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.today-top-bar > .today-score-strip {
+  flex: 1;
+  min-width: 0;
+}
+
+/* ── Mode Toggle ────────────────────────────────────── */
+
+.mode-toggle {
+  display: flex;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--border-active);
+  background: var(--panel);
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.mode-toggle__btn {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.5rem 1rem;
+  font-size: var(--fs-small);
+  font-weight: 600;
+  color: var(--text-secondary);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  transition: all var(--dur-fast) var(--ease);
+  white-space: nowrap;
+}
+
+.mode-toggle__btn:hover {
+  color: var(--text);
+  background: rgba(255,255,255,0.04);
+}
+
+.mode-toggle__btn--active {
+  color: #0f0d08;
+  background: linear-gradient(135deg, var(--accent), #c4842f);
+  box-shadow: 0 1px 8px rgba(217,153,58,0.25);
+}
+
+.mode-toggle__btn--active:hover {
+  color: #0f0d08;
+  background: linear-gradient(135deg, var(--accent-bright), var(--accent));
+}
+
+.mode-toggle__icon {
+  font-size: 0.75rem;
+}
+
+.mode-toggle__badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.15rem;
+  height: 1.15rem;
+  padding: 0 0.3rem;
+  border-radius: var(--r-pill);
+  font-size: var(--fs-micro);
+  font-weight: 700;
+  background: rgba(0,0,0,0.2);
+  color: inherit;
+}
+
+/* ── Planner Layout ─────────────────────────────────── */
+
+.planner {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  animation: slideUp 0.35s var(--ease) both;
+}
+
+.planner__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.planner__title {
+  font-family: var(--font-display);
+  font-size: var(--fs-h2);
+  font-weight: 600;
+  color: var(--text);
+}
+
+.planner__error {
+  padding: 0.5rem 0.75rem;
+  border-radius: var(--r-xs);
+  background: rgba(201,85,76,0.1);
+  border: 1px solid rgba(201,85,76,0.2);
+  color: var(--negative);
+  font-size: var(--fs-small);
+}
+
+.planner__assign-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.6rem 1rem;
+  border-radius: var(--r-sm);
+  background: var(--accent-soft);
+  border: 1px solid rgba(217,153,58,0.2);
+  color: var(--accent-bright);
+  font-size: var(--fs-small);
+  font-weight: 600;
+  animation: slideUp 0.2s var(--ease) both;
+}
+
+.planner__body {
+  display: grid;
+  grid-template-columns: 1fr 320px;
+  gap: 1.25rem;
+  align-items: start;
+}
+
+.planner__timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.planner__empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 3rem 1.5rem;
+  border-radius: var(--r);
+  border: 2px dashed var(--border);
+  text-align: center;
+}
+
+.planner__empty-icon {
+  font-size: 2rem;
+  margin-bottom: 0.75rem;
+  opacity: 0.6;
+}
+
+.planner__empty-title {
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 0.25rem;
+}
+
+.planner__empty-desc {
+  font-size: var(--fs-small);
+  color: var(--text-secondary);
+}
+
+/* ── Planner Block Card ─────────────────────────────── */
+
+.planner-block {
+  border-radius: var(--r);
+  border: 1px solid var(--border);
+  background: linear-gradient(180deg, var(--panel-elevated), var(--panel));
+  overflow: hidden;
+  transition: border-color var(--dur-fast) var(--ease), box-shadow var(--dur-fast) var(--ease);
+}
+
+.planner-block:hover {
+  border-color: var(--border-active);
+}
+
+.planner-block--empty {
+  border-style: dashed;
+  opacity: 0.85;
+}
+
+.planner-block--assign-target {
+  cursor: pointer;
+  width: 100%;
+  text-align: left;
+  font-family: inherit;
+  padding: 1rem 1.25rem;
+  transition: all var(--dur-fast) var(--ease);
+}
+
+.planner-block--assign-target:hover {
+  border-color: var(--accent);
+  background:
+    radial-gradient(ellipse at 50% 50%, rgba(217,153,58,0.06), transparent 70%),
+    linear-gradient(180deg, var(--panel-elevated), var(--panel));
+  box-shadow: 0 0 20px rgba(217,153,58,0.08);
+}
+
+.planner-block__assign-hint {
+  font-size: var(--fs-micro);
+  color: var(--accent);
+  font-weight: 600;
+  margin-top: 0.35rem;
+}
+
+.planner-block__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  padding: 0.85rem 1rem;
+  gap: 0.75rem;
+}
+
+.planner-block__info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  min-width: 0;
+}
+
+.planner-block__time-badge {
+  font-size: var(--fs-micro);
+  font-weight: 700;
+  color: var(--accent);
+  letter-spacing: 0.02em;
+}
+
+.planner-block__title {
+  font-size: var(--fs-body);
+  font-weight: 600;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.planner-block__untitled {
+  color: var(--text-tertiary);
+  font-style: italic;
+}
+
+.planner-block__task-count {
+  font-size: var(--fs-micro);
+  color: var(--text-tertiary);
+}
+
+.planner-block__actions {
+  display: flex;
+  gap: 0.25rem;
+  flex-shrink: 0;
+}
+
+.planner-block__action-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: var(--r-xs);
+  border: none;
+  background: transparent;
+  color: var(--text-tertiary);
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: all var(--dur-fast) var(--ease);
+}
+
+.planner-block__action-btn:hover {
+  background: rgba(255,255,255,0.06);
+  color: var(--text);
+}
+
+.planner-block__action-btn--delete:hover {
+  background: rgba(201,85,76,0.12);
+  color: var(--negative);
+}
+
+/* ── Block Edit Form ────────────────────────────────── */
+
+.planner-block__edit-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  width: 100%;
+}
+
+.planner-block__edit-title {
+  width: 100%;
+  padding: 0.45rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: var(--r-xs);
+  background: rgba(255,255,255,0.03);
+  color: var(--text);
+  font-size: var(--fs-body);
+  font-family: var(--font-body);
+}
+
+.planner-block__edit-title:focus {
+  outline: none;
+  border-color: var(--border-focus);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.planner-block__edit-times {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.planner-block__edit-time {
+  padding: 0.4rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: var(--r-xs);
+  background: rgba(255,255,255,0.03);
+  color: var(--text);
+  font-size: var(--fs-small);
+  font-family: var(--font-body);
+}
+
+.planner-block__edit-time:focus {
+  outline: none;
+  border-color: var(--border-focus);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.planner-block__edit-sep {
+  color: var(--text-tertiary);
+  font-size: var(--fs-small);
+}
+
+.planner-block__edit-actions {
+  display: flex;
+  gap: 0.4rem;
+}
+
+/* ── Block Tasks ────────────────────────────────────── */
+
+.planner-block__tasks {
+  border-top: 1px solid var(--border);
+}
+
+.planner-block__task {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  font-size: var(--fs-small);
+  color: var(--text);
+  transition: background var(--dur-fast) var(--ease);
+}
+
+.planner-block__task:not(:last-child) {
+  border-bottom: 1px solid rgba(255,255,255,0.03);
+}
+
+.planner-block__task:hover {
+  background: rgba(255,255,255,0.02);
+}
+
+.planner-block__task--done {
+  opacity: 0.55;
+}
+
+.planner-block__task--done .planner-block__task-title {
+  text-decoration: line-through;
+}
+
+.planner-block__task-check {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1rem;
+  height: 1rem;
+  border-radius: 50%;
+  border: 1.5px solid var(--text-tertiary);
+  flex-shrink: 0;
+  color: var(--positive);
+  font-size: 0.6rem;
+}
+
+.planner-block__task--done .planner-block__task-check {
+  border-color: var(--positive);
+  background: rgba(93,184,106,0.1);
+}
+
+.planner-block__task-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.planner-block__task-actions {
+  display: flex;
+  gap: 0.15rem;
+  flex-shrink: 0;
+  opacity: 0;
+  transition: opacity var(--dur-fast) var(--ease);
+}
+
+.planner-block__task:hover .planner-block__task-actions {
+  opacity: 1;
+}
+
+.planner-block__task-move,
+.planner-block__task-remove {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.35rem;
+  height: 1.35rem;
+  border: none;
+  border-radius: var(--r-xs);
+  background: transparent;
+  color: var(--text-tertiary);
+  font-size: 0.7rem;
+  cursor: pointer;
+  transition: all var(--dur-fast) var(--ease);
+}
+
+.planner-block__task-move:hover {
+  background: rgba(255,255,255,0.08);
+  color: var(--text);
+}
+
+.planner-block__task-remove:hover {
+  background: rgba(201,85,76,0.12);
+  color: var(--negative);
+}
+
+.planner-block__empty-hint {
+  padding: 0.6rem 1rem;
+  font-size: var(--fs-micro);
+  color: var(--text-tertiary);
+  font-style: italic;
+  border-top: 1px solid var(--border);
+}
+
+/* ── Planner Block Form ─────────────────────────────── */
+
+.planner-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  padding: 1rem 1.15rem;
+  border-radius: var(--r);
+  border: 1px solid var(--accent);
+  background:
+    radial-gradient(ellipse at 30% 30%, rgba(217,153,58,0.05), transparent 60%),
+    linear-gradient(180deg, var(--panel-elevated), var(--panel));
+  box-shadow: 0 0 24px rgba(217,153,58,0.05);
+  animation: scaleIn 0.2s var(--ease) both;
+}
+
+.planner-form__title-label {
+  font-size: var(--fs-small);
+  font-weight: 700;
+  color: var(--accent);
+  letter-spacing: 0.02em;
+}
+
+.planner-form__input {
+  width: 100%;
+  padding: 0.55rem 0.7rem;
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  background: rgba(255,255,255,0.03);
+  color: var(--text);
+  font-size: var(--fs-body);
+  font-family: var(--font-body);
+}
+
+.planner-form__input:focus {
+  outline: none;
+  border-color: var(--border-focus);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+  background: rgba(255,255,255,0.05);
+}
+
+.planner-form__times {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.5rem;
+}
+
+.planner-form__time-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  flex: 1;
+}
+
+.planner-form__time-label {
+  font-size: var(--fs-micro);
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.planner-form__time-input {
+  padding: 0.5rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  background: rgba(255,255,255,0.03);
+  color: var(--text);
+  font-size: var(--fs-body);
+  font-family: var(--font-body);
+}
+
+.planner-form__time-input:focus {
+  outline: none;
+  border-color: var(--border-focus);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.planner-form__time-sep {
+  color: var(--text-tertiary);
+  font-size: var(--fs-body);
+  padding-bottom: 0.55rem;
+}
+
+.planner-form__error {
+  font-size: var(--fs-small);
+  color: var(--negative);
+}
+
+.planner-form__actions {
+  display: flex;
+  gap: 0.4rem;
+}
+
+.planner-form__presets {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+  padding-top: 0.25rem;
+  border-top: 1px solid var(--border);
+}
+
+.planner-form__presets-label {
+  font-size: var(--fs-micro);
+  color: var(--text-tertiary);
+  font-weight: 600;
+}
+
+.planner-form__preset {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.25rem 0.55rem;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: var(--fs-micro);
+  font-family: var(--font-body);
+  cursor: pointer;
+  transition: all var(--dur-fast) var(--ease);
+}
+
+.planner-form__preset:hover {
+  border-color: var(--border-active);
+  background: rgba(255,255,255,0.04);
+  color: var(--text);
+}
+
+/* ── Unplanned Tasks Lane ───────────────────────────── */
+
+.unplanned-lane {
+  position: sticky;
+  top: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.85rem 1rem;
+  border-radius: var(--r);
+  border: 1px solid var(--border);
+  background: linear-gradient(180deg, var(--panel-elevated), var(--panel));
+  max-height: calc(100vh - 10rem);
+  overflow-y: auto;
+}
+
+.unplanned-lane__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.unplanned-lane__title {
+  font-size: var(--fs-small);
+  font-weight: 650;
+  color: var(--text-secondary);
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.unplanned-lane__count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.3rem;
+  height: 1.3rem;
+  padding: 0 0.35rem;
+  border-radius: var(--r-pill);
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: var(--fs-micro);
+  font-weight: 700;
+}
+
+.unplanned-lane__list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.unplanned-lane__empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 1.5rem 0;
+  text-align: center;
+}
+
+.unplanned-lane__empty-icon {
+  font-size: 1.5rem;
+  color: var(--positive);
+  margin-bottom: 0.35rem;
+}
+
+.unplanned-lane__empty p {
+  font-size: var(--fs-small);
+  color: var(--text-tertiary);
+}
+
+/* ── Unplanned Task Row ─────────────────────────────── */
+
+.unplanned-task {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.45rem 0.5rem;
+  border-radius: var(--r-xs);
+  transition: background var(--dur-fast) var(--ease);
+}
+
+.unplanned-task:hover {
+  background: rgba(255,255,255,0.03);
+}
+
+.unplanned-task--selected {
+  background: var(--accent-soft);
+  border-radius: var(--r-xs);
+}
+
+.unplanned-task__info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+
+.unplanned-task__title {
+  font-size: var(--fs-small);
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.unplanned-task__goal {
+  font-size: var(--fs-micro);
+  color: var(--text-tertiary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.unplanned-task__actions {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.unplanned-task__assign-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  padding: 0.25rem 0.55rem;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--accent);
+  font-size: var(--fs-micro);
+  font-weight: 600;
+  font-family: var(--font-body);
+  cursor: pointer;
+  transition: all var(--dur-fast) var(--ease);
+  white-space: nowrap;
+}
+
+.unplanned-task__assign-btn:hover {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.unplanned-task__assign-btn--disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.unplanned-task__picker {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 4px);
+  z-index: 20;
+  min-width: 200px;
+  padding: 0.35rem;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--border-active);
+  background: var(--panel-elevated);
+  box-shadow: var(--shadow-md);
+  animation: scaleIn 0.15s var(--ease) both;
+}
+
+.unplanned-task__picker-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.45rem 0.55rem;
+  border-radius: var(--r-xs);
+  border: none;
+  background: transparent;
+  color: var(--text);
+  font-size: var(--fs-small);
+  font-family: var(--font-body);
+  cursor: pointer;
+  text-align: left;
+  transition: background var(--dur-fast) var(--ease);
+}
+
+.unplanned-task__picker-item:hover {
+  background: rgba(255,255,255,0.06);
+}
+
+.unplanned-task__picker-time {
+  font-size: var(--fs-micro);
+  font-weight: 700;
+  color: var(--accent);
+  flex-shrink: 0;
+  min-width: 3.5rem;
+}
+
+.unplanned-task__picker-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── Planner Summary (Context Panel) ────────────────── */
+
+.planner-summary {
+  padding: 0.85rem 1rem;
+  border-radius: var(--r);
+  border: 1px solid var(--border);
+  background: linear-gradient(180deg, var(--panel-elevated), var(--panel));
+}
+
+.planner-summary__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.5rem;
+}
+
+.planner-summary__edit-btn {
+  padding: 0.2rem 0.55rem;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--accent);
+  font-size: var(--fs-micro);
+  font-weight: 600;
+  font-family: var(--font-body);
+  cursor: pointer;
+  transition: all var(--dur-fast) var(--ease);
+}
+
+.planner-summary__edit-btn:hover {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.planner-summary__current {
+  padding: 0.6rem 0.75rem;
+  margin-bottom: 0.5rem;
+  border-radius: var(--r-sm);
+  background: var(--accent-soft);
+  border: 1px solid rgba(217,153,58,0.15);
+}
+
+.planner-summary__now-label {
+  font-size: var(--fs-micro);
+  font-weight: 700;
+  color: var(--accent);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 0.15rem;
+}
+
+.planner-summary__block-name {
+  font-size: var(--fs-body);
+  font-weight: 600;
+  color: var(--text);
+}
+
+.planner-summary__block-time {
+  font-size: var(--fs-micro);
+  color: var(--text-secondary);
+  margin-top: 0.1rem;
+}
+
+.planner-summary__block-tasks {
+  margin-top: 0.35rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.planner-summary__task {
+  font-size: var(--fs-micro);
+  color: var(--text-secondary);
+}
+
+.planner-summary__task--done {
+  text-decoration: line-through;
+  opacity: 0.6;
+}
+
+.planner-summary__next {
+  padding: 0.5rem 0.75rem;
+  margin-bottom: 0.5rem;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--border);
+}
+
+.planner-summary__next-label {
+  font-size: var(--fs-micro);
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.planner-summary__stats {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: var(--fs-micro);
+  color: var(--text-tertiary);
+  margin-bottom: 0.5rem;
+}
+
+.planner-summary__sep {
+  color: var(--text-tertiary);
+}
+
+.planner-summary__timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+
+.planner-summary__row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.25rem 0.4rem;
+  border-radius: var(--r-xs);
+  font-size: var(--fs-micro);
+}
+
+.planner-summary__row--current {
+  background: rgba(217,153,58,0.06);
+}
+
+.planner-summary__row-time {
+  font-weight: 700;
+  color: var(--accent);
+  flex-shrink: 0;
+  min-width: 3.5rem;
+}
+
+.planner-summary__row-title {
+  flex: 1;
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.planner-summary__row-progress {
+  font-weight: 600;
+  color: var(--text-tertiary);
+  flex-shrink: 0;
+}
+
+/* ── Planned time badge on task cards (execution mode) ─ */
+
+.today-task-card__planned-badge {
+  font-size: var(--fs-micro);
+  color: var(--accent);
+  font-weight: 600;
+  padding: 0.15rem 0.85rem 0;
+  letter-spacing: 0.01em;
+}
+
 /* ── Responsive ──────────────────────────────────────── */
 
 @media (max-width: 960px) {
@@ -1213,6 +2135,24 @@
     flex-basis: 100%;
     text-align: center;
   }
+
+  .planner__body {
+    grid-template-columns: 1fr;
+  }
+
+  .unplanned-lane {
+    position: static;
+    max-height: none;
+  }
+
+  .today-top-bar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .mode-toggle {
+    align-self: flex-start;
+  }
 }
 
 @media (max-width: 640px) {
@@ -1223,5 +2163,9 @@
 
   .today-score-strip__buckets {
     display: none;
+  }
+
+  .planner-block__task-actions {
+    opacity: 1;
   }
 }

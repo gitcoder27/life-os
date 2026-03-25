@@ -1,0 +1,563 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import Fastify from "fastify";
+
+import { registerPlanningRoutes } from "../../../src/modules/planning/routes.js";
+import { createMockPrisma } from "../../utils/mock-prisma.js";
+
+vi.mock("../../../src/lib/recurrence/tasks.js", () => ({
+  materializeRecurringTasksInRange: vi.fn().mockResolvedValue(undefined),
+  materializeNextRecurringTaskOccurrence: vi.fn().mockResolvedValue(null),
+  applyRecurringTaskCarryForward: vi.fn().mockResolvedValue(null),
+}));
+
+type TaskRecord = {
+  id: string;
+  userId: string;
+  title: string;
+  notes: string | null;
+  kind: "TASK";
+  reminderAt: Date | null;
+  reminderTriggeredAt: Date | null;
+  status: "PENDING";
+  scheduledForDate: Date | null;
+  dueAt: Date | null;
+  goalId: string | null;
+  goal: null;
+  originType: "MANUAL";
+  carriedFromTaskId: string | null;
+  recurrenceRuleId: string | null;
+  recurrenceRule: null;
+  completedAt: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+type PlannerBlockRecord = {
+  id: string;
+  planningCycleId: string;
+  title: string | null;
+  startsAt: Date;
+  endsAt: Date;
+  sortOrder: number;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+type PlannerLinkRecord = {
+  id: string;
+  blockId: string;
+  taskId: string;
+  sortOrder: number;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+const DAY_ISO = "2026-03-14";
+const DAY_START = new Date("2026-03-14T00:00:00.000Z");
+const TASK_ONE_ID = "11111111-1111-4111-8111-111111111111";
+const TASK_TWO_ID = "22222222-2222-4222-8222-222222222222";
+
+function buildTask(id: string, title: string): TaskRecord {
+  return {
+    id,
+    userId: "user-1",
+    title,
+    notes: null,
+    kind: "TASK",
+    reminderAt: null,
+    reminderTriggeredAt: null,
+    status: "PENDING",
+    scheduledForDate: DAY_START,
+    dueAt: null,
+    goalId: null,
+    goal: null,
+    originType: "MANUAL",
+    carriedFromTaskId: null,
+    recurrenceRuleId: null,
+    recurrenceRule: null,
+    completedAt: null,
+    createdAt: new Date("2026-03-14T08:00:00.000Z"),
+    updatedAt: new Date("2026-03-14T08:00:00.000Z"),
+  };
+}
+
+describe("day planner planning routes", () => {
+  let app: Awaited<ReturnType<typeof Fastify>> | undefined;
+  let prisma: Record<string, unknown>;
+  let tasksById: Map<string, TaskRecord>;
+  let plannerBlocks: PlannerBlockRecord[];
+  let plannerLinks: PlannerLinkRecord[];
+  let blockCounter: number;
+  let linkCounter: number;
+
+  const authenticatedUser = {
+    id: "user-1",
+    email: "owner@example.com",
+    displayName: "Owner",
+  };
+
+  function getHydratedTask(taskId: string) {
+    const task = tasksById.get(taskId);
+    if (!task) {
+      throw new Error(`Missing task ${taskId}`);
+    }
+
+    return { ...task };
+  }
+
+  function getHydratedBlock(blockId: string) {
+    const block = plannerBlocks.find((entry) => entry.id === blockId);
+    if (!block) {
+      return null;
+    }
+
+    const taskLinks = plannerLinks
+      .filter((entry) => entry.blockId === blockId)
+      .sort((left, right) => left.sortOrder - right.sortOrder)
+      .map((entry) => ({
+        ...entry,
+        task: getHydratedTask(entry.taskId),
+      }));
+
+    return {
+      ...block,
+      planningCycle: {
+        id: block.planningCycleId,
+        cycleStartDate: DAY_START,
+      },
+      taskLinks,
+    };
+  }
+
+  beforeEach(async () => {
+    if (app) {
+      await app.close();
+    }
+
+    vi.clearAllMocks();
+    prisma = createMockPrisma();
+    tasksById = new Map([
+      [TASK_ONE_ID, buildTask(TASK_ONE_ID, "Write report")],
+      [TASK_TWO_ID, buildTask(TASK_TWO_ID, "Prepare slides")],
+    ]);
+    plannerBlocks = [];
+    plannerLinks = [];
+    blockCounter = 1;
+    linkCounter = 1;
+
+    prisma.$transaction = vi.fn(async (callback: (tx: Record<string, unknown>) => Promise<unknown>) => {
+      return callback(prisma);
+    }) as any;
+    prisma.userPreference = {
+      findUnique: vi.fn().mockResolvedValue({ timezone: "UTC", weekStartsOn: 1 }),
+    } as any;
+    prisma.planningCycle = {
+      upsert: vi.fn().mockResolvedValue({
+        id: "cycle-1",
+        userId: "user-1",
+        cycleType: "DAY",
+        cycleStartDate: DAY_START,
+        cycleEndDate: DAY_START,
+        theme: null,
+        priorities: [],
+      }),
+    } as any;
+    prisma.goal = {
+      findMany: vi.fn().mockResolvedValue([]),
+    } as any;
+    prisma.cyclePriority = {
+      findMany: vi.fn().mockResolvedValue([]),
+    } as any;
+    prisma.habit = {
+      findMany: vi.fn().mockResolvedValue([]),
+    } as any;
+    prisma.task = {
+      findMany: vi.fn().mockImplementation(async (args: any) => {
+        const ids = args?.where?.id?.in as string[] | undefined;
+        const scheduledForDate = args?.where?.scheduledForDate as Date | undefined;
+        const selectedTasks = [...tasksById.values()].filter((task) => {
+          if (ids && !ids.includes(task.id)) {
+            return false;
+          }
+
+          if (scheduledForDate) {
+            return task.scheduledForDate?.getTime() === scheduledForDate.getTime();
+          }
+
+          return true;
+        });
+
+        if (args?.select) {
+          return selectedTasks.map((task) => ({
+            id: task.id,
+            kind: task.kind,
+            scheduledForDate: task.scheduledForDate,
+          }));
+        }
+
+        return selectedTasks.map((task) => ({ ...task }));
+      }),
+      updateMany: vi.fn().mockImplementation(async ({ where, data }: any) => {
+        const ids = (where?.id?.in ?? []) as string[];
+        ids.forEach((taskId) => {
+          const task = tasksById.get(taskId);
+          if (!task) {
+            return;
+          }
+
+          tasksById.set(taskId, {
+            ...task,
+            dueAt: data.dueAt ?? null,
+            updatedAt: new Date("2026-03-14T09:00:00.000Z"),
+          });
+        });
+
+        return { count: ids.length };
+      }),
+      update: vi.fn().mockImplementation(async ({ where, data }: any) => {
+        const task = tasksById.get(where.id);
+        if (!task) {
+          throw new Error("Task not found");
+        }
+
+        const updatedTask: TaskRecord = {
+          ...task,
+          dueAt: data.dueAt === undefined ? task.dueAt : data.dueAt,
+          updatedAt: new Date("2026-03-14T09:00:00.000Z"),
+        };
+        tasksById.set(task.id, updatedTask);
+        return { ...updatedTask };
+      }),
+    } as any;
+    prisma.dayPlannerBlock = {
+      count: vi.fn().mockImplementation(async () => plannerBlocks.length),
+      create: vi.fn().mockImplementation(async ({ data }: any) => {
+        const createdBlock: PlannerBlockRecord = {
+          id: `00000000-0000-4000-8000-${String(blockCounter++).padStart(12, "0")}`,
+          planningCycleId: data.planningCycleId,
+          title: data.title ?? null,
+          startsAt: data.startsAt,
+          endsAt: data.endsAt,
+          sortOrder: data.sortOrder,
+          createdAt: new Date("2026-03-14T08:30:00.000Z"),
+          updatedAt: new Date("2026-03-14T08:30:00.000Z"),
+        };
+        plannerBlocks.push(createdBlock);
+        return { ...createdBlock };
+      }),
+      findMany: vi.fn().mockImplementation(async (args: any) => {
+        const cycleId = args?.where?.planningCycleId as string | undefined;
+        let blocks = plannerBlocks
+          .filter((entry) => (cycleId ? entry.planningCycleId === cycleId : true))
+          .sort((left, right) => left.sortOrder - right.sortOrder);
+
+        if (args?.select) {
+          return blocks.map((entry) => ({ id: entry.id, sortOrder: entry.sortOrder }));
+        }
+
+        return blocks
+          .map((entry) => getHydratedBlock(entry.id))
+          .filter((entry): entry is NonNullable<typeof entry> => Boolean(entry));
+      }),
+      findFirst: vi.fn().mockImplementation(async ({ where }: any) => {
+        const block = plannerBlocks.find((entry) => {
+          if (typeof where?.id === "string" && entry.id !== where.id) {
+            return false;
+          }
+
+          if (where?.planningCycleId && entry.planningCycleId !== where.planningCycleId) {
+            return false;
+          }
+
+          if (where?.planningCycle?.userId && where.planningCycle.userId !== "user-1") {
+            return false;
+          }
+
+          if (where?.planningCycle?.cycleStartDate) {
+            return where.planningCycle.cycleStartDate.getTime() === DAY_START.getTime();
+          }
+
+          if (where?.startsAt?.lt && !(entry.startsAt < where.startsAt.lt)) {
+            return false;
+          }
+
+          if (where?.endsAt?.gt && !(entry.endsAt > where.endsAt.gt)) {
+            return false;
+          }
+
+          if (typeof where?.id === "object" && where.id?.not && entry.id === where.id.not) {
+            return false;
+          }
+
+          return true;
+        });
+
+        if (!block) {
+          return null;
+        }
+
+        if (where?.planningCycle) {
+          return getHydratedBlock(block.id);
+        }
+
+        return { id: block.id };
+      }),
+      findUniqueOrThrow: vi.fn().mockImplementation(async ({ where }: any) => {
+        const block = getHydratedBlock(where.id);
+        if (!block) {
+          throw new Error("Planner block not found");
+        }
+
+        return block;
+      }),
+      update: vi.fn().mockImplementation(async ({ where, data }: any) => {
+        const blockIndex = plannerBlocks.findIndex((entry) => entry.id === where.id);
+        if (blockIndex === -1) {
+          throw new Error("Planner block not found");
+        }
+
+        plannerBlocks[blockIndex] = {
+          ...plannerBlocks[blockIndex]!,
+          title: data.title === undefined ? plannerBlocks[blockIndex]!.title : data.title,
+          startsAt: data.startsAt ?? plannerBlocks[blockIndex]!.startsAt,
+          endsAt: data.endsAt ?? plannerBlocks[blockIndex]!.endsAt,
+          sortOrder: data.sortOrder ?? plannerBlocks[blockIndex]!.sortOrder,
+          updatedAt: new Date("2026-03-14T09:30:00.000Z"),
+        };
+
+        return getHydratedBlock(where.id);
+      }),
+      delete: vi.fn().mockImplementation(async ({ where }: any) => {
+        plannerBlocks = plannerBlocks.filter((entry) => entry.id !== where.id);
+        plannerLinks = plannerLinks.filter((entry) => entry.blockId !== where.id);
+        return { id: where.id };
+      }),
+    } as any;
+    prisma.dayPlannerBlockTask = {
+      findMany: vi.fn().mockImplementation(async ({ where }: any) => {
+        let links = plannerLinks;
+
+        if (where?.blockId) {
+          links = links.filter((entry) => entry.blockId === where.blockId);
+        }
+
+        if (where?.taskId?.in) {
+          links = links.filter((entry) => where.taskId.in.includes(entry.taskId));
+        }
+
+        return links
+          .sort((left, right) => left.sortOrder - right.sortOrder)
+          .map((entry) => ({ ...entry }));
+      }),
+      findUnique: vi.fn().mockImplementation(async ({ where }: any) => {
+        const link = plannerLinks.find((entry) => entry.taskId === where.taskId);
+        return link ? { ...link } : null;
+      }),
+      deleteMany: vi.fn().mockImplementation(async ({ where }: any) => {
+        const before = plannerLinks.length;
+        plannerLinks = plannerLinks.filter((entry) => {
+          const matchesBlock = where?.OR?.[0]?.blockId === entry.blockId;
+          const matchesTaskIds = where?.OR?.[1]?.taskId?.in?.includes(entry.taskId) ?? false;
+          return !(matchesBlock || matchesTaskIds);
+        });
+
+        return { count: before - plannerLinks.length };
+      }),
+      createMany: vi.fn().mockImplementation(async ({ data }: any) => {
+        data.forEach((entry: { blockId: string; taskId: string; sortOrder: number }) => {
+          plannerLinks.push({
+            id: `link-${linkCounter++}`,
+            blockId: entry.blockId,
+            taskId: entry.taskId,
+            sortOrder: entry.sortOrder,
+            createdAt: new Date("2026-03-14T08:45:00.000Z"),
+            updatedAt: new Date("2026-03-14T08:45:00.000Z"),
+          });
+        });
+
+        return { count: data.length };
+      }),
+      update: vi.fn().mockImplementation(async ({ where, data }: any) => {
+        const linkIndex = plannerLinks.findIndex((entry) => entry.id === where.id);
+        if (linkIndex === -1) {
+          throw new Error("Planner link not found");
+        }
+
+        plannerLinks[linkIndex] = {
+          ...plannerLinks[linkIndex]!,
+          sortOrder: data.sortOrder,
+          updatedAt: new Date("2026-03-14T09:30:00.000Z"),
+        };
+
+        return { ...plannerLinks[linkIndex]! };
+      }),
+      delete: vi.fn().mockImplementation(async ({ where }: any) => {
+        const linkIndex = plannerLinks.findIndex((entry) => entry.taskId === where.taskId);
+        if (linkIndex === -1) {
+          throw new Error("Planner link not found");
+        }
+
+        const [removedLink] = plannerLinks.splice(linkIndex, 1);
+        return removedLink;
+      }),
+    } as any;
+
+    app = Fastify({ logger: false });
+    app.decorate("prisma", prisma);
+    app.decorateRequest("auth", null);
+    app.addHook("onRequest", async (request) => {
+      request.auth = {
+        sessionToken: "session-token",
+        sessionId: "session-id",
+        userId: authenticatedUser.id,
+        user: authenticatedUser,
+      };
+    });
+
+    await app.register(registerPlanningRoutes, { prefix: "/api" });
+    await app.ready();
+  });
+
+  afterEach(async () => {
+    if (app) {
+      await app.close();
+    }
+  });
+
+  it("creates, updates, reorders, and clears day planner blocks while syncing task times", async () => {
+    const createBlock = await app!.inject({
+      method: "POST",
+      url: `/api/planning/days/${DAY_ISO}/planner-blocks`,
+      payload: {
+        title: "Deep work",
+        startsAt: "2026-03-14T09:00:00.000Z",
+        endsAt: "2026-03-14T10:30:00.000Z",
+        taskIds: [TASK_ONE_ID],
+      },
+    });
+
+    expect(createBlock.statusCode).toBe(201);
+    const createdBlock = JSON.parse(createBlock.body).plannerBlock;
+    expect(createdBlock).toEqual(
+      expect.objectContaining({
+        title: "Deep work",
+        tasks: [
+          expect.objectContaining({
+            taskId: TASK_ONE_ID,
+            task: expect.objectContaining({
+              id: TASK_ONE_ID,
+              dueAt: "2026-03-14T09:00:00.000Z",
+            }),
+          }),
+        ],
+      }),
+    );
+    expect(tasksById.get(TASK_ONE_ID)?.dueAt?.toISOString()).toBe("2026-03-14T09:00:00.000Z");
+
+    const updateBlock = await app!.inject({
+      method: "PATCH",
+      url: `/api/planning/days/${DAY_ISO}/planner-blocks/${createdBlock.id}`,
+      payload: {
+        title: "Focus session",
+        startsAt: "2026-03-14T11:00:00.000Z",
+        endsAt: "2026-03-14T12:00:00.000Z",
+      },
+    });
+
+    expect(updateBlock.statusCode).toBe(200);
+    expect(JSON.parse(updateBlock.body).plannerBlock).toEqual(
+      expect.objectContaining({
+        title: "Focus session",
+        startsAt: "2026-03-14T11:00:00.000Z",
+        endsAt: "2026-03-14T12:00:00.000Z",
+      }),
+    );
+    expect(tasksById.get(TASK_ONE_ID)?.dueAt?.toISOString()).toBe("2026-03-14T11:00:00.000Z");
+
+    const createSecondBlock = await app!.inject({
+      method: "POST",
+      url: `/api/planning/days/${DAY_ISO}/planner-blocks`,
+      payload: {
+        title: "Admin",
+        startsAt: "2026-03-14T13:00:00.000Z",
+        endsAt: "2026-03-14T13:30:00.000Z",
+      },
+    });
+
+    expect(createSecondBlock.statusCode).toBe(201);
+    const secondBlockId = JSON.parse(createSecondBlock.body).plannerBlock.id;
+
+    const reorderBlocks = await app!.inject({
+      method: "PUT",
+      url: `/api/planning/days/${DAY_ISO}/planner-blocks/order`,
+      payload: {
+        blockIds: [secondBlockId, createdBlock.id],
+      },
+    });
+
+    expect(reorderBlocks.statusCode).toBe(200);
+    expect(JSON.parse(reorderBlocks.body).plannerBlocks.map((block: { id: string }) => block.id)).toEqual([
+      secondBlockId,
+      createdBlock.id,
+    ]);
+
+    const replaceTasks = await app!.inject({
+      method: "PUT",
+      url: `/api/planning/days/${DAY_ISO}/planner-blocks/${createdBlock.id}/tasks`,
+      payload: {
+        taskIds: [TASK_TWO_ID],
+      },
+    });
+
+    expect(replaceTasks.statusCode).toBe(200);
+    expect(JSON.parse(replaceTasks.body).plannerBlock.tasks).toEqual([
+      expect.objectContaining({
+        taskId: TASK_TWO_ID,
+      }),
+    ]);
+    expect(tasksById.get(TASK_ONE_ID)?.dueAt).toBeNull();
+    expect(tasksById.get(TASK_TWO_ID)?.dueAt?.toISOString()).toBe("2026-03-14T11:00:00.000Z");
+
+    const removeTask = await app!.inject({
+      method: "DELETE",
+      url: `/api/planning/days/${DAY_ISO}/planner-blocks/${createdBlock.id}/tasks/${TASK_TWO_ID}`,
+    });
+
+    expect(removeTask.statusCode).toBe(200);
+    expect(JSON.parse(removeTask.body).plannerBlock.tasks).toEqual([]);
+    expect(tasksById.get(TASK_TWO_ID)?.dueAt).toBeNull();
+
+    const overlappingBlock = await app!.inject({
+      method: "POST",
+      url: `/api/planning/days/${DAY_ISO}/planner-blocks`,
+      payload: {
+        title: "Overlap",
+        startsAt: "2026-03-14T13:15:00.000Z",
+        endsAt: "2026-03-14T14:00:00.000Z",
+      },
+    });
+
+    expect(overlappingBlock.statusCode).toBe(400);
+
+    const deleteFirstBlock = await app!.inject({
+      method: "DELETE",
+      url: `/api/planning/days/${DAY_ISO}/planner-blocks/${createdBlock.id}`,
+    });
+
+    expect(deleteFirstBlock.statusCode).toBe(204);
+
+    const dayPlan = await app!.inject({
+      method: "GET",
+      url: `/api/planning/days/${DAY_ISO}`,
+    });
+
+    expect(dayPlan.statusCode).toBe(200);
+    expect(JSON.parse(dayPlan.body).plannerBlocks).toEqual([
+      expect.objectContaining({
+        id: secondBlockId,
+        title: "Admin",
+        tasks: [],
+      }),
+    ]);
+  });
+});

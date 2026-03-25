@@ -58,11 +58,29 @@ export interface GoalNudgeItem {
   suggestedPriorityTitle: string;
 }
 
+export interface DayPlannerBlockTaskItem {
+  taskId: EntityId;
+  sortOrder: number;
+  task: PlanningTaskItem;
+}
+
+export interface DayPlannerBlockItem {
+  id: EntityId;
+  title: string | null;
+  startsAt: string;
+  endsAt: string;
+  sortOrder: number;
+  tasks: DayPlannerBlockTaskItem[];
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface DayPlanResponse extends ApiMeta {
   date: IsoDateString;
   priorities: PlanningPriorityItem[];
   tasks: PlanningTaskItem[];
   goalNudges: GoalNudgeItem[];
+  plannerBlocks: DayPlannerBlockItem[];
 }
 
 export interface WeekPlanResponse extends ApiMeta {
@@ -95,6 +113,14 @@ export interface PlanningPriorityMutationResponse extends ApiMeta {
   priorities: PlanningPriorityItem[];
 }
 
+export interface DayPlannerBlockMutationResponse extends ApiMeta {
+  plannerBlock: DayPlannerBlockItem;
+}
+
+export interface DayPlannerBlocksMutationResponse extends ApiMeta {
+  plannerBlocks: DayPlannerBlockItem[];
+}
+
 export interface UpdatePriorityRequest {
   title?: string;
   status?: PriorityStatus;
@@ -102,6 +128,27 @@ export interface UpdatePriorityRequest {
 
 export interface PriorityMutationResponse extends ApiMeta {
   priority: PlanningPriorityItem;
+}
+
+export interface CreateDayPlannerBlockRequest {
+  title?: string | null;
+  startsAt: string;
+  endsAt: string;
+  taskIds?: EntityId[];
+}
+
+export interface UpdateDayPlannerBlockRequest {
+  title?: string | null;
+  startsAt?: string;
+  endsAt?: string;
+}
+
+export interface ReplaceDayPlannerBlockTasksRequest {
+  taskIds: EntityId[];
+}
+
+export interface ReorderDayPlannerBlocksRequest {
+  blockIds: EntityId[];
 }
 
 export interface MonthFocusMutationResponse extends ApiMeta {

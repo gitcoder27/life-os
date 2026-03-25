@@ -343,6 +343,23 @@ export type GoalNudgeItem = {
   suggestedPriorityTitle: string;
 };
 
+export type DayPlannerBlockTaskItem = {
+  taskId: string;
+  sortOrder: number;
+  task: TaskItem;
+};
+
+export type DayPlannerBlockItem = {
+  id: string;
+  title: string | null;
+  startsAt: string;
+  endsAt: string;
+  sortOrder: number;
+  tasks: DayPlannerBlockTaskItem[];
+  createdAt: string;
+  updatedAt: string;
+};
+
 type DayPlanResponse = {
   generatedAt: string;
   date: string;
@@ -357,6 +374,17 @@ type DayPlanResponse = {
   }>;
   tasks: TaskItem[];
   goalNudges: GoalNudgeItem[];
+  plannerBlocks: DayPlannerBlockItem[];
+};
+
+type DayPlannerBlockMutationResponse = {
+  generatedAt: string;
+  plannerBlock: DayPlannerBlockItem;
+};
+
+type DayPlannerBlocksMutationResponse = {
+  generatedAt: string;
+  plannerBlocks: DayPlannerBlockItem[];
 };
 
 export type DayPriorityInput = {
@@ -1447,6 +1475,10 @@ export async function apiRequest<TResponse>(
     throw new ApiClientError(response.status, payload);
   }
 
+  if (response.status === 204 || response.headers.get("content-length") === "0") {
+    return undefined as TResponse;
+  }
+
   return response.json() as Promise<TResponse>;
 }
 
@@ -2155,6 +2187,107 @@ export function useUpdateDayPrioritiesMutation(date: string) {
       successMessage: "Priorities updated.",
       errorMessage: "Priority update failed.",
     },
+    onSuccess: () => invalidateCoreData(queryClient, date),
+  });
+}
+
+/* ── Day Planner Block mutations ─────────────────────── */
+
+export function useCreatePlannerBlockMutation(date: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (payload: {
+      title?: string | null;
+      startsAt: string;
+      endsAt: string;
+      taskIds?: string[];
+    }) =>
+      apiRequest<DayPlannerBlockMutationResponse>(
+        `/api/planning/days/${date}/planner-blocks`,
+        { method: "POST", body: payload },
+      ),
+    meta: { errorMessage: "Block creation failed." },
+    onSuccess: () => invalidateCoreData(queryClient, date),
+  });
+}
+
+export function useUpdatePlannerBlockMutation(date: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      blockId,
+      title,
+      startsAt,
+      endsAt,
+    }: {
+      blockId: string;
+      title?: string | null;
+      startsAt?: string;
+      endsAt?: string;
+    }) =>
+      apiRequest<DayPlannerBlockMutationResponse>(
+        `/api/planning/days/${date}/planner-blocks/${blockId}`,
+        { method: "PATCH", body: { title, startsAt, endsAt } },
+      ),
+    meta: { errorMessage: "Block update failed." },
+    onSuccess: () => invalidateCoreData(queryClient, date),
+  });
+}
+
+export function useDeletePlannerBlockMutation(date: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (blockId: string) =>
+      apiRequest<void>(
+        `/api/planning/days/${date}/planner-blocks/${blockId}`,
+        { method: "DELETE" },
+      ),
+    meta: { errorMessage: "Block deletion failed." },
+    onSuccess: () => invalidateCoreData(queryClient, date),
+  });
+}
+
+export function useReorderPlannerBlocksMutation(date: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (blockIds: string[]) =>
+      apiRequest<DayPlannerBlocksMutationResponse>(
+        `/api/planning/days/${date}/planner-blocks/order`,
+        { method: "PUT", body: { blockIds } },
+      ),
+    meta: { errorMessage: "Block reorder failed." },
+    onSuccess: () => invalidateCoreData(queryClient, date),
+  });
+}
+
+export function useReplacePlannerBlockTasksMutation(date: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ blockId, taskIds }: { blockId: string; taskIds: string[] }) =>
+      apiRequest<DayPlannerBlockMutationResponse>(
+        `/api/planning/days/${date}/planner-blocks/${blockId}/tasks`,
+        { method: "PUT", body: { taskIds } },
+      ),
+    meta: { errorMessage: "Task assignment failed." },
+    onSuccess: () => invalidateCoreData(queryClient, date),
+  });
+}
+
+export function useRemovePlannerBlockTaskMutation(date: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ blockId, taskId }: { blockId: string; taskId: string }) =>
+      apiRequest<DayPlannerBlockMutationResponse>(
+        `/api/planning/days/${date}/planner-blocks/${blockId}/tasks/${taskId}`,
+        { method: "DELETE" },
+      ),
+    meta: { errorMessage: "Task removal failed." },
     onSuccess: () => invalidateCoreData(queryClient, date),
   });
 }

@@ -1,10 +1,11 @@
 import { RoutinesHabits } from "./RoutinesHabits";
 import { HealthPulse } from "./HealthPulse";
 import { FinanceAdmin } from "./FinanceAdmin";
+import { PlannerSummary } from "./PlannerSummary";
 import { TimeBlocks } from "./TimeBlocks";
 import { DayNotes } from "./DayNotes";
 import { GoalNudges } from "./GoalNudges";
-import type { TaskItem, GoalNudgeItem } from "../../../shared/lib/api";
+import type { TaskItem, GoalNudgeItem, DayPlannerBlockItem } from "../../../shared/lib/api";
 import type { EditablePriority } from "../hooks/usePriorityDraft";
 
 type HealthDay = {
@@ -22,6 +23,8 @@ export function ContextPanel({
   priorityDraft,
   canAddGoalNudge,
   onAddGoalNudge,
+  plannerBlocks,
+  onSwitchToPlanner,
 }: {
   currentDay: HealthDay | undefined;
   timedTasks: TaskItem[];
@@ -30,13 +33,19 @@ export function ContextPanel({
   priorityDraft: EditablePriority[];
   canAddGoalNudge: boolean;
   onAddGoalNudge: (nudge: GoalNudgeItem) => void;
+  plannerBlocks: DayPlannerBlockItem[];
+  onSwitchToPlanner: () => void;
 }) {
   return (
     <aside className="today-context-panel">
       <RoutinesHabits />
       <HealthPulse currentDay={currentDay} />
       <FinanceAdmin />
-      <TimeBlocks tasks={timedTasks} />
+      {plannerBlocks.length > 0 ? (
+        <PlannerSummary blocks={plannerBlocks} onSwitchToPlanner={onSwitchToPlanner} />
+      ) : (
+        <TimeBlocks tasks={timedTasks} />
+      )}
       <DayNotes tasks={quickCaptureTasks} />
       <GoalNudges
         nudges={goalNudges}

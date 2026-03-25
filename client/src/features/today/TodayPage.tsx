@@ -1,4 +1,5 @@
 import "./today.css";
+import { useState } from "react";
 import {
   InlineErrorState,
   PageErrorState,
@@ -9,18 +10,23 @@ import { PriorityStack } from "./components/PriorityStack";
 import { TaskQueue } from "./components/TaskQueue";
 import { ContextPanel } from "./components/ContextPanel";
 import { RecoveryLane } from "./components/RecoveryLane";
+import { ModeToggle } from "./components/ModeToggle";
+import { DayPlanner } from "./components/DayPlanner";
 import { useTodayData } from "./hooks/useTodayData";
 import { usePriorityDraft } from "./hooks/usePriorityDraft";
 import { useTaskActions } from "./hooks/useTaskActions";
+import { usePlannerActions } from "./hooks/usePlannerActions";
 
 export function TodayPage() {
   const data = useTodayData();
+  const [mode, setMode] = useState<"execute" | "plan">("execute");
   const priorityDraft = usePriorityDraft(
     data.today,
     data.priorities,
     Boolean(data.dayPlanQuery.data),
   );
   const taskActions = useTaskActions(data.today);
+  const plannerActions = usePlannerActions(data.today);
 
   if (data.isLoading) {
     return (
@@ -41,9 +47,14 @@ export function TodayPage() {
     );
   }
 
-  const allErrors = [priorityDraft.mutationError, taskActions.mutationError]
-    .filter((e): e is Error => e instanceof Error)
-    .map((e) => e.message)
+  const allErrors = [
+    priorityDraft.mutationError instanceof Error
+      ? priorityDraft.mutationError.message
+      : null,
+    taskActions.mutationError,
+    plannerActions.mutationError,
+  ]
+    .filter((e): e is string => typeof e === "string" && e.length > 0)
     .join("; ");
 
   const canAddGoalNudge =
@@ -51,43 +62,66 @@ export function TodayPage() {
 
   return (
     <div className="today-layout">
-      <ScoreProgressStrip />
+      <div className="today-top-bar">
+        <ScoreProgressStrip />
+        <ModeToggle
+          mode={mode}
+          onModeChange={setMode}
+          plannerBlockCount={data.plannerBlocks.length}
+        />
+      </div>
 
       {allErrors ? (
         <InlineErrorState message={allErrors} onRetry={data.refetchAll} />
       ) : null}
 
-      <div className="today-columns">
-        <div className="today-focus-zone">
-          <PriorityStack
-            priorityDraft={priorityDraft}
-            activeGoals={data.activeGoals}
-          />
+      {mode === "execute" ? (
+        <>
+          <div className="today-columns">
+            <div className="today-focus-zone">
+              <PriorityStack
+                priorityDraft={priorityDraft}
+                activeGoals={data.activeGoals}
+              />
 
-          <TaskQueue
-            taskGroups={data.taskGroups}
-            completedCount={data.completedTaskCount}
-            totalCount={data.totalTaskCount}
+              <TaskQueue
+                taskGroups={data.taskGroups}
+                completedCount={data.completedTaskCount}
+                totalCount={data.totalTaskCount}
+                taskActions={taskActions}
+                plannerBlocks={data.plannerBlocks}
+                plannedTaskIds={data.plannedTaskIds}
+              />
+            </div>
+
+            <ContextPanel
+              currentDay={data.currentDay}
+              timedTasks={data.timedTasks}
+              quickCaptureTasks={data.quickCaptureTasks}
+              goalNudges={data.goalNudges}
+              priorityDraft={priorityDraft.draft}
+              canAddGoalNudge={canAddGoalNudge}
+              onAddGoalNudge={priorityDraft.addGoalNudge}
+              plannerBlocks={data.plannerBlocks}
+              onSwitchToPlanner={() => setMode("plan")}
+            />
+          </div>
+
+          <RecoveryLane
+            overdueTasks={data.overdueTasks}
+            overdueTasksQuery={data.overdueTasksQuery}
             taskActions={taskActions}
           />
-        </div>
-
-        <ContextPanel
-          currentDay={data.currentDay}
-          timedTasks={data.timedTasks}
-          quickCaptureTasks={data.quickCaptureTasks}
-          goalNudges={data.goalNudges}
-          priorityDraft={priorityDraft.draft}
-          canAddGoalNudge={canAddGoalNudge}
-          onAddGoalNudge={priorityDraft.addGoalNudge}
+        </>
+      ) : (
+        <DayPlanner
+          date={data.today}
+          blocks={data.plannerBlocks}
+          unplannedTasks={data.unplannedTasks}
+          plannedTaskIds={data.plannedTaskIds}
+          actions={plannerActions}
         />
-      </div>
-
-      <RecoveryLane
-        overdueTasks={data.overdueTasks}
-        overdueTasksQuery={data.overdueTasksQuery}
-        taskActions={taskActions}
-      />
+      )}
     </div>
   );
 }

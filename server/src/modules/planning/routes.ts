@@ -3,9 +3,13 @@ import type {
   ApplyTaskTemplateResponse,
   BulkTaskMutationResponse,
   BulkUpdateTasksRequest,
+  CreateDayPlannerBlockRequest,
   CreateGoalRequest,
   CreateTaskRequest,
   CreateTaskTemplateRequest,
+  DayPlannerBlockItem,
+  DayPlannerBlockMutationResponse,
+  DayPlannerBlocksMutationResponse,
   DayPlanResponse,
   GoalDomain,
   GoalDetailResponse,
@@ -29,6 +33,8 @@ import type {
   PlanningPriorityMutationResponse,
   PriorityMutationResponse,
   PlanningTaskItem,
+  ReorderDayPlannerBlocksRequest,
+  ReplaceDayPlannerBlockTasksRequest,
   TaskKind,
   TasksResponse,
   TaskMutationResponse,
@@ -36,6 +42,7 @@ import type {
   TaskTemplateMutationResponse,
   TaskTemplatesResponse,
   UpdateDayPrioritiesRequest,
+  UpdateDayPlannerBlockRequest,
   UpdateGoalRequest,
   UpdateMonthFocusRequest,
   UpdatePriorityRequest,
@@ -205,6 +212,49 @@ const updatePrioritySchema = z
     status: priorityStatusSchema.optional(),
   })
   .refine((value) => Object.keys(value).length > 0, "At least one field must be updated");
+
+const plannerBlockTaskIdsSchema = z
+  .array(z.string().uuid())
+  .max(50)
+  .superRefine((taskIds, context) => {
+    const seen = new Set<string>();
+
+    taskIds.forEach((taskId, index) => {
+      if (seen.has(taskId)) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: [index],
+          message: "Task ids must be unique",
+        });
+        return;
+      }
+
+      seen.add(taskId);
+    });
+  });
+
+const createDayPlannerBlockSchema = z.object({
+  title: z.string().trim().max(120).nullable().optional(),
+  startsAt: isoDateTimeSchema,
+  endsAt: isoDateTimeSchema,
+  taskIds: plannerBlockTaskIdsSchema.optional(),
+});
+
+const updateDayPlannerBlockSchema = z
+  .object({
+    title: z.string().trim().max(120).nullable().optional(),
+    startsAt: isoDateTimeSchema.optional(),
+    endsAt: isoDateTimeSchema.optional(),
+  })
+  .refine((value) => Object.keys(value).length > 0, "At least one field must be updated");
+
+const replaceDayPlannerBlockTasksSchema = z.object({
+  taskIds: plannerBlockTaskIdsSchema,
+});
+
+const reorderDayPlannerBlocksSchema = z.object({
+  blockIds: plannerBlockTaskIdsSchema,
+});
 
 const createTaskSchema = z.object({
   title: z.string().min(1).max(200),
@@ -524,6 +574,11 @@ function normalizeTaskTemplateDescription(value: string | null | undefined) {
   return trimmed ? trimmed : null;
 }
 
+function normalizePlannerBlockTitle(value: string | null | undefined) {
+  const trimmed = value?.trim() ?? "";
+  return trimmed ? trimmed : null;
+}
+
 function isIsoDateInput(value: string): value is IsoDateString {
   return /^\d{4}-\d{2}-\d{2}$/.test(value);
 }
@@ -734,6 +789,46 @@ function serializeTask(task: Task & {
   };
 }
 
+function serializeDayPlannerBlock(
+  block: {
+    id: string;
+    title: string | null;
+    startsAt: Date;
+    endsAt: Date;
+    sortOrder: number;
+    createdAt: Date;
+    updatedAt: Date;
+    taskLinks: Array<{
+      taskId: string;
+      sortOrder: number;
+      task: Task & {
+        goal?: {
+          id: string;
+          title: string;
+          domain: PrismaGoalDomain;
+          status: PrismaGoalStatus;
+        } | null;
+        recurrenceRule?: Parameters<typeof serializeRecurrenceDefinition>[0];
+      };
+    }>;
+  },
+): DayPlannerBlockItem {
+  return {
+    id: block.id,
+    title: block.title,
+    startsAt: block.startsAt.toISOString(),
+    endsAt: block.endsAt.toISOString(),
+    sortOrder: block.sortOrder,
+    tasks: block.taskLinks.map((link) => ({
+      taskId: link.taskId,
+      sortOrder: link.sortOrder,
+      task: serializeTask(link.task),
+    })),
+    createdAt: block.createdAt.toISOString(),
+    updatedAt: block.updatedAt.toISOString(),
+  };
+}
+
 function serializeGoalMilestone(milestone: GoalMilestone): GoalMilestoneItem {
   return {
     id: milestone.id,
@@ -746,6 +841,44 @@ function serializeGoalMilestone(milestone: GoalMilestone): GoalMilestoneItem {
     createdAt: milestone.createdAt.toISOString(),
     updatedAt: milestone.updatedAt.toISOString(),
   };
+}
+
+function validatePlannerBlockWindow(
+  date: IsoDateString,
+  timezone: string | null | undefined,
+  startsAtInput: string,
+  endsAtInput: string,
+) {
+  const startsAt = new Date(startsAtInput);
+  const endsAt = new Date(endsAtInput);
+
+  if (Number.isNaN(startsAt.getTime()) || Number.isNaN(endsAt.getTime())) {
+    throw new AppError({
+      statusCode: 400,
+      code: "BAD_REQUEST",
+      message: "Planner block times must be valid datetimes",
+    });
+  }
+
+  if (startsAt >= endsAt) {
+    throw new AppError({
+      statusCode: 400,
+      code: "BAD_REQUEST",
+      message: "Planner block end time must be after start time",
+    });
+  }
+
+  const startsAtDay = getUserLocalDate(startsAt, timezone);
+  const endsAtDay = getUserLocalDate(endsAt, timezone);
+  if (startsAtDay !== date || endsAtDay !== date) {
+    throw new AppError({
+      statusCode: 400,
+      code: "BAD_REQUEST",
+      message: "Planner block times must stay within the requested day",
+    });
+  }
+
+  return { startsAt, endsAt };
 }
 
 function serializeGoalLinkedPriority(priority: {
@@ -797,6 +930,7 @@ function buildBulkTaskUpdateData(
   if (action.type === "schedule") {
     return {
       scheduledForDate: parseIsoDate(action.scheduledForDate),
+      dueAt: null,
       reminderAt:
         task.kind === "REMINDER" ? toTaskReminderAt(action.scheduledForDate, timezone) : undefined,
       reminderTriggeredAt: task.kind === "REMINDER" ? null : undefined,
@@ -1359,6 +1493,367 @@ async function ensurePlanningCycle(
   });
 }
 
+async function loadPlannerBlocks(
+  prisma: any,
+  planningCycleId: string,
+) {
+  const blocks = await prisma.dayPlannerBlock.findMany({
+    where: {
+      planningCycleId,
+    },
+    orderBy: {
+      sortOrder: "asc",
+    },
+    include: {
+      taskLinks: {
+        orderBy: {
+          sortOrder: "asc",
+        },
+        include: {
+          task: {
+            include: {
+              goal: true,
+              recurrenceRule: {
+                include: {
+                  exceptions: {
+                    orderBy: {
+                      occurrenceDate: "asc",
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+  });
+
+  return blocks.map(serializeDayPlannerBlock);
+}
+
+async function findOwnedDayPlannerBlock(
+  app: Parameters<FastifyPluginAsync>[0],
+  userId: string,
+  date: IsoDateString,
+  blockId: string,
+) {
+  const cycleStartDate = parseIsoDate(date);
+  const block = await app.prisma.dayPlannerBlock.findFirst({
+    where: {
+      id: blockId,
+      planningCycle: {
+        userId,
+        cycleType: "DAY",
+        cycleStartDate,
+      },
+    },
+    include: {
+      planningCycle: {
+        select: {
+          id: true,
+          cycleStartDate: true,
+        },
+      },
+      taskLinks: {
+        orderBy: {
+          sortOrder: "asc",
+        },
+        include: {
+          task: {
+            include: {
+              goal: true,
+              recurrenceRule: {
+                include: {
+                  exceptions: {
+                    orderBy: {
+                      occurrenceDate: "asc",
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+  });
+
+  if (!block) {
+    throw new AppError({
+      statusCode: 404,
+      code: "NOT_FOUND",
+      message: "Planner block not found",
+    });
+  }
+
+  return block;
+}
+
+async function assertNoPlannerBlockOverlap(
+  prisma: any,
+  planningCycleId: string,
+  startsAt: Date,
+  endsAt: Date,
+  options?: { ignoreBlockId?: string },
+) {
+  const overlappingBlock = await prisma.dayPlannerBlock.findFirst({
+    where: {
+      planningCycleId,
+      id: options?.ignoreBlockId
+        ? {
+            not: options.ignoreBlockId,
+          }
+        : undefined,
+      startsAt: {
+        lt: endsAt,
+      },
+      endsAt: {
+        gt: startsAt,
+      },
+    },
+    select: {
+      id: true,
+    },
+  });
+
+  if (overlappingBlock) {
+    throw new AppError({
+      statusCode: 400,
+      code: "BAD_REQUEST",
+      message: "Planner blocks cannot overlap",
+    });
+  }
+}
+
+async function normalizePlannerBlockSortOrders(tx: any, planningCycleId: string) {
+  const blocks = await tx.dayPlannerBlock.findMany({
+    where: {
+      planningCycleId,
+    },
+    orderBy: {
+      sortOrder: "asc",
+    },
+    select: {
+      id: true,
+      sortOrder: true,
+    },
+  });
+
+  await Promise.all(
+    blocks.map((block: { id: string; sortOrder: number }, index: number) =>
+      block.sortOrder === index + 1
+        ? Promise.resolve()
+        : tx.dayPlannerBlock.update({
+            where: {
+              id: block.id,
+            },
+            data: {
+              sortOrder: index + 1,
+            },
+          }),
+    ),
+  );
+}
+
+async function normalizePlannerBlockTaskSortOrders(tx: any, blockId: string) {
+  const taskLinks = await tx.dayPlannerBlockTask.findMany({
+    where: {
+      blockId,
+    },
+    orderBy: {
+      sortOrder: "asc",
+    },
+    select: {
+      id: true,
+      sortOrder: true,
+    },
+  });
+
+  await Promise.all(
+    taskLinks.map((taskLink: { id: string; sortOrder: number }, index: number) =>
+      taskLink.sortOrder === index + 1
+        ? Promise.resolve()
+        : tx.dayPlannerBlockTask.update({
+            where: {
+              id: taskLink.id,
+            },
+            data: {
+              sortOrder: index + 1,
+            },
+          }),
+    ),
+  );
+}
+
+async function removePlannerAssignmentForTask(
+  tx: any,
+  taskId: string,
+) {
+  const plannerAssignment = await tx.dayPlannerBlockTask.findUnique({
+    where: {
+      taskId,
+    },
+    select: {
+      id: true,
+      blockId: true,
+    },
+  });
+
+  if (!plannerAssignment) {
+    return null;
+  }
+
+  await tx.dayPlannerBlockTask.delete({
+    where: {
+      taskId,
+    },
+  });
+  await normalizePlannerBlockTaskSortOrders(tx, plannerAssignment.blockId);
+
+  return plannerAssignment;
+}
+
+async function replacePlannerBlockTasks(
+  tx: any,
+  input: {
+    userId: string;
+    date: IsoDateString;
+    blockId: string;
+    blockStartsAt: Date;
+    taskIds: string[];
+  },
+) {
+  const requestedTaskIds = input.taskIds;
+  const requestedTasks = requestedTaskIds.length
+    ? await tx.task.findMany({
+        where: {
+          id: {
+            in: requestedTaskIds,
+          },
+          userId: input.userId,
+        },
+        select: {
+          id: true,
+          kind: true,
+          scheduledForDate: true,
+        },
+      })
+    : [];
+
+  if (requestedTasks.length !== requestedTaskIds.length) {
+    throw new AppError({
+      statusCode: 404,
+      code: "NOT_FOUND",
+      message: "Task not found",
+    });
+  }
+
+  const invalidTask = requestedTasks.find(
+    (task: { kind: string; scheduledForDate: Date | null }) =>
+      task.kind !== "TASK" ||
+      !task.scheduledForDate ||
+      toIsoDateString(task.scheduledForDate) !== input.date,
+  );
+  if (invalidTask) {
+    throw new AppError({
+      statusCode: 400,
+      code: "BAD_REQUEST",
+      message: "Only today's scheduled tasks can be assigned to planner blocks",
+    });
+  }
+
+  const currentBlockLinks = await tx.dayPlannerBlockTask.findMany({
+    where: {
+      blockId: input.blockId,
+    },
+    orderBy: {
+      sortOrder: "asc",
+    },
+    select: {
+      taskId: true,
+    },
+  });
+  const currentTaskIds = currentBlockLinks.map((link: { taskId: string }) => link.taskId);
+  const removedTaskIds = currentTaskIds.filter((taskId: string) => !requestedTaskIds.includes(taskId));
+
+  const reassignedLinks = requestedTaskIds.length
+    ? await tx.dayPlannerBlockTask.findMany({
+        where: {
+          taskId: {
+            in: requestedTaskIds,
+          },
+        },
+        select: {
+          taskId: true,
+          blockId: true,
+        },
+      })
+    : [];
+  const affectedOtherBlockIds = [
+    ...new Set<string>(
+      reassignedLinks
+        .filter((link: { blockId: string }) => link.blockId !== input.blockId)
+        .map((link: { blockId: string }) => link.blockId),
+    ),
+  ];
+
+  await tx.dayPlannerBlockTask.deleteMany({
+    where: {
+      OR: [
+        {
+          blockId: input.blockId,
+        },
+        requestedTaskIds.length > 0
+          ? {
+              taskId: {
+                in: requestedTaskIds,
+              },
+            }
+          : {
+              id: "__never__",
+            },
+      ],
+    },
+  });
+
+  if (requestedTaskIds.length > 0) {
+    await tx.dayPlannerBlockTask.createMany({
+      data: requestedTaskIds.map((taskId, index) => ({
+        blockId: input.blockId,
+        taskId,
+        sortOrder: index + 1,
+      })),
+    });
+
+    await tx.task.updateMany({
+      where: {
+        id: {
+          in: requestedTaskIds,
+        },
+      },
+      data: {
+        dueAt: input.blockStartsAt,
+      },
+    });
+  }
+
+  if (removedTaskIds.length > 0) {
+    await tx.task.updateMany({
+      where: {
+        id: {
+          in: removedTaskIds,
+        },
+      },
+      data: {
+        dueAt: null,
+      },
+    });
+  }
+
+  await Promise.all(affectedOtherBlockIds.map((blockId) => normalizePlannerBlockTaskSortOrders(tx, blockId)));
+}
+
 async function syncTaskRecurrence(
   tx: any,
   taskId: string,
@@ -1854,44 +2349,47 @@ export const registerPlanningRoutes: FastifyPluginAsync = async (app) => {
       cycleStartDate,
       cycleEndDate: cycleStartDate,
     });
-    const tasks = await app.prisma.task.findMany({
-      where: {
-        userId: user.id,
-        scheduledForDate: cycleStartDate,
-      },
-      orderBy: [
-        { status: "asc" },
-        { createdAt: "asc" },
-      ],
-      include: {
-        goal: true,
-        recurrenceRule: {
-          include: {
-            exceptions: {
-              orderBy: {
-                occurrenceDate: "asc",
+    const [tasks, activeGoals, plannerBlocks] = await Promise.all([
+      app.prisma.task.findMany({
+        where: {
+          userId: user.id,
+          scheduledForDate: cycleStartDate,
+        },
+        orderBy: [
+          { status: "asc" },
+          { createdAt: "asc" },
+        ],
+        include: {
+          goal: true,
+          recurrenceRule: {
+            include: {
+              exceptions: {
+                orderBy: {
+                  occurrenceDate: "asc",
+                },
               },
             },
           },
         },
-      },
-    });
-    const activeGoals = await app.prisma.goal.findMany({
-      where: {
-        userId: user.id,
-        status: "ACTIVE",
-      },
-      orderBy: {
-        createdAt: "desc",
-      },
-      include: {
-        milestones: {
-          orderBy: {
-            sortOrder: "asc",
+      }),
+      app.prisma.goal.findMany({
+        where: {
+          userId: user.id,
+          status: "ACTIVE",
+        },
+        orderBy: {
+          createdAt: "desc",
+        },
+        include: {
+          milestones: {
+            orderBy: {
+              sortOrder: "asc",
+            },
           },
         },
-      },
-    });
+      }),
+      loadPlannerBlocks(app.prisma, cycle.id),
+    ]);
     const goalOverviews = await buildGoalOverviews(app, user.id, activeGoals, goalContext);
     const todayLinkedGoalCounts = buildTodayLinkedGoalCounts(cycle.priorities, tasks);
     const goalNudges = buildGoalNudges(
@@ -1924,6 +2422,7 @@ export const registerPlanningRoutes: FastifyPluginAsync = async (app) => {
       priorities: cycle.priorities.map(serializePriority),
       tasks: tasks.map(serializeTask),
       goalNudges,
+      plannerBlocks,
     });
 
     return reply.send(response);
@@ -1945,6 +2444,403 @@ export const registerPlanningRoutes: FastifyPluginAsync = async (app) => {
 
     const response: PlanningPriorityMutationResponse = withGeneratedAt({
       priorities,
+    });
+
+    return reply.send(response);
+  });
+
+  app.post("/planning/days/:date/planner-blocks", async (request, reply) => {
+    const user = requireAuthenticatedUser(request);
+    const { date } = request.params as { date: IsoDateString };
+    const parsedDate = parseOrThrow(isoDateSchema, date);
+    const payload = parseOrThrow(
+      createDayPlannerBlockSchema,
+      request.body as CreateDayPlannerBlockRequest,
+    );
+    const cycleStartDate = parseIsoDate(parsedDate);
+    const timezone = await getUserTimezone(app, user.id);
+    const cycle = await ensurePlanningCycle(app, {
+      userId: user.id,
+      cycleType: "DAY",
+      cycleStartDate,
+      cycleEndDate: cycleStartDate,
+    });
+    const { startsAt, endsAt } = validatePlannerBlockWindow(
+      parsedDate,
+      timezone,
+      payload.startsAt,
+      payload.endsAt,
+    );
+    await assertNoPlannerBlockOverlap(app.prisma, cycle.id, startsAt, endsAt);
+
+    const plannerBlock = await app.prisma.$transaction(async (tx) => {
+      const nextSortOrder =
+        (await tx.dayPlannerBlock.count({
+          where: {
+            planningCycleId: cycle.id,
+          },
+        })) + 1;
+
+      const createdBlock = await tx.dayPlannerBlock.create({
+        data: {
+          planningCycleId: cycle.id,
+          title: normalizePlannerBlockTitle(payload.title),
+          startsAt,
+          endsAt,
+          sortOrder: nextSortOrder,
+        },
+      });
+
+      await replacePlannerBlockTasks(tx, {
+        userId: user.id,
+        date: parsedDate,
+        blockId: createdBlock.id,
+        blockStartsAt: startsAt,
+        taskIds: payload.taskIds ?? [],
+      });
+
+      return tx.dayPlannerBlock.findUniqueOrThrow({
+        where: {
+          id: createdBlock.id,
+        },
+        include: {
+          taskLinks: {
+            orderBy: {
+              sortOrder: "asc",
+            },
+            include: {
+              task: {
+                include: {
+                  goal: true,
+                  recurrenceRule: {
+                    include: {
+                      exceptions: {
+                        orderBy: {
+                          occurrenceDate: "asc",
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      });
+    });
+
+    const response: DayPlannerBlockMutationResponse = withGeneratedAt({
+      plannerBlock: serializeDayPlannerBlock(plannerBlock),
+    });
+
+    return reply.status(201).send(response);
+  });
+
+  app.patch("/planning/days/:date/planner-blocks/:blockId", async (request, reply) => {
+    const user = requireAuthenticatedUser(request);
+    const { date, blockId } = request.params as { date: IsoDateString; blockId: string };
+    const parsedDate = parseOrThrow(isoDateSchema, date);
+    const payload = parseOrThrow(
+      updateDayPlannerBlockSchema,
+      request.body as UpdateDayPlannerBlockRequest,
+    );
+    const timezone = await getUserTimezone(app, user.id);
+    const block = await findOwnedDayPlannerBlock(app, user.id, parsedDate, blockId);
+    const nextTitle = payload.title === undefined ? block.title : normalizePlannerBlockTitle(payload.title);
+    const { startsAt, endsAt } = validatePlannerBlockWindow(
+      parsedDate,
+      timezone,
+      payload.startsAt ?? block.startsAt.toISOString(),
+      payload.endsAt ?? block.endsAt.toISOString(),
+    );
+    await assertNoPlannerBlockOverlap(app.prisma, block.planningCycle.id, startsAt, endsAt, {
+      ignoreBlockId: block.id,
+    });
+
+    const plannerBlock = await app.prisma.$transaction(async (tx) => {
+      await tx.dayPlannerBlock.update({
+        where: {
+          id: block.id,
+        },
+        data: {
+          title: nextTitle,
+          startsAt,
+          endsAt,
+        },
+      });
+
+      if (startsAt.getTime() !== block.startsAt.getTime()) {
+        const taskIds = block.taskLinks.map((link) => link.taskId);
+        if (taskIds.length > 0) {
+          await tx.task.updateMany({
+            where: {
+              id: {
+                in: taskIds,
+              },
+            },
+            data: {
+              dueAt: startsAt,
+            },
+          });
+        }
+      }
+
+      return tx.dayPlannerBlock.findUniqueOrThrow({
+        where: {
+          id: block.id,
+        },
+        include: {
+          taskLinks: {
+            orderBy: {
+              sortOrder: "asc",
+            },
+            include: {
+              task: {
+                include: {
+                  goal: true,
+                  recurrenceRule: {
+                    include: {
+                      exceptions: {
+                        orderBy: {
+                          occurrenceDate: "asc",
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      });
+    });
+
+    const response: DayPlannerBlockMutationResponse = withGeneratedAt({
+      plannerBlock: serializeDayPlannerBlock(plannerBlock),
+    });
+
+    return reply.send(response);
+  });
+
+  app.delete("/planning/days/:date/planner-blocks/:blockId", async (request, reply) => {
+    const user = requireAuthenticatedUser(request);
+    const { date, blockId } = request.params as { date: IsoDateString; blockId: string };
+    const parsedDate = parseOrThrow(isoDateSchema, date);
+    const block = await findOwnedDayPlannerBlock(app, user.id, parsedDate, blockId);
+
+    if (block.taskLinks.length > 0) {
+      throw new AppError({
+        statusCode: 400,
+        code: "BAD_REQUEST",
+        message: "Planner block must be empty before deletion",
+      });
+    }
+
+    await app.prisma.$transaction(async (tx) => {
+      await tx.dayPlannerBlock.delete({
+        where: {
+          id: block.id,
+        },
+      });
+      await normalizePlannerBlockSortOrders(tx, block.planningCycle.id);
+    });
+
+    return reply.status(204).send();
+  });
+
+  app.put("/planning/days/:date/planner-blocks/order", async (request, reply) => {
+    const user = requireAuthenticatedUser(request);
+    const { date } = request.params as { date: IsoDateString };
+    const parsedDate = parseOrThrow(isoDateSchema, date);
+    const payload = parseOrThrow(
+      reorderDayPlannerBlocksSchema,
+      request.body as ReorderDayPlannerBlocksRequest,
+    );
+    const cycleStartDate = parseIsoDate(parsedDate);
+    const cycle = await ensurePlanningCycle(app, {
+      userId: user.id,
+      cycleType: "DAY",
+      cycleStartDate,
+      cycleEndDate: cycleStartDate,
+    });
+    const existingBlocks = await app.prisma.dayPlannerBlock.findMany({
+      where: {
+        planningCycleId: cycle.id,
+      },
+      orderBy: {
+        sortOrder: "asc",
+      },
+      select: {
+        id: true,
+      },
+    });
+    const existingIds = existingBlocks.map((block) => block.id);
+    const sameMembership =
+      existingIds.length === payload.blockIds.length &&
+      existingIds.every((id) => payload.blockIds.includes(id));
+
+    if (!sameMembership) {
+      throw new AppError({
+        statusCode: 400,
+        code: "BAD_REQUEST",
+        message: "Planner block reorder payload must include every block exactly once",
+      });
+    }
+
+    await app.prisma.$transaction(async (tx) => {
+      for (const [index, blockId] of payload.blockIds.entries()) {
+        await tx.dayPlannerBlock.update({
+          where: {
+            id: blockId,
+          },
+          data: {
+            sortOrder: 100 + index,
+          },
+        });
+      }
+
+      for (const [index, blockId] of payload.blockIds.entries()) {
+        await tx.dayPlannerBlock.update({
+          where: {
+            id: blockId,
+          },
+          data: {
+            sortOrder: index + 1,
+          },
+        });
+      }
+    });
+
+    const response: DayPlannerBlocksMutationResponse = withGeneratedAt({
+      plannerBlocks: await loadPlannerBlocks(app.prisma, cycle.id),
+    });
+
+    return reply.send(response);
+  });
+
+  app.put("/planning/days/:date/planner-blocks/:blockId/tasks", async (request, reply) => {
+    const user = requireAuthenticatedUser(request);
+    const { date, blockId } = request.params as { date: IsoDateString; blockId: string };
+    const parsedDate = parseOrThrow(isoDateSchema, date);
+    const payload = parseOrThrow(
+      replaceDayPlannerBlockTasksSchema,
+      request.body as ReplaceDayPlannerBlockTasksRequest,
+    );
+    const block = await findOwnedDayPlannerBlock(app, user.id, parsedDate, blockId);
+
+    const plannerBlock = await app.prisma.$transaction(async (tx) => {
+      await replacePlannerBlockTasks(tx, {
+        userId: user.id,
+        date: parsedDate,
+        blockId: block.id,
+        blockStartsAt: block.startsAt,
+        taskIds: payload.taskIds,
+      });
+
+      return tx.dayPlannerBlock.findUniqueOrThrow({
+        where: {
+          id: block.id,
+        },
+        include: {
+          taskLinks: {
+            orderBy: {
+              sortOrder: "asc",
+            },
+            include: {
+              task: {
+                include: {
+                  goal: true,
+                  recurrenceRule: {
+                    include: {
+                      exceptions: {
+                        orderBy: {
+                          occurrenceDate: "asc",
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      });
+    });
+
+    const response: DayPlannerBlockMutationResponse = withGeneratedAt({
+      plannerBlock: serializeDayPlannerBlock(plannerBlock),
+    });
+
+    return reply.send(response);
+  });
+
+  app.delete("/planning/days/:date/planner-blocks/:blockId/tasks/:taskId", async (request, reply) => {
+    const user = requireAuthenticatedUser(request);
+    const { date, blockId, taskId } = request.params as {
+      date: IsoDateString;
+      blockId: string;
+      taskId: string;
+    };
+    const parsedDate = parseOrThrow(isoDateSchema, date);
+    const block = await findOwnedDayPlannerBlock(app, user.id, parsedDate, blockId);
+    const taskLink = block.taskLinks.find((link) => link.taskId === taskId);
+
+    if (!taskLink) {
+      throw new AppError({
+        statusCode: 404,
+        code: "NOT_FOUND",
+        message: "Planner task assignment not found",
+      });
+    }
+
+    const plannerBlock = await app.prisma.$transaction(async (tx) => {
+      await tx.dayPlannerBlockTask.delete({
+        where: {
+          taskId,
+        },
+      });
+      await normalizePlannerBlockTaskSortOrders(tx, block.id);
+      await tx.task.update({
+        where: {
+          id: taskId,
+        },
+        data: {
+          dueAt: null,
+        },
+      });
+
+      return tx.dayPlannerBlock.findUniqueOrThrow({
+        where: {
+          id: block.id,
+        },
+        include: {
+          taskLinks: {
+            orderBy: {
+              sortOrder: "asc",
+            },
+            include: {
+              task: {
+                include: {
+                  goal: true,
+                  recurrenceRule: {
+                    include: {
+                      exceptions: {
+                        orderBy: {
+                          occurrenceDate: "asc",
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      });
+    });
+
+    const response: DayPlannerBlockMutationResponse = withGeneratedAt({
+      plannerBlock: serializeDayPlannerBlock(plannerBlock),
     });
 
     return reply.send(response);
@@ -2418,6 +3314,12 @@ export const registerPlanningRoutes: FastifyPluginAsync = async (app) => {
         }),
       );
 
+      if (payload.action.type === "schedule") {
+        for (const taskId of payload.taskIds) {
+          await removePlannerAssignmentForTask(tx, taskId);
+        }
+      }
+
       if (shouldTrackInboxZero) {
         await recordInboxZeroIfEarned(tx, {
           userId: user.id,
@@ -2491,6 +3393,24 @@ export const registerPlanningRoutes: FastifyPluginAsync = async (app) => {
         message: "Task not found",
       });
     }
+    const existingPlannerAssignment = await app.prisma.dayPlannerBlockTask.findUnique({
+      where: {
+        taskId,
+      },
+      select: {
+        blockId: true,
+      },
+    });
+    const existingScheduledForDate = existingTask.scheduledForDate
+      ? toIsoDateString(existingTask.scheduledForDate)
+      : null;
+    const nextScheduledForDate =
+      payload.scheduledForDate === undefined ? existingScheduledForDate : payload.scheduledForDate;
+    const shouldRemovePlannerAssignment =
+      Boolean(existingPlannerAssignment) &&
+      (payload.dueAt !== undefined || nextScheduledForDate !== existingScheduledForDate);
+    const shouldClearPlannerDueAt =
+      shouldRemovePlannerAssignment && payload.dueAt === undefined;
     await assertOwnedGoalReference(app, user.id, payload.goalId);
     const shouldTrackInboxZero = payload.status !== undefined || payload.scheduledForDate !== undefined;
     const task = await app.prisma.$transaction(async (tx) => {
@@ -2521,7 +3441,13 @@ export const registerPlanningRoutes: FastifyPluginAsync = async (app) => {
                 ? null
                 : parseIsoDate(payload.scheduledForDate),
           dueAt:
-            payload.dueAt === undefined ? undefined : payload.dueAt === null ? null : new Date(payload.dueAt),
+            payload.dueAt === undefined
+              ? shouldClearPlannerDueAt
+                ? null
+                : undefined
+              : payload.dueAt === null
+                ? null
+                : new Date(payload.dueAt),
           goalId: payload.goalId,
           completedAt:
             payload.status === "completed"
@@ -2561,6 +3487,10 @@ export const registerPlanningRoutes: FastifyPluginAsync = async (app) => {
           mutationSource: "task_update",
           affectedTaskIds: [taskId],
         });
+      }
+
+      if (shouldRemovePlannerAssignment) {
+        await removePlannerAssignmentForTask(tx, taskId);
       }
 
       return tx.task.findUniqueOrThrow({
@@ -2620,6 +3550,14 @@ export const registerPlanningRoutes: FastifyPluginAsync = async (app) => {
         message: "Task not found",
       });
     }
+    const existingPlannerAssignment = await app.prisma.dayPlannerBlockTask.findUnique({
+      where: {
+        taskId,
+      },
+      select: {
+        blockId: true,
+      },
+    });
 
     const task = await app.prisma.$transaction(async (tx) => {
       const staleCountBefore = await countStaleInboxTasks(tx, {
@@ -2636,6 +3574,29 @@ export const registerPlanningRoutes: FastifyPluginAsync = async (app) => {
           payload.targetDate,
         );
         if (recurringTask) {
+          if (existingPlannerAssignment) {
+            await removePlannerAssignmentForTask(tx, existingTask.id);
+            return tx.task.update({
+              where: {
+                id: recurringTask.id,
+              },
+              data: {
+                dueAt: null,
+              },
+              include: {
+                goal: true,
+                recurrenceRule: {
+                  include: {
+                    exceptions: {
+                      orderBy: {
+                        occurrenceDate: "asc",
+                      },
+                    },
+                  },
+                },
+              },
+            });
+          }
           return recurringTask;
         }
       }
@@ -2661,7 +3622,7 @@ export const registerPlanningRoutes: FastifyPluginAsync = async (app) => {
               : existingTask.reminderAt,
           reminderTriggeredAt: null,
           scheduledForDate: parseIsoDate(payload.targetDate),
-          dueAt: existingTask.dueAt,
+          dueAt: existingPlannerAssignment ? null : existingTask.dueAt,
           goalId: existingTask.goalId,
           originType: "CARRY_FORWARD",
           carriedFromTaskId: existingTask.id,
