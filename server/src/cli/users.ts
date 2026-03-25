@@ -192,9 +192,9 @@ export async function runUserCli(argv: string[], dependencies: CliDependencies) 
 
 async function main() {
   const env = getEnv();
+  assertDatabaseSeparation(env);
   await ensureDatabaseExists(env);
   await ensureDatabaseMigrations(env);
-  assertDatabaseSeparation(env);
 
   const prisma = new PrismaClient();
 

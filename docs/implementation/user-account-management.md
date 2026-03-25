@@ -6,7 +6,9 @@ Use this when you need to create or manage accounts without a UI.
 
 - There is no public sign-up screen in this app.
 - Account creation is admin-only.
-- On the production server, always run these commands with `NODE_ENV=production`.
+- On the production server, always run these commands with both `NODE_ENV=production` and `ENV_FILE=/home/ubuntu/apps/life-os-prod/server/.env.production`.
+- This forces the CLI to use the production server env file even if older database variables are already present in the shell.
+- Use the same command format whether you launch it from the repo root or from inside the `server` workspace.
 
 ## Production location
 
@@ -15,6 +17,19 @@ Run from the production checkout:
 ```bash
 cd /home/ubuntu/apps/life-os-prod
 ```
+
+## Safe default command
+
+Use this exact format for production user-management commands:
+
+```bash
+cd /home/ubuntu/apps/life-os-prod
+ENV_FILE=/home/ubuntu/apps/life-os-prod/server/.env.production \
+NODE_ENV=production \
+npm run users -w server -- list
+```
+
+Replace `list` with `create`, `set-password`, `disable`, or `enable` as needed.
 
 ## Create the first account on a brand-new install
 
@@ -35,21 +50,27 @@ Important:
 
 ```bash
 cd /home/ubuntu/apps/life-os-prod
-NODE_ENV=production npm run users -w server -- create --email user@example.com --password change-me-please --display-name "User"
+ENV_FILE=/home/ubuntu/apps/life-os-prod/server/.env.production \
+NODE_ENV=production \
+npm run users -w server -- create --email user@example.com --password change-me-please --display-name "User"
 ```
 
 ## List users
 
 ```bash
 cd /home/ubuntu/apps/life-os-prod
-NODE_ENV=production npm run users -w server -- list
+ENV_FILE=/home/ubuntu/apps/life-os-prod/server/.env.production \
+NODE_ENV=production \
+npm run users -w server -- list
 ```
 
 ## Reset a user's password
 
 ```bash
 cd /home/ubuntu/apps/life-os-prod
-NODE_ENV=production npm run users -w server -- set-password --email user@example.com --password new-password-123
+ENV_FILE=/home/ubuntu/apps/life-os-prod/server/.env.production \
+NODE_ENV=production \
+npm run users -w server -- set-password --email user@example.com --password new-password-123
 ```
 
 This also revokes that user's existing sessions.
@@ -58,14 +79,18 @@ This also revokes that user's existing sessions.
 
 ```bash
 cd /home/ubuntu/apps/life-os-prod
-NODE_ENV=production npm run users -w server -- disable --email user@example.com
+ENV_FILE=/home/ubuntu/apps/life-os-prod/server/.env.production \
+NODE_ENV=production \
+npm run users -w server -- disable --email user@example.com
 ```
 
 ## Re-enable a user
 
 ```bash
 cd /home/ubuntu/apps/life-os-prod
-NODE_ENV=production npm run users -w server -- enable --email user@example.com
+ENV_FILE=/home/ubuntu/apps/life-os-prod/server/.env.production \
+NODE_ENV=production \
+npm run users -w server -- enable --email user@example.com
 ```
 
 ## Full references

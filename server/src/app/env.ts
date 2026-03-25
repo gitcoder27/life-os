@@ -1,35 +1,96 @@
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
-import { config as loadEnv } from "dotenv";
+import { fileURLToPath } from "node:url";
+import { parse as parseEnv } from "dotenv";
 import { z } from "zod";
 
-function resolveEnvPath() {
-  const cwd = process.cwd();
-  const nodeEnv = process.env.NODE_ENV;
+type ResolveEnvPathOptions = {
+  cwd?: string;
+  envFile?: string | null;
+  nodeEnv?: string | null;
+  serverRootDir?: string;
+};
+
+type LoadSelectedEnvOptions = ResolveEnvPathOptions & {
+  targetEnv?: NodeJS.ProcessEnv;
+};
+
+export function getServerRootDir(moduleUrl = import.meta.url) {
+  const modulePath = fileURLToPath(moduleUrl);
+  return path.resolve(path.dirname(modulePath), "..", "..");
+}
+
+function dedupePaths(paths: string[]) {
+  return [...new Set(paths)];
+}
+
+function resolveExplicitEnvCandidates(envFile: string, cwd: string, serverRootDir: string) {
+  if (path.isAbsolute(envFile)) {
+    return [envFile];
+  }
+
+  return dedupePaths([
+    path.resolve(cwd, envFile),
+    path.resolve(serverRootDir, envFile),
+    path.resolve(path.dirname(serverRootDir), envFile),
+    path.resolve(serverRootDir, path.basename(envFile)),
+  ]);
+}
+
+export function resolveEnvPath(options: ResolveEnvPathOptions = {}) {
+  const cwd = options.cwd ?? process.cwd();
+  const envFile = options.envFile === undefined ? process.env.ENV_FILE : options.envFile;
+  const nodeEnv = options.nodeEnv === undefined ? process.env.NODE_ENV : options.nodeEnv;
+  const serverRootDir = options.serverRootDir ?? getServerRootDir();
+
+  if (envFile) {
+    const explicitCandidates = resolveExplicitEnvCandidates(envFile, cwd, serverRootDir);
+
+    for (const candidate of explicitCandidates) {
+      if (existsSync(candidate)) {
+        return candidate;
+      }
+    }
+
+    throw new Error(
+      `[env] ENV_FILE was set but no env file was found. Checked: ${explicitCandidates.join(", ")}`,
+    );
+  }
+
   const candidates = [
-    process.env.ENV_FILE,
-    nodeEnv ? `.env.${nodeEnv}` : null,
-    `.env`,
-    ...(nodeEnv ? [path.join("server", `.env.${nodeEnv}`)] : []),
-    path.join("server", ".env"),
-  ].filter(Boolean) as string[];
+    ...(nodeEnv ? [path.join(serverRootDir, `.env.${nodeEnv}`)] : []),
+    path.join(serverRootDir, ".env"),
+  ];
 
   for (const candidate of candidates) {
-    const absolutePath = path.resolve(cwd, candidate);
-    if (existsSync(absolutePath)) {
-      return absolutePath;
+    if (existsSync(candidate)) {
+      return candidate;
     }
   }
 
   return null;
 }
 
-const envPath = resolveEnvPath();
-if (envPath) {
-  loadEnv({
-    path: envPath,
-  });
+export function loadSelectedEnv(options: LoadSelectedEnvOptions = {}) {
+  const envPath = resolveEnvPath(options);
+
+  if (!envPath) {
+    return null;
+  }
+
+  const parsedEnv = parseEnv(readFileSync(envPath));
+  const targetEnv = options.targetEnv ?? process.env;
+
+  for (const [key, value] of Object.entries(parsedEnv)) {
+    targetEnv[key] = value;
+  }
+
+  targetEnv.ENV_FILE = envPath;
+
+  return envPath;
 }
+
+const envPath = loadSelectedEnv();
 
 const envSchema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
