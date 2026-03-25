@@ -7,6 +7,7 @@ import { DayNotes } from "./DayNotes";
 import { GoalNudges } from "./GoalNudges";
 import type { TaskItem, GoalNudgeItem, DayPlannerBlockItem } from "../../../shared/lib/api";
 import type { EditablePriority } from "../hooks/usePriorityDraft";
+import type { PlannerExecutionModel } from "../helpers/planner-execution";
 
 type HealthDay = {
   waterMl: number;
@@ -24,6 +25,7 @@ export function ContextPanel({
   canAddGoalNudge,
   onAddGoalNudge,
   plannerBlocks,
+  plannerExecution,
   unplannedTaskCount,
   onSwitchToPlanner,
 }: {
@@ -35,6 +37,7 @@ export function ContextPanel({
   canAddGoalNudge: boolean;
   onAddGoalNudge: (nudge: GoalNudgeItem) => void;
   plannerBlocks: DayPlannerBlockItem[];
+  plannerExecution: PlannerExecutionModel;
   unplannedTaskCount: number;
   onSwitchToPlanner: () => void;
 }) {
@@ -45,7 +48,7 @@ export function ContextPanel({
       <FinanceAdmin />
       {plannerBlocks.length > 0 ? (
         <PlannerSummary
-          blocks={plannerBlocks}
+          execution={plannerExecution}
           unplannedTaskCount={unplannedTaskCount}
           onSwitchToPlanner={onSwitchToPlanner}
         />

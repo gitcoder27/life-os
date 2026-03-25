@@ -11,11 +11,17 @@ import {
 export function PlannerBlockForm({
   date,
   existingBlocks,
+  initialValues,
   onSubmit,
   onCancel,
 }: {
   date: string;
   existingBlocks: DayPlannerBlockItem[];
+  initialValues?: {
+    title?: string;
+    startTime?: string;
+    endTime?: string;
+  };
   onSubmit: (payload: {
     title?: string | null;
     startsAt: string;
@@ -26,9 +32,9 @@ export function PlannerBlockForm({
   const defaultStart = getNextAvailableTime(existingBlocks);
   const defaultEnd = addMinutes(defaultStart, 60);
 
-  const [title, setTitle] = useState("");
-  const [startTime, setStartTime] = useState(defaultStart);
-  const [endTime, setEndTime] = useState(defaultEnd);
+  const [title, setTitle] = useState(initialValues?.title ?? "");
+  const [startTime, setStartTime] = useState(initialValues?.startTime ?? defaultStart);
+  const [endTime, setEndTime] = useState(initialValues?.endTime ?? defaultEnd);
   const validation = validatePlannerBlockDraft({
     date,
     startTime,

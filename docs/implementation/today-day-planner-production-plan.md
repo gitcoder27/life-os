@@ -24,16 +24,16 @@ The goal is not just to "finish missing tickets." The goal is to make the planne
 
 ## Current State Summary
 
-The feature now has a strong operational Phase 1.
+The feature now has a strong operational Phase 3.
 
 The planner already exists inside the Today page and the page correctly supports two working states:
 
 - `Execute`
 - `Plan`
 
-The current implementation is now strong enough to support a real daily planning workflow without obvious workarounds.
+The current implementation is now strong enough to support both planning the day and running against that plan without obvious workarounds.
 
-The planner still is not production-ready, but the biggest core interaction gaps are now closed. The remaining work is mostly about timeline clarity, stronger execution guidance, speed improvements, and mobile polish.
+The planner still is not fully production-ready, but the biggest core interaction gaps are now closed. The remaining work is mostly about speed improvements, quality-of-life actions, and final mobile polish.
 
 ## What Works Today
 
@@ -54,45 +54,15 @@ The following parts are already implemented and working:
 - The planner empty state now explains how to start instead of only saying there are no blocks.
 - The Execute view shows clearer planned versus unplanned status and nudges the user back into planning when work is still outside the plan.
 - The right rail shows a stronger planner summary when blocks exist.
+- Execute mode now has a dedicated current-block focus in the main work lane.
+- Execute mode now shows stronger up-next handoff and drift signals when the plan is slipping.
+- A user can move planned work forward, return it to unplanned, or assign unplanned work into live blocks without leaving Execute.
 
 This confirms that the backend contract is connected and the feature foundation is already real.
 
 ## Main Gaps
 
-## 1. The planner is still not a true timeline
-
-The planning surface is now operational, but it still reads as a block workspace rather than a time-first day view.
-
-What is missing:
-
-- no hour grid or visible day scale
-- no empty-space visualization between blocks
-- no clear sense of the full day from morning to night
-- no direct manipulation of block position on a time axis
-- no fast way to understand where the day is overloaded or still open
-
-Why this matters:
-
-This feature is supposed to help the user shape the day. A planner without strong time visibility makes planning slower and less trustworthy.
-
-## 2. The execution loop still needs to be stronger
-
-The Execute state is materially better than before, but it still is not a full “run the day from here” experience.
-
-What is missing:
-
-- no strong “current block” focus in the main work lane
-- no clear “up next” handoff inside the main work area
-- no indication that a block is off track, overdue, or partially complete
-- no quick in-place replanning path when the day slips
-
-Why this matters:
-
-A day planner is not only for making a plan. It also needs to help the user stay aligned with that plan while the day is happening.
-
-## 3. The planning surface still lacks speed features expected from a core daily tool
-
-The important operations now exist, but the planner is still missing the “repeat this every day without friction” layer.
+## 1. The planner still lacks the speed layer expected from a daily tool
 
 What is missing:
 
@@ -101,15 +71,14 @@ What is missing:
 - no fast keyboard-friendly planning path
 - no quick duplicate block
 - no quick split block
-- no quick extend or shorten block
 - no quick carry unfinished work into the next block
 - no quick way to plan five to ten tasks in one pass without repeated clicking
 
 Why this matters:
 
-This is a daily-use planning feature. Repeated small frictions compound quickly.
+This is a high-frequency workflow. Once the core interactions are dependable, repeated friction becomes the main reason a user stops using the feature every day.
 
-## 4. The mobile story is acceptable, but not yet strong
+## 2. The mobile story is acceptable, but not yet strong
 
 The feature still avoids drag-and-drop, which is correct for v1, but mobile ergonomics need another pass.
 
@@ -124,14 +93,12 @@ Why this matters:
 
 Today is one of the highest-frequency surfaces in the product. Mobile friction will be felt immediately.
 
-## 5. The planner still needs to feel more integrated with the rest of Today
+## 3. The planner still needs cleaner end-of-day handling
 
-The feature now bridges Plan and Execute better, but it still does not feel like a fully continuous workday operating system.
+The feature now bridges Plan and Execute much better, but it still needs a cleaner story once reality fully outruns the schedule.
 
 What is missing:
 
-- stronger current-versus-next context in Execute
-- easier quick adjustments without a full mode shift
 - a clearer story for how unfinished work carries forward later in the day
 - tighter feedback when the planned day stops matching reality
 
@@ -212,20 +179,29 @@ Definition of done for Phase 1:
 
 ## Phase 2: Make the planner feel like a real time planner
 
+Status: implemented
+
 This phase should improve the planning surface itself.
 
-- upgrade the block list into a more explicit timeline with visible time structure
-- make free time and gaps visible
+- render the planner in clock order by block start time so the main surface reads like a true day timeline
+- add visible time structure inside the planner itself instead of a plain stacked block list
+- make free time and gaps visible, including direct “add block here” entry points from open time
+- add adjustable visible day bounds with a browser-saved default window
 - improve visual hierarchy between current, upcoming, and past blocks
-- add faster block editing controls
-- improve mobile layout for planning actions
+- add faster block editing controls for common duration changes
+- improve mobile layout for planning actions and touch-first pickers
 
 Definition of done for Phase 2:
 
 - a user can scan the day and understand its shape in seconds
 - the planner feels like time-based planning, not just grouped tasks
+- visible hours can be tuned to the user’s preferred day window without hiding real blocks outside that range
+- free time is visible and actionable, not implicit
+- mobile planning interactions remain usable without drag-and-drop
 
 ## Phase 3: Strengthen the execution loop
+
+Status: implemented
 
 This phase should connect planning and doing more tightly.
 
@@ -256,10 +232,12 @@ Definition of done for Phase 4:
 
 The following decisions should be made explicitly before polishing the feature:
 
-- Should the planner show a full-day hour scale from early morning to late evening?
-- Should users be able to create blocks directly from tasks in Execute mode?
+- Phase 2 decision: use a default visible planner window of `06:00` to `22:00`, but let the user change that window locally in the browser and reuse it on later visits.
+- Phase 2 decision: the timeline renders in clock order by `startsAt`; existing block reorder behavior remains a compatibility path, but time order is the primary visual rule.
+- Phase 2 decision: mobile keeps the unplanned lane below the timeline instead of using a bottom sheet.
+- Phase 3 decision: Execute mode supports task-level move and assign actions in place, but block creation and block time edits stay in Plan mode.
+- Phase 3 decision: drift signals use both time passage and unfinished tasks instead of task completion alone.
 - Should the app suggest starter blocks based on existing timed tasks or common routines?
-- Should a block track progress only by task completion, or also by time passage?
 - Should the planner support quick block templates in v1.1, or stay fully manual for now?
 
 ## Recommended Acceptance Criteria For "Production-Ready"
@@ -301,14 +279,14 @@ That means the immediate next milestone is mostly about better product behavior 
 
 ## Recommended Next Step
 
-The next implementation item should now move into Phase 2.
+The next implementation item should now move into Phase 4.
 
 Recommended next batch:
 
-1. make the planner feel like a real timeline
-2. show clearer free time and overload
-3. improve visual hierarchy between current, upcoming, and past blocks
-4. tighten mobile layouts for the new planner actions
-5. add faster block editing controls once the time structure is clearer
+1. add faster planning actions like bulk assignment and multi-task placement
+2. add quick duplicate, split, and carry-forward actions for blocks
+3. improve keyboard-friendly planning where it materially reduces repeated clicks
+4. keep tightening mobile layouts for the highest-frequency task and block actions
+5. consider lightweight starter structures only after the speed layer is solid
 
-With Phase 1 done, the next milestone is no longer about missing core operations. It is about making the planner instantly scannable and trustworthy as a time-shaped day view.
+With Phases 1 through 3 done, the next milestone is no longer about missing core capability. It is about making the planner fast enough to become a repeated daily habit.

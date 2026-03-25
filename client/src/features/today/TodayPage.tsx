@@ -1,5 +1,5 @@
 import "./today.css";
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   InlineErrorState,
   PageErrorState,
@@ -12,6 +12,8 @@ import { ContextPanel } from "./components/ContextPanel";
 import { RecoveryLane } from "./components/RecoveryLane";
 import { ModeToggle } from "./components/ModeToggle";
 import { DayPlanner } from "./components/DayPlanner";
+import { ExecutePlannerFocus } from "./components/ExecutePlannerFocus";
+import { buildPlannerExecutionModel } from "./helpers/planner-execution";
 import { useTodayData } from "./hooks/useTodayData";
 import { usePriorityDraft } from "./hooks/usePriorityDraft";
 import { useTaskActions } from "./hooks/useTaskActions";
@@ -20,6 +22,7 @@ import { usePlannerActions } from "./hooks/usePlannerActions";
 export function TodayPage() {
   const data = useTodayData();
   const [mode, setMode] = useState<"execute" | "plan">("execute");
+  const [plannerNow, setPlannerNow] = useState(() => new Date());
   const priorityDraft = usePriorityDraft(
     data.today,
     data.priorities,
@@ -27,6 +30,20 @@ export function TodayPage() {
   );
   const taskActions = useTaskActions(data.today);
   const plannerActions = usePlannerActions(data.today);
+  const plannerExecution = useMemo(
+    () =>
+      buildPlannerExecutionModel({
+        blocks: data.plannerBlocks,
+        unplannedTasks: data.unplannedTasks,
+        now: plannerNow,
+      }),
+    [data.plannerBlocks, data.unplannedTasks, plannerNow],
+  );
+
+  useEffect(() => {
+    const intervalId = window.setInterval(() => setPlannerNow(new Date()), 60_000);
+    return () => window.clearInterval(intervalId);
+  }, []);
 
   if (data.isLoading) {
     return (
@@ -84,6 +101,13 @@ export function TodayPage() {
                 activeGoals={data.activeGoals}
               />
 
+              <ExecutePlannerFocus
+                execution={plannerExecution}
+                plannerActions={plannerActions}
+                taskActions={taskActions}
+                onSwitchToPlanner={() => setMode("plan")}
+              />
+
               <TaskQueue
                 taskGroups={data.taskGroups}
                 completedCount={data.completedTaskCount}
@@ -105,6 +129,7 @@ export function TodayPage() {
               canAddGoalNudge={canAddGoalNudge}
               onAddGoalNudge={priorityDraft.addGoalNudge}
               plannerBlocks={data.plannerBlocks}
+              plannerExecution={plannerExecution}
               unplannedTaskCount={data.unplannedPendingTaskCount}
               onSwitchToPlanner={() => setMode("plan")}
             />

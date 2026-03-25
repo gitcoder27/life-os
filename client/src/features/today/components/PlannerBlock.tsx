@@ -2,6 +2,8 @@ import { Fragment, useEffect, useState } from "react";
 import type { DayPlannerBlockItem, TaskItem } from "../../../shared/lib/api";
 import { formatTimeLabel } from "../../../shared/lib/api";
 import {
+  addMinutes,
+  minutesToTimeString,
   toTimeInputValue,
   validatePlannerBlockDraft,
 } from "../helpers/planner-blocks";
@@ -21,6 +23,15 @@ export function PlannerBlock({
   onDeleteBlock,
   onRemoveTask,
   onReorderTasks,
+  onNudgeDuration,
+  timelineStatus,
+  isUpNext,
+  durationLabel,
+  segmentStartMinutes,
+  segmentEndMinutes,
+  hourMarkers,
+  currentMarkerPercent,
+  minHeight,
   isPending,
 }: {
   block: DayPlannerBlockItem;
@@ -36,6 +47,15 @@ export function PlannerBlock({
   onDeleteBlock: () => void;
   onRemoveTask: (taskId: string) => void;
   onReorderTasks: (taskIds: string[]) => void;
+  onNudgeDuration: (direction: -1 | 1) => void;
+  timelineStatus: "past" | "current" | "upcoming";
+  isUpNext: boolean;
+  durationLabel: string;
+  segmentStartMinutes: number;
+  segmentEndMinutes: number;
+  hourMarkers: number[];
+  currentMarkerPercent: number | null;
+  minHeight: number;
   isPending: boolean;
 }) {
   const [editing, setEditing] = useState(false);
@@ -52,6 +72,22 @@ export function PlannerBlock({
     date: block.startsAt.slice(0, 10),
     startTime: editStart,
     endTime: editEnd,
+    timezoneOffset: block.startsAt.slice(-6),
+    existingBlocks,
+    ignoreBlockId: block.id,
+  });
+  const shortenValidation = validatePlannerBlockDraft({
+    date: block.startsAt.slice(0, 10),
+    startTime: toTimeInputValue(block.startsAt),
+    endTime: addMinutes(toTimeInputValue(block.endsAt), -15),
+    timezoneOffset: block.startsAt.slice(-6),
+    existingBlocks,
+    ignoreBlockId: block.id,
+  });
+  const extendValidation = validatePlannerBlockDraft({
+    date: block.startsAt.slice(0, 10),
+    startTime: toTimeInputValue(block.startsAt),
+    endTime: addMinutes(toTimeInputValue(block.endsAt), 15),
     timezoneOffset: block.startsAt.slice(-6),
     existingBlocks,
     ignoreBlockId: block.id,
@@ -96,8 +132,46 @@ export function PlannerBlock({
     onReorderTasks(ids);
   }
 
+  const statusLabel =
+    timelineStatus === "current" ? "Now" : isUpNext ? "Up next" : timelineStatus === "past" ? "Past" : "Later";
+
   return (
-    <div className={`planner-block ${isEmpty ? "planner-block--empty" : ""}`}>
+    <div
+      className={[
+        "planner-block",
+        isEmpty ? "planner-block--empty" : "",
+        timelineStatus === "current" ? "planner-block--current" : "",
+        timelineStatus === "past" ? "planner-block--past" : "",
+        isUpNext ? "planner-block--up-next" : "",
+      ]
+        .filter(Boolean)
+        .join(" ")}
+      style={{ minHeight: `${minHeight}px` }}
+    >
+      {hourMarkers.length > 0 ? (
+        <div className="planner-segment__markers" aria-hidden="true">
+          {hourMarkers.map((marker) => (
+            <div
+              key={marker}
+              className="planner-segment__tick"
+              style={{
+                top: `${((marker - segmentStartMinutes) / Math.max(segmentEndMinutes - segmentStartMinutes, 1)) * 100}%`,
+              }}
+            >
+              <span className="planner-segment__tick-label">{minutesToTimeString(marker)}</span>
+            </div>
+          ))}
+        </div>
+      ) : null}
+
+      {currentMarkerPercent !== null ? (
+        <div
+          className="planner-segment__now-line"
+          style={{ top: `${currentMarkerPercent}%` }}
+          aria-hidden="true"
+        />
+      ) : null}
+
       <div className="planner-block__header">
         {editing ? (
           <div className="planner-block__edit-form">
@@ -148,25 +222,56 @@ export function PlannerBlock({
         ) : (
           <>
             <div className="planner-block__info">
-              <div className="planner-block__time-badge">
-                {formatTimeLabel(block.startsAt)} – {formatTimeLabel(block.endsAt)}
+              <div className="planner-block__meta-row">
+                <div className="planner-block__time-badge">
+                  {formatTimeLabel(block.startsAt)} – {formatTimeLabel(block.endsAt)}
+                </div>
+                <span className="planner-block__duration">{durationLabel}</span>
+                <span
+                  className={`planner-block__status planner-block__status--${timelineStatus} ${isUpNext ? "planner-block__status--up-next" : ""}`}
+                >
+                  {statusLabel}
+                </span>
               </div>
               <div className="planner-block__title">
                 {block.title || <span className="planner-block__untitled">Untitled block</span>}
               </div>
-              {sortedTasks.length > 0 ? (
-                <span className="planner-block__task-count">
-                  {completedCount}/{sortedTasks.length} tasks
-                </span>
-              ) : null}
+              <div className="planner-block__subline">
+                {sortedTasks.length > 0 ? (
+                  <span className="planner-block__task-count">
+                    {completedCount}/{sortedTasks.length} tasks
+                  </span>
+                ) : (
+                  <span className="planner-block__task-count">Open block</span>
+                )}
+              </div>
             </div>
             <div className="planner-block__actions">
+              <button
+                className="planner-block__action-btn planner-block__action-btn--text"
+                type="button"
+                onClick={() => onNudgeDuration(-1)}
+                disabled={isPending || Boolean(shortenValidation.error)}
+                aria-label="Shorten block by fifteen minutes"
+              >
+                -15m
+              </button>
+              <button
+                className="planner-block__action-btn planner-block__action-btn--text"
+                type="button"
+                onClick={() => onNudgeDuration(1)}
+                disabled={isPending || Boolean(extendValidation.error)}
+                aria-label="Extend block by fifteen minutes"
+              >
+                +15m
+              </button>
               <button
                 className="planner-block__action-btn"
                 type="button"
                 onClick={() => onMoveBlock(-1)}
                 disabled={!canMoveUp || isPending}
                 aria-label="Move block up"
+                title="Move block up in list order"
               >
                 ↑
               </button>
@@ -176,6 +281,7 @@ export function PlannerBlock({
                 onClick={() => onMoveBlock(1)}
                 disabled={!canMoveDown || isPending}
                 aria-label="Move block down"
+                title="Move block down in list order"
               >
                 ↓
               </button>

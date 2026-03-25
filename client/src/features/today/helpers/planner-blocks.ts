@@ -33,10 +33,49 @@ export const buildPlannerDateTime = (date: string, time: string, timezoneOffset:
 
 export const addMinutes = (timeStr: string, minutes: number): string => {
   const [h, m] = timeStr.split(":").map(Number);
-  const totalMinutes = Math.min(h * 60 + m + minutes, 23 * 60 + 59);
+  const totalMinutes = Math.min(Math.max(h * 60 + m + minutes, 0), 23 * 60 + 59);
   const newH = String(Math.floor(totalMinutes / 60)).padStart(2, "0");
   const newM = String(totalMinutes % 60).padStart(2, "0");
   return `${newH}:${newM}`;
+};
+
+export const timeStringToMinutes = (timeStr: string): number => {
+  const [h, m] = timeStr.split(":").map(Number);
+  if (Number.isNaN(h) || Number.isNaN(m)) {
+    return 0;
+  }
+
+  return h * 60 + m;
+};
+
+export const minutesToTimeString = (minutes: number): string => {
+  const bounded = Math.min(Math.max(minutes, 0), 23 * 60 + 59);
+  const h = String(Math.floor(bounded / 60)).padStart(2, "0");
+  const m = String(bounded % 60).padStart(2, "0");
+  return `${h}:${m}`;
+};
+
+export const formatDurationMinutes = (minutes: number): string => {
+  const rounded = Math.max(0, minutes);
+  const hours = Math.floor(rounded / 60);
+  const remainder = rounded % 60;
+
+  if (hours === 0) {
+    return `${remainder}m`;
+  }
+
+  if (remainder === 0) {
+    return `${hours}h`;
+  }
+
+  return `${hours}h ${remainder}m`;
+};
+
+export const getDurationMinutes = (startsAt: string, endsAt: string): number => {
+  const start = new Date(startsAt);
+  const end = new Date(endsAt);
+  const diff = Math.round((end.getTime() - start.getTime()) / 60000);
+  return Math.max(diff, 0);
 };
 
 export const getNextAvailableTime = (blocks: DayPlannerBlockItem[]): string => {

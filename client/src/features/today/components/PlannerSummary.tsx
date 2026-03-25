@@ -1,33 +1,22 @@
 import { formatTimeLabel } from "../../../shared/lib/api";
-import type { DayPlannerBlockItem } from "../../../shared/lib/api";
+import type { PlannerExecutionModel } from "../helpers/planner-execution";
 
 export function PlannerSummary({
-  blocks,
+  execution,
   unplannedTaskCount,
   onSwitchToPlanner,
 }: {
-  blocks: DayPlannerBlockItem[];
+  execution: PlannerExecutionModel;
   unplannedTaskCount: number;
   onSwitchToPlanner: () => void;
 }) {
-  if (blocks.length === 0) return null;
+  if (execution.orderedBlocks.length === 0) {
+    return null;
+  }
 
-  const sorted = [...blocks].sort(
-    (a, b) => new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime(),
-  );
-
-  const now = new Date();
-  const currentBlock = sorted.find((b) => {
-    const start = new Date(b.startsAt);
-    const end = new Date(b.endsAt);
-    return now >= start && now < end;
-  });
-
-  const nextBlock = sorted.find((b) => new Date(b.startsAt) > now);
-
-  const totalTasks = sorted.reduce((sum, b) => sum + b.tasks.length, 0);
-  const completedTasks = sorted.reduce(
-    (sum, b) => sum + b.tasks.filter((bt) => bt.task.status === "completed").length,
+  const totalTasks = execution.orderedBlocks.reduce((sum, block) => sum + block.totalCount, 0);
+  const completedTasks = execution.orderedBlocks.reduce(
+    (sum, block) => sum + block.completedCount,
     0,
   );
 
@@ -44,40 +33,66 @@ export function PlannerSummary({
         </button>
       </div>
 
-      {currentBlock ? (
+      {execution.currentBlock ? (
         <div className="planner-summary__current">
           <div className="planner-summary__now-label">Now</div>
           <div className="planner-summary__block-name">
-            {currentBlock.title || "Untitled block"}
+            {execution.currentBlock.block.title || "Untitled block"}
           </div>
           <div className="planner-summary__block-time">
-            {formatTimeLabel(currentBlock.startsAt)} – {formatTimeLabel(currentBlock.endsAt)}
+            {formatTimeLabel(execution.currentBlock.block.startsAt)} -{" "}
+            {formatTimeLabel(execution.currentBlock.block.endsAt)}
           </div>
-          {currentBlock.tasks.length > 0 ? (
+          {execution.currentBlock.tasks.length > 0 ? (
             <div className="planner-summary__block-tasks">
-              {currentBlock.tasks
-                .sort((a, b) => a.sortOrder - b.sortOrder)
-                .map((bt) => (
-                  <div
-                    key={bt.taskId}
-                    className={`planner-summary__task ${bt.task.status === "completed" ? "planner-summary__task--done" : ""}`}
-                  >
-                    {bt.task.status === "completed" ? "✓" : "○"} {bt.task.title}
-                  </div>
-                ))}
+              {execution.currentBlock.tasks.map((task) => (
+                <div
+                  key={task.taskId}
+                  className={`planner-summary__task ${task.task.status === "completed" ? "planner-summary__task--done" : ""}`}
+                >
+                  {task.task.status === "completed" ? "✓" : "○"} {task.task.title}
+                </div>
+              ))}
             </div>
           ) : null}
         </div>
-      ) : null}
-
-      {nextBlock && !currentBlock ? (
+      ) : execution.nextBlock ? (
         <div className="planner-summary__next">
           <div className="planner-summary__next-label">
-            Up next · {formatTimeLabel(nextBlock.startsAt)}
+            Up next · {formatTimeLabel(execution.nextBlock.block.startsAt)}
           </div>
           <div className="planner-summary__block-name">
-            {nextBlock.title || "Untitled block"}
+            {execution.nextBlock.block.title || "Untitled block"}
           </div>
+        </div>
+      ) : null}
+
+      {execution.slippedBlocks.length > 0 ? (
+        <div className="planner-summary__alert">
+          <span>
+            {execution.slippedTaskCount} task{execution.slippedTaskCount === 1 ? "" : "s"} slipped from earlier blocks
+          </span>
+          <button
+            className="planner-summary__alert-btn"
+            type="button"
+            onClick={onSwitchToPlanner}
+          >
+            Fix plan
+          </button>
+        </div>
+      ) : execution.currentBlock?.health === "at_risk" ? (
+        <div className="planner-summary__alert">
+          <span>
+            Current block is at risk with {execution.currentBlock.pendingCount} task
+            {execution.currentBlock.pendingCount === 1 ? "" : "s"} left
+          </span>
+          <button
+            className="planner-summary__alert-btn"
+            type="button"
+            onClick={onSwitchToPlanner}
+          >
+            Adjust
+          </button>
         </div>
       ) : null}
 
@@ -95,7 +110,7 @@ export function PlannerSummary({
       ) : null}
 
       <div className="planner-summary__stats">
-        <span>{sorted.length} block{sorted.length !== 1 ? "s" : ""}</span>
+        <span>{execution.orderedBlocks.length} block{execution.orderedBlocks.length !== 1 ? "s" : ""}</span>
         <span className="planner-summary__sep">·</span>
         <span>{completedTasks}/{totalTasks} tasks</span>
         {unplannedTaskCount > 0 ? (
@@ -107,23 +122,31 @@ export function PlannerSummary({
       </div>
 
       <div className="planner-summary__timeline">
-        {sorted.map((block) => {
-          const tasksDone = block.tasks.filter((bt) => bt.task.status === "completed").length;
-          const isCurrent = currentBlock?.id === block.id;
+        {execution.orderedBlocks.map((block) => {
+          const isCurrent = execution.currentBlock?.block.id === block.block.id;
+          const isNext = execution.nextBlock?.block.id === block.block.id;
+          const isSlipped = block.health === "off_track";
           return (
             <div
-              key={block.id}
-              className={`planner-summary__row ${isCurrent ? "planner-summary__row--current" : ""}`}
+              key={block.block.id}
+              className={[
+                "planner-summary__row",
+                isCurrent ? "planner-summary__row--current" : "",
+                isNext ? "planner-summary__row--next" : "",
+                isSlipped ? "planner-summary__row--slipped" : "",
+              ]
+                .filter(Boolean)
+                .join(" ")}
             >
               <span className="planner-summary__row-time">
-                {formatTimeLabel(block.startsAt)}
+                {formatTimeLabel(block.block.startsAt)}
               </span>
               <span className="planner-summary__row-title">
-                {block.title || "Untitled"}
+                {block.block.title || "Untitled"}
               </span>
-              {block.tasks.length > 0 ? (
+              {block.totalCount > 0 ? (
                 <span className="planner-summary__row-progress">
-                  {tasksDone}/{block.tasks.length}
+                  {block.completedCount}/{block.totalCount}
                 </span>
               ) : null}
             </div>
