@@ -2023,7 +2023,6 @@ export function useLoginMutation() {
       }),
     meta: {
       successMessage: "Signed in.",
-      errorMessage: "Sign-in failed.",
     },
     onSuccess: (data) => {
       queryClient.setQueryData<SessionResponse>(queryKeys.session, {
