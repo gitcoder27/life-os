@@ -77,11 +77,7 @@ export function usePlannerActions(date: string) {
     replaceBlockTasks.mutate({ blockId: block.id, taskIds });
   }
 
-  function moveTaskBetweenBlocks(
-    sourceBlock: DayPlannerBlockItem,
-    targetBlock: DayPlannerBlockItem,
-    taskId: string,
-  ) {
+  function moveTaskToBlock(targetBlock: DayPlannerBlockItem, taskId: string) {
     const targetTaskIds = targetBlock.tasks.map((bt) => bt.taskId);
     if (targetTaskIds.includes(taskId)) return;
     replaceBlockTasks.mutate({
@@ -100,6 +96,6 @@ export function usePlannerActions(date: string) {
     assignTaskToBlock,
     removeTaskFromBlock,
     reorderTasksInBlock,
-    moveTaskBetweenBlocks,
+    moveTaskToBlock,
   };
 }

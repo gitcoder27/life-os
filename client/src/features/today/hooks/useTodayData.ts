@@ -76,6 +76,11 @@ export function useTodayData() {
     () => executionTasks.filter((t) => t.status === "completed").length,
     [executionTasks],
   );
+  const plannedPendingTaskCount = useMemo(
+    () =>
+      executionTasks.filter((t) => t.status === "pending" && plannedTaskIds.has(t.id)).length,
+    [executionTasks, plannedTaskIds],
+  );
 
   const refetchAll = () => {
     void dayPlanQuery.refetch();
@@ -100,6 +105,8 @@ export function useTodayData() {
     plannerBlocks,
     plannedTaskIds,
     unplannedTasks,
+    plannedPendingTaskCount,
+    unplannedPendingTaskCount: unplannedTasks.length,
     overdueTasks,
     overdueTasksQuery,
     currentDay,

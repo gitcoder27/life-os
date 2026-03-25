@@ -11,36 +11,25 @@ export function DayPlanner({
   date,
   blocks,
   unplannedTasks,
-  plannedTaskIds,
   actions,
 }: {
   date: string;
   blocks: DayPlannerBlockItem[];
   unplannedTasks: TaskItem[];
-  plannedTaskIds: Set<string>;
   actions: PlannerActions;
 }) {
   const [showForm, setShowForm] = useState(false);
-  const [assigningTaskId, setAssigningTaskId] = useState<string | null>(null);
+  const orderedBlocks = [...blocks].sort((a, b) => a.sortOrder - b.sortOrder);
 
-  const sortedBlocks = [...blocks].sort((a, b) => {
-    const timeDiff = new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime();
-    if (timeDiff !== 0) return timeDiff;
-    return a.sortOrder - b.sortOrder;
-  });
+  function handleMoveBlock(index: number, direction: -1 | 1) {
+    const target = index + direction;
+    if (target < 0 || target >= orderedBlocks.length) {
+      return;
+    }
 
-  function handleAssignTask(taskId: string) {
-    setAssigningTaskId(taskId);
-  }
-
-  function handleSelectBlock(block: DayPlannerBlockItem) {
-    if (!assigningTaskId) return;
-    actions.assignTaskToBlock(block, assigningTaskId);
-    setAssigningTaskId(null);
-  }
-
-  function handleCancelAssign() {
-    setAssigningTaskId(null);
+    const blockIds = orderedBlocks.map((block) => block.id);
+    [blockIds[index], blockIds[target]] = [blockIds[target], blockIds[index]];
+    actions.reorder(blockIds);
   }
 
   return (
@@ -61,25 +50,12 @@ export function DayPlanner({
         <div className="planner__error">{actions.mutationError}</div>
       ) : null}
 
-      {assigningTaskId ? (
-        <div className="planner__assign-banner">
-          <span>Select a block to place this task</span>
-          <button
-            className="button button--ghost button--small"
-            type="button"
-            onClick={handleCancelAssign}
-          >
-            Cancel
-          </button>
-        </div>
-      ) : null}
-
       <div className="planner__body">
         <div className="planner__timeline">
           {showForm ? (
             <PlannerBlockForm
               date={date}
-              existingBlocks={sortedBlocks}
+              existingBlocks={orderedBlocks}
               onSubmit={(payload) => {
                 actions.addBlock(payload);
                 setShowForm(false);
@@ -88,22 +64,43 @@ export function DayPlanner({
             />
           ) : null}
 
-          {sortedBlocks.length === 0 && !showForm ? (
+          {orderedBlocks.length === 0 && !showForm ? (
             <div className="planner__empty">
               <div className="planner__empty-icon">📅</div>
-              <p className="planner__empty-title">No blocks yet</p>
+              <p className="planner__empty-title">Build the shape of the day first</p>
               <p className="planner__empty-desc">
-                Create your first time block to start organizing the day.
+                Start with one block, add a few core sessions, then drop tasks into the right
+                places.
               </p>
+              <div className="planner__empty-steps">
+                <span>1. Create your first block.</span>
+                <span>2. Use the quick presets if they help.</span>
+                <span>3. Assign tasks from the unplanned lane or from inside each block.</span>
+              </div>
+              <button
+                className="button button--primary button--small"
+                type="button"
+                onClick={() => setShowForm(true)}
+              >
+                Create first block
+              </button>
             </div>
           ) : null}
 
-          {sortedBlocks.map((block) => (
+          {orderedBlocks.map((block, index) => (
             <PlannerBlock
               key={block.id}
               block={block}
-              isAssigning={assigningTaskId !== null}
-              onSelectForAssign={() => handleSelectBlock(block)}
+              existingBlocks={orderedBlocks}
+              availableTasks={unplannedTasks}
+              availableBlocks={orderedBlocks}
+              canMoveUp={index > 0}
+              canMoveDown={index < orderedBlocks.length - 1}
+              onMoveBlock={(direction) => handleMoveBlock(index, direction)}
+              onAddTask={(taskId) => actions.assignTaskToBlock(block, taskId)}
+              onMoveTaskToBlock={(taskId, targetBlock) =>
+                actions.moveTaskToBlock(targetBlock, taskId)
+              }
               onEditBlock={(updates) => actions.editBlock(block.id, updates)}
               onDeleteBlock={() => actions.removeBlock(block.id)}
               onRemoveTask={(taskId) => actions.removeTaskFromBlock(block.id, taskId)}
@@ -115,11 +112,8 @@ export function DayPlanner({
 
         <UnplannedTasks
           tasks={unplannedTasks}
-          blocks={sortedBlocks}
-          assigningTaskId={assigningTaskId}
-          onAssignTask={handleAssignTask}
+          blocks={orderedBlocks}
           onQuickAssign={(taskId, block) => actions.assignTaskToBlock(block, taskId)}
-          onCancelAssign={handleCancelAssign}
         />
       </div>
     </div>

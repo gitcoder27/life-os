@@ -24,16 +24,16 @@ The goal is not just to "finish missing tickets." The goal is to make the planne
 
 ## Current State Summary
 
-The feature is partially implemented.
+The feature now has a strong operational Phase 1.
 
 The planner already exists inside the Today page and the page correctly supports two working states:
 
 - `Execute`
 - `Plan`
 
-The current implementation is strong enough to demo and test the basic planning flow, but it is not yet strong enough to feel complete for daily repeated use.
+The current implementation is now strong enough to support a real daily planning workflow without obvious workarounds.
 
-At the moment, the planner behaves like a block list plus an unplanned-task lane. It does not yet behave like a fully operational day-planning system.
+The planner still is not production-ready, but the biggest core interaction gaps are now closed. The remaining work is mostly about timeline clarity, stronger execution guidance, speed improvements, and mobile polish.
 
 ## What Works Today
 
@@ -44,19 +44,24 @@ The following parts are already implemented and working:
 - A user can create a free-form time block with start and end time.
 - A user can edit a block title and block time.
 - A user can delete an empty block.
+- A user can reorder blocks directly from the planner UI.
 - A user can assign an unplanned task into a block.
+- A user can add tasks from inside a block.
 - A user can remove a task from a block and return it to unplanned.
+- A user can move a task directly from one block to another.
 - A user can reorder tasks inside a block.
-- The Execute view shows planned-time badges for tasks that are in a block.
-- The right rail shows a lightweight planner summary when blocks exist.
+- Block create and edit flows both show inline client-side validation before save.
+- The planner empty state now explains how to start instead of only saying there are no blocks.
+- The Execute view shows clearer planned versus unplanned status and nudges the user back into planning when work is still outside the plan.
+- The right rail shows a stronger planner summary when blocks exist.
 
 This confirms that the backend contract is connected and the feature foundation is already real.
 
 ## Main Gaps
 
-## 1. The planner is not yet a true timeline
+## 1. The planner is still not a true timeline
 
-The planning surface is currently a vertically ordered list of block cards. It is sorted by block start time, but it does not yet function as a real timeline.
+The planning surface is now operational, but it still reads as a block workspace rather than a time-first day view.
 
 What is missing:
 
@@ -70,132 +75,65 @@ Why this matters:
 
 This feature is supposed to help the user shape the day. A planner without strong time visibility makes planning slower and less trustworthy.
 
-## 2. The first-run planning flow is too weak
+## 2. The execution loop still needs to be stronger
 
-The current empty state says "No blocks yet" and asks the user to create one. That is technically correct, but not enough guidance for a high-frequency feature.
+The Execute state is materially better than before, but it still is not a full “run the day from here” experience.
 
 What is missing:
 
-- no onboarding explanation of the flow
-- no suggested first-step sequence
-- no starter block set for a typical day
-- no helpful prompt based on the user's existing tasks
+- no strong “current block” focus in the main work lane
+- no clear “up next” handoff inside the main work area
+- no indication that a block is off track, overdue, or partially complete
+- no quick in-place replanning path when the day slips
 
 Why this matters:
 
-A user can land on `Plan`, see an empty planner and a list of tasks, and still not know what to do next. That confusion is already visible in testing.
+A day planner is not only for making a plan. It also needs to help the user stay aligned with that plan while the day is happening.
 
-## 3. Task planning is possible, but not fast enough
+## 3. The planning surface still lacks speed features expected from a core daily tool
 
-Tasks can be assigned from the unplanned lane into a block. That part works. But the flow is still too slow for daily use.
+The important operations now exist, but the planner is still missing the “repeat this every day without friction” layer.
 
 What is missing:
 
 - no bulk assignment flow
-- no "assign next few tasks to this block" flow
-- no block-level add-task action from inside the block
+- no “assign next few tasks to this block” flow
 - no fast keyboard-friendly planning path
+- no quick duplicate block
+- no quick split block
+- no quick extend or shorten block
+- no quick carry unfinished work into the next block
 - no quick way to plan five to ten tasks in one pass without repeated clicking
 
 Why this matters:
 
 This is a daily-use planning feature. Repeated small frictions compound quickly.
 
-## 4. Whole-block reordering is not exposed in the UI
+## 4. The mobile story is acceptable, but not yet strong
 
-The frontend API layer and planner actions include block reorder support, but the current screen does not expose controls for it.
-
-Current consequence:
-
-- if a user creates blocks in the wrong order, they cannot rearrange them directly from the planner UI
-- the only practical workaround is editing block times one by one
-
-Why this matters:
-
-Block order is a core planner interaction, not an edge case.
-
-## 5. Moving a task from one block to another is not a first-class action
-
-The backend behavior supports moving a task into another block through the replace-tasks endpoint, but the current UI does not provide a clear "move to another block" control from the block itself.
-
-Current consequence:
-
-- the user has to remove the task from the current block
-- then find it again in `Unplanned`
-- then assign it into the new block
-
-Why this matters:
-
-Replanning is normal. A planner should make replanning easy, not awkward.
-
-## 6. Block editing is under-validated and too dependent on backend errors
-
-Block creation validates start and end ordering in the form. Block editing does not provide the same level of client-side feedback before save.
+The feature still avoids drag-and-drop, which is correct for v1, but mobile ergonomics need another pass.
 
 What is missing:
 
-- no clear inline validation for overlap before submit
-- no clear inline validation when edited end time is before start time
-- no visual warning when moving a block would collide with another block
-
-Why this matters:
-
-This should feel like a smooth planning tool, not a form that fails after submit.
-
-## 7. The planner does not yet support a strong execution loop
-
-The Execute state shows planned-time badges and the context panel shows a summary. That helps, but it is still a light connection between planning and doing.
-
-What is missing:
-
-- no strong "current block" focus in the main execution lane
-- no clear "up next" handoff inside the main work area
-- no indication that a block is off track, overdue, or partially complete
-- no simple way to adjust the day when the plan starts slipping
-
-Why this matters:
-
-A day planner is not only for making a plan. It also needs to help the user stay aligned with that plan while the day is happening.
-
-## 8. The planning surface still lacks speed features expected from a core daily tool
-
-What is missing:
-
-- no quick duplicate block
-- no quick split block
-- no quick extend or shorten block
-- no quick carry unfinished work into the next block
-- no fast "plan around lunch / meetings / workout" workflow
-
-Why this matters:
-
-Daily planning is repetitive. Speed features are what make the tool feel usable every day instead of occasionally useful.
-
-## 9. The mobile story is acceptable, but not yet strong
-
-The feature does not depend on drag-and-drop, which is correct for v1. But mobile ergonomics still need work.
-
-What is missing:
-
-- larger tap targets for high-frequency actions
-- cleaner task-to-block assignment flow on smaller screens
-- a compact block-edit pattern that avoids visual clutter
-- a simpler way to move tasks and blocks without precision tapping
+- larger tap targets for the highest-frequency actions
+- cleaner picker layouts on smaller screens
+- a denser but still readable block-edit pattern
+- simpler touch-first movement of tasks and blocks
 
 Why this matters:
 
 Today is one of the highest-frequency surfaces in the product. Mobile friction will be felt immediately.
 
-## 10. The planner still feels isolated from the rest of the Today flow
+## 5. The planner still needs to feel more integrated with the rest of Today
 
-The feature sits inside Today, which is the correct product direction. But the user experience still feels like "switch to another mode and manage blocks" rather than one continuous workday flow.
+The feature now bridges Plan and Execute better, but it still does not feel like a fully continuous workday operating system.
 
 What is missing:
 
-- stronger prompts in Execute when tasks are still unplanned
-- stronger nudges to plan before execution when appropriate
-- easier plan adjustments while staying in execution mode
-- clearer status of what is planned versus not planned at a glance
+- stronger current-versus-next context in Execute
+- easier quick adjustments without a full mode shift
+- a clearer story for how unfinished work carries forward later in the day
+- tighter feedback when the planned day stops matching reality
 
 Why this matters:
 
@@ -254,19 +192,23 @@ The user can:
 
 ## Phase 1: Close the core functional gaps
 
-These are the highest-priority missing pieces and should be the next implementation batch.
+Status: implemented
 
-- add visible UI controls for block reordering
-- add visible UI controls to move a task from one block to another
-- add block-level "add task" or "assign tasks" entry points
-- add better inline validation for block edits
-- strengthen empty-state guidance in the planner
+This batch focused on core day-planning operations and the minimum execute-mode visibility needed to make the feature dependable.
+
+- added visible UI controls for block reordering
+- added visible UI controls to move a task from one block to another
+- added block-level “add task” entry points
+- added shared inline validation for block create and edit
+- strengthened empty-state guidance in the planner
+- improved execute-mode visibility for planned versus unplanned work
 
 Definition of done for Phase 1:
 
 - a user can fully plan the day without needing workarounds
 - a user can fix block order and task placement directly from the planner
 - a user gets clear validation before invalid edits fail
+- a user can see from Execute when work is still outside the plan
 
 ## Phase 2: Make the planner feel like a real time planner
 
@@ -359,14 +301,14 @@ That means the immediate next milestone is mostly about better product behavior 
 
 ## Recommended Next Step
 
-The next implementation item should focus on completing the core missing planner operations before adding polish.
+The next implementation item should now move into Phase 2.
 
 Recommended next batch:
 
-1. block reordering UI
-2. move-task-between-blocks UI
-3. planner empty-state guidance
-4. stronger block edit validation
-5. better execution-mode visibility for planned versus unplanned work
+1. make the planner feel like a real timeline
+2. show clearer free time and overload
+3. improve visual hierarchy between current, upcoming, and past blocks
+4. tighten mobile layouts for the new planner actions
+5. add faster block editing controls once the time structure is clearer
 
-Once those are done, the planner will stop feeling partial and start feeling dependable.
+With Phase 1 done, the next milestone is no longer about missing core operations. It is about making the planner instantly scannable and trustworthy as a time-shaped day view.

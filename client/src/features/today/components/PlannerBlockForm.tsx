@@ -1,5 +1,12 @@
 import { useState } from "react";
 import type { DayPlannerBlockItem } from "../../../shared/lib/api";
+import {
+  QUICK_BLOCK_PRESETS,
+  addMinutes,
+  getLocalTimezoneOffset,
+  getNextAvailableTime,
+  validatePlannerBlockDraft,
+} from "../helpers/planner-blocks";
 
 export function PlannerBlockForm({
   date,
@@ -22,25 +29,24 @@ export function PlannerBlockForm({
   const [title, setTitle] = useState("");
   const [startTime, setStartTime] = useState(defaultStart);
   const [endTime, setEndTime] = useState(defaultEnd);
-  const [error, setError] = useState<string | null>(null);
+  const validation = validatePlannerBlockDraft({
+    date,
+    startTime,
+    endTime,
+    timezoneOffset: getLocalTimezoneOffset(),
+    existingBlocks,
+  });
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    setError(null);
-
-    if (startTime >= endTime) {
-      setError("End time must be after start time.");
+    if (validation.error) {
       return;
     }
 
-    const tz = getLocalTimezoneOffset();
-    const startsAt = `${date}T${startTime}:00${tz}`;
-    const endsAt = `${date}T${endTime}:00${tz}`;
-
     onSubmit({
       title: title.trim() || null,
-      startsAt,
-      endsAt,
+      startsAt: validation.startsAt,
+      endsAt: validation.endsAt,
     });
   }
 
@@ -81,10 +87,14 @@ export function PlannerBlockForm({
         </label>
       </div>
 
-      {error ? <div className="planner-form__error">{error}</div> : null}
+      {validation.error ? <div className="planner-form__error">{validation.error}</div> : null}
 
       <div className="planner-form__actions">
-        <button className="button button--primary button--small" type="submit">
+        <button
+          className="button button--primary button--small"
+          type="submit"
+          disabled={Boolean(validation.error)}
+        >
           Create block
         </button>
         <button
@@ -98,7 +108,7 @@ export function PlannerBlockForm({
 
       <div className="planner-form__presets">
         <span className="planner-form__presets-label">Quick:</span>
-        {QUICK_PRESETS.map((preset) => (
+        {QUICK_BLOCK_PRESETS.map((preset) => (
           <button
             key={preset.label}
             className="planner-form__preset"
@@ -115,47 +125,4 @@ export function PlannerBlockForm({
       </div>
     </form>
   );
-}
-
-const QUICK_PRESETS = [
-  { label: "Morning focus", icon: "🌅", start: "08:00", end: "10:00" },
-  { label: "Lunch", icon: "🍽", start: "12:00", end: "13:00" },
-  { label: "Deep work", icon: "🎯", start: "14:00", end: "16:00" },
-  { label: "Gym", icon: "💪", start: "17:00", end: "18:00" },
-  { label: "Wind down", icon: "🌙", start: "20:00", end: "21:00" },
-];
-
-function getNextAvailableTime(blocks: DayPlannerBlockItem[]): string {
-  if (blocks.length === 0) {
-    const now = new Date();
-    const h = String(Math.max(now.getHours(), 8)).padStart(2, "0");
-    return `${h}:00`;
-  }
-
-  const lastBlock = blocks[blocks.length - 1];
-  try {
-    const end = new Date(lastBlock.endsAt);
-    const h = String(end.getHours()).padStart(2, "0");
-    const m = String(end.getMinutes()).padStart(2, "0");
-    return `${h}:${m}`;
-  } catch {
-    return "09:00";
-  }
-}
-
-function addMinutes(timeStr: string, minutes: number): string {
-  const [h, m] = timeStr.split(":").map(Number);
-  const totalMinutes = Math.min(h * 60 + m + minutes, 23 * 60 + 59);
-  const newH = String(Math.floor(totalMinutes / 60)).padStart(2, "0");
-  const newM = String(totalMinutes % 60).padStart(2, "0");
-  return `${newH}:${newM}`;
-}
-
-function getLocalTimezoneOffset(): string {
-  const offset = new Date().getTimezoneOffset();
-  const sign = offset <= 0 ? "+" : "-";
-  const absOffset = Math.abs(offset);
-  const h = String(Math.floor(absOffset / 60)).padStart(2, "0");
-  const m = String(absOffset % 60).padStart(2, "0");
-  return `${sign}${h}:${m}`;
 }

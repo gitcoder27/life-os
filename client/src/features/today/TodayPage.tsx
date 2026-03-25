@@ -90,7 +90,9 @@ export function TodayPage() {
                 totalCount={data.totalTaskCount}
                 taskActions={taskActions}
                 plannerBlocks={data.plannerBlocks}
-                plannedTaskIds={data.plannedTaskIds}
+                plannedTaskCount={data.plannedPendingTaskCount}
+                unplannedTaskCount={data.unplannedPendingTaskCount}
+                onSwitchToPlanner={() => setMode("plan")}
               />
             </div>
 
@@ -103,6 +105,7 @@ export function TodayPage() {
               canAddGoalNudge={canAddGoalNudge}
               onAddGoalNudge={priorityDraft.addGoalNudge}
               plannerBlocks={data.plannerBlocks}
+              unplannedTaskCount={data.unplannedPendingTaskCount}
               onSwitchToPlanner={() => setMode("plan")}
             />
           </div>
@@ -118,7 +121,6 @@ export function TodayPage() {
           date={data.today}
           blocks={data.plannerBlocks}
           unplannedTasks={data.unplannedTasks}
-          plannedTaskIds={data.plannedTaskIds}
           actions={plannerActions}
         />
       )}

@@ -3,9 +3,11 @@ import type { DayPlannerBlockItem } from "../../../shared/lib/api";
 
 export function PlannerSummary({
   blocks,
+  unplannedTaskCount,
   onSwitchToPlanner,
 }: {
   blocks: DayPlannerBlockItem[];
+  unplannedTaskCount: number;
   onSwitchToPlanner: () => void;
 }) {
   if (blocks.length === 0) return null;
@@ -79,10 +81,29 @@ export function PlannerSummary({
         </div>
       ) : null}
 
+      {unplannedTaskCount > 0 ? (
+        <div className="planner-summary__alert">
+          <span>{unplannedTaskCount} task{unplannedTaskCount === 1 ? "" : "s"} still unplanned</span>
+          <button
+            className="planner-summary__alert-btn"
+            type="button"
+            onClick={onSwitchToPlanner}
+          >
+            Plan remaining
+          </button>
+        </div>
+      ) : null}
+
       <div className="planner-summary__stats">
         <span>{sorted.length} block{sorted.length !== 1 ? "s" : ""}</span>
         <span className="planner-summary__sep">·</span>
         <span>{completedTasks}/{totalTasks} tasks</span>
+        {unplannedTaskCount > 0 ? (
+          <>
+            <span className="planner-summary__sep">·</span>
+            <span>{unplannedTaskCount} unplanned</span>
+          </>
+        ) : null}
       </div>
 
       <div className="planner-summary__timeline">

@@ -33,14 +33,18 @@ export function TaskQueue({
   totalCount,
   taskActions,
   plannerBlocks = [],
-  plannedTaskIds,
+  plannedTaskCount,
+  unplannedTaskCount,
+  onSwitchToPlanner,
 }: {
   taskGroups: TaskGroup[];
   completedCount: number;
   totalCount: number;
   taskActions: TaskActions;
   plannerBlocks?: DayPlannerBlockItem[];
-  plannedTaskIds?: Set<string>;
+  plannedTaskCount: number;
+  unplannedTaskCount: number;
+  onSwitchToPlanner: () => void;
 }) {
   const progressPct = totalCount > 0 ? (completedCount / totalCount) * 100 : 0;
 
@@ -49,6 +53,27 @@ export function TaskQueue({
       <div className="today-task-queue__header">
         <div>
           <h2 className="today-task-queue__title">Tasks</h2>
+          {totalCount > 0 ? (
+            <div className="today-task-queue__planner-status">
+              <span className="today-task-queue__planner-chip">
+                {plannedTaskCount} planned
+              </span>
+              <span
+                className={`today-task-queue__planner-chip ${unplannedTaskCount > 0 ? "today-task-queue__planner-chip--warning" : ""}`}
+              >
+                {unplannedTaskCount} unplanned
+              </span>
+              {unplannedTaskCount > 0 ? (
+                <button
+                  className="today-task-queue__planner-cta"
+                  type="button"
+                  onClick={onSwitchToPlanner}
+                >
+                  Plan day
+                </button>
+              ) : null}
+            </div>
+          ) : null}
         </div>
         {totalCount > 0 ? (
           <div className="today-task-queue__progress">
@@ -78,7 +103,6 @@ export function TaskQueue({
               group={group}
               taskActions={taskActions}
               plannerBlocks={plannerBlocks}
-              plannedTaskIds={plannedTaskIds}
             />
           ))}
         </div>
@@ -91,12 +115,10 @@ function TaskGroupSection({
   group,
   taskActions,
   plannerBlocks,
-  plannedTaskIds,
 }: {
   group: TaskGroup;
   taskActions: TaskActions;
   plannerBlocks: DayPlannerBlockItem[];
-  plannedTaskIds?: Set<string>;
 }) {
   const icon = GROUP_ICONS[group.key] ?? "•";
   const groupDone = group.tasks.filter((t) => t.status === "completed").length;
@@ -115,12 +137,15 @@ function TaskGroupSection({
           const blockInfo = plannerBlocks.length > 0
             ? getTaskBlockInfo(task.id, plannerBlocks)
             : null;
-          const isPlanned = plannedTaskIds?.has(task.id) ?? false;
           return (
             <div key={task.id}>
               {blockInfo ? (
                 <div className="today-task-card__planned-badge">
                   🕐 {formatTimeLabel(blockInfo.startsAt)} · {blockInfo.blockTitle}
+                </div>
+              ) : task.status === "pending" ? (
+                <div className="today-task-card__planned-badge today-task-card__planned-badge--unplanned">
+                  Unplanned
                 </div>
               ) : null}
               <TaskCard

@@ -4,19 +4,13 @@ import type { TaskItem, DayPlannerBlockItem } from "../../../shared/lib/api";
 export function UnplannedTasks({
   tasks,
   blocks,
-  assigningTaskId,
-  onAssignTask,
   onQuickAssign,
-  onCancelAssign,
 }: {
   tasks: TaskItem[];
   blocks: DayPlannerBlockItem[];
-  assigningTaskId: string | null;
-  onAssignTask: (taskId: string) => void;
   onQuickAssign: (taskId: string, block: DayPlannerBlockItem) => void;
-  onCancelAssign: () => void;
 }) {
-  if (tasks.length === 0 && !assigningTaskId) {
+  if (tasks.length === 0) {
     return (
       <div className="unplanned-lane">
         <h3 className="unplanned-lane__title">Unplanned tasks</h3>
@@ -34,6 +28,11 @@ export function UnplannedTasks({
         <h3 className="unplanned-lane__title">Unplanned</h3>
         <span className="unplanned-lane__count">{tasks.length}</span>
       </div>
+      {blocks.length === 0 ? (
+        <div className="unplanned-lane__helper">
+          Create a block first, then assign tasks from here or from inside a block.
+        </div>
+      ) : null}
 
       <div className="unplanned-lane__list">
         {tasks.map((task) => (
@@ -41,10 +40,7 @@ export function UnplannedTasks({
             key={task.id}
             task={task}
             blocks={blocks}
-            isSelected={assigningTaskId === task.id}
-            onAssign={() => onAssignTask(task.id)}
             onQuickAssign={(block) => onQuickAssign(task.id, block)}
-            onCancel={onCancelAssign}
           />
         ))}
       </div>
@@ -55,17 +51,11 @@ export function UnplannedTasks({
 function UnplannedTaskRow({
   task,
   blocks,
-  isSelected,
-  onAssign,
   onQuickAssign,
-  onCancel,
 }: {
   task: TaskItem;
   blocks: DayPlannerBlockItem[];
-  isSelected: boolean;
-  onAssign: () => void;
   onQuickAssign: (block: DayPlannerBlockItem) => void;
-  onCancel: () => void;
 }) {
   const [showPicker, setShowPicker] = useState(false);
   const pickerRef = useRef<HTMLDivElement>(null);
@@ -82,7 +72,7 @@ function UnplannedTaskRow({
   }, [showPicker]);
 
   return (
-    <div className={`unplanned-task ${isSelected ? "unplanned-task--selected" : ""}`}>
+    <div className="unplanned-task">
       <div className="unplanned-task__info">
         <span className="unplanned-task__title">{task.title}</span>
         {task.goal ? (
@@ -138,17 +128,7 @@ function UnplannedTaskRow({
               </>
             )}
           </>
-        ) : (
-          <button
-            className="unplanned-task__assign-btn unplanned-task__assign-btn--disabled"
-            type="button"
-            onClick={onAssign}
-            title="Create a block first"
-            disabled
-          >
-            No blocks
-          </button>
-        )}
+        ) : null}
       </div>
     </div>
   );

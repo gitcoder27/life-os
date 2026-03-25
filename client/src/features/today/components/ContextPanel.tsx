@@ -24,6 +24,7 @@ export function ContextPanel({
   canAddGoalNudge,
   onAddGoalNudge,
   plannerBlocks,
+  unplannedTaskCount,
   onSwitchToPlanner,
 }: {
   currentDay: HealthDay | undefined;
@@ -34,6 +35,7 @@ export function ContextPanel({
   canAddGoalNudge: boolean;
   onAddGoalNudge: (nudge: GoalNudgeItem) => void;
   plannerBlocks: DayPlannerBlockItem[];
+  unplannedTaskCount: number;
   onSwitchToPlanner: () => void;
 }) {
   return (
@@ -42,7 +44,11 @@ export function ContextPanel({
       <HealthPulse currentDay={currentDay} />
       <FinanceAdmin />
       {plannerBlocks.length > 0 ? (
-        <PlannerSummary blocks={plannerBlocks} onSwitchToPlanner={onSwitchToPlanner} />
+        <PlannerSummary
+          blocks={plannerBlocks}
+          unplannedTaskCount={unplannedTaskCount}
+          onSwitchToPlanner={onSwitchToPlanner}
+        />
       ) : (
         <TimeBlocks tasks={timedTasks} />
       )}
