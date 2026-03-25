@@ -146,7 +146,9 @@ export function TodayPage() {
           date={data.today}
           blocks={data.plannerBlocks}
           unplannedTasks={data.unplannedTasks}
+          execution={plannerExecution}
           actions={plannerActions}
+          taskActions={taskActions}
         />
       )}
     </div>

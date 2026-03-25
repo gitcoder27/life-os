@@ -33,7 +33,7 @@ The planner already exists inside the Today page and the page correctly supports
 
 The current implementation is now strong enough to support both planning the day and running against that plan without obvious workarounds.
 
-The planner still is not fully production-ready, but the biggest core interaction gaps are now closed. The remaining work is mostly about speed improvements, quality-of-life actions, and final mobile polish.
+The planner still is not fully production-ready, but the biggest core interaction gaps are now closed. The remaining work is mostly about speed improvements and final mobile polish.
 
 ## What Works Today
 
@@ -57,6 +57,9 @@ The following parts are already implemented and working:
 - Execute mode now has a dedicated current-block focus in the main work lane.
 - Execute mode now shows stronger up-next handoff and drift signals when the plan is slipping.
 - A user can move planned work forward, return it to unplanned, or assign unplanned work into live blocks without leaving Execute.
+- Execute mode now has a dedicated cleanup state once unfinished planned work is trapped in past blocks.
+- A user can batch move slipped work into a live block, unplan it, or carry it to tomorrow without leaving Today.
+- Plan mode now mirrors stale-day cleanup with a supporting banner instead of forcing a separate end-of-day flow.
 
 This confirms that the backend contract is connected and the feature foundation is already real.
 
@@ -93,18 +96,20 @@ Why this matters:
 
 Today is one of the highest-frequency surfaces in the product. Mobile friction will be felt immediately.
 
-## 3. The planner still needs cleaner end-of-day handling
+## 3. End-of-day cleanup is now Execute-led, but still needs later polish
 
-The feature now bridges Plan and Execute much better, but it still needs a cleaner story once reality fully outruns the schedule.
+Status: implemented for the core flow
 
-What is missing:
+What is now true:
 
-- a clearer story for how unfinished work carries forward later in the day
-- tighter feedback when the planned day stops matching reality
+- Execute clearly calls out when earlier blocks slipped or the entire planned day is already in the past
+- unfinished planned work can be moved into a live block, unplanned, or carried to tomorrow from the same Today surface
+- Plan mode mirrors the stale-day state with supporting cleanup actions instead of introducing a separate close-day screen
 
-Why this matters:
+What still remains:
 
-The planner should feel like the operating system for the day, not a side workflow.
+- richer batch reschedule choices beyond tomorrow if cleanup usage proves heavy
+- more explicit history or recap polish if the product later wants a stronger “what actually happened” record inside Today
 
 ## Production-Ready Target Experience
 
@@ -209,6 +214,8 @@ This phase should connect planning and doing more tightly.
 - show stronger "up next" and "off track" signals
 - surface unplanned tasks more clearly in execution mode
 - support quick plan adjustments without requiring a full context switch
+- add an Execute-led cleanup state when unfinished planned work is left behind in past blocks
+- mirror cleanup state in Plan mode with supporting actions instead of a separate close-day workflow
 
 Definition of done for Phase 3:
 
@@ -241,6 +248,8 @@ The following decisions should be made explicitly before polishing the feature:
 - Phase 2 decision: mobile keeps the unplanned lane below the timeline instead of using a bottom sheet.
 - Phase 3 decision: Execute mode supports task-level move and assign actions in place, but block creation and block time edits stay in Plan mode.
 - Phase 3 decision: drift signals use both time passage and unfinished tasks instead of task completion alone.
+- End-of-day cleanup decision: keep cleanup primary in Execute, with a lighter supporting banner in Plan mode.
+- End-of-day cleanup decision: batch carry-forward inside cleanup goes to tomorrow only; custom-date reschedule stays on existing task-level paths elsewhere in Today.
 - Phase 4 decision: bulk assignment stays inside the existing unplanned lane instead of introducing a separate planner inbox or modal.
 - Phase 4 decision: duplicate block copies structure and timing only, not tasks.
 - Phase 4 decision: carry-forward speed actions in the planner move pending work into the next block; carry-to-tomorrow remains the existing task-level path elsewhere in Today.
@@ -256,6 +265,7 @@ The feature should not be considered complete until the following are true:
 - A user can scan the full day and understand time distribution, gaps, and overload.
 - A user can see what is planned, what is unplanned, what is current, and what is next.
 - A user can adjust the plan during the day without losing context or momentum.
+- A user can clearly clean up slipped planned work once the day no longer matches reality.
 - The feature works cleanly on desktop and mobile without relying on drag-and-drop.
 
 ## Likely Implementation Areas

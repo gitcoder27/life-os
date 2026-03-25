@@ -101,6 +101,38 @@ export function usePlannerActions(date: string) {
     removeBlockTask.mutate({ blockId, taskId });
   }
 
+  async function unplanTaskIdsFromBlock(block: DayPlannerBlockItem, taskIds: string[]) {
+    const taskIdsToRemove = new Set(taskIds);
+    const remainingTaskIds = block.tasks
+      .sort((left, right) => left.sortOrder - right.sortOrder)
+      .map((task) => task.taskId)
+      .filter((taskId) => !taskIdsToRemove.has(taskId));
+
+    if (remainingTaskIds.length === block.tasks.length) {
+      return;
+    }
+
+    await replaceBlockTasks.mutateAsync({
+      blockId: block.id,
+      taskIds: remainingTaskIds,
+    });
+  }
+
+  async function unplanPendingTasksFromBlocks(blocks: DayPlannerBlockItem[]) {
+    for (const block of blocks) {
+      const pendingTaskIds = block.tasks
+        .filter((bt) => bt.task.status === "pending")
+        .sort((left, right) => left.sortOrder - right.sortOrder)
+        .map((bt) => bt.taskId);
+
+      if (pendingTaskIds.length === 0) {
+        continue;
+      }
+
+      await unplanTaskIdsFromBlock(block, pendingTaskIds);
+    }
+  }
+
   function reorderTasksInBlock(block: DayPlannerBlockItem, taskIds: string[]) {
     replaceBlockTasks.mutate({ blockId: block.id, taskIds });
   }
@@ -176,6 +208,8 @@ export function usePlannerActions(date: string) {
     assignTaskToBlock,
     assignTasksToBlock,
     removeTaskFromBlock,
+    unplanTaskIdsFromBlock,
+    unplanPendingTasksFromBlocks,
     reorderTasksInBlock,
     moveTaskToBlock,
     splitBlock,

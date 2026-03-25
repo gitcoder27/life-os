@@ -23,11 +23,14 @@ import {
   writeStoredPlannerVisibleHours,
   type PlannerTimelineSegment,
 } from "../helpers/planner-timeline";
+import type { PlannerExecutionModel } from "../helpers/planner-execution";
 import { PlannerBlock } from "./PlannerBlock";
 import { PlannerBlockForm } from "./PlannerBlockForm";
 import { UnplannedTasks } from "./UnplannedTasks";
+import type { useTaskActions } from "../hooks/useTaskActions";
 
 type PlannerActions = ReturnType<typeof usePlannerActions>;
+type TaskActions = ReturnType<typeof useTaskActions>;
 
 type PlannerFormDraft = {
   key: string;
@@ -40,12 +43,16 @@ export function DayPlanner({
   date,
   blocks,
   unplannedTasks,
+  execution,
   actions,
+  taskActions,
 }: {
   date: string;
   blocks: DayPlannerBlockItem[];
   unplannedTasks: TaskItem[];
+  execution: PlannerExecutionModel;
   actions: PlannerActions;
+  taskActions: TaskActions;
 }) {
   const [formDraft, setFormDraft] = useState<PlannerFormDraft | null>(null);
   const [showHoursEditor, setShowHoursEditor] = useState(false);
@@ -68,6 +75,8 @@ export function DayPlanner({
     [orderedBlocks, now, visibleHours],
   );
   const hoursValidation = validatePlannerVisibleHours(hoursDraft);
+  const cleanupTarget = execution.cleanup.targetBlock?.block ?? null;
+  const isCleanupPending = actions.isPending || taskActions.isPending;
 
   useEffect(() => {
     const intervalId = window.setInterval(() => setNow(new Date()), 60_000);
@@ -184,6 +193,32 @@ export function DayPlanner({
     setShowHoursEditor(false);
   }
 
+  function handleCleanupMoveAll(targetBlock: DayPlannerBlockItem | null) {
+    if (!targetBlock || execution.cleanup.taskIds.length === 0) {
+      return;
+    }
+
+    void actions.assignTasksToBlock(targetBlock, execution.cleanup.taskIds);
+  }
+
+  function handleCleanupUnplanAll() {
+    if (execution.slippedBlocks.length === 0) {
+      return;
+    }
+
+    void actions.unplanPendingTasksFromBlocks(
+      execution.slippedBlocks.map((block) => block.block),
+    );
+  }
+
+  function handleCleanupTomorrow() {
+    if (execution.cleanup.taskIds.length === 0) {
+      return;
+    }
+
+    void taskActions.moveTasksToTomorrow(execution.cleanup.taskIds);
+  }
+
   return (
     <div className="planner">
       <div className="planner__header">
@@ -273,6 +308,57 @@ export function DayPlanner({
 
       {actions.mutationError ? (
         <div className="planner__error">{actions.mutationError}</div>
+      ) : null}
+
+      {execution.cleanup.state !== "none" ? (
+        <div className="planner__cleanup-banner">
+          <div className="planner__cleanup-copy">
+            <div className="planner__cleanup-title">
+              {execution.cleanup.state === "close_day"
+                ? "The planned day is already in the past"
+                : "Earlier blocks slipped off plan"}
+            </div>
+            <div className="planner__cleanup-desc">
+              {execution.cleanup.state === "close_day"
+                ? `${execution.cleanup.taskCount} task${execution.cleanup.taskCount === 1 ? "" : "s"} are still attached to past blocks.`
+                : `${execution.cleanup.taskCount} task${execution.cleanup.taskCount === 1 ? "" : "s"} from ${execution.cleanup.blockCount} past block${execution.cleanup.blockCount === 1 ? "" : "s"} still need a home.`}
+              {execution.cleanup.state === "close_day" &&
+              execution.cleanup.dayEndedMinutesAgo !== null
+                ? ` Last planned block ended ${formatDurationMinutes(execution.cleanup.dayEndedMinutesAgo)} ago.`
+                : ""}
+            </div>
+          </div>
+          <div className="planner__cleanup-actions">
+            {cleanupTarget ? (
+              <button
+                className="button button--primary button--small"
+                type="button"
+                onClick={() => handleCleanupMoveAll(cleanupTarget)}
+                disabled={isCleanupPending}
+              >
+                Move all to {cleanupTarget.title || formatTimeLabel(cleanupTarget.startsAt)}
+              </button>
+            ) : null}
+            <button
+              className="button button--ghost button--small"
+              type="button"
+              onClick={handleCleanupUnplanAll}
+              disabled={isCleanupPending}
+            >
+              Unplan all slipped
+            </button>
+            {execution.cleanup.state === "close_day" ? (
+              <button
+                className="button button--ghost button--small"
+                type="button"
+                onClick={handleCleanupTomorrow}
+                disabled={isCleanupPending}
+              >
+                Move all to tomorrow
+              </button>
+            ) : null}
+          </div>
+        </div>
       ) : null}
 
       <div className="planner__body">

@@ -29,12 +29,22 @@ export function useTaskActions(today: string) {
     carryForwardMutation.mutate({ taskId, targetDate }, { onSuccess });
   }
 
+  async function carryForwardTasks(taskIds: string[], targetDate: string) {
+    for (const taskId of taskIds) {
+      await carryForwardMutation.mutateAsync({ taskId, targetDate });
+    }
+  }
+
   function moveToToday(taskId: string, onSuccess?: () => void) {
     carryForwardMutation.mutate({ taskId, targetDate: today }, { onSuccess });
   }
 
   function moveToTomorrow(taskId: string, onSuccess?: () => void) {
     carryForwardMutation.mutate({ taskId, targetDate: tomorrow }, { onSuccess });
+  }
+
+  async function moveTasksToTomorrow(taskIds: string[]) {
+    await carryForwardTasks(taskIds, tomorrow);
   }
 
   function reschedule(taskId: string, onSuccess?: () => void) {
@@ -56,8 +66,10 @@ export function useTaskActions(today: string) {
     setRescheduleDate,
     changeStatus,
     carryForward,
+    carryForwardTasks,
     moveToToday,
     moveToTomorrow,
+    moveTasksToTomorrow,
     reschedule,
     tomorrow,
   };

@@ -11,6 +11,7 @@ export type PlannerExecutionFocusState =
   | "off_track"
   | "plan_complete";
 export type PlannerExecutionDayHealth = "aligned" | "unplanned" | "at_risk" | "off_track";
+export type PlannerCleanupState = "none" | "replan_now" | "close_day";
 
 export type PlannerExecutionBlockModel = {
   block: DayPlannerBlockItem;
@@ -30,11 +31,21 @@ export type PlannerExecutionBlockModel = {
   health: PlannerExecutionHealth;
 };
 
+export type PlannerExecutionCleanupModel = {
+  state: PlannerCleanupState;
+  targetBlock: PlannerExecutionBlockModel | null;
+  taskIds: string[];
+  blockCount: number;
+  taskCount: number;
+  dayEndedMinutesAgo: number | null;
+};
+
 export type PlannerExecutionModel = {
   orderedBlocks: PlannerExecutionBlockModel[];
   currentBlock: PlannerExecutionBlockModel | null;
   nextBlock: PlannerExecutionBlockModel | null;
   slippedBlocks: PlannerExecutionBlockModel[];
+  cleanup: PlannerExecutionCleanupModel;
   focusState: PlannerExecutionFocusState;
   dayHealth: PlannerExecutionDayHealth;
   unplannedTasks: TaskItem[];
@@ -77,11 +88,34 @@ export const buildPlannerExecutionModel = (input: {
     dayHealth = "unplanned";
   }
 
+  const cleanupTargetBlock = currentBlock ?? nextBlock;
+  const cleanupState: PlannerCleanupState =
+    slippedBlocks.length === 0
+      ? "none"
+      : cleanupTargetBlock
+        ? "replan_now"
+        : "close_day";
+  const cleanupTaskIds = slippedBlocks.flatMap((block) =>
+    block.pendingTasks.map((task) => task.taskId),
+  );
+  const dayEndedMinutesAgo =
+    cleanupState === "close_day" && orderedBlocks.length > 0
+      ? orderedBlocks[orderedBlocks.length - 1]?.endedMinutesAgo ?? null
+      : null;
+
   return {
     orderedBlocks,
     currentBlock,
     nextBlock,
     slippedBlocks,
+    cleanup: {
+      state: cleanupState,
+      targetBlock: cleanupTargetBlock,
+      taskIds: cleanupTaskIds,
+      blockCount: slippedBlocks.length,
+      taskCount: cleanupTaskIds.length,
+      dayEndedMinutesAgo,
+    },
     focusState,
     dayHealth,
     unplannedTasks: input.unplannedTasks,

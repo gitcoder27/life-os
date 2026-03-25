@@ -55,11 +55,14 @@ export function ExecutePlannerFocus({
         </button>
       </div>
 
-      {execution.slippedBlocks.length > 0 ? (
-        <div className="execute-focus__banner execute-focus__banner--warning">
-          <strong>{execution.slippedTaskCount} task{execution.slippedTaskCount === 1 ? "" : "s"} slipped off plan.</strong>
-          <span>Move them forward or unplan them before the next handoff gets messy.</span>
-        </div>
+      {execution.cleanup.state !== "none" ? (
+        <CleanupSummaryCard
+          execution={execution}
+          targets={replanTargets}
+          plannerActions={plannerActions}
+          taskActions={taskActions}
+          onSwitchToPlanner={onSwitchToPlanner}
+        />
       ) : execution.currentBlock?.health === "at_risk" ? (
         <div className="execute-focus__banner execute-focus__banner--risk">
           <strong>Current block is running tight.</strong>
@@ -79,6 +82,7 @@ export function ExecutePlannerFocus({
               targets={replanTargets.filter((candidate) => candidate.id !== block.block.id)}
               plannerActions={plannerActions}
               taskActions={taskActions}
+              showTomorrowAction={execution.cleanup.state === "close_day"}
             />
           ))}
         </div>
@@ -108,15 +112,6 @@ export function ExecutePlannerFocus({
 
       {execution.focusState === "gap_before_next" && execution.nextBlock ? (
         <GapBeforeNextCard nextBlock={execution.nextBlock} />
-      ) : null}
-
-      {execution.focusState === "off_track" && !execution.currentBlock ? (
-        <EmptyExecuteState
-          title="The plan slipped before the next block started"
-          description="Clean up the leftover work above, then decide whether the next block still holds or needs a fuller edit."
-          actionLabel="Adjust plan"
-          onAction={onSwitchToPlanner}
-        />
       ) : null}
 
       {execution.focusState === "plan_complete" ? (
@@ -180,6 +175,107 @@ export function ExecutePlannerFocus({
           ) : null}
         </section>
       ) : null}
+    </section>
+  );
+}
+
+function CleanupSummaryCard({
+  execution,
+  targets,
+  plannerActions,
+  taskActions,
+  onSwitchToPlanner,
+}: {
+  execution: PlannerExecutionModel;
+  targets: DayPlannerBlockItem[];
+  plannerActions: PlannerActions;
+  taskActions: TaskActions;
+  onSwitchToPlanner: () => void;
+}) {
+  const cleanupTarget = execution.cleanup.targetBlock?.block ?? null;
+  const isBusy = plannerActions.isPending || taskActions.isPending;
+
+  return (
+    <section className="execute-focus__card execute-focus__card--cleanup">
+      <div className="execute-focus__card-head">
+        <div>
+          <div className="execute-focus__eyebrow">Cleanup</div>
+          <h3 className="execute-focus__card-title">
+            {execution.cleanup.state === "close_day"
+              ? "The planned day no longer matches reality"
+              : "Earlier blocks slipped"}
+          </h3>
+          <div className="execute-focus__helper">
+            {execution.cleanup.state === "close_day"
+              ? `${execution.cleanup.taskCount} task${execution.cleanup.taskCount === 1 ? "" : "s"} are still attached to past blocks.`
+              : `${execution.cleanup.taskCount} task${execution.cleanup.taskCount === 1 ? "" : "s"} from ${execution.cleanup.blockCount} earlier block${execution.cleanup.blockCount === 1 ? "" : "s"} still need a clearer plan.`}
+            {execution.cleanup.state === "close_day" &&
+            execution.cleanup.dayEndedMinutesAgo !== null
+              ? ` Last planned block ended ${formatDurationMinutes(execution.cleanup.dayEndedMinutesAgo)} ago.`
+              : ""}
+          </div>
+        </div>
+        <HealthChip health="off_track" />
+      </div>
+
+      <div className="execute-focus__cleanup-stats">
+        <span className="execute-focus__cleanup-chip">
+          {execution.cleanup.blockCount} past block{execution.cleanup.blockCount === 1 ? "" : "s"}
+        </span>
+        <span className="execute-focus__cleanup-chip">
+          {execution.cleanup.taskCount} open task{execution.cleanup.taskCount === 1 ? "" : "s"}
+        </span>
+      </div>
+
+      <div className="execute-focus__quick-actions">
+        {cleanupTarget ? (
+          <button
+            className="button button--primary button--small"
+            type="button"
+            onClick={() => plannerActions.assignTasksToBlock(cleanupTarget, execution.cleanup.taskIds)}
+            disabled={isBusy}
+          >
+            Move all to {cleanupTarget.title || formatTimeLabel(cleanupTarget.startsAt)}
+          </button>
+        ) : null}
+        {targets.length > 1 ? (
+          <BlockTargetPicker
+            label={cleanupTarget ? "Choose block" : "Move all"}
+            blocks={targets}
+            disabled={isBusy}
+            onSelect={(block) => plannerActions.assignTasksToBlock(block, execution.cleanup.taskIds)}
+          />
+        ) : null}
+        <button
+          className="button button--ghost button--small"
+          type="button"
+          onClick={() =>
+            plannerActions.unplanPendingTasksFromBlocks(
+              execution.slippedBlocks.map((block) => block.block),
+            )
+          }
+          disabled={isBusy}
+        >
+          Unplan all slipped
+        </button>
+        {execution.cleanup.state === "close_day" ? (
+          <button
+            className="button button--ghost button--small"
+            type="button"
+            onClick={() => taskActions.moveTasksToTomorrow(execution.cleanup.taskIds)}
+            disabled={isBusy}
+          >
+            Move all to tomorrow
+          </button>
+        ) : null}
+        <button
+          className="button button--ghost button--small"
+          type="button"
+          onClick={onSwitchToPlanner}
+        >
+          Adjust plan
+        </button>
+      </div>
     </section>
   );
 }
@@ -265,13 +361,17 @@ function SlippedBlockCard({
   targets,
   plannerActions,
   taskActions,
+  showTomorrowAction,
 }: {
   block: PlannerExecutionBlockModel;
   targets: DayPlannerBlockItem[];
   plannerActions: PlannerActions;
   taskActions: TaskActions;
+  showTomorrowAction: boolean;
 }) {
   const nextTarget = targets[0] ?? null;
+  const pendingTaskIds = block.pendingTasks.map((task) => task.taskId);
+  const isBusy = plannerActions.isPending || taskActions.isPending;
 
   return (
     <section className="execute-focus__card execute-focus__card--slipped">
@@ -289,16 +389,36 @@ function SlippedBlockCard({
       <div className="execute-focus__helper">
         {block.pendingCount} task{block.pendingCount === 1 ? "" : "s"} still open from this block.
       </div>
-      {nextTarget && block.pendingCount > 0 ? (
+      {block.pendingCount > 0 ? (
         <div className="execute-focus__quick-actions">
+          {nextTarget ? (
+            <button
+              className="button button--ghost button--small"
+              type="button"
+              onClick={() => plannerActions.carryPendingTasksToBlock(block.block, nextTarget)}
+              disabled={isBusy}
+            >
+              Carry open to {nextTarget.title || formatTimeLabel(nextTarget.startsAt)}
+            </button>
+          ) : null}
           <button
             className="button button--ghost button--small"
             type="button"
-            onClick={() => plannerActions.carryPendingTasksToBlock(block.block, nextTarget)}
-            disabled={plannerActions.isPending}
+            onClick={() => plannerActions.unplanTaskIdsFromBlock(block.block, pendingTaskIds)}
+            disabled={isBusy}
           >
-            Carry open to {nextTarget.title || formatTimeLabel(nextTarget.startsAt)}
+            Unplan all
           </button>
+          {showTomorrowAction ? (
+            <button
+              className="button button--ghost button--small"
+              type="button"
+              onClick={() => taskActions.moveTasksToTomorrow(pendingTaskIds)}
+              disabled={isBusy}
+            >
+              Tomorrow
+            </button>
+          ) : null}
         </div>
       ) : null}
       <div className="execute-focus__task-list">
@@ -310,6 +430,7 @@ function SlippedBlockCard({
             targets={targets}
             plannerActions={plannerActions}
             taskActions={taskActions}
+            showTomorrowAction={showTomorrowAction}
           />
         ))}
       </div>
@@ -388,12 +509,14 @@ function PlannedTaskRow({
   targets,
   plannerActions,
   taskActions,
+  showTomorrowAction = false,
 }: {
   task: DayPlannerBlockTaskItem;
   sourceBlock: DayPlannerBlockItem;
   targets: DayPlannerBlockItem[];
   plannerActions: PlannerActions;
   taskActions: TaskActions;
+  showTomorrowAction?: boolean;
 }) {
   const isBusy = plannerActions.isPending || taskActions.isPending;
 
@@ -418,6 +541,16 @@ function PlannedTaskRow({
             disabled={isBusy}
             onSelect={(block) => plannerActions.moveTaskToBlock(block, task.taskId)}
           />
+        ) : null}
+        {showTomorrowAction ? (
+          <button
+            className="execute-focus__task-btn"
+            type="button"
+            onClick={() => taskActions.moveToTomorrow(task.taskId)}
+            disabled={isBusy}
+          >
+            Tomorrow
+          </button>
         ) : null}
         <button
           className="execute-focus__task-btn"

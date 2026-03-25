@@ -417,6 +417,12 @@ export function PlannerBlock({
         )}
       </div>
 
+      {timelineStatus === "past" && pendingCount > 0 ? (
+        <div className="planner-block__past-note">
+          {pendingCount} task{pendingCount === 1 ? "" : "s"} still belong to this finished block. Use the cleanup actions above or move them forward from here.
+        </div>
+      ) : null}
+
       {showAddTaskPicker ? (
         <div
           className="planner-block__picker"
