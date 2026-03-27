@@ -182,6 +182,28 @@ function formatDraftStatus(lastSavedAt: string | null) {
   })}.`;
 }
 
+function formatClosedWindowStatus(
+  windowPresentation: ReturnType<typeof deriveReviewWindowPresentation> | null,
+) {
+  if (!windowPresentation) {
+    return "Submission is currently disabled — the review window is not open.";
+  }
+
+  if (windowPresentation.opensAtLocal && windowPresentation.closesAtLocal) {
+    return `Submission is currently disabled — the next review window opens ${windowPresentation.opensAtLocal} and closes ${windowPresentation.closesAtLocal} (${windowPresentation.timezone}).`;
+  }
+
+  if (windowPresentation.opensAtLocal) {
+    return `Submission is currently disabled — the next review window opens ${windowPresentation.opensAtLocal} (${windowPresentation.timezone}).`;
+  }
+
+  return `Submission is currently disabled — ${windowPresentation.description}`;
+}
+
+function formatCount(count: number, singular: string, plural: string) {
+  return `${count} ${count === 1 ? singular : plural}`;
+}
+
 export function ReviewsPage() {
   const { cadence = "daily" } = useParams();
   const [searchParams] = useSearchParams();
@@ -689,6 +711,45 @@ export function ReviewsPage() {
       ? dailyTomorrowPriorities.length === 3 &&
         dailyTomorrowPriorities.every((priority) => priority.title.trim().length > 0)
       : false;
+  const unresolvedTaskDecisionCount =
+    reviewQuery.data.cadence === "daily"
+      ? dailyPendingTasks.filter((task) => {
+          const decision = dailyTaskDecisions[task.id];
+          if (!decision) {
+            return true;
+          }
+
+          return decision.type === "reschedule" && !decision.targetDate;
+        }).length
+      : 0;
+  const missingTomorrowPriorityCount =
+    reviewQuery.data.cadence === "daily"
+      ? dailyTomorrowPriorities.filter((priority) => priority.title.trim().length === 0).length
+      : 0;
+  const dailySubmitBlockers =
+    reviewQuery.data.cadence === "daily"
+      ? [
+          ...(!isWindowOpen ? [formatClosedWindowStatus(windowPresentation)] : []),
+          ...(isWindowOpen && unresolvedTaskDecisionCount > 0
+            ? [
+                `${formatCount(
+                  unresolvedTaskDecisionCount,
+                  "pending task still needs a decision",
+                  "pending tasks still need decisions",
+                )}.`,
+              ]
+            : []),
+          ...(isWindowOpen && missingTomorrowPriorityCount > 0
+            ? [
+                `${formatCount(
+                  missingTomorrowPriorityCount,
+                  "tomorrow priority is still empty",
+                  "tomorrow priorities are still empty",
+                )}.`,
+              ]
+            : []),
+        ]
+      : [];
 
   const canSubmitDaily =
     reviewQuery.data.cadence === "daily" &&
@@ -736,7 +797,7 @@ export function ReviewsPage() {
           to="/reviews/history"
           className="button button--ghost button--small"
         >
-          History
+          Past reviews
         </NavLink>
       </div>
 
@@ -1054,15 +1115,11 @@ export function ReviewsPage() {
             <>
               <div className="button-row" style={{ paddingTop: "0.5rem" }}>
                 <span className="support-copy">
-                  {!isWindowOpen
-                    ? "Submission is currently disabled — the review window is not open."
-                    : hasDecisionForEveryPendingTask
-                      ? "All pending tasks have decisions."
-                      : "Choose carry forward, drop, or reschedule for every pending task."}{" "}
-                  {isWindowOpen &&
-                    (hasThreeTomorrowPriorities
-                      ? "Three tomorrow priorities are set."
-                      : "Fill all three tomorrow priorities to submit.")}
+                  {canSubmitDaily
+                    ? "Everything required is filled in. You can submit the daily review now."
+                    : isWindowOpen
+                      ? "The review window is open, but the form is still incomplete."
+                      : formatClosedWindowStatus(windowPresentation)}
                 </span>
                 <button
                   className="button button--primary"
@@ -1073,6 +1130,13 @@ export function ReviewsPage() {
                   {isSubmitting ? "Submitting..." : "Submit daily review"}
                 </button>
               </div>
+              {!canSubmitDaily && dailySubmitBlockers.length > 0 ? (
+                <div className="inline-state inline-state--out-of-window" style={{ marginTop: "0.75rem" }}>
+                  {dailySubmitBlockers.map((blocker) => (
+                    <div key={blocker}>{blocker}</div>
+                  ))}
+                </div>
+              ) : null}
               <p className="support-copy" style={{ marginTop: "0.5rem" }}>
                 {draftStatusText}
               </p>

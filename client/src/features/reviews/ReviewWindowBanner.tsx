@@ -12,6 +12,9 @@ export function ReviewWindowBanner({
   onNavigateToAllowed,
 }: ReviewWindowBannerProps) {
   const statusModifier = presentation.status.replace(/_/g, "-");
+  const showUpcomingClose =
+    !presentation.isOpen &&
+    (presentation.status === "too_early" || presentation.status === "no_open_window");
   const showNavigate =
     !presentation.isOpen &&
     presentation.allowedDate &&
@@ -45,6 +48,12 @@ export function ReviewWindowBanner({
               <span className="review-window__ts">
                 <span className="review-window__ts-label">Opens</span>
                 <span className="review-window__ts-value">{presentation.opensAtLocal}</span>
+              </span>
+            )}
+            {presentation.closesAtLocal && showUpcomingClose && (
+              <span className="review-window__ts">
+                <span className="review-window__ts-label">Closes</span>
+                <span className="review-window__ts-value">{presentation.closesAtLocal}</span>
               </span>
             )}
             {presentation.closesAtLocal && presentation.isOpen && (
