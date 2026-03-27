@@ -14,14 +14,14 @@ import {
 } from "../../shared/lib/api";
 
 const navItems = [
-  { to: "/", label: "Home", hint: "dashboard and direction" },
-  { to: "/inbox", label: "Inbox", hint: "capture triage" },
-  { to: "/today", label: "Today", hint: "daily execution workspace" },
-  { to: "/habits", label: "Habits", hint: "consistency system" },
-  { to: "/health", label: "Health", hint: "body basics" },
-  { to: "/finance", label: "Finance", hint: "spend visibility" },
-  { to: "/goals", label: "Goals", hint: "weekly and monthly direction" },
-  { to: "/reviews/daily", label: "Reviews", hint: "reflection loop" },
+  { to: "/", label: "Home" },
+  { to: "/inbox", label: "Inbox" },
+  { to: "/today", label: "Today" },
+  { to: "/habits", label: "Habits" },
+  { to: "/health", label: "Health" },
+  { to: "/finance", label: "Finance" },
+  { to: "/goals", label: "Goals" },
+  { to: "/reviews/daily", label: "Reviews" },
 ] as const;
 
 function navClass(isActive: boolean) {
@@ -72,14 +72,12 @@ export function AppShell() {
     <div className="shell">
       <aside className="shell-sidebar">
         <div className="brand-block">
-          <span className="brand-block__eyebrow">Personal command center</span>
+          <span className="brand-block__eyebrow">Personal operating system</span>
           <div className="brand-block__title-row">
             <span className="brand-block__mark">L</span>
             <div>
               <h1 className="brand-block__title">Life OS</h1>
-              <p className="brand-block__subtitle">
-                Run the day. Protect momentum.
-              </p>
+              <p className="brand-block__subtitle">Daily clarity.</p>
             </div>
           </div>
         </div>
@@ -92,7 +90,6 @@ export function AppShell() {
               to={item.to}
             >
               <span className="shell-nav__label">{item.label}</span>
-              <span className="shell-nav__hint">{item.hint}</span>
             </NavLink>
           ))}
         </nav>
