@@ -543,7 +543,7 @@ Notes:
 
 ## Key indexes and constraints
 
-The backend agent should add these early:
+Add these early:
 
 - `planning_cycles(user_id, cycle_type, cycle_start_date)` unique
 - `cycle_priorities(planning_cycle_id, slot)` unique

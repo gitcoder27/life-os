@@ -1,55 +1,38 @@
 # Life OS Product Docs
 
-This folder turns the brainstorm in [`../myRequirement.md`](../myRequirement.md) into an initial planning set for product discovery and PRD work.
+This folder holds the active long-lived product and system references for Life OS.
+
+Historical planning material that is no longer part of the main doc set lives in [`../archive/prd/`](../archive/prd/).
 
 ## Reading order
 
-1. [`requirement-review.md`](./requirement-review.md)
+1. [`PRD.md`](./PRD.md)
 2. [`product-vision.md`](./product-vision.md)
-3. [`PRD.md`](./PRD.md)
-4. [`technical-architecture.md`](./technical-architecture.md)
-5. [`api-contracts.md`](./api-contracts.md)
-6. [`data-model.md`](./data-model.md)
+3. [`technical-architecture.md`](./technical-architecture.md)
+4. [`api-contracts.md`](./api-contracts.md)
+5. [`data-model.md`](./data-model.md)
+6. [`authentication-and-security.md`](./authentication-and-security.md)
 7. [`scoring-system.md`](./scoring-system.md)
 8. [`review-templates.md`](./review-templates.md)
-9. [`authentication-and-security.md`](./authentication-and-security.md)
-10. [`success-metrics.md`](./success-metrics.md)
-11. [`screen-specs.md`](./screen-specs.md)
-12. [`frontend-architecture.md`](./frontend-architecture.md)
-13. [`backend-architecture.md`](./backend-architecture.md)
-14. [`parallel-workstreams.md`](./parallel-workstreams.md)
-15. [`frontend-workstream.md`](./frontend-workstream.md)
-16. [`backend-workstream.md`](./backend-workstream.md)
-17. [`features-by-module.md`](./features-by-module.md)
-18. [`screen-breakdown.md`](./screen-breakdown.md)
-19. [`roadmap.md`](./roadmap.md)
-20. [`open-questions.md`](./open-questions.md)
+9. [`success-metrics.md`](./success-metrics.md)
+10. [`screen-specs.md`](./screen-specs.md)
 
 ## What each file does
 
-- `requirement-review.md`: evaluates the original idea, highlights strengths, risks, and missing decisions.
-- `product-vision.md`: captures the product promise, target user, jobs to be done, and design principles.
-- `PRD.md`: the main draft product requirements document for the first version.
-- `technical-architecture.md`: defines the system topology, recommended stack, repo layout, and shared frontend/backend boundaries.
-- `api-contracts.md`: defines the canonical MVP API surface between frontend and backend.
-- `data-model.md`: defines the PostgreSQL-first backend schema plan and migration order.
-- `scoring-system.md`: defines the Daily Score, Weekly Momentum, streak logic, and anti-gaming rules.
-- `review-templates.md`: defines the exact daily, weekly, and monthly review flows.
-- `authentication-and-security.md`: defines the simple-login decision and MVP security baseline.
-- `success-metrics.md`: defines launch readiness and first-30-day success thresholds.
-- `screen-specs.md`: gives wireframe-level specs for all MVP routes and surfaces.
-- `frontend-architecture.md`: defines the frontend stack, app shell, route structure, state model, and UI behavior rules.
-- `backend-architecture.md`: defines the backend module design, jobs, scoring responsibilities, and deployment model.
-- `parallel-workstreams.md`: defines how frontend and backend agents work in parallel without contract drift.
-- `frontend-workstream.md`: gives the milestone-based execution plan for the frontend agent.
-- `backend-workstream.md`: gives the milestone-based execution plan for the backend agent.
-- `features-by-module.md`: organizes capabilities by Life OS module and by release phase.
-- `screen-breakdown.md`: maps product modules to screens, components, and screen-level behaviors.
-- `roadmap.md`: outlines MVP, next phases, and release goals.
-- `open-questions.md`: acts as the decision summary and reference map for resolved planning questions.
+- `PRD.md`: the main product definition and scope reference.
+- `product-vision.md`: product promise, audience, jobs to be done, and design principles.
+- `technical-architecture.md`: current system topology, module boundaries, routes, and repository layout.
+- `api-contracts.md`: canonical frontend/backend contract surface.
+- `data-model.md`: database design and persistence model.
+- `authentication-and-security.md`: authentication model and security baseline.
+- `scoring-system.md`: scoring rules, weighting, and anti-gaming constraints.
+- `review-templates.md`: daily, weekly, and monthly review structure.
+- `success-metrics.md`: launch readiness and adoption metrics.
+- `screen-specs.md`: route-level UX reference for the shipped product surfaces.
 
-## Current status
+## Usage notes
 
-- This is a draft v0.3 planning baseline.
-- The core product-definition and implementation-planning gaps are now resolved, including scoring, reviews, simple auth, data model, architecture, screen specs, and parallel workstreams.
-- The recommended build target for MVP in these docs is a responsive single-user web app with simple login, fast manual input, transparent scoring, and limited automation.
+- Use this folder as the source of truth for the current product and system shape.
+- Use [`../implementation/`](../implementation/) for operating procedures.
+- Use [`../user/life-os-user-guide.md`](../user/life-os-user-guide.md) for end-user instructions.
+- Use [`../archive/`](../archive/) only when you need historical context.

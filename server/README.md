@@ -1,13 +1,13 @@
 # Server Workspace
 
-This workspace is owned by the backend implementation agent.
+This workspace contains the backend API, worker jobs, and CLI tooling.
 
 Primary references:
 
-- [`../docs/prd/backend-architecture.md`](../docs/prd/backend-architecture.md)
+- [`../docs/prd/technical-architecture.md`](../docs/prd/technical-architecture.md)
 - [`../docs/prd/data-model.md`](../docs/prd/data-model.md)
 - [`../docs/prd/api-contracts.md`](../docs/prd/api-contracts.md)
-- [`../docs/prd/backend-workstream.md`](../docs/prd/backend-workstream.md)
+- [`../docs/prd/authentication-and-security.md`](../docs/prd/authentication-and-security.md)
 
 ## Environment setup
 

@@ -4,22 +4,23 @@ Life OS is a personal command-center product for daily planning, habits, health 
 
 ## Repo structure
 
-- [`docs/prd/README.md`](./docs/prd/README.md): product, architecture, API, and workstream docs
+- [`docs/prd/README.md`](./docs/prd/README.md): active product, architecture, and system reference docs
+- [`docs/implementation/README.md`](./docs/implementation/README.md): active operating and deployment docs
+- [`docs/user/life-os-user-guide.md`](./docs/user/life-os-user-guide.md): end-user guide
+- [`docs/archive/`](./docs/archive): historical planning, review, and prompt material kept for reference
 - [`client/`](./client): frontend app workspace
 - [`server/`](./server): backend app workspace
 - [`packages/contracts/`](./packages/contracts): shared API contracts and types
-- [`docs/implementation/`](./docs/implementation): implementation plans and checklist trackers created by the frontend and backend agents
-- [`docs/agent-prompts/`](./docs/agent-prompts): reusable prompt docs for the frontend and backend AI agents
 
 ## Current state
 
-This repo is scaffolded for parallel frontend and backend development.
+This repo contains the working product plus a trimmed documentation set. The main `docs/` folders now focus on long-lived product, operating, and user references; superseded planning and review docs live under `docs/archive/`.
 
 Start with:
 
 1. [`docs/prd/README.md`](./docs/prd/README.md)
-2. [`docs/agent-prompts/frontend-agent-prompt.md`](./docs/agent-prompts/frontend-agent-prompt.md)
-3. [`docs/agent-prompts/backend-agent-prompt.md`](./docs/agent-prompts/backend-agent-prompt.md)
+2. [`docs/user/life-os-user-guide.md`](./docs/user/life-os-user-guide.md)
+3. [`docs/implementation/README.md`](./docs/implementation/README.md)
 
 ## Bootstrap commands
 

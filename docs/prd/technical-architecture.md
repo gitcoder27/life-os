@@ -1,6 +1,6 @@
 # Technical Architecture
 
-This document defines the recommended MVP architecture for Life OS and separates the system into clear frontend and backend responsibilities so both can be built in parallel.
+This document defines the current Life OS architecture and separates the system into clear frontend and backend responsibilities.
 
 ## Architecture goals
 
@@ -44,11 +44,19 @@ This document defines the recommended MVP architecture for Life OS and separates
 
 - It is fast to build with.
 - It keeps frontend and backend truly separate.
-- It is simple enough for two parallel implementation agents.
+- It is simple enough for a small team to build and maintain.
 - PostgreSQL is a better long-term fit than SQLite for scoring, reviews, recurring items, and reporting.
 - Fastify gives a lean API surface without the ceremony of a heavier framework.
 
-## System topology
+## Application shape
+
+- modular monolith backend
+- one API process
+- one worker process for scheduled jobs
+- one PostgreSQL database
+- one shared contracts package consumed by client and server
+
+This keeps deployment simple while preserving clean boundaries inside the codebase.
 
 ### Runtime components
 
@@ -106,58 +114,76 @@ The backend is the source of truth for API behavior. The frontend consumes publi
 /client
   /src
     /app
-    /components
     /features
     /routes
-    /lib
-    /styles
+    /shared
 
 /server
   /src
+    /app
+    /cli
+    /jobs
     /modules
     /lib
-    /jobs
-    /plugins
-    /routes
   /prisma
+  /test
 
 /packages
   /contracts
 
 /docs
   /prd
+  /implementation
+  /user
+  /archive
 ```
 
 ## Backend module map
 
+- `admin`
 - `auth`
-- `setup`
-- `home`
-- `priorities`
-- `tasks`
-- `habits`
-- `routines`
-- `health`
 - `finance`
-- `goals`
+- `habits`
+- `health`
+- `home`
+- `notifications`
+- `onboarding`
+- `planning`
 - `reviews`
 - `scoring`
-- `notifications`
-- `admin`
+- `settings`
 
 ## Frontend feature map
 
 - `auth`
-- `home`
-- `today`
-- `habits`
-- `health`
+- `capture`
 - `finance`
 - `goals`
-- `review`
-- `quick-capture`
+- `habits`
+- `health`
+- `home`
+- `inbox`
 - `notifications`
+- `onboarding`
+- `reviews`
 - `settings`
+- `today`
+
+## Route map
+
+- `/login`
+- `/onboarding`
+- `/`
+- `/inbox`
+- `/today`
+- `/habits`
+- `/health`
+- `/finance`
+- `/goals`
+- `/reviews/history`
+- `/reviews/:cadence`
+- `/notifications`
+- `/settings`
 
 ## State strategy
 
@@ -213,14 +239,13 @@ If load or complexity grows later, move from cron-style worker jobs to a queue-b
 
 ## Build docs
 
-Use these docs as the execution set:
+Use these docs as the active reference set:
 
+- [`PRD.md`](./PRD.md)
 - [`api-contracts.md`](./api-contracts.md)
 - [`data-model.md`](./data-model.md)
-- [`frontend-architecture.md`](./frontend-architecture.md)
-- [`backend-architecture.md`](./backend-architecture.md)
+- [`authentication-and-security.md`](./authentication-and-security.md)
 - [`screen-specs.md`](./screen-specs.md)
-- [`parallel-workstreams.md`](./parallel-workstreams.md)
 
 ## Security baseline
 

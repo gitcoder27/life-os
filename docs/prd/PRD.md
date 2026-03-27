@@ -1,8 +1,8 @@
 # Product Requirements Document
 
-Status: Draft v0.3  
+Status: Active reference  
 Product: Life OS  
-Source: [`../myRequirement.md`](../myRequirement.md)
+Source: original brainstorming notes and planning material archived in [`../archive/prd/`](../archive/prd/)
 
 Related docs:
 
@@ -14,16 +14,7 @@ Related docs:
 - [`review-templates.md`](./review-templates.md)
 - [`authentication-and-security.md`](./authentication-and-security.md)
 - [`success-metrics.md`](./success-metrics.md)
-- [`frontend-architecture.md`](./frontend-architecture.md)
 - [`screen-specs.md`](./screen-specs.md)
-- [`frontend-workstream.md`](./frontend-workstream.md)
-- [`backend-architecture.md`](./backend-architecture.md)
-- [`backend-workstream.md`](./backend-workstream.md)
-- [`parallel-workstreams.md`](./parallel-workstreams.md)
-- [`features-by-module.md`](./features-by-module.md)
-- [`screen-breakdown.md`](./screen-breakdown.md)
-- [`roadmap.md`](./roadmap.md)
-- [`open-questions.md`](./open-questions.md)
 
 ## 1. Executive summary
 

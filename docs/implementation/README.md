@@ -1,15 +1,11 @@
 # Implementation Docs
 
-This folder is reserved for execution artifacts created by the frontend and backend AI agents.
+This folder holds the active operating docs for running and supporting Life OS.
 
-Expected docs:
+Current docs:
 
-- `frontend-implementation-plan.md`
-- `frontend-checklist.md`
-- `backend-implementation-plan.md`
-- `backend-checklist.md`
-- `production-deployment.md`
-- `production-deployment-quick-reference.md`
-- `user-account-management.md`
+- `production-deployment.md`: the full production deployment guide
+- `production-deployment-quick-reference.md`: the short deployment checklist
+- `user-account-management.md`: user lifecycle and account admin tasks
 
-Each agent should keep its plan and checklist up to date as work progresses.
+Historical implementation plans, checklists, and one-off reviews were moved to [`../archive/implementation/`](../archive/implementation/).

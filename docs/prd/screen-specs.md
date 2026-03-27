@@ -1,20 +1,24 @@
 # Screen Specs
 
-This document gives wireframe-level frontend specs for the MVP screens. It is meant to be detailed enough for a frontend AI agent to implement without guessing page responsibility or component boundaries.
+This document gives route-level frontend specs for the current Life OS surfaces. It should stay aligned with the shipped routes in `client/src/app/router.tsx`.
 
 ## Screen inventory
 
 | Route or surface | Status | Notes |
 | --- | --- | --- |
 | `/login` | Required | Separate auth layout |
-| `/onboarding` | Required | First-run wizard only |
+| `/onboarding` | Conditional | First-run setup route for incomplete accounts |
 | `/` | Required | Home dashboard |
+| `/inbox` | Required | Capture triage and backlog cleanup |
 | `/today` | Required | Focused execution view |
 | `/habits` | Required | Habit and routine management |
 | `/health` | Required | Health basics tracking |
 | `/finance` | Required | Expense and spend visibility |
 | `/goals` | Required | Goals, weekly priorities, monthly focus |
 | `/reviews/:cadence` | Required | `daily`, `weekly`, `monthly` |
+| `/reviews/history` | Supporting | Past review history and retrieval |
+| `/notifications` | Supporting | Notification list and attention follow-up |
+| `/settings` | Supporting | Account and workspace settings |
 | `Quick Capture` | Required | Global modal or bottom sheet |
 
 ## 1. Login
@@ -48,7 +52,7 @@ Authenticate the single owner account quickly and clearly.
 
 ### Purpose
 
-Create the user's initial Life OS setup.
+Create the user's initial Life OS setup when the account is still incomplete.
 
 ### Steps
 
@@ -78,6 +82,7 @@ Create the user's initial Life OS setup.
 - persist drafts locally
 - show progress across steps
 - keep each step lightweight
+- treat this as a conditional first-run flow, not a primary everyday route
 
 ## 3. Home
 
@@ -130,7 +135,42 @@ Answer "what is going on today and what should I do next?"
 - lower-priority sections stack vertically
 - keep quick capture reachable at all times
 
-## 4. Today
+## 4. Inbox
+
+### Purpose
+
+Turn quick-captured tasks, notes, and reminders into scheduled work, linked goal items, or archive.
+
+### Major sections
+
+- filter tabs with counts
+- inbox item list
+- detail inspector
+- workflow templates
+- bulk action controls
+
+### Key components
+
+- `InboxFilterBar`
+- `InboxList`
+- `InboxInspector`
+- `BulkActionsBar`
+- `WorkflowTemplatesSection`
+
+### Data dependencies
+
+- inbox counts by kind
+- paginated inbox items
+- linked goals for scheduling and routing
+- workflow template suggestions
+
+### Interaction rules
+
+- single-item and bulk triage should both support schedule, goal-link, and archive actions
+- selecting an item should keep the inspector stable while filters change
+- loading more items should happen without leaving the page
+
+## 5. Today
 
 ### Purpose
 
@@ -172,7 +212,7 @@ Support focused execution for the current day.
 - use drag handles carefully; provide tap-based reorder fallback
 - notes collapse behind an accordion
 
-## 5. Habits
+## 6. Habits
 
 ### Purpose
 
@@ -206,7 +246,7 @@ Manage habits and routines without clutter.
 - editing should not require leaving the page
 - streaks should be visible but not dominate the screen
 
-## 6. Health
+## 7. Health
 
 ### Purpose
 
@@ -245,7 +285,7 @@ Track core physical inputs with very low friction.
 - quick health actions stay sticky near bottom
 - charts should collapse to compact summaries first
 
-## 7. Finance
+## 8. Finance
 
 ### Purpose
 
@@ -279,7 +319,7 @@ Show spending clearly and make expense logging painless.
 - edits should happen inline or in modal without route change
 - category summary should be readable at a glance
 
-## 8. Goals
+## 9. Goals
 
 ### Purpose
 
@@ -312,7 +352,7 @@ Hold direction without becoming a heavy project-management surface.
 - emphasize editing focus over analytics
 - do not introduce complex milestone trees in MVP
 
-## 9. Reviews
+## 10. Reviews
 
 ### Purpose
 
@@ -365,7 +405,7 @@ Run the daily, weekly, and monthly review flows from a shared screen system.
 - drafts must survive refresh or accidental navigation
 - required sections should be visually obvious
 
-## 10. Quick Capture
+## 11. Quick Capture
 
 ### Purpose
 
@@ -405,6 +445,12 @@ Provide one global low-friction entry point for common actions.
 - switching event types should not reset shared fields unnecessarily
 - recent templates should appear first
 - submissions should close fast and give clear confirmation
+
+## 12. Supporting routes
+
+- `ReviewHistoryPage`: browse completed daily, weekly, and monthly reviews without entering edit mode.
+- `NotificationsPage`: list, dismiss, and revisit generated notifications.
+- `SettingsPage`: manage account details, workspace defaults, and onboarding state.
 
 ## Cross-screen UX rules
 

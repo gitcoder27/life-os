@@ -63,6 +63,6 @@ npm run prisma:migrate -w server
 ## Development Conventions
 
 - **Monorepo Structure**: Ensure any shared types or API definitions are placed in `packages/contracts/` so both the client and server can utilize them.
-- **Documentation**: Extensive documentation regarding product requirements, architecture, API contracts, and implementation plans can be found in the `docs/` directory. Refer to `docs/prd/README.md` as the starting point for product details.
-- **AI Agent Prompts**: The `docs/agent-prompts/` directory contains reusable prompts that guide the behavior of AI agents working on specific parts of this repository.
+- **Documentation**: Active product, architecture, operating, and user documentation lives in the `docs/` directory. Refer to `docs/prd/README.md` as the starting point for product details.
+- **Archived Prompts**: Historical prompt material is kept in `docs/archive/agent-prompts/` for reference.
 - **Database**: The server uses Prisma. Schema modifications should be made in `server/prisma/schema.prisma` followed by running migration commands.
