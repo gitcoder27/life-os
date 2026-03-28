@@ -20,7 +20,6 @@ import {
   PageLoadingState,
 } from "../../shared/ui/PageState";
 import { ScoreRing } from "../../shared/ui/ScoreRing";
-import { SectionCard } from "../../shared/ui/SectionCard";
 
 function GoalChip({ goal }: { goal: LinkedGoal }) {
   return (
@@ -358,12 +357,12 @@ export function HomePage() {
         ) : null}
       </div>
 
-      <div className="dashboard-grid stagger">
-        <SectionCard
-          title="Today focus"
-          subtitle="Use Home to decide. Use Today to work."
-          className="today-focus-card"
-        >
+      <div className="unified-dashboard stagger">
+        <section className="focus-section">
+          <Link to="/today" className="focus-section__header-link">
+            <h2 className="focus-section__title">Today Focus</h2>
+            <p className="focus-section__subtitle">Use Home to decide. Use Today to work. &rarr;</p>
+          </Link>
           <div className="today-focus">
             <div className="today-focus__lede">
               <div className="today-focus__eyebrow">Execution handoff</div>
@@ -412,38 +411,20 @@ export function HomePage() {
                 </span>
               </div>
             </div>
-
-            <div className="button-row">
-              <button
-                className="button button--primary"
-                type="button"
-                onClick={() => navigate("/today")}
-              >
-                Open Today
-              </button>
-            </div>
           </div>
-        </SectionCard>
+        </section>
 
-        <SectionCard
-          title="Overdue / Attention Required"
-          subtitle="Catch work that slipped out of view"
-        >
-          {accountabilityRadar.totalCount > 0 ? (
-            <>
-              <div className="radar-summary">
-                <div className="radar-summary__metric">
-                  <span className="radar-summary__label">Overdue tasks</span>
-                  <strong className="radar-summary__value">{accountabilityRadar.overdueTaskCount}</strong>
-                </div>
-                <div className="radar-summary__metric">
-                  <span className="radar-summary__label">Stale inbox</span>
-                  <strong className="radar-summary__value">{accountabilityRadar.staleInboxCount}</strong>
-                </div>
-              </div>
+        {(accountabilityRadar.totalCount > 0 || attentionItems.length > 0) && (
+          <section className="focus-section">
+            <div className="focus-section__header">
+              <h2 className="focus-section__title">Attention Required</h2>
+              <p className="focus-section__subtitle">Catch work that slipped out of view or needs immediate decision.</p>
+            </div>
+            
+            {accountabilityRadar.totalCount > 0 && (
               <div className="radar-list">
                 {accountabilityRadar.items.map((item) => (
-                  <div key={item.id} className={`radar-item radar-item--${item.kind}`}>
+                  <Link key={item.id} to={getRadarRoute(item.kind, item.id)} className={`radar-item radar-item--${item.kind}`}>
                     <div className="radar-item__content">
                       <div className="radar-item__title">
                         {item.kind === "stale_inbox"
@@ -459,201 +440,101 @@ export function HomePage() {
                       </div>
                       <div className="radar-item__detail">{item.label}</div>
                     </div>
-                    <button
-                      className="button button--ghost button--small"
-                      type="button"
-                      onClick={() => navigate(getRadarRoute(item.kind, item.id))}
-                    >
-                      {getRadarActionLabel(item.kind)}
-                    </button>
-                  </div>
+                    <span className="radar-item__action-label">{getRadarActionLabel(item.kind)} &rarr;</span>
+                  </Link>
                 ))}
               </div>
-              {accountabilityRadar.overflowCount > 0 ? (
-                <p className="support-copy">
-                  {accountabilityRadar.overflowCount} more item{accountabilityRadar.overflowCount === 1 ? "" : "s"} still need review.
-                </p>
-              ) : null}
-              <div className="button-row" style={{ marginTop: "0.75rem" }}>
-                {accountabilityRadar.overdueTaskCount > 0 ? (
-                  <button
-                    className="button button--ghost button--small"
-                    type="button"
-                    onClick={() => navigate(getRadarRoute("overdue_task"))}
-                  >
-                    Open recovery view
-                  </button>
-                ) : null}
-                {accountabilityRadar.staleInboxCount > 0 ? (
-                  <button
-                    className="button button--ghost button--small"
-                    type="button"
-                    onClick={() => navigate("/inbox")}
-                  >
-                    Open Inbox
-                  </button>
-                ) : null}
-              </div>
-            </>
-          ) : (
-            <EmptyState
-              title="Nothing is slipping"
-              description="No overdue tasks or stale inbox captures need recovery right now."
-            />
-          )}
-        </SectionCard>
+            )}
 
-        <SectionCard
-          title="Attention"
-          subtitle="What needs a decision right now"
-        >
-          {attentionItems.length > 0 ? (
-            <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
-              {attentionItems.map((item) => (
-                <div key={item.id} className="attention-item">
-                  <span className="attention-item__icon" />
-                  <div className="attention-item__content">
-                    <div className="attention-item__title">{item.title}</div>
-                    <div className="attention-item__detail">
-                      {item.detail ?? `${item.kind.replace(/_/g, " ")} • ${item.tone}`}
+            {attentionItems.length > 0 && (
+              <div className="radar-list">
+                {attentionItems.map((item) => (
+                  <Link key={item.id} to={item.action.route} className="radar-item radar-item--attention">
+                    <span className="attention-item__icon" />
+                    <div className="radar-item__content">
+                      <div className="radar-item__title">{item.title}</div>
+                      <div className="radar-item__detail">
+                        {item.detail ?? `${item.kind.replace(/_/g, " ")} • ${item.tone}`}
+                      </div>
                     </div>
-                  </div>
-                  <button
-                    className="button button--ghost button--small"
-                    type="button"
-                    onClick={() => navigate(item.action.route)}
-                  >
-                    {getActionLabel(item.action)}
-                  </button>
+                    <span className="radar-item__action-label">{getActionLabel(item.action)} &rarr;</span>
+                  </Link>
+                ))}
+              </div>
+            )}
+          </section>
+        )}
+
+        <section className="focus-section focus-section--compact">
+          <div className="focus-section__header">
+            <h2 className="focus-section__title">Daily Overview</h2>
+            <p className="focus-section__subtitle">Status and captures at a glance.</p>
+          </div>
+          <div className="snapshot-grid">
+            <Link to="/habits" className="snapshot-card">
+              <div className="snapshot-card__title">Routines & Habits &rarr;</div>
+              {home.routineSummary.totalItems > 0 ? (
+                <div className="snapshot-card__list">
+                  {routines.map((routine) => (
+                    <div key={routine.title} className="snapshot-card__row">
+                      <span className="snapshot-card__label">{routine.title}</span>
+                      <span className="snapshot-card__value">{routine.detail}</span>
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
-          ) : (
-            <EmptyState
-              title="Nothing urgent"
-              description="The dashboard is clear. Open Today when you want to work the next meaningful step."
-            />
-          )}
-        </SectionCard>
+              ) : (
+                <span className="snapshot-card__value">No active routines yet.</span>
+              )}
+            </Link>
 
-        <SectionCard
-          title="Routines"
-          subtitle="Morning and evening"
-        >
-          {home.routineSummary.totalItems > 0 ? (
-            <>
-              <ul className="list">
-                {routines.map((routine) => (
-                  <li key={routine.title}>
-                    <strong>{routine.title}</strong>
-                    <span className="list__subtle">{routine.detail}</span>
-                  </li>
+            <Link to="/health" className="snapshot-card">
+              <div className="snapshot-card__title">Health Snapshot &rarr;</div>
+              <div className="snapshot-card__list">
+                {healthSnapshot.map((item) => (
+                  <div key={item.label} className="snapshot-card__row">
+                    <span className="snapshot-card__label">{item.label}</span>
+                    <span className="snapshot-card__value">{item.value}</span>
+                  </div>
                 ))}
-              </ul>
-              <div className="button-row" style={{ marginTop: "0.75rem" }}>
-                <button
-                  className="button button--ghost button--small"
-                  type="button"
-                  onClick={() => navigate("/habits")}
-                >
-                  Open Habits
-                </button>
               </div>
-            </>
-          ) : (
-            <EmptyState
-              title="No active routines"
-              description="Routine progress will appear here once a morning or evening routine is active."
-              actionLabel="Open Habits"
-              onAction={() => navigate("/habits")}
-            />
-          )}
-        </SectionCard>
+            </Link>
 
-        <SectionCard
-          title="Health snapshot"
-          subtitle="Body basics today"
-        >
-          <ul className="list">
-            {healthSnapshot.map((item) => (
-              <li key={item.label}>
-                <strong>{item.label}</strong>
-                <span className="list__subtle">{item.value}</span>
-              </li>
-            ))}
-          </ul>
-          <div className="button-row" style={{ marginTop: "0.75rem" }}>
-            <button
-              className="button button--ghost button--small"
-              type="button"
-              onClick={() => navigate("/health")}
-            >
-              Open Health
-            </button>
-          </div>
-        </SectionCard>
-
-        <SectionCard title="Inbox" subtitle="Captured items waiting for triage">
-          {inboxQuery.isError ? (
-            <InlineErrorState
-              message={inboxQuery.error instanceof Error ? inboxQuery.error.message : "Inbox preview could not load."}
-              onRetry={() => void inboxQuery.refetch()}
-            />
-          ) : null}
-          {inboxQuery.isLoading && !inboxQuery.data ? (
-            <p className="support-copy">Loading the capture queue...</p>
-          ) : inboxPreviewItems.length > 0 ? (
-            <>
-              <ul className="list">
-                {inboxPreviewItems.map((task) => (
-                  <li key={task.id}>
-                    <strong>{getHomeTaskMeta(task, task.title)}</strong>
-                    <span className="list__subtle">Captured for triage</span>
-                  </li>
+            <Link to="/finance" className="snapshot-card">
+              <div className="snapshot-card__title">Finance Snapshot &rarr;</div>
+              <div className="snapshot-card__list">
+                {financeSnapshot.map((item) => (
+                  <div key={item.label} className="snapshot-card__row">
+                    <span className="snapshot-card__label">{item.label}</span>
+                    <span className="snapshot-card__value">{item.value}</span>
+                  </div>
                 ))}
-              </ul>
-              <div className="button-row" style={{ marginTop: "0.75rem" }}>
-                <button
-                  className="button button--ghost button--small"
-                  type="button"
-                  onClick={() => navigate("/inbox")}
-                >
-                  Open Inbox
-                </button>
               </div>
-            </>
-          ) : (
-            <EmptyState
-              title="Inbox is clear"
-              description="New captures will wait here until you decide what belongs on the calendar or Today."
-              actionLabel="Open Inbox"
-              onAction={() => navigate("/inbox")}
-            />
-          )}
-        </SectionCard>
+            </Link>
 
-        <SectionCard
-          title="Finance snapshot"
-          subtitle="Spend visibility"
-        >
-          <ul className="list">
-            {financeSnapshot.map((item) => (
-              <li key={item.label}>
-                <strong>{item.label}</strong>
-                <span className="list__subtle">{item.value}</span>
-              </li>
-            ))}
-          </ul>
-          <div className="button-row" style={{ marginTop: "0.75rem" }}>
-            <button
-              className="button button--ghost button--small"
-              type="button"
-              onClick={() => navigate("/finance")}
-            >
-              Open Finance
-            </button>
+            <Link to="/inbox" className="snapshot-card">
+              <div className="snapshot-card__title">Capture Inbox &rarr;</div>
+              {inboxPreviewItems.length > 0 ? (
+                <div className="snapshot-card__list">
+                  {inboxPreviewItems.map((task) => (
+                    <div key={task.id} className="snapshot-card__row">
+                      <span className="snapshot-card__label" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '160px' }}>
+                        {getHomeTaskMeta(task, task.title)}
+                      </span>
+                      <span className="snapshot-card__value">Triage</span>
+                    </div>
+                  ))}
+                  {inboxPreviewItems.length >= 3 && (
+                    <div className="snapshot-card__row" style={{ marginTop: '0.25rem' }}>
+                      <span className="snapshot-card__value">See all in Inbox...</span>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <span className="snapshot-card__value">Inbox is clear.</span>
+              )}
+            </Link>
           </div>
-        </SectionCard>
+        </section>
       </div>
     </div>
   );
