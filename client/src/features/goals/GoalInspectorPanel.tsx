@@ -3,12 +3,11 @@ import { Link } from "react-router-dom";
 
 import {
   useGoalDetailQuery,
-  useUpdateGoalMilestonesMutation,
   type GoalDetailItem,
   type GoalLinkedHabitItem,
-  type GoalMilestoneItem,
 } from "../../shared/lib/api";
 import { InlineErrorState } from "../../shared/ui/PageState";
+import { GoalInspectorMilestones } from "./GoalInspectorMilestones";
 import { useGoalTodayAction } from "./useGoalTodayAction";
 
 /* ── Helpers ── */
@@ -31,30 +30,6 @@ const domainIcons: Record<string, string> = {
   other: "✦",
 };
 
-function formatDate(iso: string | null): string {
-  if (!iso) return "";
-  const d = new Date(`${iso}T12:00:00`);
-  return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-}
-
-function isOverdue(targetDate: string | null): boolean {
-  if (!targetDate) return false;
-  const ref = new Date().toISOString().slice(0, 10);
-  return targetDate < ref;
-}
-
-function getDueLabel(targetDate: string | null): string | null {
-  if (!targetDate) return null;
-  const now = new Date();
-  const target = new Date(`${targetDate}T12:00:00`);
-  const diffDays = Math.ceil((target.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
-
-  if (diffDays < 0) return `Overdue`;
-  if (diffDays === 0) return "Due today";
-  if (diffDays === 1) return "Due tomorrow";
-  return `Due in ${diffDays} days`;
-}
-
 /* ── Collapsible Section ── */
 
 function CollapsibleSection({
@@ -76,11 +51,12 @@ function CollapsibleSection({
         className="ap-inspector-section__header"
         type="button"
         onClick={() => setOpen(!open)}
+        aria-expanded={open}
       >
         <span className="ap-inspector-section__icon">{icon}</span>
         <span className="ap-inspector-section__title">{title}</span>
         <span className={`ap-inspector-section__chevron${open ? " ap-inspector-section__chevron--open" : ""}`}>
-          ‹
+          ›
         </span>
       </button>
       {open && (
@@ -88,76 +64,6 @@ function CollapsibleSection({
           {children}
         </div>
       )}
-    </div>
-  );
-}
-
-/* ── Milestones Section ── */
-
-function InspectorMilestones({
-  milestones,
-  goalId,
-  onSaved,
-}: {
-  milestones: GoalMilestoneItem[];
-  goalId: string;
-  onSaved?: () => void;
-}) {
-  const mutation = useUpdateGoalMilestonesMutation(goalId);
-
-  function handleToggle(index: number) {
-    const updated = milestones.map((m, i) => ({
-      id: m.id,
-      title: m.title,
-      targetDate: m.targetDate || null,
-      status: i === index
-        ? (m.status === "completed" ? "pending" as const : "completed" as const)
-        : m.status,
-    }));
-    mutation.mutate({ milestones: updated }, {
-      onSuccess: () => onSaved?.(),
-    });
-  }
-
-  if (milestones.length === 0) {
-    return (
-      <p className="ap-inspector__empty-section">
-        No milestones defined yet.
-      </p>
-    );
-  }
-
-  return (
-    <div className="ap-inspector-milestones">
-      {milestones.map((ms, i) => {
-        const due = getDueLabel(ms.targetDate);
-        const overdue = isOverdue(ms.targetDate) && ms.status === "pending";
-
-        return (
-          <div key={ms.id} className="ap-inspector-milestone">
-            <span className={`ap-inspector-milestone__dot ap-inspector-milestone__dot--${ms.status === "completed" ? "done" : overdue ? "overdue" : "pending"}`} />
-            <div className="ap-inspector-milestone__body">
-              <span className={`ap-inspector-milestone__title${ms.status === "completed" ? " ap-inspector-milestone__title--done" : ""}`}>
-                {ms.title}
-              </span>
-              {due && (
-                <span className={`ap-inspector-milestone__due${overdue ? " ap-inspector-milestone__due--overdue" : ms.status === "completed" ? " ap-inspector-milestone__due--done" : ""}`}>
-                  {ms.status === "completed" ? `Completed ${formatDate(ms.completedAt)}` : due}
-                </span>
-              )}
-            </div>
-            <button
-              className={`ap-inspector-milestone__check${ms.status === "completed" ? " ap-inspector-milestone__check--done" : ""}`}
-              type="button"
-              onClick={() => handleToggle(i)}
-              aria-label={`Toggle ${ms.title}`}
-              disabled={mutation.isPending}
-            >
-              {ms.status === "completed" ? "✓" : ""}
-            </button>
-          </div>
-        );
-      })}
     </div>
   );
 }
@@ -314,7 +220,7 @@ export function GoalInspectorPanel({
       <div className="ap-inspector__body">
         {/* Milestones */}
         <CollapsibleSection icon="⚡" title="Milestones" defaultOpen>
-          <InspectorMilestones
+          <GoalInspectorMilestones
             milestones={goal.milestones}
             goalId={goal.id}
             onSaved={() => void detailQuery.refetch()}

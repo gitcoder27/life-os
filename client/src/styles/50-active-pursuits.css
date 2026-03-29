@@ -563,11 +563,11 @@
 .ap-inspector-section__chevron {
   font-size: 0.75rem;
   transition: transform var(--dur) var(--ease);
-  transform: rotate(-90deg);
+  transform: rotate(0deg);
 }
 
 .ap-inspector-section__chevron--open {
-  transform: rotate(-180deg);
+  transform: rotate(90deg);
 }
 
 .ap-inspector-section__body {
@@ -580,7 +580,118 @@
 .ap-inspector-milestones {
   display: flex;
   flex-direction: column;
+  gap: 0.5rem;
+}
+
+.ap-inspector-milestones--empty {
+  align-items: flex-start;
+}
+
+.ap-inspector-milestones__summary,
+.ap-inspector-milestones__editor-meta,
+.ap-inspector-milestones__editor-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.ap-inspector-milestones__summary,
+.ap-inspector-milestones__editor-meta,
+.ap-inspector-milestones__limit,
+.ap-inspector-milestones__error {
+  font-size: var(--fs-micro);
+  color: var(--text-tertiary);
+}
+
+.ap-inspector-milestones__text-btn {
+  color: var(--accent);
+  font-size: var(--fs-micro);
+  font-weight: 600;
+  transition: color var(--dur-fast) var(--ease);
+}
+
+.ap-inspector-milestones__text-btn:hover {
+  color: var(--text);
+}
+
+.ap-inspector-milestones__editor {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.ap-inspector-milestones__editor-row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.ap-inspector-milestones__input {
+  min-width: 0;
+  flex: 1;
+  padding: 0.45rem 0.55rem;
+  border-radius: var(--r-xs);
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--text);
+  font-size: var(--fs-small);
+  transition: border-color var(--dur-fast) var(--ease),
+              box-shadow var(--dur-fast) var(--ease);
+}
+
+.ap-inspector-milestones__input:focus {
+  outline: none;
+  border-color: var(--border-focus);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.ap-inspector-milestones__date {
+  width: 8.5rem;
+  flex: 0 0 8.5rem;
+}
+
+.ap-inspector-milestones__reorder {
+  display: flex;
+  flex-direction: column;
   gap: 0;
+}
+
+.ap-inspector-milestones__icon-btn {
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--r-xs);
+  color: var(--text-tertiary);
+  font-size: 0.7rem;
+  transition: all var(--dur-fast) var(--ease);
+}
+
+.ap-inspector-milestones__icon-btn:hover:not(:disabled) {
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.ap-inspector-milestones__icon-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.ap-inspector-milestones__icon-btn--danger:hover:not(:disabled) {
+  color: var(--negative);
+  background: var(--negative-soft);
+}
+
+.ap-inspector-milestones__editor-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.ap-inspector-milestones__error {
+  margin: 0;
 }
 
 .ap-inspector-milestone {
@@ -939,5 +1050,41 @@
     padding: 0.3rem 0.6rem;
     font-size: var(--fs-micro);
   }
-}
 
+  .ap-inspector-milestones__summary,
+  .ap-inspector-milestones__editor-meta,
+  .ap-inspector-milestones__editor-footer {
+    flex-wrap: wrap;
+  }
+
+  .ap-inspector-milestones__editor-row {
+    display: grid;
+    grid-template-columns: 22px minmax(0, 1fr) auto auto;
+    grid-template-areas:
+      "check title reorder remove"
+      ". date date date";
+    align-items: center;
+  }
+
+  .ap-inspector-milestones__editor-row > .ap-inspector-milestone__check {
+    grid-area: check;
+  }
+
+  .ap-inspector-milestones__editor-row > .ap-inspector-milestones__input {
+    grid-area: title;
+  }
+
+  .ap-inspector-milestones__editor-row > .ap-inspector-milestones__date {
+    grid-area: date;
+    width: 100%;
+    flex: initial;
+  }
+
+  .ap-inspector-milestones__editor-row > .ap-inspector-milestones__reorder {
+    grid-area: reorder;
+  }
+
+  .ap-inspector-milestones__editor-row > .ap-inspector-milestones__icon-btn--danger {
+    grid-area: remove;
+  }
+}
