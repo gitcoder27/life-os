@@ -7,6 +7,7 @@ import type {
   HealthSummary,
   HomeNotificationItem,
   HomeOverviewResponse,
+  HomeQuoteResponse,
   IsoDateString,
   TaskKind,
   RoutineSummary,
@@ -49,6 +50,7 @@ import {
 } from "../../lib/time/user-time.js";
 import { parseOrThrow } from "../../lib/validation/parse.js";
 import { buildHomeGuidance } from "./guidance.js";
+import { createHomeQuoteService } from "./quote-service.js";
 import { getOpenDailyReviewRoute } from "../reviews/submission-window.js";
 import { calculateDailyScore, ensureCycle, getWeeklyMomentum } from "../scoring/service.js";
 
@@ -652,6 +654,8 @@ async function buildHomeOverview(
 }
 
 export const registerHomeRoutes: FastifyPluginAsync = async (app) => {
+  const quoteService = createHomeQuoteService();
+
   app.get("/overview", async (request, reply) => {
     const user = requireAuthenticatedUser(request);
     const query = parseOrThrow(dateQuerySchema, request.query);
@@ -674,6 +678,16 @@ export const registerHomeRoutes: FastifyPluginAsync = async (app) => {
         );
 
     return reply.send(await buildHomeOverview(app, user.id, targetDate));
+  });
+
+  app.get("/quote", async (request, reply): Promise<HomeQuoteResponse> => {
+    requireAuthenticatedUser(request);
+
+    return reply.send(
+      withGeneratedAt({
+        quote: await quoteService.getQuote(),
+      }),
+    );
   });
 
   app.get("/overview/history/:date", async (request, reply) => {

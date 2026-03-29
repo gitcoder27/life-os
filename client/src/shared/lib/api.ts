@@ -235,6 +235,15 @@ type HomeOverviewResponse = {
   };
 };
 
+type HomeQuoteResponse = {
+  generatedAt: string;
+  quote: {
+    text: string;
+    author: string;
+    attributionUrl: string;
+  };
+};
+
 type ScoreBucket = {
   key: string;
   label: string;
@@ -1345,6 +1354,7 @@ const queryKeys = {
   session: ["session"] as const,
   onboarding: ["onboarding"] as const,
   home: (date: string) => ["home", date] as const,
+  homeQuote: ["home", "quote"] as const,
   score: (date: string) => ["score", "daily", date] as const,
   weeklyMomentum: (date: string) => ["score", "weekly-momentum", date] as const,
   dayPlan: (date: string) => ["planning", "day", date] as const,
@@ -1756,6 +1766,17 @@ export function useHomeOverviewQuery(date: string) {
     queryKey: queryKeys.home(date),
     queryFn: () => apiRequest<HomeOverviewResponse>("/api/home/overview", { query: { date } }),
     retry: false,
+  });
+}
+
+export function useHomeQuoteQuery() {
+  return useQuery({
+    queryKey: queryKeys.homeQuote,
+    queryFn: () => apiRequest<HomeQuoteResponse>("/api/home/quote"),
+    retry: false,
+    staleTime: 0,
+    gcTime: 0,
+    refetchOnMount: "always",
   });
 }
 

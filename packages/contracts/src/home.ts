@@ -127,6 +127,16 @@ export interface HomeGuidance {
   recommendations: HomeGuidanceRecommendation[];
 }
 
+export interface HomeQuote {
+  text: string;
+  author: string;
+  attributionUrl: string;
+}
+
+export interface HomeQuoteResponse extends ApiMeta {
+  quote: HomeQuote;
+}
+
 export interface HomeOverviewResponse extends ApiMeta {
   date: IsoDateString;
   greeting: string;

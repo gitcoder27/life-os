@@ -17,6 +17,7 @@ import { FocusBlock } from "./FocusBlock";
 import { GuidanceRail } from "./GuidanceRail";
 import { InboxCard } from "./InboxCard";
 import { LedgerCard } from "./LedgerCard";
+import { MotivationalQuoteCard } from "./MotivationalQuoteCard";
 import { PrioritiesList } from "./PrioritiesList";
 import { PulseCard } from "./PulseCard";
 import { RoutinesCard } from "./RoutinesCard";
@@ -112,8 +113,10 @@ export function HomePage() {
             nextTimedTask
               ? { title: nextTimedTask.title, timeLabel: formatTimeLabel(nextTimedTask.dueAt) }
               : null
-          }
+            }
         />
+
+        <MotivationalQuoteCard />
 
         <PulseCard
           waterMl={home.healthSummary.waterMl}

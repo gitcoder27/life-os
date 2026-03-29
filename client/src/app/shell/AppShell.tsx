@@ -12,17 +12,55 @@ import {
   useSessionQuery,
   useSettingsProfileQuery,
 } from "../../shared/lib/api";
+import {
+  CaptureIcon,
+  CollapseIcon,
+  ExpandIcon,
+  SettingsIcon,
+  shellNavItems,
+} from "./shell-navigation";
 
-const navItems = [
-  { to: "/", label: "Home", hint: "dashboard and direction" },
-  { to: "/inbox", label: "Inbox", hint: "capture triage" },
-  { to: "/today", label: "Today", hint: "daily execution workspace" },
-  { to: "/habits", label: "Habits", hint: "consistency system" },
-  { to: "/health", label: "Health", hint: "body basics" },
-  { to: "/finance", label: "Finance", hint: "spend visibility" },
-  { to: "/goals", label: "Goals", hint: "weekly and monthly direction" },
-  { to: "/reviews/daily", label: "Reviews", hint: "reflection loop" },
-] as const;
+const SHELL_SIDEBAR_STORAGE_KEY = "lifeos:shell-sidebar";
+const SHELL_SIDEBAR_STORAGE_VERSION = 1;
+
+type StoredShellSidebarPreference = {
+  version: 1;
+  collapsed: boolean;
+};
+
+const readStoredShellSidebarPreference = () => {
+  try {
+    const rawValue = localStorage.getItem(SHELL_SIDEBAR_STORAGE_KEY);
+    if (!rawValue) {
+      return false;
+    }
+
+    const parsed = JSON.parse(rawValue) as Partial<StoredShellSidebarPreference>;
+    if (
+      parsed.version !== SHELL_SIDEBAR_STORAGE_VERSION ||
+      typeof parsed.collapsed !== "boolean"
+    ) {
+      localStorage.removeItem(SHELL_SIDEBAR_STORAGE_KEY);
+      return false;
+    }
+
+    return parsed.collapsed;
+  } catch {
+    return false;
+  }
+};
+
+const writeStoredShellSidebarPreference = (collapsed: boolean) => {
+  try {
+    const payload: StoredShellSidebarPreference = {
+      version: SHELL_SIDEBAR_STORAGE_VERSION,
+      collapsed,
+    };
+    localStorage.setItem(SHELL_SIDEBAR_STORAGE_KEY, JSON.stringify(payload));
+  } catch {
+    return;
+  }
+};
 
 function navClass(isActive: boolean) {
   return `shell-nav__link${isActive ? " shell-nav__link--active" : ""}`;
@@ -30,6 +68,7 @@ function navClass(isActive: boolean) {
 
 export function AppShell() {
   const [captureOpen, setCaptureOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => readStoredShellSidebarPreference());
   const navigate = useNavigate();
   const today = getTodayDate();
   const sessionQuery = useSessionQuery();
@@ -68,14 +107,35 @@ export function AppShell() {
     return () => document.removeEventListener("keydown", handleGlobalKeyDown);
   }, [handleGlobalKeyDown]);
 
+  useEffect(() => {
+    writeStoredShellSidebarPreference(sidebarCollapsed);
+  }, [sidebarCollapsed]);
+
+  const sidebarClassName = `shell${sidebarCollapsed ? " shell--sidebar-collapsed" : ""}`;
+  const sidebarToggleLabel = sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar";
+
   return (
-    <div className="shell">
-      <aside className="shell-sidebar">
+    <div className={sidebarClassName}>
+      <aside className="shell-sidebar" aria-label="Primary navigation">
         <div className="brand-block">
-          <span className="brand-block__eyebrow">Personal command center</span>
+          <div className="brand-block__toolbar">
+            <span className="brand-block__eyebrow">Personal command center</span>
+            <button
+              className="button button--ghost button--small shell-sidebar__toggle shell-collapsed-label"
+              type="button"
+              onClick={() => setSidebarCollapsed((prev) => !prev)}
+              aria-label={sidebarToggleLabel}
+              aria-expanded={!sidebarCollapsed}
+              data-shell-label={sidebarToggleLabel}
+            >
+              <span className="shell-action__icon" aria-hidden="true">
+                {sidebarCollapsed ? <ExpandIcon /> : <CollapseIcon />}
+              </span>
+            </button>
+          </div>
           <div className="brand-block__title-row">
             <span className="brand-block__mark">L</span>
-            <div>
+            <div className="brand-block__copy">
               <h1 className="brand-block__title">Life OS</h1>
               <p className="brand-block__subtitle">
                 Run the day. Protect momentum.
@@ -85,38 +145,63 @@ export function AppShell() {
         </div>
 
         <nav className="shell-nav">
-          {navItems.map((item) => (
-            <NavLink
-              key={item.to}
-              className={({ isActive }) => navClass(isActive)}
-              to={item.to}
-            >
-              <span className="shell-nav__label">{item.label}</span>
-              <span className="shell-nav__hint">{item.hint}</span>
-            </NavLink>
-          ))}
+          {shellNavItems.map((item) => {
+            const Icon = item.icon;
+
+            return (
+              <NavLink
+                key={item.to}
+                className={({ isActive }) => navClass(isActive)}
+                to={item.to}
+                aria-label={sidebarCollapsed ? item.label : undefined}
+                data-shell-label={item.label}
+              >
+                <span className="shell-nav__icon" aria-hidden="true">
+                  <Icon />
+                </span>
+                <span className="shell-nav__meta">
+                  <span className="shell-nav__label">{item.label}</span>
+                  <span className="shell-nav__hint">{item.hint}</span>
+                </span>
+              </NavLink>
+            );
+          })}
         </nav>
 
         <div className="shell-sidebar__footer">
           <button
-            className="button button--primary"
+            className="button button--primary shell-sidebar__action shell-sidebar__action--primary shell-collapsed-label"
             onClick={() => setCaptureOpen(true)}
             type="button"
+            aria-label={sidebarCollapsed ? "Quick capture" : undefined}
+            data-shell-label="Quick capture"
           >
-            Quick capture
-            <span className="kbd" style={{ marginLeft: "0.5rem", fontSize: "0.7rem" }}>⌘K</span>
+            <span className="shell-action__icon" aria-hidden="true">
+              <CaptureIcon />
+            </span>
+            <span className="shell-sidebar__action-text">Quick capture</span>
+            <span className="kbd shell-sidebar__action-kbd">⌘K</span>
           </button>
-          <div className="account-chip">
+          <div
+            className={`account-chip${sidebarCollapsed ? " account-chip--collapsed shell-collapsed-label" : ""}`}
+            data-shell-label={userEmail}
+            title={sidebarCollapsed ? userEmail : undefined}
+          >
             <span className="account-chip__dot" />
-            {userEmail}
+            <span className="account-chip__text">{userEmail}</span>
           </div>
           <NavLink
             to="/settings"
             className={({ isActive }) =>
-              `button button--ghost button--small${isActive ? " button--active" : ""}`
+              `button button--ghost button--small shell-sidebar__action shell-collapsed-label${isActive ? " button--active" : ""}`
             }
+            aria-label={sidebarCollapsed ? "Settings" : undefined}
+            data-shell-label="Settings"
           >
-            Settings
+            <span className="shell-action__icon" aria-hidden="true">
+              <SettingsIcon />
+            </span>
+            <span className="shell-sidebar__action-text">Settings</span>
           </NavLink>
         </div>
       </aside>
@@ -155,7 +240,7 @@ export function AppShell() {
         </main>
 
         <nav className="mobile-nav">
-          {navItems.slice(0, 5).map((item) => (
+          {shellNavItems.slice(0, 5).map((item) => (
             <NavLink
               key={item.to}
               className={({ isActive }) => navClass(isActive)}
