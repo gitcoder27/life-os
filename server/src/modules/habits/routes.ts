@@ -391,6 +391,7 @@ async function serializeHabit(
   },
   checkins: HabitCheckin[],
   targetIsoDate: IsoDateString,
+  options?: { pauseWindowCutoffIsoDate?: IsoDateString },
 ): Promise<HabitItem> {
   const recurrence = resolveHabitRecurrence(habit, targetIsoDate);
   const scheduleRule = deriveHabitScheduleFromRecurrence(recurrence.rule);
@@ -426,7 +427,10 @@ async function serializeHabit(
         }
       : calculateHabitRisk(checkins, recurrence, targetIsoDate, habit.pauseWindows),
     pauseWindows: (habit.pauseWindows ?? [])
-      .filter((pauseWindow) => toIsoDateString(pauseWindow.endsOn) >= targetIsoDate)
+      .filter(
+        (pauseWindow) =>
+          toIsoDateString(pauseWindow.endsOn) >= (options?.pauseWindowCutoffIsoDate ?? targetIsoDate),
+      )
       .map((pauseWindow) => serializeHabitPauseWindow(pauseWindow, targetIsoDate)),
   };
 }
@@ -938,7 +942,9 @@ export const registerHabitsRoutes: FastifyPluginAsync = async (app) => {
     });
 
     const response: HabitMutationResponse = withGeneratedAt({
-      habit: await serializeHabit(habit, habit.checkins, targetIsoDate),
+      habit: await serializeHabit(habit, habit.checkins, targetIsoDate, {
+        pauseWindowCutoffIsoDate: payload.startsOn,
+      }),
     });
 
     return reply.status(201).send(response);
