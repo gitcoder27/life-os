@@ -34,6 +34,7 @@
 .brand-block {
   padding-bottom: 1.25rem;
   border-bottom: 1px solid var(--border);
+  transition: padding-bottom var(--dur-slow) var(--ease);
 }
 
 .brand-block__toolbar {
@@ -41,6 +42,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 0.85rem;
+  transition: justify-content var(--dur-slow) var(--ease);
 }
 
 .brand-block__eyebrow,
@@ -69,6 +71,10 @@
   align-items: center;
   gap: 0.85rem;
   margin-top: 0.75rem;
+  transition:
+    gap var(--dur-slow) var(--ease),
+    margin-top var(--dur-slow) var(--ease),
+    justify-content var(--dur-slow) var(--ease);
 }
 
 .brand-block__mark {
@@ -84,6 +90,11 @@
   font-family: var(--font-display);
   font-size: 1.3rem;
   font-weight: 600;
+  transition:
+    width var(--dur-slow) var(--ease),
+    height var(--dur-slow) var(--ease),
+    border-radius var(--dur-slow) var(--ease),
+    font-size var(--dur-slow) var(--ease);
 }
 
 .brand-block__copy {
@@ -94,6 +105,7 @@
     transform var(--dur-slow) var(--ease);
   max-width: 10rem;
   overflow: hidden;
+  white-space: nowrap;
 }
 
 .brand-block__title {
@@ -115,6 +127,10 @@
   height: 2.35rem;
   padding: 0;
   flex-shrink: 0;
+  transition:
+    width var(--dur-slow) var(--ease),
+    height var(--dur-slow) var(--ease),
+    border-radius var(--dur-slow) var(--ease);
 }
 
 /* ── Navigation ── */
@@ -125,6 +141,9 @@
   gap: 0.3rem;
   flex: 1;
   padding: 0.5rem 0;
+  transition:
+    gap var(--dur-slow) var(--ease),
+    padding var(--dur-slow) var(--ease);
 }
 
 .shell-nav__link {
@@ -138,7 +157,10 @@
   transition:
     color var(--dur) var(--ease),
     background var(--dur) var(--ease),
-    border-color var(--dur) var(--ease);
+    border-color var(--dur) var(--ease),
+    padding var(--dur-slow) var(--ease),
+    gap var(--dur-slow) var(--ease),
+    min-height var(--dur-slow) var(--ease);
   border: 1px solid transparent;
   min-width: 0;
 }
@@ -175,7 +197,10 @@
     background var(--dur) var(--ease),
     border-color var(--dur) var(--ease),
     color var(--dur) var(--ease),
-    transform var(--dur) var(--ease);
+    transform var(--dur) var(--ease),
+    width var(--dur-slow) var(--ease),
+    height var(--dur-slow) var(--ease),
+    border-radius var(--dur-slow) var(--ease);
 }
 
 .shell-action__icon {
@@ -183,7 +208,10 @@
     background var(--dur) var(--ease),
     border-color var(--dur) var(--ease),
     color var(--dur) var(--ease),
-    transform var(--dur) var(--ease);
+    transform var(--dur) var(--ease),
+    width var(--dur-slow) var(--ease),
+    height var(--dur-slow) var(--ease),
+    border-radius var(--dur-slow) var(--ease);
 }
 
 .shell-nav__icon svg,
@@ -203,6 +231,7 @@
     transform var(--dur-slow) var(--ease);
   max-width: 12rem;
   overflow: hidden;
+  white-space: nowrap;
 }
 
 .shell-nav__link:hover {
@@ -245,11 +274,22 @@
   gap: 0.85rem;
   padding-top: 1rem;
   border-top: 1px solid var(--border);
+  transition:
+    gap var(--dur-slow) var(--ease),
+    padding-top var(--dur-slow) var(--ease),
+    align-items var(--dur-slow) var(--ease);
 }
 
 .shell-sidebar__action {
   width: 100%;
   justify-content: flex-start;
+  transition:
+    width var(--dur-slow) var(--ease),
+    height var(--dur-slow) var(--ease),
+    padding var(--dur-slow) var(--ease),
+    gap var(--dur-slow) var(--ease),
+    border-radius var(--dur-slow) var(--ease),
+    justify-content var(--dur-slow) var(--ease);
 }
 
 .shell-sidebar__action .shell-action__icon {
@@ -345,6 +385,7 @@
 .shell--sidebar-collapsed .brand-block__title-row {
   justify-content: center;
   margin-top: 0.15rem;
+  gap: 0;
 }
 
 .shell--sidebar-collapsed .brand-block__mark {
@@ -377,8 +418,8 @@
   pointer-events: none;
 }
 
-.shell--sidebar-collapsed .brand-block__title-row {
-  justify-content: center;
+.shell--sidebar-collapsed .shell-sidebar__action-kbd {
+  margin-left: 0;
 }
 
 .shell--sidebar-collapsed .shell-nav__link {
