@@ -1,0 +1,637 @@
+/* ═══════════════════════════════════════════════
+   Phase 4 — Guidance, Risk, Challenge
+   ═══════════════════════════════════════════════ */
+
+/* --- Guidance rail (Home) --- */
+
+.guidance-rail {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-bottom: 1.25rem;
+}
+
+/* Recovery strip */
+.recovery-strip {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.7rem 1rem;
+  border-radius: var(--r-sm);
+  border: 1px solid rgba(217, 153, 58, 0.12);
+  background: rgba(217, 153, 58, 0.04);
+  transition: border-color var(--dur) var(--ease);
+}
+
+.recovery-strip--recovery {
+  border-color: rgba(201, 85, 76, 0.18);
+  background: rgba(201, 85, 76, 0.05);
+}
+
+.recovery-strip__indicator {
+  flex-shrink: 0;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+.recovery-strip--recovery .recovery-strip__indicator {
+  background: var(--negative);
+  box-shadow: 0 0 6px rgba(201, 85, 76, 0.3);
+}
+
+.recovery-strip__body {
+  flex: 1;
+  min-width: 0;
+}
+
+.recovery-strip__title {
+  font-size: var(--fs-body);
+  font-weight: 650;
+  color: var(--text);
+}
+
+.recovery-strip__detail {
+  font-size: var(--fs-small);
+  color: var(--text-secondary);
+  margin-top: 0.1rem;
+}
+
+/* Weekly challenge card */
+.challenge-card {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  padding: 0.75rem 1rem;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--border);
+  background: linear-gradient(135deg, var(--panel-elevated) 0%, var(--panel) 100%);
+  cursor: pointer;
+  transition: all var(--dur) var(--ease);
+}
+
+.challenge-card:hover {
+  border-color: var(--border-active);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-sm);
+}
+
+.challenge-card__progress-ring {
+  flex-shrink: 0;
+  width: 40px;
+  height: 40px;
+}
+
+.challenge-card__progress-ring circle {
+  fill: none;
+  stroke-width: 3;
+}
+
+.challenge-card__progress-ring .ring-bg {
+  stroke: rgba(255, 255, 255, 0.06);
+}
+
+.challenge-card__progress-ring .ring-fill {
+  stroke: var(--positive);
+  stroke-linecap: round;
+  transition: stroke-dashoffset 0.6s var(--ease);
+}
+
+.challenge-card--behind .challenge-card__progress-ring .ring-fill {
+  stroke: var(--accent);
+}
+
+.challenge-card__body {
+  flex: 1;
+  min-width: 0;
+}
+
+.challenge-card__label {
+  font-size: var(--fs-micro);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+}
+
+.challenge-card__title {
+  font-size: var(--fs-body);
+  font-weight: 650;
+  color: var(--text);
+  margin-top: 0.05rem;
+}
+
+.challenge-card__meta {
+  font-size: var(--fs-small);
+  color: var(--text-secondary);
+  margin-top: 0.1rem;
+}
+
+.challenge-card__status {
+  flex-shrink: 0;
+}
+
+/* Recommendation stack */
+.rec-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.rec-item {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.55rem 0.75rem;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--border);
+  background: var(--panel);
+  transition: all var(--dur) var(--ease);
+}
+
+.rec-item:hover {
+  border-color: var(--border-active);
+  background: var(--panel-elevated);
+}
+
+.rec-item__kind {
+  flex-shrink: 0;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+.rec-item__kind--habit { background: var(--positive); }
+.rec-item__kind--health { background: #5db8b0; }
+.rec-item__kind--review { background: var(--accent-bright); }
+
+.rec-item__body {
+  flex: 1;
+  min-width: 0;
+}
+
+.rec-item__title {
+  font-size: var(--fs-body);
+  font-weight: 600;
+}
+
+.rec-item__detail {
+  font-size: var(--fs-small);
+  color: var(--text-secondary);
+  margin-top: 0.05rem;
+}
+
+.rec-item__impact {
+  flex-shrink: 0;
+  font-size: var(--fs-micro);
+  font-weight: 700;
+  padding: 0.15rem 0.45rem;
+  border-radius: var(--r-xs);
+  background: var(--accent-soft);
+  color: var(--accent-bright);
+}
+
+.rec-item__action {
+  flex-shrink: 0;
+}
+
+/* --- Habit risk indicators --- */
+
+.habit-item--at-risk {
+  border-left: 3px solid var(--accent);
+  padding-left: 0.55rem;
+}
+
+.habit-item--drifting {
+  border-left: 3px solid var(--text-tertiary);
+  padding-left: 0.55rem;
+}
+
+.risk-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  padding: 0.1rem 0.4rem;
+  border-radius: var(--r-xs);
+  font-size: var(--fs-micro);
+  font-weight: 600;
+}
+
+.risk-badge--at-risk {
+  background: rgba(217, 153, 58, 0.12);
+  color: var(--accent-bright);
+}
+
+.risk-badge--drifting {
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-tertiary);
+}
+
+.habit-item__risk-msg {
+  font-size: var(--fs-micro);
+  color: var(--text-secondary);
+  margin-top: 0.15rem;
+}
+
+.habit-item__stats {
+  font-size: var(--fs-micro);
+  color: var(--text-tertiary);
+}
+
+/* --- Focus habit selector (Reviews) --- */
+
+.focus-habit-field {
+  margin-top: 0.75rem;
+}
+
+.focus-habit-field select {
+  width: 100%;
+  padding: 0.5rem 0.75rem;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--text);
+  font-size: var(--fs-body);
+  font-family: var(--font-body);
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' fill='%23a0957e'%3E%3Cpath d='M6 8L0 0h12z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.75rem center;
+  cursor: pointer;
+  transition: border-color var(--dur) var(--ease);
+}
+
+.focus-habit-field select:focus {
+  outline: none;
+  border-color: var(--border-focus);
+}
+
+.focus-habit-field select:hover {
+  border-color: var(--border-active);
+}
+
+/* --- Responsive adjustments for guidance --- */
+
+@media (max-width: 640px) {
+  .guidance-rail {
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+  }
+
+  .today-focus {
+    grid-template-columns: 1fr;
+  }
+
+  .challenge-card {
+    padding: 0.6rem 0.75rem;
+  }
+
+  .recovery-strip {
+    padding: 0.55rem 0.75rem;
+  }
+}
+
+/* ────────────────────────────────────────────────
+   Recurrence Editor
+   ──────────────────────────────────────────────── */
+
+.recurrence-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  padding: 0.75rem;
+  background: var(--panel);
+  border: 1px solid rgba(255 255 255 / 0.04);
+  border-radius: var(--r-md);
+}
+
+.recurrence-editor__summary {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.45rem 0.65rem;
+  background: rgba(217 153 58 / 0.08);
+  border: 1px solid rgba(217 153 58 / 0.15);
+  border-radius: var(--r-sm);
+  font-size: var(--fs-small);
+  color: var(--accent-bright);
+  line-height: 1.4;
+}
+
+.recurrence-editor__summary-icon {
+  font-size: 1rem;
+  opacity: 0.8;
+}
+
+.recurrence-editor__preview {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  padding: 0.15rem 0;
+  font-size: var(--fs-small);
+  line-height: 1.5;
+}
+
+.recurrence-editor__preview-label {
+  color: var(--text-tertiary);
+}
+
+.recurrence-editor__preview-value {
+  color: var(--text-secondary);
+}
+
+.recurrence-editor__frequency {
+  display: flex;
+  gap: 0.25rem;
+  flex-wrap: wrap;
+}
+
+.recurrence-freq-btn {
+  padding: 0.3rem 0.65rem;
+  border: 1px solid rgba(255 255 255 / 0.08);
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: var(--fs-small);
+  font-family: var(--font-body);
+  cursor: pointer;
+  transition: all var(--dur-fast) var(--ease);
+}
+
+.recurrence-freq-btn:hover {
+  border-color: rgba(255 255 255 / 0.15);
+  color: var(--text);
+}
+
+.recurrence-freq-btn--active {
+  background: rgba(217 153 58 / 0.12);
+  border-color: var(--accent);
+  color: var(--accent-bright);
+}
+
+.recurrence-editor__days {
+  display: flex;
+  gap: 0.2rem;
+  flex-wrap: wrap;
+}
+
+.recurrence-day-btn {
+  width: 2.2rem;
+  height: 2.2rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(255 255 255 / 0.08);
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: var(--fs-micro);
+  font-family: var(--font-body);
+  cursor: pointer;
+  transition: all var(--dur-fast) var(--ease);
+}
+
+.recurrence-day-btn:hover {
+  border-color: rgba(255 255 255 / 0.15);
+  color: var(--text);
+}
+
+.recurrence-day-btn--active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--bg-deep);
+  font-weight: 600;
+}
+
+.recurrence-editor__interval-field {
+  margin: 0;
+}
+
+.recurrence-editor__interval-row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.recurrence-editor__interval-input {
+  width: 4.5rem;
+}
+
+.recurrence-editor__interval-unit {
+  font-size: var(--fs-small);
+  color: var(--text-secondary);
+}
+
+.recurrence-editor__monthly {
+  display: flex;
+  gap: 0.4rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.recurrence-editor__select {
+  padding: 0.35rem 0.5rem;
+  border: 1px solid rgba(255 255 255 / 0.1);
+  border-radius: var(--r-sm);
+  background: var(--panel-elevated);
+  color: var(--text);
+  font-size: var(--fs-small);
+  font-family: var(--font-body);
+}
+
+.recurrence-editor__monthly-label {
+  font-size: var(--fs-small);
+  color: var(--text-secondary);
+}
+
+.recurrence-editor__start-field {
+  margin: 0;
+}
+
+.recurrence-editor__end-toggle {
+  align-self: flex-start;
+  color: var(--text-tertiary);
+  font-size: var(--fs-small);
+}
+
+.recurrence-editor__end {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.recurrence-editor__end .field {
+  margin: 0;
+}
+
+/* ── Recurrence Toggle (collapsed) ─────────── */
+
+.recurrence-toggle {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.recurrence-toggle__btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.35rem 0.7rem;
+  border: 1px dashed rgba(255 255 255 / 0.1);
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: var(--fs-small);
+  font-family: var(--font-body);
+  cursor: pointer;
+  transition: all var(--dur-fast) var(--ease);
+  align-self: flex-start;
+}
+
+.recurrence-toggle__btn:hover {
+  border-color: rgba(217 153 58 / 0.3);
+  color: var(--text);
+}
+
+.recurrence-toggle__btn--active {
+  border-style: solid;
+  border-color: var(--accent);
+  background: rgba(217 153 58 / 0.08);
+  color: var(--accent-bright);
+}
+
+.recurrence-toggle__icon {
+  font-size: 0.95rem;
+}
+
+/* ── Recurrence Badges ─────────────────────── */
+
+.recurrence-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.15rem 0.45rem;
+  background: rgba(217 153 58 / 0.1);
+  border: 1px solid rgba(217 153 58 / 0.2);
+  border-radius: var(--r-xs);
+  font-size: var(--fs-micro);
+  color: var(--accent-bright);
+  vertical-align: middle;
+  line-height: 1.3;
+  white-space: nowrap;
+}
+
+.recurrence-badge--compact {
+  padding: 0.1rem 0.3rem;
+  font-size: var(--fs-micro);
+}
+
+.recurrence-badge__icon {
+  font-size: 0.85em;
+}
+
+.recurrence-badge__text {
+  max-width: 14rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.carry-policy-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.1rem 0.4rem;
+  background: rgba(93 184 106 / 0.08);
+  border: 1px solid rgba(93 184 106 / 0.15);
+  border-radius: var(--r-xs);
+  font-size: var(--fs-micro);
+  color: var(--positive);
+  white-space: nowrap;
+}
+
+.recurrence-info {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  margin-left: 0.4rem;
+  vertical-align: middle;
+}
+
+/* ── Habit recurrence in detail line ───────── */
+
+.habit-item__recurrence {
+  color: var(--accent);
+  font-size: var(--fs-micro);
+}
+
+/* ── Manage form section divider ───────────── */
+
+.manage-form__section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid rgba(255 255 255 / 0.04);
+}
+
+.manage-form__section-label {
+  font-size: var(--fs-small);
+  font-weight: 500;
+  color: var(--text-secondary);
+  letter-spacing: 0.02em;
+}
+
+/* ── Manage list recurrence text ───────────── */
+
+.manage-list__recurrence {
+  color: var(--accent);
+  font-size: var(--fs-micro);
+}
+
+/* ── Expense row recurrence inline ─────────── */
+
+.expense-row__recurrence {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  font-size: var(--fs-micro);
+  color: var(--accent);
+}
+
+/* ── Mobile adjustments ────────────────────── */
+
+@media (max-width: 640px) {
+  .recurrence-editor {
+    padding: 0.6rem;
+  }
+
+  .recurrence-editor__preview {
+    flex-direction: column;
+    gap: 0.1rem;
+  }
+
+  .recurrence-editor__frequency {
+    gap: 0.2rem;
+  }
+
+  .recurrence-freq-btn {
+    padding: 0.25rem 0.5rem;
+    font-size: var(--fs-micro);
+  }
+
+  .recurrence-day-btn {
+    width: 2rem;
+    height: 2rem;
+  }
+
+  .recurrence-editor__monthly {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .recurrence-badge__text {
+    max-width: 10rem;
+  }
+}
+
