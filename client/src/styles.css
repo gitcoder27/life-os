@@ -4890,6 +4890,13 @@ img { max-width: 100%; display: block; }
   gap: 1.5rem;
 }
 
+.goals-workspace__attention-hint {
+  margin: 0;
+  font-size: var(--fs-small);
+  color: var(--text-tertiary);
+  line-height: 1.5;
+}
+
 .goals-workspace__detail {
   width: 440px;
   flex-shrink: 0;
@@ -5100,6 +5107,12 @@ img { max-width: 100%; display: block; }
   color: var(--accent);
 }
 
+.goal-attention-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
 /* ── Momentum Sparkline ── */
 
 .momentum-spark {
@@ -5175,6 +5188,48 @@ img { max-width: 100%; display: block; }
 
 .goal-execution-bridge__copy {
   margin: 0.35rem 0 0;
+  font-size: var(--fs-small);
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+
+.goal-carry-banner {
+  display: flex;
+  flex-direction: column;
+  gap: 0.8rem;
+  padding: 1rem 1.1rem;
+  border-radius: var(--r);
+  border: 1px solid rgba(217, 153, 58, 0.18);
+  background: linear-gradient(135deg, rgba(217, 153, 58, 0.08), rgba(255, 255, 255, 0.025));
+  margin-top: 1.5rem;
+}
+
+.goal-carry-banner__top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.goal-carry-banner__eyebrow {
+  font-size: var(--fs-micro);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.goal-carry-banner__title {
+  font-family: var(--font-display);
+  font-size: 1.2rem;
+  font-weight: 500;
+  line-height: 1.3;
+  margin-top: 0.15rem;
+}
+
+.goal-carry-banner__copy,
+.goal-carry-banner__helper {
+  margin: 0;
   font-size: var(--fs-small);
   line-height: 1.5;
   color: var(--text-secondary);
