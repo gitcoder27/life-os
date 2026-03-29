@@ -1,0 +1,312 @@
+import type { PrismaClient } from "@prisma/client";
+
+import { isHabitDueOnIsoDate, resolveHabitRecurrence } from "../../../lib/habits/schedule.js";
+import { countWaterTargetHits } from "../../../lib/health/water.js";
+import { getMonthEndDate } from "../../../lib/time/cycle.js";
+import { toIsoDateString } from "../../../lib/time/date.js";
+import { getDateRangeWindowUtc, normalizeTimezone } from "../../../lib/time/user-time.js";
+import { ensureCycle, getWeeklyMomentum } from "../../scoring/service.js";
+import { resolveMonthlyReviewSubmissionWindow } from "../submission-window.js";
+
+import {
+  assertReviewSubmissionWindow,
+  getUserPreferences,
+  listIsoDates,
+  replacePriorities,
+  roundToPercent,
+  serializePriority,
+  throwReviewAlreadySubmitted,
+  toJson,
+} from "./review-helpers.js";
+import type {
+  ExistingMonthlyReview,
+  ReviewFrictionTag,
+  SubmitMonthlyReviewRequest,
+  MonthlyReviewResponse,
+} from "./review-types.js";
+
+export async function getMonthlyReviewModel(
+  prisma: PrismaClient,
+  userId: string,
+  startDate: Date,
+): Promise<MonthlyReviewResponse> {
+  const startIsoDate = toIsoDateString(startDate);
+  const cycle = await ensureCycle(prisma, {
+    userId,
+    cycleType: "MONTH",
+    cycleStartDate: startDate,
+    cycleEndDate: getMonthEndDate(startDate),
+  });
+  const nextMonthStart = new Date(Date.UTC(startDate.getUTCFullYear(), startDate.getUTCMonth() + 1, 1));
+  const preferences = await prisma.userPreference?.findUnique?.({
+    where: {
+      userId,
+    },
+  });
+  const timezone = normalizeTimezone(preferences?.timezone);
+  const waterTargetMl = preferences?.dailyWaterTargetMl ?? 2500;
+  const effectiveEndDate = cycle.cycleEndDate;
+  const effectiveEndIsoDate = toIsoDateString(effectiveEndDate);
+  const submissionWindow = resolveMonthlyReviewSubmissionWindow(startIsoDate, new Date(), preferences);
+  const rangeWindow = getDateRangeWindowUtc(startIsoDate, effectiveEndIsoDate, timezone);
+  const scopedIsoDates = listIsoDates(startIsoDate, effectiveEndIsoDate);
+  const [scores, habits, workoutDays, waterLogs, expenses, dailyReviews, nextMonthCycle] = await Promise.all([
+    prisma.dailyScore.findMany({
+      where: {
+        userId,
+        finalizedAt: {
+          not: null,
+        },
+        planningCycle: {
+          cycleStartDate: {
+            gte: startDate,
+            lte: effectiveEndDate,
+          },
+        },
+      },
+      include: {
+        planningCycle: true,
+      },
+    }),
+    prisma.habit.findMany({
+      where: {
+        userId,
+        status: "ACTIVE",
+        archivedAt: null,
+      },
+      include: {
+        recurrenceRule: {
+          include: {
+            exceptions: {
+              orderBy: {
+                occurrenceDate: "asc",
+              },
+            },
+          },
+        },
+        pauseWindows: {
+          orderBy: {
+            startsOn: "asc",
+          },
+        },
+        checkins: {
+          where: {
+            occurredOn: {
+              gte: startDate,
+              lte: effectiveEndDate,
+            },
+          },
+        },
+      },
+    }),
+    prisma.workoutDay.findMany({
+      where: {
+        userId,
+        date: {
+          gte: startDate,
+          lte: effectiveEndDate,
+        },
+      },
+    }),
+    prisma.waterLog.findMany({
+      where: {
+        userId,
+        occurredAt: {
+          gte: rangeWindow.start,
+          lt: rangeWindow.end,
+        },
+      },
+    }),
+    prisma.expense.findMany({
+      where: {
+        userId,
+        spentOn: {
+          gte: startDate,
+          lte: effectiveEndDate,
+        },
+      },
+      include: {
+        expenseCategory: true,
+      },
+    }),
+    prisma.dailyReview.findMany({
+      where: {
+        userId,
+        planningCycle: {
+          cycleStartDate: {
+            gte: startDate,
+            lte: effectiveEndDate,
+          },
+        },
+      },
+    }),
+    prisma.planningCycle.findUnique({
+      where: {
+        userId_cycleType_cycleStartDate: {
+          userId,
+          cycleType: "MONTH",
+          cycleStartDate: nextMonthStart,
+        },
+      },
+      include: {
+        priorities: {
+          orderBy: {
+            slot: "asc",
+          },
+        },
+      },
+    }),
+  ]);
+
+  const spendingByCategory = expenses.reduce<Record<string, number>>((acc, expense) => {
+    const category = expense.expenseCategory?.name ?? "Uncategorized";
+    acc[category] = (acc[category] ?? 0) + expense.amountMinor;
+    return acc;
+  }, {});
+  const frictionCounts = dailyReviews.reduce<Record<string, number>>((acc, review) => {
+    acc[review.frictionTag] = (acc[review.frictionTag] ?? 0) + 1;
+    return acc;
+  }, {});
+  const waterTargetHitCount = countWaterTargetHits(waterLogs, timezone, waterTargetMl);
+  const topHabits = habits
+    .map((habit) => {
+      const scheduleRule = resolveHabitRecurrence(habit, startIsoDate);
+      const completedDates = new Set<string>(
+        habit.checkins
+          .filter((checkin) => checkin.status === "COMPLETED")
+          .map((checkin) => toIsoDateString(checkin.occurredOn)),
+      );
+      const dueCount = scopedIsoDates.filter((isoDate) =>
+        isHabitDueOnIsoDate(scheduleRule, isoDate, habit.pauseWindows),
+      ).length;
+      const completedCount = scopedIsoDates.filter((isoDate) => completedDates.has(isoDate)).length;
+
+      return {
+        habitId: habit.id,
+        title: habit.title,
+        completionRate: dueCount > 0 ? roundToPercent(completedCount / dueCount) : 0,
+      };
+    })
+    .sort((a, b) => b.completionRate - a.completionRate)
+    .slice(0, 3);
+
+  const existingReview: ExistingMonthlyReview | null = cycle.monthlyReview
+    ? {
+        monthVerdict: cycle.monthlyReview.monthVerdict,
+        biggestWin: cycle.monthlyReview.biggestWin,
+        biggestLeak: cycle.monthlyReview.biggestLeak,
+        ratings: cycle.monthlyReview.ratingsJson as Record<string, number>,
+        nextMonthTheme: cycle.monthlyReview.nextMonthTheme,
+        threeOutcomes: cycle.monthlyReview.threeOutcomesJson as string[],
+        habitChanges: cycle.monthlyReview.habitChangesJson as string[],
+        simplifyText: cycle.monthlyReview.simplifyText,
+        notes: cycle.monthlyReview.notes,
+        completedAt: cycle.monthlyReview.completedAt.toISOString(),
+      }
+    : null;
+
+  const weeklyMomentum = await getWeeklyMomentum(prisma, userId, cycle.cycleEndDate);
+
+  return {
+    startDate: startIsoDate,
+    endDate: toIsoDateString(cycle.cycleEndDate),
+    summary: {
+      averageWeeklyMomentum: weeklyMomentum.value,
+      bestScore: scores.length > 0 ? Math.max(...scores.map((score) => score.scoreValue)) : null,
+      worstScore: scores.length > 0 ? Math.min(...scores.map((score) => score.scoreValue)) : null,
+      workoutCount: workoutDays.filter((day) => day.actualStatus === "COMPLETED").length,
+      waterSuccessRate:
+        scopedIsoDates.length > 0 ? roundToPercent(waterTargetHitCount / scopedIsoDates.length) : 0,
+      spendingByCategory: Object.entries(spendingByCategory).map(([category, amountMinor]) => ({
+        category,
+        amountMinor,
+      })),
+      topHabits,
+      commonFrictionTags: Object.entries(frictionCounts)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 3)
+        .map(([tag, count]) => ({ tag: tag as ReviewFrictionTag, count })),
+    },
+    existingReview,
+    seededNextMonthTheme: nextMonthCycle?.theme ?? null,
+    seededNextMonthOutcomes: nextMonthCycle?.priorities.map(serializePriority) ?? [],
+    submissionWindow,
+    generatedAt: new Date().toISOString(),
+  };
+}
+
+export async function submitMonthlyReview(
+  prisma: PrismaClient,
+  userId: string,
+  startDate: Date,
+  payload: SubmitMonthlyReviewRequest,
+) {
+  const cycle = await ensureCycle(prisma, {
+    userId,
+    cycleType: "MONTH",
+    cycleStartDate: startDate,
+    cycleEndDate: getMonthEndDate(startDate),
+  });
+
+  if (cycle.monthlyReview) {
+    throwReviewAlreadySubmitted("Monthly review");
+  }
+
+  const preferences = await getUserPreferences(prisma, userId);
+  assertReviewSubmissionWindow(
+    "Monthly review",
+    resolveMonthlyReviewSubmissionWindow(toIsoDateString(startDate), new Date(), preferences),
+  );
+  const nextMonthStart = new Date(Date.UTC(startDate.getUTCFullYear(), startDate.getUTCMonth() + 1, 1));
+  const nextMonthCycle = await ensureCycle(prisma, {
+    userId,
+    cycleType: "MONTH",
+    cycleStartDate: nextMonthStart,
+    cycleEndDate: getMonthEndDate(nextMonthStart),
+  });
+  const completedAt = new Date();
+
+  await prisma.monthlyReview.create({
+    data: {
+      userId,
+      planningCycleId: cycle.id,
+      monthVerdict: payload.monthVerdict,
+      biggestWin: payload.biggestWin,
+      biggestLeak: payload.biggestLeak,
+      ratingsJson: toJson(payload.ratings),
+      nextMonthTheme: payload.nextMonthTheme,
+      threeOutcomesJson: toJson(payload.threeOutcomes),
+      habitChangesJson: toJson(payload.habitChanges),
+      simplifyText: payload.simplifyText,
+      notes: payload.notes ?? null,
+      completedAt,
+    },
+  });
+
+  await prisma.planningCycle.update({
+    where: {
+      id: nextMonthCycle.id,
+    },
+    data: {
+      theme: payload.nextMonthTheme,
+    },
+  });
+
+  const nextMonthOutcomes = await replacePriorities(
+    prisma,
+    nextMonthCycle.id,
+    payload.threeOutcomes.map((title, index) => ({
+      slot: (index + 1) as 1 | 2 | 3,
+      title,
+      goalId: null,
+    })),
+    "MONTHLY",
+  );
+
+  return {
+    reviewCompletedAt: completedAt.toISOString(),
+    nextMonthTheme: payload.nextMonthTheme,
+    nextMonthOutcomes,
+    generatedAt: new Date().toISOString(),
+  };
+}
