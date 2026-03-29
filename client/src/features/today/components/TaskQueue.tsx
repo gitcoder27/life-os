@@ -27,6 +27,37 @@ function getTaskBlockInfo(
   return null;
 }
 
+function MiniProgressRing({ percent }: { percent: number }) {
+  const size = 28;
+  const strokeWidth = 3;
+  const radius = (size - strokeWidth * 2) / 2;
+  const circumference = 2 * Math.PI * radius;
+  const offset = circumference - (percent / 100) * circumference;
+  const color = percent >= 100 ? "var(--positive)" : "var(--accent)";
+
+  return (
+    <svg
+      className="daily-stream__progress-ring"
+      viewBox={`0 0 ${size} ${size}`}
+      width={size}
+      height={size}
+    >
+      <circle
+        cx={size / 2} cy={size / 2} r={radius}
+        fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth={strokeWidth}
+      />
+      <circle
+        cx={size / 2} cy={size / 2} r={radius}
+        fill="none" stroke={color} strokeWidth={strokeWidth}
+        strokeLinecap="round"
+        strokeDasharray={circumference} strokeDashoffset={offset}
+        transform={`rotate(-90 ${size / 2} ${size / 2})`}
+        style={{ transition: "stroke-dashoffset 0.5s var(--ease)" }}
+      />
+    </svg>
+  );
+}
+
 export function TaskQueue({
   taskGroups,
   completedCount,
@@ -52,7 +83,7 @@ export function TaskQueue({
     <section className="today-task-queue">
       <div className="today-task-queue__header">
         <div>
-          <h2 className="today-task-queue__title">Tasks</h2>
+          <h2 className="today-task-queue__title">Daily Stream</h2>
           {totalCount > 0 ? (
             <div className="today-task-queue__planner-status">
               <span className="today-task-queue__planner-chip">
@@ -77,15 +108,10 @@ export function TaskQueue({
         </div>
         {totalCount > 0 ? (
           <div className="today-task-queue__progress">
+            <MiniProgressRing percent={progressPct} />
             <span className="today-task-queue__counter">
-              {completedCount}/{totalCount} done
+              {completedCount}/{totalCount}
             </span>
-            <div className="today-task-queue__bar">
-              <div
-                className="today-task-queue__bar-fill"
-                style={{ width: `${progressPct}%` }}
-              />
-            </div>
           </div>
         ) : null}
       </div>

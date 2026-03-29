@@ -42,7 +42,7 @@ export function ContextPanel({
   onSwitchToPlanner: () => void;
 }) {
   return (
-    <aside className="today-context-panel">
+    <aside className="today-sidebar stagger">
       <RoutinesHabits />
       <HealthPulse currentDay={currentDay} />
       <FinanceAdmin />

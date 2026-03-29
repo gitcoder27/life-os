@@ -5,12 +5,11 @@ import {
   PageErrorState,
   PageLoadingState,
 } from "../../shared/ui/PageState";
-import { ScoreProgressStrip } from "./components/ScoreProgressStrip";
+import { TodayHero } from "./components/TodayHero";
 import { PriorityStack } from "./components/PriorityStack";
 import { TaskQueue } from "./components/TaskQueue";
 import { ContextPanel } from "./components/ContextPanel";
 import { RecoveryLane } from "./components/RecoveryLane";
-import { ModeToggle } from "./components/ModeToggle";
 import { DayPlanner } from "./components/DayPlanner";
 import { ExecutePlannerFocus } from "./components/ExecutePlannerFocus";
 import { buildPlannerExecutionModel } from "./helpers/planner-execution";
@@ -79,14 +78,11 @@ export function TodayPage() {
 
   return (
     <div className="today-layout">
-      <div className="today-top-bar">
-        <ScoreProgressStrip />
-        <ModeToggle
-          mode={mode}
-          onModeChange={setMode}
-          plannerBlockCount={data.plannerBlocks.length}
-        />
-      </div>
+      <TodayHero
+        mode={mode}
+        onModeChange={setMode}
+        plannerBlockCount={data.plannerBlocks.length}
+      />
 
       {allErrors ? (
         <InlineErrorState message={allErrors} onRetry={data.refetchAll} />
@@ -95,7 +91,7 @@ export function TodayPage() {
       {mode === "execute" ? (
         <>
           <div className="today-columns">
-            <div className="today-focus-zone">
+            <div className="today-focus-zone stagger">
               <PriorityStack
                 priorityDraft={priorityDraft}
                 activeGoals={data.activeGoals}

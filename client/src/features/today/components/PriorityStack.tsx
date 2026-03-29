@@ -42,8 +42,8 @@ export function PriorityStack({
     <section className="today-priority-hero">
       <div className="today-priority-hero__header">
         <div>
-          <h2 className="today-priority-hero__title">Priority Stack</h2>
-          <p className="today-priority-hero__subtitle">Top three for today — reorder before you start</p>
+          <h2 className="today-priority-hero__title">Top Priorities</h2>
+          <p className="today-priority-hero__subtitle">Your three most important outcomes for today</p>
         </div>
         <SaveIndicator status={priorityDraft.saveStatus} />
       </div>
