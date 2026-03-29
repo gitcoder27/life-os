@@ -4865,6 +4865,949 @@ img { max-width: 100%; display: block; }
 }
 
 /* ═══════════════════════════════════════════════════════
+   ACTIVE PURSUITS — Redesigned Goals Page
+   ═══════════════════════════════════════════════════════ */
+
+/* ── Page Layout ── */
+
+.ap-page {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  animation: slideUp 0.45s var(--ease) both;
+}
+
+.ap-page-header {
+  max-width: 48rem;
+}
+
+.ap-page-header__title {
+  font-family: var(--font-display);
+  font-size: clamp(2rem, 3.5vw, 2.8rem);
+  font-weight: 400;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+  color: var(--text);
+}
+
+.ap-page-header__subtitle {
+  color: var(--text-secondary);
+  font-size: var(--fs-body);
+  margin-top: 0.4rem;
+  line-height: 1.6;
+}
+
+/* ── Filter Bar ── */
+
+.ap-filter-bar {
+  display: flex;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+  align-items: center;
+  padding: 0.25rem 0;
+}
+
+.ap-filter-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.4rem 0.85rem;
+  border-radius: var(--r-pill);
+  font-size: var(--fs-small);
+  font-weight: 600;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all var(--dur) var(--ease);
+  white-space: nowrap;
+}
+
+.ap-filter-pill:hover {
+  border-color: var(--border-active);
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.ap-filter-pill--active {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--bg-deep);
+}
+
+.ap-filter-pill--active:hover {
+  background: var(--accent-bright);
+  border-color: var(--accent-bright);
+  color: var(--bg-deep);
+}
+
+/* ── Workspace Layout ── */
+
+.ap-workspace {
+  display: flex;
+  gap: 0;
+  min-height: 0;
+}
+
+.ap-workspace__list {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.ap-workspace__inspector {
+  width: 380px;
+  flex-shrink: 0;
+  margin-left: 1.25rem;
+  position: sticky;
+  top: 5rem;
+  max-height: calc(100vh - 6rem);
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  background: var(--panel);
+  animation: slideInRight 0.3s var(--ease) both;
+}
+
+.ap-workspace__inspector::-webkit-scrollbar {
+  width: 4px;
+}
+
+.ap-workspace__inspector::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.ap-workspace__inspector::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 4px;
+}
+
+@media (max-width: 1100px) {
+  .ap-workspace {
+    flex-direction: column;
+  }
+
+  .ap-workspace__inspector {
+    width: 100%;
+    margin-left: 0;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    max-height: 100vh;
+    border-radius: 0;
+    z-index: 40;
+    animation: slideUp 0.35s var(--ease) both;
+  }
+}
+
+/* ── Domain Sections ── */
+
+.ap-domain-sections {
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+}
+
+.ap-domain-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.ap-domain-section__header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding-bottom: 0.25rem;
+}
+
+.ap-domain-section__title {
+  font-family: var(--font-display);
+  font-size: 1.15rem;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  color: var(--accent-bright);
+  letter-spacing: -0.01em;
+}
+
+.ap-domain-section__emoji {
+  font-size: 0.9rem;
+}
+
+.ap-domain-section__count {
+  font-size: var(--fs-micro);
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.ap-domain-section__cards {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+/* ── Goal Card ── */
+
+.ap-goal-card {
+  padding: 1.15rem 1.25rem;
+  border-radius: var(--r);
+  border: 1px solid var(--border);
+  background: linear-gradient(180deg, var(--panel-elevated) 0%, var(--panel) 100%);
+  cursor: pointer;
+  transition: all var(--dur) var(--ease);
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  position: relative;
+  overflow: hidden;
+}
+
+.ap-goal-card::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+  pointer-events: none;
+}
+
+.ap-goal-card:hover {
+  border-color: var(--border-active);
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+}
+
+.ap-goal-card--selected {
+  border-color: var(--accent);
+  background: linear-gradient(180deg, rgba(217, 153, 58, 0.08) 0%, var(--panel) 100%);
+  box-shadow: 0 0 0 1px rgba(217, 153, 58, 0.12), var(--shadow-md);
+}
+
+.ap-goal-card__top-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.ap-goal-card__status-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.18rem 0.55rem;
+  border-radius: var(--r-xs);
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.ap-goal-card__status-badge--on_track {
+  background: rgba(93, 184, 106, 0.15);
+  color: var(--positive);
+}
+
+.ap-goal-card__status-badge--drifting {
+  background: rgba(232, 176, 56, 0.12);
+  color: #e8b038;
+}
+
+.ap-goal-card__status-badge--stalled {
+  background: var(--negative-soft);
+  color: var(--negative);
+}
+
+.ap-goal-card__status-badge--achieved {
+  background: var(--positive-soft);
+  color: var(--positive);
+}
+
+.ap-goal-card__domain-icon {
+  font-size: 1.1rem;
+  opacity: 0.7;
+  transition: opacity var(--dur-fast) var(--ease);
+}
+
+.ap-goal-card:hover .ap-goal-card__domain-icon {
+  opacity: 1;
+}
+
+.ap-goal-card__title {
+  font-family: var(--font-display);
+  font-size: 1.15rem;
+  font-weight: 450;
+  line-height: 1.3;
+  letter-spacing: -0.01em;
+  color: var(--text);
+}
+
+.ap-goal-card__description {
+  font-size: var(--fs-small);
+  color: var(--text-secondary);
+  line-height: 1.55;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  margin: 0;
+}
+
+.ap-goal-card__meta-row {
+  display: flex;
+  gap: 0.85rem;
+  flex-wrap: wrap;
+}
+
+.ap-goal-card__meta-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: var(--fs-micro);
+  color: var(--text-tertiary);
+}
+
+.ap-goal-card__meta-icon {
+  font-size: 0.65rem;
+}
+
+/* Milestone progress in card */
+
+.ap-goal-card__milestone {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  padding: 0.5rem 0.65rem;
+  border-radius: var(--r-xs);
+  background: rgba(255, 255, 255, 0.025);
+  border: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.ap-goal-card__milestone-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.ap-goal-card__milestone-label {
+  font-size: var(--fs-micro);
+  font-weight: 600;
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+  min-width: 0;
+}
+
+.ap-goal-card__milestone-pct {
+  font-size: var(--fs-micro);
+  font-weight: 700;
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+
+.ap-goal-card__progress-track {
+  height: 5px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.06);
+  overflow: hidden;
+}
+
+.ap-goal-card__progress-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.8s var(--ease);
+  min-width: 0;
+}
+
+.ap-goal-card__progress-fill--on_track {
+  background: linear-gradient(90deg, var(--accent), var(--accent-bright));
+}
+
+.ap-goal-card__progress-fill--drifting {
+  background: linear-gradient(90deg, #d4922b, var(--accent));
+}
+
+.ap-goal-card__progress-fill--stalled {
+  background: linear-gradient(90deg, var(--negative), #d97a73);
+}
+
+.ap-goal-card__progress-fill--achieved {
+  background: linear-gradient(90deg, var(--positive), #7fd98a);
+}
+
+/* ── Inspector Panel ── */
+
+.ap-inspector {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.ap-inspector__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.85rem 1rem;
+  border-bottom: 1px solid var(--border);
+  background: var(--panel-elevated);
+  position: sticky;
+  top: 0;
+  z-index: 5;
+}
+
+.ap-inspector__header-label {
+  font-size: var(--fs-micro);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--accent);
+}
+
+.ap-inspector__header-actions {
+  display: flex;
+  gap: 0.3rem;
+  align-items: center;
+}
+
+.ap-inspector__action-btn {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--r-xs);
+  color: var(--text-tertiary);
+  font-size: 1rem;
+  transition: all var(--dur-fast) var(--ease);
+}
+
+.ap-inspector__action-btn:hover {
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.ap-inspector__close {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--r-xs);
+  color: var(--text-tertiary);
+  font-size: 1rem;
+  transition: all var(--dur-fast) var(--ease);
+}
+
+.ap-inspector__close:hover {
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+/* Title area */
+
+.ap-inspector__title-area {
+  padding: 1rem 1rem 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.ap-inspector__title {
+  font-family: var(--font-display);
+  font-size: 1.35rem;
+  font-weight: 450;
+  line-height: 1.25;
+  letter-spacing: -0.01em;
+}
+
+.ap-inspector__domain {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.ap-inspector__domain-icon {
+  width: 2.2rem;
+  height: 2.2rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--r-sm);
+  background: linear-gradient(135deg, rgba(217, 153, 58, 0.15), rgba(217, 153, 58, 0.05));
+  border: 1px solid rgba(217, 153, 58, 0.18);
+  font-size: 1rem;
+}
+
+.ap-inspector__domain-label {
+  font-size: var(--fs-micro);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-tertiary);
+}
+
+.ap-inspector__domain-value {
+  font-size: var(--fs-small);
+  color: var(--text-secondary);
+  margin-top: 0.05rem;
+}
+
+/* Body */
+
+.ap-inspector__body {
+  padding: 0.75rem 1rem 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.ap-inspector__loading {
+  padding: 2rem 1rem;
+  text-align: center;
+  color: var(--text-tertiary);
+  font-size: var(--fs-small);
+}
+
+.ap-inspector__empty-section {
+  font-size: var(--fs-small);
+  color: var(--text-tertiary);
+  font-style: italic;
+  margin: 0;
+  padding: 0.25rem 0;
+}
+
+/* ── Collapsible sections ── */
+
+.ap-inspector-section {
+  border-top: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.ap-inspector-section:first-child {
+  border-top: none;
+}
+
+.ap-inspector-section__header {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.75rem 0;
+  width: 100%;
+  color: var(--text-secondary);
+  font-size: var(--fs-small);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  transition: color var(--dur-fast) var(--ease);
+}
+
+.ap-inspector-section__header:hover {
+  color: var(--text);
+}
+
+.ap-inspector-section__icon {
+  font-size: 0.85rem;
+}
+
+.ap-inspector-section__title {
+  flex: 1;
+  text-align: left;
+}
+
+.ap-inspector-section__chevron {
+  font-size: 0.75rem;
+  transition: transform var(--dur) var(--ease);
+  transform: rotate(-90deg);
+}
+
+.ap-inspector-section__chevron--open {
+  transform: rotate(-180deg);
+}
+
+.ap-inspector-section__body {
+  padding-bottom: 0.5rem;
+  animation: fadeIn 0.2s var(--ease) both;
+}
+
+/* ── Inspector Milestones ── */
+
+.ap-inspector-milestones {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.ap-inspector-milestone {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  padding: 0.45rem 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+}
+
+.ap-inspector-milestone:last-child {
+  border-bottom: none;
+}
+
+.ap-inspector-milestone__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  margin-top: 5px;
+}
+
+.ap-inspector-milestone__dot--pending {
+  background: var(--accent);
+}
+
+.ap-inspector-milestone__dot--done {
+  background: var(--positive);
+}
+
+.ap-inspector-milestone__dot--overdue {
+  background: var(--negative);
+}
+
+.ap-inspector-milestone__body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.05rem;
+}
+
+.ap-inspector-milestone__title {
+  font-size: var(--fs-small);
+  line-height: 1.4;
+  color: var(--text);
+}
+
+.ap-inspector-milestone__title--done {
+  text-decoration: line-through;
+  color: var(--text-tertiary);
+}
+
+.ap-inspector-milestone__due {
+  font-size: var(--fs-micro);
+  color: var(--text-tertiary);
+}
+
+.ap-inspector-milestone__due--overdue {
+  color: var(--negative);
+}
+
+.ap-inspector-milestone__due--done {
+  color: var(--positive);
+  opacity: 0.7;
+}
+
+.ap-inspector-milestone__check {
+  width: 22px;
+  height: 22px;
+  border-radius: var(--r-xs);
+  border: 2px solid var(--border-active);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.7rem;
+  flex-shrink: 0;
+  transition: all var(--dur-fast) var(--ease);
+  color: transparent;
+}
+
+.ap-inspector-milestone__check:hover {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.ap-inspector-milestone__check--done {
+  border-color: var(--positive);
+  background: var(--positive-soft);
+  color: var(--positive);
+}
+
+/* ── Inspector Habits ── */
+
+.ap-inspector-habits {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.ap-inspector-habit {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.4rem 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+  font-size: var(--fs-small);
+}
+
+.ap-inspector-habit:last-child {
+  border-bottom: none;
+}
+
+.ap-inspector-habit__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.ap-inspector-habit__dot--active {
+  background: var(--positive);
+}
+
+.ap-inspector-habit__dot--paused {
+  background: var(--text-tertiary);
+}
+
+.ap-inspector-habit__title {
+  flex: 1;
+  min-width: 0;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ap-inspector-habit__streak {
+  font-size: var(--fs-micro);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.ap-inspector-habit__badge {
+  font-size: 0.6rem;
+  font-weight: 700;
+  padding: 0.1rem 0.35rem;
+  border-radius: var(--r-pill);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.ap-inspector-habit__badge--done {
+  background: var(--positive-soft);
+  color: var(--positive);
+}
+
+.ap-inspector-habit__badge--due {
+  background: rgba(232, 176, 56, 0.1);
+  color: #e8b038;
+}
+
+/* ── Inspector linked items ── */
+
+.ap-inspector-linked {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.ap-inspector-linked__item {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.35rem 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+  font-size: var(--fs-small);
+}
+
+.ap-inspector-linked__item:last-child {
+  border-bottom: none;
+}
+
+.ap-inspector-linked__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.ap-inspector-linked__dot--pending {
+  background: var(--text-tertiary);
+}
+
+.ap-inspector-linked__dot--completed {
+  background: var(--positive);
+}
+
+.ap-inspector-linked__dot--dropped {
+  background: var(--negative);
+}
+
+.ap-inspector-linked__title {
+  flex: 1;
+  min-width: 0;
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── Inspector CTA ── */
+
+.ap-inspector-cta {
+  padding: 0.5rem 0;
+}
+
+.ap-inspector-cta__btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.7rem 1rem;
+  border-radius: var(--r-sm);
+  background: linear-gradient(135deg, rgba(217, 153, 58, 0.12), rgba(217, 153, 58, 0.06));
+  border: 1px solid rgba(217, 153, 58, 0.2);
+  color: var(--accent-bright);
+  font-weight: 600;
+  font-size: var(--fs-small);
+  transition: all var(--dur) var(--ease);
+}
+
+.ap-inspector-cta__btn:hover:not(:disabled) {
+  background: linear-gradient(135deg, rgba(217, 153, 58, 0.18), rgba(217, 153, 58, 0.1));
+  border-color: rgba(217, 153, 58, 0.3);
+  transform: translateY(-1px);
+}
+
+.ap-inspector-cta__btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.ap-inspector-cta__icon {
+  font-size: 1.1rem;
+}
+
+.ap-inspector__today-link {
+  display: block;
+  font-size: var(--fs-small);
+  color: var(--accent);
+  text-align: center;
+  padding: 0.3rem 0;
+  transition: color var(--dur-fast) var(--ease);
+}
+
+.ap-inspector__today-link:hover {
+  color: var(--accent-bright);
+}
+
+/* ── Inspector Notes ── */
+
+.ap-inspector-notes {
+  padding: 0.5rem 0;
+}
+
+.ap-inspector-notes__label {
+  font-size: var(--fs-micro);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-tertiary);
+  display: block;
+  margin-bottom: 0.3rem;
+}
+
+.ap-inspector-notes__text {
+  font-size: var(--fs-small);
+  color: var(--text-secondary);
+  line-height: 1.6;
+  margin: 0;
+}
+
+/* ── Goal Form ── */
+
+.ap-goal-form {
+  padding: 1rem;
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  background: var(--panel);
+}
+
+/* ── Add Goal Row ── */
+
+.ap-add-goal-row {
+  display: flex;
+  gap: 0.5rem;
+}
+
+/* ── Planning Panel (collapsible) ── */
+
+.ap-planning-panel {
+  border-top: 1px solid var(--border);
+  margin-top: 0.5rem;
+  padding-top: 0.5rem;
+}
+
+.ap-planning-panel__toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.5rem 0;
+  width: 100%;
+  color: var(--text-secondary);
+  font-size: var(--fs-small);
+  font-weight: 600;
+  transition: color var(--dur-fast) var(--ease);
+}
+
+.ap-planning-panel__toggle:hover {
+  color: var(--text);
+}
+
+.ap-planning-panel__toggle-icon {
+  font-size: 0.75rem;
+  color: var(--accent);
+}
+
+.ap-planning-panel__body {
+  padding: 0.75rem 0;
+  animation: fadeIn 0.25s var(--ease) both;
+}
+
+/* ── Responsive ── */
+
+@media (max-width: 640px) {
+  .ap-goal-card {
+    padding: 0.85rem;
+  }
+
+  .ap-goal-card__title {
+    font-size: 1rem;
+  }
+
+  .ap-domain-section__header {
+    flex-direction: column;
+    gap: 0.2rem;
+  }
+
+  .ap-filter-bar {
+    gap: 0.3rem;
+  }
+
+  .ap-filter-pill {
+    padding: 0.3rem 0.6rem;
+    font-size: var(--fs-micro);
+  }
+}
+
+/* ═══════════════════════════════════════════════════════
    GOAL PLANNING SYSTEM
    ═══════════════════════════════════════════════════════ */
 
