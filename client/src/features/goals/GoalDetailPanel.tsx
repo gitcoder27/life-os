@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { Link } from "react-router-dom";
 
 import {
   useGoalDetailQuery,
@@ -11,6 +12,7 @@ import {
   type GoalOverviewItem,
 } from "../../shared/lib/api";
 import { EmptyState, InlineErrorState } from "../../shared/ui/PageState";
+import { useGoalTodayAction } from "./useGoalTodayAction";
 
 /* ── Helpers ── */
 
@@ -409,6 +411,68 @@ function LinkedHabitsSection({ habits }: { habits: GoalLinkedHabitItem[] }) {
   );
 }
 
+/* ── Goal Execution Bridge ── */
+
+function GoalExecutionBridge({
+  goalId,
+  goalStatus,
+  nextBestAction,
+  onLinkedToToday,
+}: {
+  goalId: string;
+  goalStatus: GoalDetailItem["status"];
+  nextBestAction: string | null;
+  onLinkedToToday: () => Promise<unknown>;
+}) {
+  const {
+    isAvailable,
+    updateDayPrioritiesMutation,
+    canAddToToday,
+    helperCopy,
+    buttonLabel,
+    addToToday,
+  } = useGoalTodayAction({
+    goalId,
+    goalStatus,
+    nextBestAction,
+    onLinkedToToday,
+  });
+
+  if (!isAvailable) {
+    return null;
+  }
+
+  return (
+    <div className="goal-execution-bridge">
+      <div>
+        <div className="detail-section__title">Move Into Today</div>
+        <p className="goal-execution-bridge__copy">{helperCopy}</p>
+      </div>
+
+      <div className="button-row button-row--wrap">
+        <button
+          className="button button--primary button--small"
+          type="button"
+          onClick={() => void addToToday()}
+          disabled={updateDayPrioritiesMutation.isPending || !canAddToToday}
+        >
+          {buttonLabel}
+        </button>
+        <Link to="/today" className="button button--ghost button--small">
+          Open Today
+        </Link>
+      </div>
+
+      {updateDayPrioritiesMutation.error instanceof Error ? (
+        <InlineErrorState
+          message={updateDayPrioritiesMutation.error.message}
+          onRetry={() => void addToToday()}
+        />
+      ) : null}
+    </div>
+  );
+}
+
 /* ── Main Detail Panel ── */
 
 const healthLabels: Record<string, string> = {
@@ -513,6 +577,15 @@ export function GoalDetailPanel({
             <span>{goal.nextBestAction}</span>
           </div>
         )}
+
+        <GoalExecutionBridge
+          goalId={goal.id}
+          goalStatus={goal.status}
+          nextBestAction={goal.nextBestAction}
+          onLinkedToToday={async () => {
+            await detailQuery.refetch();
+          }}
+        />
 
         <MilestoneEditor
           milestones={goal.milestones}
