@@ -1,7 +1,11 @@
 import { useEffect, useRef, useState } from "react";
+import { Link } from "react-router-dom";
 
 import {
+  getTodayDate,
+  useDayPlanQuery,
   useGoalDetailQuery,
+  useUpdateDayPrioritiesMutation,
   useUpdateGoalMilestonesMutation,
   type GoalDetailItem,
   type GoalLinkedHabitItem,
@@ -15,6 +19,12 @@ import { EmptyState, InlineErrorState } from "../../shared/ui/PageState";
 /* ── Helpers ── */
 
 const cycleLabels: Record<string, string> = { day: "D", week: "W", month: "M" };
+const todayPrioritySlots: Array<1 | 2 | 3> = [1, 2, 3];
+const nextBestActionPrefixes = [
+  "Complete milestone: ",
+  "Finish task: ",
+  "Complete habit: ",
+] as const;
 
 function formatDate(iso: string | null): string {
   if (!iso) return "";
@@ -26,6 +36,15 @@ function isOverdue(targetDate: string | null, contextDate?: string): boolean {
   if (!targetDate) return false;
   const ref = contextDate ?? new Date().toISOString().slice(0, 10);
   return targetDate < ref;
+}
+
+function toSuggestedPriorityTitle(nextBestAction: string) {
+  const matchedPrefix = nextBestActionPrefixes.find((prefix) => nextBestAction.startsWith(prefix));
+  if (!matchedPrefix) {
+    return nextBestAction;
+  }
+
+  return nextBestAction.slice(matchedPrefix.length).trim();
 }
 
 /* ── Milestone Editor ── */
@@ -409,6 +428,105 @@ function LinkedHabitsSection({ habits }: { habits: GoalLinkedHabitItem[] }) {
   );
 }
 
+/* ── Goal Execution Bridge ── */
+
+function GoalExecutionBridge({
+  goalId,
+  goalStatus,
+  nextBestAction,
+  onLinkedToToday,
+}: {
+  goalId: string;
+  goalStatus: GoalDetailItem["status"];
+  nextBestAction: string | null;
+  onLinkedToToday: () => Promise<unknown>;
+}) {
+  const today = getTodayDate();
+  const dayPlanQuery = useDayPlanQuery(today);
+  const updateDayPrioritiesMutation = useUpdateDayPrioritiesMutation(today);
+
+  if (goalStatus !== "active" || !nextBestAction) {
+    return null;
+  }
+
+  const todayPriorities = [...(dayPlanQuery.data?.priorities ?? [])].sort((left, right) => left.slot - right.slot);
+  const goalAlreadyInToday = todayPriorities.some((priority) => priority.goalId === goalId);
+  const todayStackFull = todayPriorities.length >= 3;
+  const canAddToToday = !dayPlanQuery.isLoading && !dayPlanQuery.isError && !goalAlreadyInToday && !todayStackFull;
+  const suggestedPriorityTitle = toSuggestedPriorityTitle(nextBestAction);
+
+  const helperCopy = dayPlanQuery.isLoading
+    ? "Checking today's priority stack."
+    : dayPlanQuery.isError
+      ? "Today's priorities could not be checked here. Open Today before changing the stack."
+      : goalAlreadyInToday
+        ? "This goal is already linked inside today's top three."
+        : todayStackFull
+          ? "Today's priority stack is full. Open Today to swap something out."
+          : "Turn the recommended next step into today's focus without leaving this page.";
+
+  async function handleAddToToday() {
+    if (!canAddToToday) {
+      return;
+    }
+
+    const priorities = [...todayPriorities, {
+      slot: todayPrioritySlots[todayPriorities.length]!,
+      title: suggestedPriorityTitle,
+      goalId,
+    }].map((priority, index) => ({
+      id: "id" in priority ? priority.id : undefined,
+      slot: todayPrioritySlots[index]!,
+      title: priority.title.trim(),
+      goalId: priority.goalId ?? null,
+    }));
+
+    await updateDayPrioritiesMutation.mutateAsync({ priorities });
+    await dayPlanQuery.refetch();
+    await onLinkedToToday();
+  }
+
+  return (
+    <div className="goal-execution-bridge">
+      <div>
+        <div className="detail-section__title">Move Into Today</div>
+        <p className="goal-execution-bridge__copy">{helperCopy}</p>
+      </div>
+
+      <div className="button-row button-row--wrap">
+        <button
+          className="button button--primary button--small"
+          type="button"
+          onClick={() => void handleAddToToday()}
+          disabled={updateDayPrioritiesMutation.isPending || !canAddToToday}
+        >
+          {dayPlanQuery.isLoading
+            ? "Checking Today…"
+            : updateDayPrioritiesMutation.isPending
+              ? "Adding…"
+              : dayPlanQuery.isError
+                ? "Open Today"
+              : goalAlreadyInToday
+                ? "Already in Today"
+                : todayStackFull
+                  ? "Today stack full"
+                  : "Add to Today"}
+        </button>
+        <Link to="/today" className="button button--ghost button--small">
+          Open Today
+        </Link>
+      </div>
+
+      {updateDayPrioritiesMutation.error instanceof Error ? (
+        <InlineErrorState
+          message={updateDayPrioritiesMutation.error.message}
+          onRetry={() => void handleAddToToday()}
+        />
+      ) : null}
+    </div>
+  );
+}
+
 /* ── Main Detail Panel ── */
 
 const healthLabels: Record<string, string> = {
@@ -513,6 +631,15 @@ export function GoalDetailPanel({
             <span>{goal.nextBestAction}</span>
           </div>
         )}
+
+        <GoalExecutionBridge
+          goalId={goal.id}
+          goalStatus={goal.status}
+          nextBestAction={goal.nextBestAction}
+          onLinkedToToday={async () => {
+            await detailQuery.refetch();
+          }}
+        />
 
         <MilestoneEditor
           milestones={goal.milestones}
