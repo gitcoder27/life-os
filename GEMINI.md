@@ -66,3 +66,14 @@ npm run prisma:migrate -w server
 - **Documentation**: Active product, architecture, operating, and user documentation lives in the `docs/` directory. Refer to `docs/prd/README.md` as the starting point for product details.
 - **Archived Prompts**: Historical prompt material is kept in `docs/archive/agent-prompts/` for reference.
 - **Database**: The server uses Prisma. Schema modifications should be made in `server/prisma/schema.prisma` followed by running migration commands.
+
+## AI Agent Behavior Rules
+
+- **DO NOT RUN `npm run dev`**: Never attempt to start the server or start development mode (`npm run dev`, `npm run dev:client`, `npm run dev:server`). The server and client dev environment is already running and managed by the user.
+- **NO BROWSER TESTING**: Never use the `browser_subagent` tool or any browser-based testing tools. Do not attempt to validate the application via the browser.
+- **VALIDATION METHODS**: Validate all changes using only:
+  - TypeScript type checks (`npm run typecheck`)
+  - Server-side tests (`npm run test -w server`)
+  - Production builds (`npm run build`)
+  - Manual code review and compilation checks.
+
