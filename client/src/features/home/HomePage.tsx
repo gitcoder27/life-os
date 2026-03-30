@@ -12,16 +12,22 @@ import {
   PageLoadingState,
 } from "../../shared/ui/PageState";
 
-import { AttentionSection } from "./AttentionSection";
-import { FocusBlock } from "./FocusBlock";
-import { GuidanceRail } from "./GuidanceRail";
-import { InboxCard } from "./InboxCard";
-import { LedgerCard } from "./LedgerCard";
-import { MotivationalQuoteCard } from "./MotivationalQuoteCard";
-import { PrioritiesList } from "./PrioritiesList";
-import { PulseCard } from "./PulseCard";
-import { RoutinesCard } from "./RoutinesCard";
-import { ScoreCard } from "./ScoreCard";
+import { AtRiskLane } from "./AtRiskLane";
+import { CommandBlock } from "./CommandBlock";
+import { EssentialsBand } from "./EssentialsBand";
+import { QuoteFooter } from "./QuoteFooter";
+import { SecondaryContext } from "./SecondaryContext";
+import { StatusStrip } from "./StatusStrip";
+import { TodayControl } from "./TodayControl";
+
+type TimePhase = "morning" | "midday" | "evening";
+
+function getTimePhase(): TimePhase {
+  const hour = new Date().getHours();
+  if (hour < 12) return "morning";
+  if (hour < 17) return "midday";
+  return "evening";
+}
 
 export function HomePage() {
   const today = getTodayDate();
@@ -58,9 +64,10 @@ export function HomePage() {
 
   const home = homeQuery.data;
   const score = scoreQuery.data ?? home.dailyScore;
-  const scoreBuckets =
-    scoreQuery.data?.buckets?.filter((b) => b.applicablePoints > 0) ?? [];
   const topReasonLabel = scoreQuery.data?.topReasons[0]?.label ?? null;
+  const phase = getTimePhase();
+
+  // Derive action data
   const allTasks = home.tasks;
   const executionTasks = allTasks.filter((t) => !isQuickCaptureReferenceTask(t));
   const openPriorities = [...home.topPriorities]
@@ -76,74 +83,64 @@ export function HomePage() {
     )[0] ?? null;
   const inboxItems = inboxQuery.data?.tasks ?? [];
 
+  // Tasks beyond priorities
+  const priorityIds = new Set(home.topPriorities.map((p) => p.id));
+  const nonPriorityOpenTasks = openExecutionTasks.filter((t) => !priorityIds.has(t.id));
+
   return (
-    <div className="home-dashboard">
-      <div className="home-main stagger">
-        <ScoreCard
-          value={score?.value ?? 0}
-          label={score?.label ?? "Loading"}
-          earnedPoints={score?.earnedPoints ?? 0}
-          possiblePoints={score?.possiblePoints ?? 0}
-          weeklyMomentum={home.weeklyMomentum}
-          strongDayStreak={weeklyMomentumQuery.data?.strongDayStreak ?? 0}
-          reviewClosed={Boolean(scoreQuery.data?.finalizedAt)}
-          buckets={scoreBuckets}
-          topReasonLabel={topReasonLabel}
-        />
+    <div className="home-operator">
+      <StatusStrip
+        score={score?.value ?? 0}
+        scoreLabel={score?.label ?? "Loading"}
+        weeklyMomentum={home.weeklyMomentum}
+        strongDayStreak={weeklyMomentumQuery.data?.strongDayStreak ?? 0}
+        reviewClosed={Boolean(scoreQuery.data?.finalizedAt)}
+        phase={phase}
+      />
 
-        <GuidanceRail
-          recovery={home.guidance.recovery}
-          weeklyChallenge={home.guidance.weeklyChallenge}
-          recommendations={home.guidance.recommendations}
-        />
-
-        <PrioritiesList priorities={home.topPriorities} />
-
-        <AttentionSection
-          radarItems={home.accountabilityRadar.items}
-          attentionItems={home.attentionItems}
-        />
-      </div>
-
-      <aside className="home-sidebar stagger">
-        <FocusBlock
+      <div className="home-operator__core">
+        <CommandBlock
           topPriority={topOpenPriority}
           openTaskCount={openExecutionTasks.length}
           nextTimedTask={
             nextTimedTask
               ? { title: nextTimedTask.title, timeLabel: formatTimeLabel(nextTimedTask.dueAt) }
               : null
-            }
+          }
+          recovery={home.guidance.recovery}
+          phase={phase}
+          topScoreReason={topReasonLabel}
         />
 
-        <MotivationalQuoteCard />
+        <AtRiskLane
+          radarItems={home.accountabilityRadar.items}
+          attentionItems={home.attentionItems}
+          overdueCount={home.accountabilityRadar.overdueTaskCount}
+          staleInboxCount={home.accountabilityRadar.staleInboxCount}
+        />
+      </div>
 
-        <PulseCard
-          waterMl={home.healthSummary.waterMl}
-          waterTargetMl={home.healthSummary.waterTargetMl}
-          mealsLogged={home.healthSummary.mealsLogged}
-          workoutStatus={home.healthSummary.workoutStatus}
+      <div className="home-operator__middle">
+        <TodayControl
+          priorities={home.topPriorities}
+          openTaskCount={nonPriorityOpenTasks.length}
         />
 
-        <LedgerCard
-          spentThisMonth={home.financeSummary.spentThisMonth}
-          budgetLabel={home.financeSummary.budgetLabel}
-          upcomingBills={home.financeSummary.upcomingBills}
+        <EssentialsBand
+          routines={home.routineSummary}
+          habits={home.habitSummary}
+          health={home.healthSummary}
+          finance={home.financeSummary}
         />
+      </div>
 
-        <RoutinesCard
-          completedItems={home.routineSummary.completedItems}
-          totalItems={home.routineSummary.totalItems}
-          currentPeriod={home.routineSummary.currentPeriod}
-          habitsCompletedToday={home.habitSummary.completedToday}
-          habitsDueToday={home.habitSummary.dueToday}
-        />
+      <SecondaryContext
+        inboxItems={inboxItems}
+        inboxHasMore={inboxItems.length >= 3}
+        weeklyChallenge={home.guidance.weeklyChallenge}
+      />
 
-        <InboxCard
-          items={inboxItems}
-          hasMore={inboxItems.length >= 3}
-        />
-      </aside>
+      <QuoteFooter />
     </div>
   );
 }
