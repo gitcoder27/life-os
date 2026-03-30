@@ -23,6 +23,7 @@
   background: var(--bg-deep);
   padding: 1.5rem 1.25rem;
   overflow-y: auto;
+  overflow-x: hidden;
   z-index: 20;
   transition:
     padding var(--dur-slow) var(--ease),
@@ -463,8 +464,15 @@
   border: 0;
 }
 
+.shell--sidebar-collapsed .shell-sidebar__action--primary {
+  background: transparent;
+  box-shadow: none;
+  border: 1px solid rgba(217, 153, 58, 0.25);
+  color: var(--accent);
+}
+
 .shell--sidebar-collapsed .shell-sidebar__action--primary .shell-action__icon {
-  color: #0f0d08;
+  color: var(--accent);
 }
 
 .shell--sidebar-collapsed .account-chip--collapsed {

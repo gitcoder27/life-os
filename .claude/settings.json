@@ -3,7 +3,10 @@
     "allow": [
       "Bash(find /home/ubuntu/Development/life-os/client/src -name *.css -o -name *.scss)",
       "Bash(npm run:*)",
-      "Bash(npm test:*)"
+      "Bash(npm test:*)",
+      "Bash(find /home/ubuntu/Development/life-os/client/src -type f \\\\\\(-name *sidebar* -o -name *sidenav* -o -name *leftnav* -o -name *nav* \\\\\\))",
+      "Bash(find /home/ubuntu/Development/life-os/client/src -type f \\\\\\(-name *.css -o -name *.scss \\\\\\))",
+      "Bash(grep -l \"shell\\\\|sidebar\\\\|nav\" /home/ubuntu/Development/life-os/client/src/styles/*.css)"
     ]
   }
 }
