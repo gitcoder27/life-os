@@ -30,7 +30,7 @@ export type DailyFrictionTag =
   | "unclear task"
   | "travel or schedule disruption";
 
-type ReviewSubmissionWindow = {
+export type ReviewSubmissionWindow = {
   isOpen: boolean;
   status: "open" | "too_early" | "too_late" | "wrong_period" | "no_open_window";
   requestedDate: string;
@@ -61,7 +61,7 @@ type DailyScoreResponse = {
   finalizedAt: string | null;
 };
 
-type DailyReviewResponse = {
+export type DailyReviewResponse = {
   generatedAt: string;
   date: string;
   summary: {
@@ -102,7 +102,7 @@ type DailyReviewResponse = {
   }>;
 };
 
-type WeeklyReviewResponse = {
+export type WeeklyReviewResponse = {
   generatedAt: string;
   startDate: string;
   endDate: string;
@@ -145,7 +145,7 @@ type WeeklyReviewResponse = {
   submissionWindow: ReviewSubmissionWindow;
 };
 
-type MonthlyReviewResponse = {
+export type MonthlyReviewResponse = {
   generatedAt: string;
   startDate: string;
   endDate: string;
@@ -193,7 +193,7 @@ type MonthlyReviewResponse = {
   submissionWindow: ReviewSubmissionWindow;
 };
 
-type DailyReviewMutationResponse = {
+export type DailyReviewMutationResponse = {
   generatedAt: string;
   reviewCompletedAt: string;
   score: DailyScoreResponse;
@@ -207,7 +207,7 @@ type DailyReviewMutationResponse = {
   }>;
 };
 
-type WeeklyReviewMutationResponse = {
+export type WeeklyReviewMutationResponse = {
   generatedAt: string;
   reviewCompletedAt: string;
   nextWeekPriorities: Array<{
@@ -220,7 +220,7 @@ type WeeklyReviewMutationResponse = {
   }>;
 };
 
-type MonthlyReviewMutationResponse = {
+export type MonthlyReviewMutationResponse = {
   generatedAt: string;
   reviewCompletedAt: string;
   nextMonthTheme: string;

@@ -179,9 +179,14 @@ export type {
 } from "./api/notifications";
 export type {
   DailyFrictionTag,
+  DailyReviewMutationResponse,
+  DailyReviewResponse,
   MonthlyComparisonMetrics,
+  MonthlyReviewMutationResponse,
+  MonthlyReviewResponse,
   MonthlyReviewHistoryTrendPoint,
   ReviewCadence,
+  ReviewSubmissionWindow,
   ReviewHistoryCadence,
   ReviewHistoryCadenceFilter,
   ReviewHistoryItem,
@@ -191,6 +196,8 @@ export type {
   ReviewHistoryRange,
   ReviewHistoryResponse,
   ReviewHistorySummary,
+  WeeklyReviewMutationResponse,
+  WeeklyReviewResponse,
   WeeklyComparisonMetrics,
   WeeklyReviewHistoryTrendPoint,
 } from "./api/reviews";
