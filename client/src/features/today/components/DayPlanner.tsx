@@ -311,33 +311,14 @@ export function DayPlanner({
 
       {execution.cleanup.state !== "none" ? (
         <div className="planner__cleanup-banner">
+          <div className="planner__cleanup-indicator" />
           <div className="planner__cleanup-copy">
-            <div className="planner__cleanup-title">
-              {execution.cleanup.state === "close_day"
-                ? "The planned day is already in the past"
-                : "Earlier blocks slipped off plan"}
-            </div>
-            <div className="planner__cleanup-desc">
-              {execution.cleanup.state === "close_day"
-                ? `${execution.cleanup.taskCount} task${execution.cleanup.taskCount === 1 ? "" : "s"} are still attached to past blocks.`
-                : `${execution.cleanup.taskCount} task${execution.cleanup.taskCount === 1 ? "" : "s"} from ${execution.cleanup.blockCount} past block${execution.cleanup.blockCount === 1 ? "" : "s"} still need a home.`}
-              {execution.cleanup.state === "close_day" &&
-              execution.cleanup.dayEndedMinutesAgo !== null
-                ? ` Last planned block ended ${formatDurationMinutes(execution.cleanup.dayEndedMinutesAgo)} ago.`
-                : ""}
-            </div>
+            <span className="planner__cleanup-count">{execution.cleanup.taskCount}</span>
+            <span className="planner__cleanup-label">
+              {execution.cleanup.taskCount === 1 ? "task" : "tasks"} in past blocks
+            </span>
           </div>
           <div className="planner__cleanup-actions">
-            {cleanupTarget ? (
-              <button
-                className="button button--primary button--small"
-                type="button"
-                onClick={() => handleCleanupMoveAll(cleanupTarget)}
-                disabled={isCleanupPending}
-              >
-                Move all to {cleanupTarget.title || formatTimeLabel(cleanupTarget.startsAt)}
-              </button>
-            ) : null}
             <button
               className="button button--ghost button--small"
               type="button"
