@@ -1,5 +1,5 @@
 import "./today.css";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   InlineErrorState,
   PageErrorState,
@@ -11,6 +11,7 @@ import { ExecutionStream } from "./components/ExecutionStream";
 import { DailyEssentials } from "./components/DailyEssentials";
 import { RecoveryTray } from "./components/RecoveryTray";
 import { DayPlanner } from "./components/DayPlanner";
+import { TodayTaskCaptureSheet } from "./components/TodayTaskCaptureSheet";
 import { buildPlannerExecutionModel } from "./helpers/planner-execution";
 import { getDayPhase } from "./helpers/day-phase";
 import { useTodayData } from "./hooks/useTodayData";
@@ -22,6 +23,7 @@ export function TodayPage() {
   const data = useTodayData();
   const [mode, setMode] = useState<"execute" | "plan">("execute");
   const [plannerNow, setPlannerNow] = useState(() => new Date());
+  const [todayTaskCaptureOpen, setTodayTaskCaptureOpen] = useState(false);
   const priorityDraft = usePriorityDraft(
     data.today,
     data.priorities,
@@ -44,20 +46,6 @@ export function TodayPage() {
   useEffect(() => {
     const intervalId = window.setInterval(() => setPlannerNow(new Date()), 60_000);
     return () => window.clearInterval(intervalId);
-  }, []);
-
-  // Trigger global quick capture via keyboard shortcut
-  const triggerCapture = useCallback(() => {
-    const isMac = navigator.platform.toUpperCase().includes("MAC");
-    document.dispatchEvent(
-      new KeyboardEvent("keydown", {
-        key: "k",
-        code: "KeyK",
-        metaKey: isMac,
-        ctrlKey: !isMac,
-        bubbles: true,
-      }),
-    );
   }, []);
 
   if (data.isLoading) {
@@ -108,7 +96,7 @@ export function TodayPage() {
         totalTaskCount={data.totalTaskCount}
         overdueCount={data.overdueTasks.length}
         hasDrift={plannerExecution.slippedBlocks.length > 0}
-        onCapture={triggerCapture}
+        onAddTask={() => setTodayTaskCaptureOpen(true)}
       />
 
       {allErrors ? (
@@ -156,6 +144,12 @@ export function TodayPage() {
           taskActions={taskActions}
         />
       )}
+
+      <TodayTaskCaptureSheet
+        open={todayTaskCaptureOpen}
+        today={data.today}
+        onClose={() => setTodayTaskCaptureOpen(false)}
+      />
     </div>
   );
 }

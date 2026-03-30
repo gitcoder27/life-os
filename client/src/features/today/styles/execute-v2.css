@@ -149,6 +149,12 @@
   border-color: rgba(217, 153, 58, 0.35);
 }
 
+.today-task-capture__hint {
+  margin: 0 0 1rem;
+  font-size: var(--fs-small);
+  color: var(--text-tertiary);
+}
+
 .command-bar__mode-toggle {
   display: flex;
   gap: 2px;
@@ -562,11 +568,13 @@
   background: rgba(217, 153, 58, 0.08);
 }
 
-.stream-task--done {
+.stream-task--done .stream-task__check,
+.stream-task--done .stream-task__content {
   opacity: 0.55;
 }
 
-.stream-task--dropped {
+.stream-task--dropped .stream-task__check,
+.stream-task--dropped .stream-task__content {
   opacity: 0.4;
 }
 

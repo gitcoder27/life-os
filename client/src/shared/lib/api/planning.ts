@@ -609,7 +609,13 @@ export const useBulkUpdateTasksMutation = (
   });
 };
 
-export const useCreateTaskMutation = (date: string) => {
+export const useCreateTaskMutation = (
+  date: string,
+  options?: {
+    successMessage?: string;
+    errorMessage?: string;
+  },
+) => {
   const queryClient = useQueryClient();
 
   return useMutation({
@@ -630,8 +636,8 @@ export const useCreateTaskMutation = (date: string) => {
         body: payload,
       }),
     meta: {
-      successMessage: "Captured to inbox.",
-      errorMessage: "Task capture failed.",
+      successMessage: options?.successMessage ?? "Captured to inbox.",
+      errorMessage: options?.errorMessage ?? "Task capture failed.",
     },
     onSuccess: () => invalidateCoreData(queryClient, date),
   });

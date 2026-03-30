@@ -27,7 +27,7 @@ export function CommandBar({
   totalTaskCount,
   overdueCount,
   hasDrift,
-  onCapture,
+  onAddTask,
 }: {
   mode: "execute" | "plan";
   onModeChange: (mode: "execute" | "plan") => void;
@@ -40,7 +40,7 @@ export function CommandBar({
   totalTaskCount: number;
   overdueCount: number;
   hasDrift: boolean;
-  onCapture: () => void;
+  onAddTask: () => void;
 }) {
   const today = getTodayDate();
   const scoreQuery = useDailyScoreQuery(today);
@@ -103,10 +103,10 @@ export function CommandBar({
         <button
           className="command-bar__capture"
           type="button"
-          onClick={onCapture}
-          aria-label="Quick capture"
+          onClick={onAddTask}
+          aria-label="Add task to today"
         >
-          + Capture
+          + Add task
         </button>
 
         <div className="command-bar__mode-toggle">
