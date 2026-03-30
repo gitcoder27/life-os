@@ -12,6 +12,8 @@ import {
 import { isQuickCaptureReferenceTask } from "../../../shared/lib/quickCapture";
 import { getOffsetDate } from "../helpers/date-helpers";
 
+const isPlannerAssignableTask = (task: TaskItem) => task.kind === "task";
+
 export function useTodayData() {
   const today = getTodayDate();
   const overdueLookbackStart = getOffsetDate(today, -30);
@@ -66,7 +68,10 @@ export function useTodayData() {
   }, [plannerBlocks]);
 
   const unplannedTasks = useMemo(
-    () => executionTasks.filter((t) => t.status === "pending" && !plannedTaskIds.has(t.id)),
+    () =>
+      executionTasks.filter(
+        (t) => t.status === "pending" && isPlannerAssignableTask(t) && !plannedTaskIds.has(t.id),
+      ),
     [executionTasks, plannedTaskIds],
   );
 
