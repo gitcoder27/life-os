@@ -2,6 +2,176 @@
    Notifications — Action System Redesign
    ══════════════════════════════════════════════════════════ */
 
+.notification-center {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+}
+
+.notification-center--desktop {
+  pointer-events: none;
+}
+
+.notification-center__backdrop {
+  position: absolute;
+  inset: 0;
+  border: 0;
+  background: rgba(4, 4, 4, 0.48);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+.notification-center__panel {
+  position: fixed;
+  display: flex;
+  flex-direction: column;
+  max-height: min(72vh, 44rem);
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 1.1rem;
+  background:
+    linear-gradient(180deg, rgba(36, 33, 28, 0.96) 0%, rgba(18, 17, 14, 0.98) 100%);
+  box-shadow:
+    0 22px 60px rgba(0, 0, 0, 0.42),
+    0 0 0 1px rgba(255, 255, 255, 0.02);
+  outline: none;
+  pointer-events: auto;
+  animation: notification-center-in 180ms var(--ease) both;
+}
+
+.notification-center__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1.15rem 1.25rem 0.95rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.02) 0%, rgba(255, 255, 255, 0) 100%);
+}
+
+.notification-center__title-block {
+  min-width: 0;
+}
+
+.notification-center__title {
+  margin: 0.18rem 0 0;
+  font-family: var(--font-display);
+  font-size: 1.3rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+.notification-center__subtitle {
+  margin: 0.3rem 0 0;
+  color: var(--text-secondary);
+  font-size: var(--fs-small);
+  line-height: 1.45;
+}
+
+.notification-center__close {
+  flex-shrink: 0;
+}
+
+.notification-center__summary {
+  display: flex;
+  gap: 0.7rem;
+  padding: 0.9rem 1.25rem 0.95rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.notification-center__summary-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.4rem 0.7rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.notification-center__summary-count {
+  font-family: var(--font-display);
+  font-size: var(--fs-body);
+  font-weight: 700;
+  color: var(--text);
+}
+
+.notification-center__summary-label {
+  font-size: var(--fs-micro);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+.notification-center__filter-bar {
+  margin-bottom: 0;
+  padding: 0 1rem;
+}
+
+.notification-center__body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 1rem 1.25rem 1.2rem;
+}
+
+.notification-center__groups {
+  display: flex;
+  flex-direction: column;
+  gap: 1.2rem;
+}
+
+.notification-center__group {
+  margin-bottom: 0;
+}
+
+.notification-center__state {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.55rem;
+  padding: 1.1rem 0.15rem 0.25rem;
+}
+
+.notification-center__state-title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 1.05rem;
+  font-weight: 600;
+}
+
+.notification-center__state-copy {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: var(--fs-small);
+  line-height: 1.5;
+}
+
+@keyframes notification-center-in {
+  from {
+    opacity: 0;
+    transform: translate3d(0, -10px, 0) scale(0.98);
+  }
+
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+}
+
+@keyframes notification-sheet-in {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 18px, 0);
+  }
+
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
 .notif-page__summary {
   display: flex;
   gap: 1rem;
@@ -179,6 +349,10 @@
 /* ── Notifications responsive ── */
 
 @media (max-width: 640px) {
+  .notification-center__summary {
+    flex-wrap: wrap;
+  }
+
   .notif-page__summary {
     flex-direction: column;
     gap: 0.5rem;
@@ -306,6 +480,13 @@
 .shell-notif-btn:hover {
   background: var(--panel-hover);
   color: var(--text);
+}
+
+.shell-notif-btn:focus-visible,
+.shell-notif-btn--active {
+  background: rgba(217, 153, 58, 0.12);
+  color: var(--text);
+  box-shadow: 0 0 0 1px rgba(217, 153, 58, 0.18);
 }
 
 .shell-notif-badge {
@@ -484,3 +665,35 @@
   }
 }
 
+@media (max-width: 960px) {
+  .notification-center--mobile {
+    display: flex;
+    align-items: flex-end;
+  }
+
+  .notification-center--mobile .notification-center__panel {
+    right: 0;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    max-height: 85vh;
+    border-radius: 1.25rem 1.25rem 0 0;
+    animation: notification-sheet-in 220ms var(--ease) both;
+  }
+
+  .notification-center--mobile .notification-center__header {
+    padding: 1rem 1rem 0.85rem;
+  }
+
+  .notification-center--mobile .notification-center__summary {
+    padding: 0.8rem 1rem 0.9rem;
+  }
+
+  .notification-center--mobile .notification-center__filter-bar {
+    padding: 0 0.75rem;
+  }
+
+  .notification-center--mobile .notification-center__body {
+    padding: 0.9rem 1rem max(1rem, env(safe-area-inset-bottom));
+  }
+}

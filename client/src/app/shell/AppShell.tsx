@@ -8,10 +8,11 @@ import {
   type FocusEvent,
   type MouseEvent,
 } from "react";
-import { NavLink, Outlet, useNavigate } from "react-router-dom";
+import { NavLink, Outlet } from "react-router-dom";
 import { createPortal } from "react-dom";
 
 import { QuickCaptureSheet } from "../../features/capture/QuickCaptureSheet";
+import { NotificationCenter } from "../../features/notifications/NotificationCenter";
 import {
   formatLongDate,
   getTodayDate,
@@ -113,12 +114,13 @@ const formatGreetingName = (displayName?: string | null, email?: string | null) 
 
 export function AppShell() {
   const [captureOpen, setCaptureOpen] = useState(false);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => readStoredShellSidebarPreference());
   const [collapsedTooltip, setCollapsedTooltip] = useState<CollapsedTooltipState | null>(null);
   const [headerHeight, setHeaderHeight] = useState(0);
   const headerRef = useRef<HTMLElement>(null);
+  const notificationButtonRef = useRef<HTMLButtonElement>(null);
   const collapsedTooltipTimeoutRef = useRef<number | null>(null);
-  const navigate = useNavigate();
   const today = getTodayDate();
   const sessionQuery = useSessionQuery();
   const homeQuery = useHomeOverviewQuery(today);
@@ -361,10 +363,14 @@ export function AppShell() {
           </div>
           <div className="shell-header__actions">
             <button
-              className="shell-notif-btn"
+              ref={notificationButtonRef}
+              className={`shell-notif-btn${notificationsOpen ? " shell-notif-btn--active" : ""}`}
               type="button"
-              onClick={() => navigate("/notifications")}
+              onClick={() => setNotificationsOpen((prev) => !prev)}
               aria-label={unreadCount > 0 ? `Notifications, ${unreadCount} unread` : "Notifications"}
+              aria-controls="shell-notification-center"
+              aria-expanded={notificationsOpen}
+              aria-haspopup="dialog"
             >
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
@@ -414,6 +420,11 @@ export function AppShell() {
       <QuickCaptureSheet
         onClose={() => setCaptureOpen(false)}
         open={captureOpen}
+      />
+      <NotificationCenter
+        anchorRef={notificationButtonRef}
+        onClose={() => setNotificationsOpen(false)}
+        open={notificationsOpen}
       />
       {collapsedTooltip
         ? createPortal(
