@@ -1,5 +1,5 @@
 import "./today.css";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import {
   InlineErrorState,
   PageErrorState,
@@ -24,6 +24,8 @@ export function TodayPage() {
   const [mode, setMode] = useState<"execute" | "plan">("execute");
   const [plannerNow, setPlannerNow] = useState(() => new Date());
   const [todayTaskCaptureOpen, setTodayTaskCaptureOpen] = useState(false);
+  const [topRailHeight, setTopRailHeight] = useState(0);
+  const topRailRef = useRef<HTMLDivElement>(null);
   const priorityDraft = usePriorityDraft(
     data.today,
     data.priorities,
@@ -46,6 +48,32 @@ export function TodayPage() {
   useEffect(() => {
     const intervalId = window.setInterval(() => setPlannerNow(new Date()), 60_000);
     return () => window.clearInterval(intervalId);
+  }, []);
+
+  useEffect(() => {
+    const topRailElement = topRailRef.current;
+    if (!topRailElement) {
+      return;
+    }
+
+    const updateTopRailHeight = () => {
+      setTopRailHeight(topRailElement.getBoundingClientRect().height);
+    };
+
+    updateTopRailHeight();
+    window.addEventListener("resize", updateTopRailHeight);
+
+    if (typeof ResizeObserver === "undefined") {
+      return () => window.removeEventListener("resize", updateTopRailHeight);
+    }
+
+    const resizeObserver = new ResizeObserver(() => updateTopRailHeight());
+    resizeObserver.observe(topRailElement);
+
+    return () => {
+      window.removeEventListener("resize", updateTopRailHeight);
+      resizeObserver.disconnect();
+    };
   }, []);
 
   if (data.isLoading) {
@@ -81,30 +109,39 @@ export function TodayPage() {
     (p) => p.status === "pending" && p.title.trim(),
   ).length;
   const pendingTaskCount = data.executionTasks.filter((t) => t.status === "pending").length;
+  const todayLayoutStyle = {
+    "--today-top-rail-height": `${topRailHeight}px`,
+  } as CSSProperties;
+  const todaySidebarStyle = {
+    top: `calc(var(--shell-header-height, 0px) + ${topRailHeight}px + 1rem)`,
+    maxHeight: `calc(100vh - var(--shell-header-height, 0px) - ${topRailHeight}px - 1.5rem)`,
+  } as CSSProperties;
 
   return (
-    <div className="today-layout today-layout--v2">
-      <CommandBar
-        mode={mode}
-        onModeChange={setMode}
-        plannerBlockCount={data.plannerBlocks.length}
-        now={plannerNow}
-        pendingPriorityCount={pendingPriorityCount}
-        totalPriorityCount={priorityDraft.draft.filter((p) => p.title.trim()).length}
-        pendingTaskCount={pendingTaskCount}
-        completedTaskCount={data.completedTaskCount}
-        totalTaskCount={data.totalTaskCount}
-        overdueCount={data.overdueTasks.length}
-        hasDrift={plannerExecution.slippedBlocks.length > 0}
-        onAddTask={() => setTodayTaskCaptureOpen(true)}
-        execution={plannerExecution}
-        topPriorityTitle={priorityDraft.draft.find((p) => p.status === "pending")?.title}
-        onSwitchToPlanner={() => setMode("plan")}
-      />
+    <div className="today-layout today-layout--v2" style={todayLayoutStyle}>
+      <div className="today-top-rail" ref={topRailRef}>
+        <CommandBar
+          mode={mode}
+          onModeChange={setMode}
+          plannerBlockCount={data.plannerBlocks.length}
+          now={plannerNow}
+          pendingPriorityCount={pendingPriorityCount}
+          totalPriorityCount={priorityDraft.draft.filter((p) => p.title.trim()).length}
+          pendingTaskCount={pendingTaskCount}
+          completedTaskCount={data.completedTaskCount}
+          totalTaskCount={data.totalTaskCount}
+          overdueCount={data.overdueTasks.length}
+          hasDrift={plannerExecution.slippedBlocks.length > 0}
+          onAddTask={() => setTodayTaskCaptureOpen(true)}
+          execution={plannerExecution}
+          topPriorityTitle={priorityDraft.draft.find((p) => p.status === "pending")?.title}
+          onSwitchToPlanner={() => setMode("plan")}
+        />
 
-      {allErrors ? (
-        <InlineErrorState message={allErrors} onRetry={data.refetchAll} />
-      ) : null}
+        {allErrors ? (
+          <InlineErrorState message={allErrors} onRetry={data.refetchAll} />
+        ) : null}
+      </div>
 
       {mode === "execute" ? (
         <div className="today-execute-v2">
@@ -124,7 +161,7 @@ export function TodayPage() {
             />
           </div>
 
-          <aside className="today-sidebar">
+          <aside className="today-sidebar" style={todaySidebarStyle}>
             <FocusStack
               priorityDraft={priorityDraft}
               activeGoals={data.activeGoals}
