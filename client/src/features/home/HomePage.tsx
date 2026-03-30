@@ -92,8 +92,10 @@ export function HomePage() {
       <StatusStrip
         score={score?.value ?? 0}
         scoreLabel={score?.label ?? "Loading"}
+        buckets={scoreQuery.data?.buckets ?? null}
         weeklyMomentum={home.weeklyMomentum}
         strongDayStreak={weeklyMomentumQuery.data?.strongDayStreak ?? 0}
+        dailyScores={weeklyMomentumQuery.data?.dailyScores ?? null}
         reviewClosed={Boolean(scoreQuery.data?.finalizedAt)}
         phase={phase}
       />
