@@ -1,18 +1,18 @@
 import "./today.css";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   InlineErrorState,
   PageErrorState,
   PageLoadingState,
 } from "../../shared/ui/PageState";
-import { TodayHero } from "./components/TodayHero";
-import { PriorityStack } from "./components/PriorityStack";
-import { TaskQueue } from "./components/TaskQueue";
-import { ContextPanel } from "./components/ContextPanel";
-import { RecoveryLane } from "./components/RecoveryLane";
+import { CommandBar } from "./components/CommandBar";
+import { FocusStack } from "./components/FocusStack";
+import { ExecutionStream } from "./components/ExecutionStream";
+import { DailyEssentials } from "./components/DailyEssentials";
+import { RecoveryTray } from "./components/RecoveryTray";
 import { DayPlanner } from "./components/DayPlanner";
-import { ExecutePlannerFocus } from "./components/ExecutePlannerFocus";
 import { buildPlannerExecutionModel } from "./helpers/planner-execution";
+import { getDayPhase } from "./helpers/day-phase";
 import { useTodayData } from "./hooks/useTodayData";
 import { usePriorityDraft } from "./hooks/usePriorityDraft";
 import { useTaskActions } from "./hooks/useTaskActions";
@@ -39,9 +39,25 @@ export function TodayPage() {
     [data.plannerBlocks, data.unplannedTasks, plannerNow],
   );
 
+  const phase = getDayPhase(plannerNow);
+
   useEffect(() => {
     const intervalId = window.setInterval(() => setPlannerNow(new Date()), 60_000);
     return () => window.clearInterval(intervalId);
+  }, []);
+
+  // Trigger global quick capture via keyboard shortcut
+  const triggerCapture = useCallback(() => {
+    const isMac = navigator.platform.toUpperCase().includes("MAC");
+    document.dispatchEvent(
+      new KeyboardEvent("keydown", {
+        key: "k",
+        code: "KeyK",
+        metaKey: isMac,
+        ctrlKey: !isMac,
+        bubbles: true,
+      }),
+    );
   }, []);
 
   if (data.isLoading) {
@@ -73,16 +89,26 @@ export function TodayPage() {
     .filter((e): e is string => typeof e === "string" && e.length > 0)
     .join("; ");
 
-  const canAddGoalNudge =
-    priorityDraft.draft.length < 3 || priorityDraft.draft.some((p) => !p.title.trim());
+  const pendingPriorityCount = priorityDraft.draft.filter(
+    (p) => p.status === "pending" && p.title.trim(),
+  ).length;
+  const pendingTaskCount = data.executionTasks.filter((t) => t.status === "pending").length;
 
   return (
-    <div className="today-layout">
-      <TodayHero
+    <div className="today-layout today-layout--v2">
+      <CommandBar
         mode={mode}
         onModeChange={setMode}
         plannerBlockCount={data.plannerBlocks.length}
-        compact={mode === "plan"}
+        now={plannerNow}
+        pendingPriorityCount={pendingPriorityCount}
+        totalPriorityCount={priorityDraft.draft.filter((p) => p.title.trim()).length}
+        pendingTaskCount={pendingTaskCount}
+        completedTaskCount={data.completedTaskCount}
+        totalTaskCount={data.totalTaskCount}
+        overdueCount={data.overdueTasks.length}
+        hasDrift={plannerExecution.slippedBlocks.length > 0}
+        onCapture={triggerCapture}
       />
 
       {allErrors ? (
@@ -90,54 +116,36 @@ export function TodayPage() {
       ) : null}
 
       {mode === "execute" ? (
-        <>
-          <div className="today-columns">
-            <div className="today-focus-zone stagger">
-              <PriorityStack
-                priorityDraft={priorityDraft}
-                activeGoals={data.activeGoals}
-              />
-
-              <ExecutePlannerFocus
-                execution={plannerExecution}
-                plannerActions={plannerActions}
-                taskActions={taskActions}
-                onSwitchToPlanner={() => setMode("plan")}
-              />
-
-              <TaskQueue
-                taskGroups={data.taskGroups}
-                completedCount={data.completedTaskCount}
-                totalCount={data.totalTaskCount}
-                taskActions={taskActions}
-                plannerBlocks={data.plannerBlocks}
-                plannedTaskCount={data.plannedPendingTaskCount}
-                unplannedTaskCount={data.unplannedPendingTaskCount}
-                onSwitchToPlanner={() => setMode("plan")}
-              />
-            </div>
-
-            <ContextPanel
-              currentDay={data.currentDay}
-              timedTasks={data.timedTasks}
-              quickCaptureTasks={data.quickCaptureTasks}
-              goalNudges={data.goalNudges}
-              priorityDraft={priorityDraft.draft}
-              canAddGoalNudge={canAddGoalNudge}
-              onAddGoalNudge={priorityDraft.addGoalNudge}
-              plannerBlocks={data.plannerBlocks}
-              plannerExecution={plannerExecution}
-              unplannedTaskCount={data.unplannedPendingTaskCount}
+        <div className="today-execute-v2">
+          <div className="today-main-v2">
+            <FocusStack
+              priorityDraft={priorityDraft}
+              activeGoals={data.activeGoals}
+              execution={plannerExecution}
+              phase={phase}
               onSwitchToPlanner={() => setMode("plan")}
+            />
+
+            <ExecutionStream
+              executionTasks={data.executionTasks}
+              execution={plannerExecution}
+              taskActions={taskActions}
+              plannerBlocks={data.plannerBlocks}
+              phase={phase}
+              onSwitchToPlanner={() => setMode("plan")}
+            />
+
+            <RecoveryTray
+              overdueTasks={data.overdueTasks}
+              taskActions={taskActions}
             />
           </div>
 
-          <RecoveryLane
-            overdueTasks={data.overdueTasks}
-            overdueTasksQuery={data.overdueTasksQuery}
-            taskActions={taskActions}
+          <DailyEssentials
+            currentDay={data.currentDay}
+            phase={phase}
           />
-        </>
+        </div>
       ) : (
         <DayPlanner
           date={data.today}

@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(find /home/ubuntu/Development/life-os/client/src -name *.css -o -name *.scss)",
+      "Bash(npm run:*)",
+      "Bash(npm test:*)"
+    ]
+  }
+}
