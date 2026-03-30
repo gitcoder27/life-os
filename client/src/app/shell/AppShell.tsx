@@ -268,8 +268,9 @@ export function AppShell() {
     <div className={sidebarClassName}>
       <aside className="shell-sidebar" aria-label="Primary navigation">
         <div className="brand-block">
-          <div className="brand-block__toolbar">
-            <span className="brand-block__eyebrow">Personal command center</span>
+          <div className="brand-block__title-row">
+            <span className="brand-block__mark">L</span>
+            <h1 className="brand-block__title">Life OS</h1>
             <button
               className="button button--ghost button--small shell-sidebar__toggle shell-collapsed-label"
               type="button"
@@ -286,15 +287,6 @@ export function AppShell() {
                 {sidebarCollapsed ? <ExpandIcon /> : <CollapseIcon />}
               </span>
             </button>
-          </div>
-          <div className="brand-block__title-row">
-            <span className="brand-block__mark">L</span>
-            <div className="brand-block__copy">
-              <h1 className="brand-block__title">Life OS</h1>
-              <p className="brand-block__subtitle">
-                Run the day. Protect momentum.
-              </p>
-            </div>
           </div>
         </div>
 
@@ -317,10 +309,7 @@ export function AppShell() {
                 <span className="shell-nav__icon" aria-hidden="true">
                   <Icon />
                 </span>
-                <span className="shell-nav__meta">
-                  <span className="shell-nav__label">{item.label}</span>
-                  <span className="shell-nav__hint">{item.hint}</span>
-                </span>
+                <span className="shell-nav__label">{item.label}</span>
               </NavLink>
             );
           })}
@@ -344,16 +333,6 @@ export function AppShell() {
             <span className="shell-sidebar__action-text">Quick capture</span>
             <span className="kbd shell-sidebar__action-kbd">⌘K</span>
           </button>
-          <div
-            className={`account-chip${sidebarCollapsed ? " account-chip--collapsed shell-collapsed-label" : ""}`}
-            data-shell-label={userEmail}
-            title={sidebarCollapsed ? userEmail : undefined}
-            onMouseEnter={handleCollapsedTooltipMouseEnter}
-            onMouseLeave={hideCollapsedTooltip}
-          >
-            <span className="account-chip__dot" />
-            <span className="account-chip__text">{userEmail}</span>
-          </div>
           <NavLink
             to="/settings"
             className={({ isActive }) =>
