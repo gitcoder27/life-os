@@ -85,6 +85,11 @@
   margin-top: 0.75rem;
 }
 
+body.planner-dragging-cursor,
+body.planner-dragging-cursor * {
+  cursor: grabbing !important;
+}
+
 .planner__header {
   display: flex;
   align-items: center;
@@ -191,6 +196,7 @@
   grid-template-columns: minmax(0, 1fr) minmax(300px, 20rem);
   gap: 1rem;
   align-items: start;
+  position: relative;
 }
 
 .planner__timeline-pane {
@@ -439,6 +445,42 @@
   border-color: rgba(255,255,255,0.1);
   box-shadow: 0 8px 32px rgba(0,0,0,0.2), 0 0 0 1px rgba(255,255,255,0.04);
   z-index: 3;
+}
+
+.planner-block--drop-ready {
+  transition:
+    border-color var(--dur) var(--ease),
+    box-shadow var(--dur) var(--ease),
+    background var(--dur) var(--ease),
+    opacity var(--dur) var(--ease),
+    transform var(--dur-fast) var(--ease);
+}
+
+.planner-block--drop-target {
+  border-color: rgba(217,153,58,0.45);
+  background:
+    linear-gradient(135deg, rgba(217,153,58,0.14) 0%, rgba(217,153,58,0.05) 100%);
+  box-shadow:
+    0 14px 40px rgba(217,153,58,0.12),
+    0 0 0 1px rgba(217,153,58,0.24);
+  transform: scale(1.01);
+  z-index: 4;
+}
+
+.planner-block--drop-target::after {
+  content: "Drop to assign";
+  position: absolute;
+  top: 0.55rem;
+  right: 0.75rem;
+  padding: 0.12rem 0.45rem;
+  border-radius: var(--r-pill);
+  background: rgba(217,153,58,0.16);
+  color: var(--accent-bright);
+  font-size: 0.58rem;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  pointer-events: none;
 }
 
 .planner-block--current {
@@ -1388,9 +1430,9 @@
 
 .unplanned-lane {
   position: sticky;
-  top: calc(
-    var(--shell-header-height, 0px) + var(--today-top-rail-height, 0px) + 1rem
-  );
+  top: var(--today-sticky-offset);
+  align-self: start;
+  z-index: 8;
   display: flex;
   flex-direction: column;
   gap: 0.35rem;
@@ -1526,6 +1568,16 @@
   font-size: var(--fs-small);
 }
 
+.unplanned-lane__drag-hint {
+  padding: 0.5rem 0.65rem;
+  border-radius: var(--r-xs);
+  border: 1px dashed rgba(217,153,58,0.28);
+  background: rgba(217,153,58,0.06);
+  color: var(--accent-bright);
+  font-size: var(--fs-small);
+  font-weight: 600;
+}
+
 .unplanned-lane__empty {
   display: flex;
   flex-direction: column;
@@ -1564,6 +1616,36 @@
 
 .unplanned-task:hover {
   background: rgba(255,255,255,0.03);
+}
+
+.unplanned-task--draggable {
+  cursor: grab;
+  touch-action: none;
+}
+
+.unplanned-task--draggable:active {
+  cursor: grabbing;
+}
+
+.unplanned-task--dragging {
+  opacity: 0.55;
+  background: rgba(217,153,58,0.08);
+  border: 1px solid rgba(217,153,58,0.18);
+}
+
+.unplanned-task--suppressed {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.unplanned-task--overlay {
+  width: min(19rem, 40vw);
+  opacity: 1;
+  border-color: rgba(217,153,58,0.3);
+  background: rgba(26,22,18,0.96);
+  box-shadow: 0 18px 40px rgba(0,0,0,0.3);
+  pointer-events: none;
+  transform: translate(14px, -12px);
 }
 
 .unplanned-task__check {

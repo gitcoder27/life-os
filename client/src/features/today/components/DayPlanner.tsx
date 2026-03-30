@@ -1,4 +1,15 @@
 import { useEffect, useMemo, useState } from "react";
+import {
+  DndContext,
+  DragOverlay,
+  PointerSensor,
+  pointerWithin,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+  type DragStartEvent,
+} from "@dnd-kit/core";
+import { createPortal } from "react-dom";
 import { formatTimeLabel, type DayPlannerBlockItem, type TaskItem } from "../../../shared/lib/api";
 import {
   addMinutes,
@@ -24,6 +35,10 @@ import {
   type PlannerTimelineSegment,
 } from "../helpers/planner-timeline";
 import type { PlannerExecutionModel } from "../helpers/planner-execution";
+import {
+  PLANNER_BLOCK_DROP_TYPE,
+  UNPLANNED_TASK_DRAG_TYPE,
+} from "../helpers/planner-drag";
 import { PlannerBlock } from "./PlannerBlock";
 import { PlannerBlockForm } from "./PlannerBlockForm";
 import { UnplannedTasks } from "./UnplannedTasks";
@@ -59,6 +74,9 @@ export function DayPlanner({
   const [visibleHours, setVisibleHours] = useState(() => readStoredPlannerVisibleHours());
   const [hoursDraft, setHoursDraft] = useState(visibleHours);
   const [now, setNow] = useState(() => new Date());
+  const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null);
+  const [suppressedTaskId, setSuppressedTaskId] = useState<string | null>(null);
+  const [disableDropAnimation, setDisableDropAnimation] = useState(false);
 
   const orderedBlocks = useMemo(() => sortPlannerBlocksByTime(blocks), [blocks]);
   const blockIndexMap = useMemo(
@@ -77,6 +95,13 @@ export function DayPlanner({
   const hoursValidation = validatePlannerVisibleHours(hoursDraft);
   const cleanupTarget = execution.cleanup.targetBlock?.block ?? null;
   const isCleanupPending = actions.isPending || taskActions.isPending;
+  const activeDraggedTask = useMemo(
+    () => unplannedTasks.find((task) => task.id === draggedTaskId) ?? null,
+    [draggedTaskId, unplannedTasks],
+  );
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+  );
 
   useEffect(() => {
     const intervalId = window.setInterval(() => setNow(new Date()), 60_000);
@@ -86,6 +111,32 @@ export function DayPlanner({
   useEffect(() => {
     setHoursDraft(visibleHours);
   }, [visibleHours]);
+
+  useEffect(() => {
+    if (draggedTaskId && !unplannedTasks.some((task) => task.id === draggedTaskId)) {
+      setDraggedTaskId(null);
+    }
+  }, [draggedTaskId, unplannedTasks]);
+
+  useEffect(() => {
+    if (!suppressedTaskId) {
+      return;
+    }
+
+    const isStillUnplanned = unplannedTasks.some((task) => task.id === suppressedTaskId);
+    if (!isStillUnplanned || !actions.isPending) {
+      setSuppressedTaskId(null);
+    }
+  }, [actions.isPending, suppressedTaskId, unplannedTasks]);
+
+  useEffect(() => {
+    const className = "planner-dragging-cursor";
+    document.body.classList.toggle(className, draggedTaskId !== null);
+
+    return () => {
+      document.body.classList.remove(className);
+    };
+  }, [draggedTaskId]);
 
   function openBlockForm(initialValues?: {
     title?: string;
@@ -219,6 +270,46 @@ export function DayPlanner({
     void taskActions.moveTasksToTomorrow(execution.cleanup.taskIds);
   }
 
+  function handleUnplannedTaskDragStart(event: DragStartEvent) {
+    setDisableDropAnimation(false);
+
+    if (event.active.data.current?.type !== UNPLANNED_TASK_DRAG_TYPE) {
+      return;
+    }
+
+    const taskId = event.active.data.current?.taskId;
+    setDraggedTaskId(typeof taskId === "string" ? taskId : null);
+  }
+
+  function handleUnplannedTaskDragCancel() {
+    setDraggedTaskId(null);
+    setDisableDropAnimation(false);
+  }
+
+  function handleUnplannedTaskDragEnd(event: DragEndEvent) {
+    const activeTaskId =
+      event.active.data.current?.type === UNPLANNED_TASK_DRAG_TYPE
+        ? event.active.data.current?.taskId
+        : null;
+    const targetBlockId =
+      event.over?.data.current?.type === PLANNER_BLOCK_DROP_TYPE
+        ? event.over.data.current?.blockId
+        : null;
+
+    if (typeof activeTaskId === "string" && typeof targetBlockId === "string") {
+      const targetBlock = orderedBlocks.find((block) => block.id === targetBlockId);
+      if (targetBlock) {
+        setDisableDropAnimation(true);
+        setSuppressedTaskId(activeTaskId);
+        actions.assignTaskToBlock(targetBlock, activeTaskId);
+      }
+    } else {
+      setDisableDropAnimation(false);
+    }
+
+    setDraggedTaskId(null);
+  }
+
   return (
     <div className="planner">
       <div className="planner__header">
@@ -341,8 +432,15 @@ export function DayPlanner({
         </div>
       ) : null}
 
-      <div className="planner__body">
-        <div className="planner__timeline-pane">
+      <DndContext
+        sensors={sensors}
+        collisionDetection={pointerWithin}
+        onDragStart={handleUnplannedTaskDragStart}
+        onDragCancel={handleUnplannedTaskDragCancel}
+        onDragEnd={handleUnplannedTaskDragEnd}
+      >
+        <div className="planner__body">
+          <div className="planner__timeline-pane">
           {orderedBlocks.length === 0 && !formDraft ? (
             <div className="planner__empty">
               <div className="planner__empty-icon">✦</div>
@@ -465,6 +563,7 @@ export function DayPlanner({
                       nextBlock={orderedBlocks[(blockIndexMap.get(segment.block!.id) ?? -1) + 1] ?? null}
                       canDuplicate={!formDraft}
                       isPending={actions.isPending}
+                      activeUnplannedTaskId={draggedTaskId}
                     />
                   ),
                 )}
@@ -479,16 +578,26 @@ export function DayPlanner({
               </div>
             </div>
           ) : null}
+          </div>
+
+          <UnplannedTasks
+            tasks={unplannedTasks}
+            blocks={orderedBlocks}
+            isPending={actions.isPending}
+            draggedTaskId={draggedTaskId}
+            suppressedTaskId={suppressedTaskId}
+            onQuickAssign={(taskId, block) => actions.assignTaskToBlock(block, taskId)}
+            onBulkAssign={(taskIds, block) => actions.assignTasksToBlock(block, taskIds)}
+          />
         </div>
 
-        <UnplannedTasks
-          tasks={unplannedTasks}
-          blocks={orderedBlocks}
-          isPending={actions.isPending}
-          onQuickAssign={(taskId, block) => actions.assignTaskToBlock(block, taskId)}
-          onBulkAssign={(taskIds, block) => actions.assignTasksToBlock(block, taskIds)}
-        />
-      </div>
+        {createPortal(
+          <DragOverlay dropAnimation={disableDropAnimation ? null : undefined}>
+            {activeDraggedTask ? <PlannerTaskDragPreview task={activeDraggedTask} /> : null}
+          </DragOverlay>,
+          document.body,
+        )}
+      </DndContext>
     </div>
   );
 }
@@ -531,6 +640,21 @@ function PlannerGapCard({
           <span className="planner-gap__add-label">Add block</span>
         </button>
       ) : null}
+    </div>
+  );
+}
+
+function PlannerTaskDragPreview({ task }: { task: TaskItem }) {
+  return (
+    <div className="unplanned-task unplanned-task--dragging unplanned-task--overlay">
+      <div className="unplanned-task__info" title={task.title}>
+        <span className="unplanned-task__title">{task.title}</span>
+        {task.goal ? (
+          <span className={`unplanned-task__goal goal-chip__dot--${task.goal.domain}`}>
+            {task.goal.title}
+          </span>
+        ) : null}
+      </div>
     </div>
   );
 }

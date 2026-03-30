@@ -4,6 +4,7 @@ import {
   PointerSensor,
   KeyboardSensor,
   closestCenter,
+  useDroppable,
   useSensor,
   useSensors,
   type DragEndEvent,
@@ -28,6 +29,7 @@ import {
   toTimeInputValue,
   validatePlannerBlockDraft,
 } from "../helpers/planner-blocks";
+import { getPlannerBlockDropId, PLANNER_BLOCK_DROP_TYPE } from "../helpers/planner-drag";
 import { CheckIcon, GripIcon } from "../helpers/icons";
 
 export function PlannerBlock({
@@ -61,6 +63,7 @@ export function PlannerBlock({
   nextBlock,
   canDuplicate,
   isPending,
+  activeUnplannedTaskId,
 }: {
   block: DayPlannerBlockItem;
   existingBlocks: DayPlannerBlockItem[];
@@ -96,6 +99,7 @@ export function PlannerBlock({
   nextBlock: DayPlannerBlockItem | null;
   canDuplicate: boolean;
   isPending: boolean;
+  activeUnplannedTaskId: string | null;
 }) {
   const [editing, setEditing] = useState(false);
   const [editTitle, setEditTitle] = useState(block.title ?? "");
@@ -130,6 +134,18 @@ export function PlannerBlock({
   const displayedHeightPx = resizeDraft
     ? Math.max(Math.round((displayedEndMinutes - segmentStartMinutes) * PIXELS_PER_MINUTE), 40)
     : heightPx;
+  const canDropUnplannedTask =
+    activeUnplannedTaskId !== null &&
+    !block.tasks.some((blockTask) => blockTask.taskId === activeUnplannedTaskId) &&
+    !isPending;
+  const { isOver, setNodeRef } = useDroppable({
+    id: getPlannerBlockDropId(block.id),
+    data: {
+      type: PLANNER_BLOCK_DROP_TYPE,
+      blockId: block.id,
+    },
+    disabled: !canDropUnplannedTask,
+  });
 
   const handleResizeStart = useCallback((e: React.MouseEvent | React.TouchEvent) => {
     if (isPending) {
@@ -355,12 +371,15 @@ export function PlannerBlock({
 
   return (
     <div
+      ref={setNodeRef}
       className={[
         "planner-block",
         isEmpty ? "planner-block--empty" : "",
         timelineStatus === "current" ? "planner-block--current" : "",
         timelineStatus === "past" ? "planner-block--past" : "",
         isUpNext ? "planner-block--up-next" : "",
+        canDropUnplannedTask ? "planner-block--drop-ready" : "",
+        isOver ? "planner-block--drop-target" : "",
       ]
         .filter(Boolean)
         .join(" ")}

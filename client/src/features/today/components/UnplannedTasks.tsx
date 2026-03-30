@@ -1,17 +1,23 @@
 import { useState, useEffect } from "react";
+import { useDraggable } from "@dnd-kit/core";
 import type { TaskItem, DayPlannerBlockItem } from "../../../shared/lib/api";
+import { UNPLANNED_TASK_DRAG_TYPE, getUnplannedTaskDragId } from "../helpers/planner-drag";
 import { BlockTargetPicker } from "./BlockTargetPicker";
 
 export function UnplannedTasks({
   tasks,
   blocks,
   isPending,
+  draggedTaskId,
+  suppressedTaskId,
   onQuickAssign,
   onBulkAssign,
 }: {
   tasks: TaskItem[];
   blocks: DayPlannerBlockItem[];
   isPending: boolean;
+  draggedTaskId: string | null;
+  suppressedTaskId: string | null;
   onQuickAssign: (taskId: string, block: DayPlannerBlockItem) => void;
   onBulkAssign: (taskIds: string[], block: DayPlannerBlockItem) => Promise<void> | void;
 }) {
@@ -114,6 +120,12 @@ export function UnplannedTasks({
         </div>
       ) : null}
 
+      {draggedTaskId ? (
+        <div className="unplanned-lane__drag-hint">
+          Drop on a time block to assign this task.
+        </div>
+      ) : null}
+
       {batchMode && blocks.length > 0 ? (
         <div
           className="unplanned-lane__batch"
@@ -195,6 +207,8 @@ export function UnplannedTasks({
             checked={selectedTaskIds.includes(task.id)}
             isPending={isPending}
             onToggleSelection={() => toggleTaskSelection(task.id)}
+            isActiveDrag={draggedTaskId === task.id}
+            isSuppressed={suppressedTaskId === task.id}
             onQuickAssign={(block) => onQuickAssign(task.id, block)}
           />
         ))}
@@ -210,6 +224,8 @@ function UnplannedTaskRow({
   checked,
   isPending,
   onToggleSelection,
+  isActiveDrag,
+  isSuppressed,
   onQuickAssign,
 }: {
   task: TaskItem;
@@ -218,10 +234,34 @@ function UnplannedTaskRow({
   checked: boolean;
   isPending: boolean;
   onToggleSelection: () => void;
+  isActiveDrag: boolean;
+  isSuppressed: boolean;
   onQuickAssign: (block: DayPlannerBlockItem) => void;
 }) {
+  const isDraggable = !batchMode && blocks.length > 0 && !isPending;
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
+    id: getUnplannedTaskDragId(task.id),
+    data: {
+      type: UNPLANNED_TASK_DRAG_TYPE,
+      taskId: task.id,
+    },
+    disabled: !isDraggable,
+  });
+
   return (
-    <div className={`unplanned-task${batchMode ? " unplanned-task--batch" : ""}`}>
+    <div
+      ref={setNodeRef}
+      className={[
+        "unplanned-task",
+        batchMode ? " unplanned-task--batch" : "",
+        isDraggable ? " unplanned-task--draggable" : "",
+        isDragging || isActiveDrag ? " unplanned-task--dragging" : "",
+        isSuppressed ? " unplanned-task--suppressed" : "",
+      ].join("")}
+      aria-grabbed={isDragging || isActiveDrag}
+      {...attributes}
+      {...listeners}
+    >
       {batchMode ? (
         <label className="unplanned-task__check">
           <input
