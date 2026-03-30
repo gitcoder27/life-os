@@ -222,25 +222,24 @@ export function DayPlanner({
   return (
     <div className="planner">
       <div className="planner__header">
-        <div className="planner__heading">
-          <h2 className="planner__title">Day Plan</h2>
-          <div className="planner__meta">
-            <span>{orderedBlocks.length} block{orderedBlocks.length === 1 ? "" : "s"}</span>
-            <span>
-              {timeline.totalFreeMinutes > 0
-                ? `${formatDurationMinutes(timeline.totalFreeMinutes)} free`
-                : "Fully allocated"}
-            </span>
-            <span>{timeline.visibleRangeLabel} preferred hours</span>
-          </div>
+        <div className="planner__meta">
+          <span>{orderedBlocks.length} block{orderedBlocks.length === 1 ? "" : "s"}</span>
+          <span>
+            {timeline.totalFreeMinutes > 0
+              ? `${formatDurationMinutes(timeline.totalFreeMinutes)} free`
+              : "Fully allocated"}
+          </span>
+          <span>{timeline.visibleRangeLabel}</span>
         </div>
         <div className="planner__header-actions">
           <button
             className="button button--ghost button--small"
             type="button"
             onClick={() => setShowHoursEditor((current) => !current)}
+            aria-label="Adjust visible hours"
+            title="Visible hours"
           >
-            Visible hours
+            ⚙
           </button>
           <button
             className="button button--primary button--small"
@@ -365,111 +364,140 @@ export function DayPlanner({
         <div className="planner__timeline-pane">
           {orderedBlocks.length === 0 && !formDraft ? (
             <div className="planner__empty">
-              <div className="planner__empty-icon">📅</div>
-              <p className="planner__empty-title">Build the shape of the day first</p>
+              <div className="planner__empty-icon">✦</div>
+              <h3 className="planner__empty-title">Shape the day</h3>
               <p className="planner__empty-desc">
-                Start with one block, then use the visible gaps to shape the rest of the day.
+                Add your first block to start building a plan.
               </p>
-              <div className="planner__empty-steps">
-                <span>1. Create your first block.</span>
-                <span>2. Fill obvious free time with focus, admin, meals, or recovery.</span>
-                <span>3. Assign tasks into the right block from the unplanned lane or inside a block.</span>
-              </div>
               <button
                 className="button button--primary button--small"
                 type="button"
                 onClick={() => openBlockForm()}
               >
-                Create first block
+                Add block
               </button>
             </div>
           ) : null}
 
-          <div className="planner__surface">
-            <div className="planner__surface-header">
-              <div className="planner__surface-title">Timeline view</div>
-              <div className="planner__surface-range">
-                Rendering {timeline.renderedRange.startTime} - {timeline.renderedRange.endTime}
+          {formDraft ? (
+            <PlannerBlockForm
+              key={formDraft.key}
+              date={date}
+              existingBlocks={orderedBlocks}
+              initialValues={formDraft}
+              onSubmit={(payload) => {
+                actions.addBlock(payload);
+                setFormDraft(null);
+              }}
+              onCancel={() => setFormDraft(null)}
+            />
+          ) : null}
+
+          {orderedBlocks.length > 0 || formDraft ? (
+            <div className="planner__timeline-area">
+              <div
+                className="planner__gutter"
+                aria-hidden="true"
+                style={{ height: `${timeline.totalHeightPx}px` }}
+              >
+                {timeline.gutterMarkers.map((marker) => (
+                  <div
+                    key={marker.minutes}
+                    className={`planner__gutter-hour${
+                      timeline.nowLinePx !== null && marker.topPercent < (timeline.nowLinePercent ?? 0)
+                        ? " planner__gutter-hour--past"
+                        : ""
+                    }`}
+                    style={{ top: `${marker.topPercent}%` }}
+                  >
+                    {marker.label}
+                  </div>
+                ))}
+                {timeline.nowLinePx !== null ? (
+                  <div
+                    className="planner__gutter-now"
+                    style={{ top: `${timeline.nowLinePx}px` }}
+                  />
+                ) : null}
+              </div>
+
+              <div
+                className="planner__timeline-track"
+                style={{ height: `${timeline.totalHeightPx}px` }}
+              >
+                {timeline.segments.map((segment) =>
+                  segment.kind === "gap" ? (
+                    <PlannerGapCard
+                      key={segment.id}
+                      segment={segment}
+                      onAddBlock={() =>
+                        openBlockForm({
+                          startTime: minutesToTimeString(segment.startMinutes),
+                          endTime: minutesToTimeString(
+                            Math.min(segment.startMinutes + 60, segment.endMinutes),
+                          ),
+                        })
+                      }
+                    />
+                  ) : (
+                    <PlannerBlock
+                      key={segment.id}
+                      block={segment.block!}
+                      existingBlocks={orderedBlocks}
+                      availableTasks={unplannedTasks}
+                      availableBlocks={orderedBlocks}
+                      canMoveUp={(blockIndexMap.get(segment.block!.id) ?? -1) > 0}
+                      canMoveDown={(blockIndexMap.get(segment.block!.id) ?? -1) < orderedBlocks.length - 1}
+                      onMoveBlock={(direction) =>
+                        handleMoveBlock(
+                          blockIndexMap.get(segment.block!.id) ?? -1,
+                          direction,
+                        )
+                      }
+                      onAddTasks={(taskIds) => actions.assignTasksToBlock(segment.block!, taskIds)}
+                      onMoveTaskToBlock={(taskId, targetBlock) =>
+                        actions.moveTaskToBlock(targetBlock, taskId)
+                      }
+                      onEditBlock={(updates) => actions.editBlock(segment.block!.id, updates)}
+                      onDeleteBlock={() => actions.removeBlock(segment.block!.id)}
+                      onRemoveTask={(taskId) => actions.removeTaskFromBlock(segment.block!.id, taskId)}
+                      onReorderTasks={(taskIds) => actions.reorderTasksInBlock(segment.block!, taskIds)}
+                      onNudgeDuration={(direction) => handleNudgeBlock(segment.block!, direction)}
+                      onDuplicateBlock={() => handleDuplicateBlock(segment.block!)}
+                      onSplitBlock={() => handleSplitBlock(segment.block!)}
+                      onCarryPendingToNext={() =>
+                        handleCarryPendingToNext(
+                          segment.block!,
+                          orderedBlocks[(blockIndexMap.get(segment.block!.id) ?? -1) + 1] ?? null,
+                        )
+                      }
+                      timelineStatus={segment.status}
+                      isUpNext={timeline.nextBlockId === segment.block!.id}
+                      durationLabel={segment.durationLabel}
+                      segmentStartMinutes={segment.startMinutes}
+                      segmentEndMinutes={segment.endMinutes}
+                      hourMarkers={segment.hourMarkers}
+                      currentMarkerPercent={segment.currentMarkerPercent}
+                      minHeight={segment.minHeight}
+                      topPx={segment.topPx}
+                      heightPx={segment.heightPx}
+                      nextBlock={orderedBlocks[(blockIndexMap.get(segment.block!.id) ?? -1) + 1] ?? null}
+                      canDuplicate={!formDraft}
+                      isPending={actions.isPending}
+                    />
+                  ),
+                )}
+
+                {timeline.nowLinePx !== null ? (
+                  <div
+                    className="planner__now-line"
+                    style={{ top: `${timeline.nowLinePx}px` }}
+                    aria-hidden="true"
+                  />
+                ) : null}
               </div>
             </div>
-
-            {formDraft ? (
-              <PlannerBlockForm
-                key={formDraft.key}
-                date={date}
-                existingBlocks={orderedBlocks}
-                initialValues={formDraft}
-                onSubmit={(payload) => {
-                  actions.addBlock(payload);
-                  setFormDraft(null);
-                }}
-                onCancel={() => setFormDraft(null)}
-              />
-            ) : null}
-
-            <div className="planner__timeline-track">
-              {timeline.segments.map((segment) =>
-                segment.kind === "gap" ? (
-                  <PlannerGapCard
-                    key={segment.id}
-                    segment={segment}
-                    onAddBlock={() =>
-                      openBlockForm({
-                        startTime: minutesToTimeString(segment.startMinutes),
-                        endTime: minutesToTimeString(
-                          Math.min(segment.startMinutes + 60, segment.endMinutes),
-                        ),
-                      })
-                    }
-                  />
-                ) : (
-                  <PlannerBlock
-                    key={segment.id}
-                    block={segment.block!}
-                    existingBlocks={orderedBlocks}
-                    availableTasks={unplannedTasks}
-                    availableBlocks={orderedBlocks}
-                    canMoveUp={(blockIndexMap.get(segment.block!.id) ?? -1) > 0}
-                    canMoveDown={(blockIndexMap.get(segment.block!.id) ?? -1) < orderedBlocks.length - 1}
-                    onMoveBlock={(direction) =>
-                      handleMoveBlock(
-                        blockIndexMap.get(segment.block!.id) ?? -1,
-                        direction,
-                      )
-                    }
-                    onAddTasks={(taskIds) => actions.assignTasksToBlock(segment.block!, taskIds)}
-                    onMoveTaskToBlock={(taskId, targetBlock) =>
-                      actions.moveTaskToBlock(targetBlock, taskId)
-                    }
-                    onEditBlock={(updates) => actions.editBlock(segment.block!.id, updates)}
-                    onDeleteBlock={() => actions.removeBlock(segment.block!.id)}
-                    onRemoveTask={(taskId) => actions.removeTaskFromBlock(segment.block!.id, taskId)}
-                    onReorderTasks={(taskIds) => actions.reorderTasksInBlock(segment.block!, taskIds)}
-                    onNudgeDuration={(direction) => handleNudgeBlock(segment.block!, direction)}
-                    onDuplicateBlock={() => handleDuplicateBlock(segment.block!)}
-                    onSplitBlock={() => handleSplitBlock(segment.block!)}
-                    onCarryPendingToNext={() =>
-                      handleCarryPendingToNext(
-                        segment.block!,
-                        orderedBlocks[(blockIndexMap.get(segment.block!.id) ?? -1) + 1] ?? null,
-                      )
-                    }
-                    timelineStatus={segment.status}
-                    isUpNext={timeline.nextBlockId === segment.block!.id}
-                    durationLabel={segment.durationLabel}
-                    segmentStartMinutes={segment.startMinutes}
-                    segmentEndMinutes={segment.endMinutes}
-                    hourMarkers={segment.hourMarkers}
-                    currentMarkerPercent={segment.currentMarkerPercent}
-                    minHeight={segment.minHeight}
-                    nextBlock={orderedBlocks[(blockIndexMap.get(segment.block!.id) ?? -1) + 1] ?? null}
-                    canDuplicate={!formDraft}
-                    isPending={actions.isPending}
-                  />
-                ),
-              )}
-            </div>
-          </div>
+          ) : null}
         </div>
 
         <UnplannedTasks
@@ -494,56 +522,33 @@ function PlannerGapCard({
   return (
     <div
       className={`planner-gap planner-gap--${segment.status}`}
-      style={{ minHeight: `${segment.minHeight}px` }}
+      style={{
+        position: "absolute",
+        top: `${segment.topPx}px`,
+        height: `${segment.heightPx}px`,
+        left: 0,
+        right: 0,
+      }}
     >
-      <div className="planner-gap__main">
-        <div className="planner-gap__header">
-          <div className="planner-gap__time">
-            <span>{formatTimeLabel(segment.startsAt)}</span>
-            <span>→</span>
-            <span>{formatTimeLabel(segment.endsAt)}</span>
-          </div>
-          <span className="planner-gap__duration">{segment.durationLabel} free</span>
-        </div>
-        <div className="planner-gap__title">
-          {segment.status === "current" ? "Free right now" : "Open time"}
-        </div>
-        <div className="planner-gap__copy">
-          Leave this open or turn it into a named block for the next part of the day.
-        </div>
+      <div className="planner-gap__info">
+        <span className="planner-gap__time">
+          {formatTimeLabel(segment.startsAt)} – {formatTimeLabel(segment.endsAt)}
+        </span>
+        <span className="planner-gap__duration">{segment.durationLabel}</span>
+        {segment.status === "current" ? (
+          <span className="planner-gap__free-label">Free now</span>
+        ) : null}
+      </div>
+      {segment.status !== "past" ? (
         <button
-          className="button button--ghost button--small"
+          className="planner-gap__add-btn"
           type="button"
           onClick={onAddBlock}
+          aria-label="Add block here"
         >
-          Add block here
+          <span className="planner-gap__add-icon">+</span>
+          <span className="planner-gap__add-label">Add block</span>
         </button>
-      </div>
-
-      {segment.hourMarkers.length > 0 ? (
-        <div className="planner-segment__markers" aria-hidden="true">
-          {segment.hourMarkers.map((marker) => (
-            <div
-              key={marker}
-              className="planner-segment__tick"
-              style={{
-                top: `${((marker - segment.startMinutes) / Math.max(segment.durationMinutes, 1)) * 100}%`,
-              }}
-            >
-              <span className="planner-segment__tick-label">
-                {minutesToTimeString(marker)}
-              </span>
-            </div>
-          ))}
-        </div>
-      ) : null}
-
-      {segment.currentMarkerPercent !== null ? (
-        <div
-          className="planner-segment__now-line"
-          style={{ top: `${segment.currentMarkerPercent}%` }}
-          aria-hidden="true"
-        />
       ) : null}
     </div>
   );

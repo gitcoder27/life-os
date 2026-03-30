@@ -49,7 +49,7 @@ export function usePlannerActions(date: string) {
     blockId: string,
     updates: { title?: string | null; startsAt?: string; endsAt?: string },
   ) {
-    updateBlock.mutate({ blockId, ...updates });
+    return updateBlock.mutateAsync({ blockId, ...updates });
   }
 
   function removeBlock(blockId: string) {

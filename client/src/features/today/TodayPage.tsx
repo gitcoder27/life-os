@@ -82,6 +82,7 @@ export function TodayPage() {
         mode={mode}
         onModeChange={setMode}
         plannerBlockCount={data.plannerBlocks.length}
+        compact={mode === "plan"}
       />
 
       {allErrors ? (

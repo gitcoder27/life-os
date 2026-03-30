@@ -1,10 +1,13 @@
-import { Fragment, useEffect, useMemo, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { DayPlannerBlockItem, TaskItem } from "../../../shared/lib/api";
 import { formatTimeLabel } from "../../../shared/lib/api";
 import {
   addMinutes,
+  getPlannerBlockDate,
+  getPlannerBlockTimezoneOffset,
   getSplitBlockTime,
   minutesToTimeString,
+  formatDurationMinutes,
   toTimeInputValue,
   validatePlannerBlockDraft,
 } from "../helpers/planner-blocks";
@@ -36,6 +39,8 @@ export function PlannerBlock({
   hourMarkers,
   currentMarkerPercent,
   minHeight,
+  topPx,
+  heightPx,
   nextBlock,
   canDuplicate,
   isPending,
@@ -49,7 +54,11 @@ export function PlannerBlock({
   onMoveBlock: (direction: -1 | 1) => void;
   onAddTasks: (taskIds: string[]) => Promise<void> | void;
   onMoveTaskToBlock: (taskId: string, targetBlock: DayPlannerBlockItem) => void;
-  onEditBlock: (updates: { title?: string | null; startsAt?: string; endsAt?: string }) => void;
+  onEditBlock: (updates: {
+    title?: string | null;
+    startsAt?: string;
+    endsAt?: string;
+  }) => Promise<unknown> | void;
   onDeleteBlock: () => void;
   onRemoveTask: (taskId: string) => void;
   onReorderTasks: (taskIds: string[]) => void;
@@ -65,6 +74,8 @@ export function PlannerBlock({
   hourMarkers: number[];
   currentMarkerPercent: number | null;
   minHeight: number;
+  topPx: number;
+  heightPx: number;
   nextBlock: DayPlannerBlockItem | null;
   canDuplicate: boolean;
   isPending: boolean;
@@ -76,6 +87,113 @@ export function PlannerBlock({
   const [showAddTaskPicker, setShowAddTaskPicker] = useState(false);
   const [movingTaskId, setMovingTaskId] = useState<string | null>(null);
   const [selectedTaskIds, setSelectedTaskIds] = useState<string[]>([]);
+  const [showOverflow, setShowOverflow] = useState(false);
+  const [resizeDraft, setResizeDraft] = useState<{
+    endMinutes: number;
+    endsAt: string;
+  } | null>(null);
+  const overflowRef = useRef<HTMLDivElement>(null);
+  const resizeDraftRef = useRef<{
+    endMinutes: number;
+    endsAt: string;
+  } | null>(null);
+  const isDraggingResizeRef = useRef(false);
+
+  const PIXELS_PER_MINUTE = 1.4; // must match CALENDAR_PIXELS_PER_MINUTE in planner-timeline.ts
+  const SNAP_MINUTES = 15;
+  const blockTimezoneOffset = useMemo(
+    () => getPlannerBlockTimezoneOffset(block),
+    [block],
+  );
+  const displayedEndsAt = resizeDraft?.endsAt ?? block.endsAt;
+  const displayedEndMinutes = resizeDraft?.endMinutes ?? segmentEndMinutes;
+  const displayedDurationLabel = resizeDraft
+    ? formatDurationMinutes(Math.max(displayedEndMinutes - segmentStartMinutes, 0))
+    : durationLabel;
+  const displayedHeightPx = resizeDraft
+    ? Math.max(Math.round((displayedEndMinutes - segmentStartMinutes) * PIXELS_PER_MINUTE), 40)
+    : heightPx;
+
+  const handleResizeStart = useCallback((e: React.MouseEvent | React.TouchEvent) => {
+    if (isPending) {
+      return;
+    }
+
+    e.preventDefault();
+    e.stopPropagation();
+    const startY = "touches" in e ? e.touches[0].clientY : e.clientY;
+    const origEndMinutes = segmentEndMinutes;
+    isDraggingResizeRef.current = true;
+
+    function onMove(ev: MouseEvent | TouchEvent) {
+      if ("cancelable" in ev && ev.cancelable) {
+        ev.preventDefault();
+      }
+
+      const currentY = "touches" in ev ? ev.touches[0].clientY : ev.clientY;
+      const deltaMinutes = Math.round((currentY - startY) / PIXELS_PER_MINUTE);
+      const rawEnd = origEndMinutes + deltaMinutes;
+      const snapped = Math.round(rawEnd / SNAP_MINUTES) * SNAP_MINUTES;
+      const newEndMinutes = Math.max(segmentStartMinutes + SNAP_MINUTES, Math.min(snapped, 23 * 60 + 59));
+      const newEndTime = minutesToTimeString(newEndMinutes);
+
+      const validation = validatePlannerBlockDraft({
+        date: getPlannerBlockDate(block),
+        startTime: toTimeInputValue(block.startsAt),
+        endTime: newEndTime,
+        timezoneOffset: blockTimezoneOffset,
+        existingBlocks,
+        ignoreBlockId: block.id,
+      });
+
+      if (validation.error) {
+        return;
+      }
+
+      const nextDraft =
+        validation.endsAt === block.endsAt
+          ? null
+          : {
+              endMinutes: newEndMinutes,
+              endsAt: validation.endsAt,
+            };
+      resizeDraftRef.current = nextDraft;
+      setResizeDraft(nextDraft);
+    }
+
+    function onEnd() {
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup", onEnd);
+      document.removeEventListener("touchmove", onMove);
+      document.removeEventListener("touchend", onEnd);
+
+      isDraggingResizeRef.current = false;
+      const nextDraft = resizeDraftRef.current;
+      if (!nextDraft || nextDraft.endsAt === block.endsAt) {
+        resizeDraftRef.current = null;
+        setResizeDraft(null);
+        return;
+      }
+
+      void Promise.resolve(onEditBlock({ endsAt: nextDraft.endsAt })).catch(() => {
+        resizeDraftRef.current = null;
+        setResizeDraft(null);
+      });
+    }
+
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", onEnd);
+    document.addEventListener("touchmove", onMove);
+    document.addEventListener("touchend", onEnd);
+  }, [
+    block,
+    blockTimezoneOffset,
+    existingBlocks,
+    isPending,
+    onEditBlock,
+    segmentStartMinutes,
+    segmentEndMinutes,
+  ]);
 
   const isEmpty = block.tasks.length === 0;
   const sortedTasks = [...block.tasks].sort((a, b) => a.sortOrder - b.sortOrder);
@@ -88,26 +206,26 @@ export function PlannerBlock({
     return [...new Set(sizes)].filter((size) => size > 1);
   }, [availableTasks.length]);
   const validation = validatePlannerBlockDraft({
-    date: block.startsAt.slice(0, 10),
+    date: getPlannerBlockDate(block),
     startTime: editStart,
     endTime: editEnd,
-    timezoneOffset: block.startsAt.slice(-6),
+    timezoneOffset: blockTimezoneOffset,
     existingBlocks,
     ignoreBlockId: block.id,
   });
   const shortenValidation = validatePlannerBlockDraft({
-    date: block.startsAt.slice(0, 10),
+    date: getPlannerBlockDate(block),
     startTime: toTimeInputValue(block.startsAt),
     endTime: addMinutes(toTimeInputValue(block.endsAt), -15),
-    timezoneOffset: block.startsAt.slice(-6),
+    timezoneOffset: blockTimezoneOffset,
     existingBlocks,
     ignoreBlockId: block.id,
   });
   const extendValidation = validatePlannerBlockDraft({
-    date: block.startsAt.slice(0, 10),
+    date: getPlannerBlockDate(block),
     startTime: toTimeInputValue(block.startsAt),
     endTime: addMinutes(toTimeInputValue(block.endsAt), 15),
-    timezoneOffset: block.startsAt.slice(-6),
+    timezoneOffset: blockTimezoneOffset,
     existingBlocks,
     ignoreBlockId: block.id,
   });
@@ -123,6 +241,24 @@ export function PlannerBlock({
       current.filter((taskId) => availableTasks.some((task) => task.id === taskId)),
     );
   }, [availableTasks]);
+
+  useEffect(() => {
+    if (resizeDraftRef.current?.endsAt === block.endsAt) {
+      resizeDraftRef.current = null;
+      setResizeDraft(null);
+    }
+  }, [block.endsAt]);
+
+  useEffect(() => {
+    if (!showOverflow) return;
+    function handler(e: MouseEvent) {
+      if (overflowRef.current && !overflowRef.current.contains(e.target as Node)) {
+        setShowOverflow(false);
+      }
+    }
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [showOverflow]);
 
   function handleSaveEdit() {
     if (validation.error) {
@@ -183,10 +319,8 @@ export function PlannerBlock({
     timelineStatus === "current"
       ? "Now"
       : isUpNext
-        ? "Up next"
-        : timelineStatus === "past"
-          ? "Past"
-          : "Later";
+        ? "Next"
+        : null;
 
   return (
     <div
@@ -199,32 +333,14 @@ export function PlannerBlock({
       ]
         .filter(Boolean)
         .join(" ")}
-      style={{ minHeight: `${minHeight}px` }}
+      style={{
+        position: "absolute",
+        top: `${topPx}px`,
+        minHeight: `${displayedHeightPx}px`,
+        left: 0,
+        right: 0,
+      }}
     >
-      {hourMarkers.length > 0 ? (
-        <div className="planner-segment__markers" aria-hidden="true">
-          {hourMarkers.map((marker) => (
-            <div
-              key={marker}
-              className="planner-segment__tick"
-              style={{
-                top: `${((marker - segmentStartMinutes) / Math.max(segmentEndMinutes - segmentStartMinutes, 1)) * 100}%`,
-              }}
-            >
-              <span className="planner-segment__tick-label">{minutesToTimeString(marker)}</span>
-            </div>
-          ))}
-        </div>
-      ) : null}
-
-      {currentMarkerPercent !== null ? (
-        <div
-          className="planner-segment__now-line"
-          style={{ top: `${currentMarkerPercent}%` }}
-          aria-hidden="true"
-        />
-      ) : null}
-
       <div className="planner-block__header">
         {editing ? (
           <div
@@ -289,139 +405,143 @@ export function PlannerBlock({
         ) : (
           <>
             <div className="planner-block__info">
-              <div className="planner-block__meta-row">
-                <div className="planner-block__time-badge">
-                  {formatTimeLabel(block.startsAt)} – {formatTimeLabel(block.endsAt)}
-                </div>
-                <span className="planner-block__duration">{durationLabel}</span>
+              <span className="planner-block__time-badge">
+                {formatTimeLabel(block.startsAt)} – {formatTimeLabel(displayedEndsAt)}
+              </span>
+              <span className="planner-block__info-sep">·</span>
+              <span className="planner-block__title">
+                {block.title || <span className="planner-block__untitled">Untitled block</span>}
+              </span>
+              <span className="planner-block__info-sep">·</span>
+              <span className="planner-block__duration">{displayedDurationLabel}</span>
+              {sortedTasks.length > 0 ? (
+                <>
+                  <span className="planner-block__info-sep">·</span>
+                  <span className="planner-block__task-count">
+                    {completedCount}/{sortedTasks.length}
+                  </span>
+                </>
+              ) : null}
+              {statusLabel ? (
                 <span
                   className={`planner-block__status planner-block__status--${timelineStatus} ${isUpNext ? "planner-block__status--up-next" : ""}`}
                 >
                   {statusLabel}
                 </span>
-              </div>
-              <div className="planner-block__title">
-                {block.title || <span className="planner-block__untitled">Untitled block</span>}
-              </div>
-              <div className="planner-block__subline">
-                {sortedTasks.length > 0 ? (
-                  <span className="planner-block__task-count">
-                    {completedCount}/{sortedTasks.length} tasks
-                  </span>
-                ) : (
-                  <span className="planner-block__task-count">Open block</span>
-                )}
-                {canCarryPending && nextBlock ? (
-                  <span className="planner-block__task-count">
-                    Carry open into {nextBlock.title || formatTimeLabel(nextBlock.startsAt)}
-                  </span>
-                ) : null}
-              </div>
+              ) : null}
             </div>
             <div className="planner-block__actions">
               <button
-                className="planner-block__action-btn planner-block__action-btn--text"
+                className="planner-block__action-icon"
                 type="button"
-                onClick={() => onNudgeDuration(-1)}
-                disabled={isPending || Boolean(shortenValidation.error)}
-                aria-label="Shorten block by fifteen minutes"
+                onClick={() => setEditing(true)}
+                aria-label="Edit block"
+                title="Edit"
               >
-                -15m
+                ✎
               </button>
               <button
-                className="planner-block__action-btn planner-block__action-btn--text"
-                type="button"
-                onClick={() => onNudgeDuration(1)}
-                disabled={isPending || Boolean(extendValidation.error)}
-                aria-label="Extend block by fifteen minutes"
-              >
-                +15m
-              </button>
-              <button
-                className="planner-block__action-btn"
-                type="button"
-                onClick={() => onMoveBlock(-1)}
-                disabled={!canMoveUp || isPending}
-                aria-label="Move block up"
-                title="Move block up in list order"
-              >
-                ↑
-              </button>
-              <button
-                className="planner-block__action-btn"
-                type="button"
-                onClick={() => onMoveBlock(1)}
-                disabled={!canMoveDown || isPending}
-                aria-label="Move block down"
-                title="Move block down in list order"
-              >
-                ↓
-              </button>
-              <button
-                className="planner-block__action-btn planner-block__action-btn--text"
+                className="planner-block__action-icon"
                 type="button"
                 onClick={() => setShowAddTaskPicker((current) => !current)}
                 disabled={availableTasks.length === 0 || isPending}
                 aria-label="Add tasks to block"
+                title="Add tasks"
               >
-                + Task
+                +
               </button>
-              <button
-                className="planner-block__action-btn planner-block__action-btn--text"
-                type="button"
-                onClick={onCarryPendingToNext}
-                disabled={!canCarryPending || isPending}
-                aria-label="Carry unfinished tasks into the next block"
-              >
-                Carry
-              </button>
-              <button
-                className="planner-block__action-btn planner-block__action-btn--text"
-                type="button"
-                onClick={onDuplicateBlock}
-                disabled={!canDuplicate || isPending}
-                aria-label="Duplicate block"
-              >
-                Duplicate
-              </button>
-              <button
-                className="planner-block__action-btn planner-block__action-btn--text"
-                type="button"
-                onClick={onSplitBlock}
-                disabled={!canSplit || isPending}
-                aria-label="Split block in two"
-              >
-                Split
-              </button>
-              <button
-                className="planner-block__action-btn"
-                type="button"
-                onClick={() => setEditing(true)}
-                aria-label="Edit block"
-              >
-                ✎
-              </button>
-              {isEmpty ? (
+              <div className="planner-block__overflow" ref={overflowRef}>
                 <button
-                  className="planner-block__action-btn planner-block__action-btn--delete"
+                  className="planner-block__action-icon planner-block__overflow-trigger"
                   type="button"
-                  onClick={onDeleteBlock}
-                  disabled={isPending}
-                  aria-label="Delete block"
+                  onClick={() => setShowOverflow((current) => !current)}
+                  aria-label="More actions"
+                  title="More"
                 >
-                  ✕
+                  ···
                 </button>
-              ) : null}
+                {showOverflow ? (
+                  <div className="planner-block__overflow-menu">
+                    <button
+                      className="planner-block__overflow-item"
+                      type="button"
+                      onClick={() => { onNudgeDuration(-1); setShowOverflow(false); }}
+                      disabled={isPending || Boolean(shortenValidation.error)}
+                    >
+                      Shorten 15m
+                    </button>
+                    <button
+                      className="planner-block__overflow-item"
+                      type="button"
+                      onClick={() => { onNudgeDuration(1); setShowOverflow(false); }}
+                      disabled={isPending || Boolean(extendValidation.error)}
+                    >
+                      Extend 15m
+                    </button>
+                    <div className="planner-block__overflow-divider" />
+                    <button
+                      className="planner-block__overflow-item"
+                      type="button"
+                      onClick={() => { onMoveBlock(-1); setShowOverflow(false); }}
+                      disabled={!canMoveUp || isPending}
+                    >
+                      Move up
+                    </button>
+                    <button
+                      className="planner-block__overflow-item"
+                      type="button"
+                      onClick={() => { onMoveBlock(1); setShowOverflow(false); }}
+                      disabled={!canMoveDown || isPending}
+                    >
+                      Move down
+                    </button>
+                    <div className="planner-block__overflow-divider" />
+                    <button
+                      className="planner-block__overflow-item"
+                      type="button"
+                      onClick={() => { onDuplicateBlock(); setShowOverflow(false); }}
+                      disabled={!canDuplicate || isPending}
+                    >
+                      Duplicate
+                    </button>
+                    <button
+                      className="planner-block__overflow-item"
+                      type="button"
+                      onClick={() => { onSplitBlock(); setShowOverflow(false); }}
+                      disabled={!canSplit || isPending}
+                    >
+                      Split in two
+                    </button>
+                    {canCarryPending && nextBlock ? (
+                      <button
+                        className="planner-block__overflow-item"
+                        type="button"
+                        onClick={() => { onCarryPendingToNext(); setShowOverflow(false); }}
+                        disabled={isPending}
+                      >
+                        Carry open to {nextBlock.title || formatTimeLabel(nextBlock.startsAt)}
+                      </button>
+                    ) : null}
+                    {isEmpty ? (
+                      <>
+                        <div className="planner-block__overflow-divider" />
+                        <button
+                          className="planner-block__overflow-item planner-block__overflow-item--danger"
+                          type="button"
+                          onClick={() => { onDeleteBlock(); setShowOverflow(false); }}
+                          disabled={isPending}
+                        >
+                          Delete block
+                        </button>
+                      </>
+                    ) : null}
+                  </div>
+                ) : null}
+              </div>
             </div>
           </>
         )}
       </div>
-
-      {timelineStatus === "past" && pendingCount > 0 ? (
-        <div className="planner-block__past-note">
-          {pendingCount} task{pendingCount === 1 ? "" : "s"} still belong to this finished block. Use the cleanup actions above or move them forward from here.
-        </div>
-      ) : null}
 
       {showAddTaskPicker ? (
         <div
@@ -441,7 +561,7 @@ export function PlannerBlock({
           }}
         >
           <div className="planner-block__picker-header">
-            <span>Plan several tasks into this block</span>
+            <span>Plan tasks into this block</span>
             <button
               className="button button--ghost button--small"
               type="button"
@@ -538,6 +658,14 @@ export function PlannerBlock({
         </div>
       ) : null}
 
+      {/* Resize handle */}
+      <div
+        className="planner-block__resize-handle"
+        onMouseDown={handleResizeStart}
+        onTouchStart={handleResizeStart}
+        title="Drag to resize"
+      />
+
       {sortedTasks.length > 0 ? (
         <div className="planner-block__tasks">
           {sortedTasks.map((bt, index) => (
@@ -627,7 +755,7 @@ export function PlannerBlock({
         </div>
       ) : (
         <div className="planner-block__empty-hint">
-          No tasks assigned yet. Use + Task to place work here, or keep it as a free block.
+          No tasks yet
         </div>
       )}
     </div>

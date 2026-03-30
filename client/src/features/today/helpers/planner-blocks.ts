@@ -95,10 +95,24 @@ export const getNextAvailableTime = (blocks: DayPlannerBlockItem[]): string => {
   return latestBlock ? toTimeInputValue(latestBlock.endsAt) : "09:00";
 };
 
-export const getPlannerBlockDate = (block: DayPlannerBlockItem) => block.startsAt.slice(0, 10);
+export const getPlannerBlockDate = (block: DayPlannerBlockItem): string => {
+  // Parse via Date to ensure correct local date even for UTC strings
+  const d = new Date(block.startsAt);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+};
 
-export const getPlannerBlockTimezoneOffset = (block: DayPlannerBlockItem) =>
-  block.startsAt.slice(-6);
+export const getPlannerBlockTimezoneOffset = (block: DayPlannerBlockItem): string => {
+  // Handle "+HH:MM" or "-HH:MM" suffix (6 chars)
+  const tail6 = block.startsAt.slice(-6);
+  if (/^[+-]\d{2}:\d{2}$/.test(tail6)) {
+    return tail6;
+  }
+  // Fallback: use local timezone offset (handles "Z" or ".000Z" endings)
+  return getLocalTimezoneOffset();
+};
 
 export const getDuplicateBlockWindow = (input: {
   block: DayPlannerBlockItem;

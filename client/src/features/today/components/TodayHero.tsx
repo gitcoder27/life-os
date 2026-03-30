@@ -16,30 +16,16 @@ function getScoreColor(value: number) {
   return "var(--negative)";
 }
 
-function getGreeting(): string {
-  const hour = new Date().getHours();
-  if (hour < 12) return "Good morning";
-  if (hour < 17) return "Good afternoon";
-  return "Good evening";
-}
-
-function formatDayLabel(isoDate: string): string {
-  const date = new Date(`${isoDate}T12:00:00`);
-  return date.toLocaleDateString(undefined, {
-    weekday: "long",
-    day: "numeric",
-    month: "long",
-  }).toUpperCase();
-}
-
 export function TodayHero({
   mode,
   onModeChange,
   plannerBlockCount,
+  compact = false,
 }: {
   mode: "execute" | "plan";
   onModeChange: (mode: "execute" | "plan") => void;
   plannerBlockCount: number;
+  compact?: boolean;
 }) {
   const today = getTodayDate();
   const scoreQuery = useDailyScoreQuery(today);
@@ -61,12 +47,7 @@ export function TodayHero({
     : 0;
 
   return (
-    <section className="today-hero">
-      <div className="today-hero__left">
-        <span className="today-hero__date">{formatDayLabel(today)}</span>
-        <h1 className="today-hero__greeting">{getGreeting()}</h1>
-      </div>
-
+    <section className={`today-hero${compact ? " today-hero--compact" : ""}`}>
       <div className={`today-hero__score${bumped ? " today-hero__score--bumped" : ""}`}>
         {score ? (
           <>

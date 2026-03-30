@@ -17,6 +17,7 @@ export function UnplannedTasks({
   const [batchMode, setBatchMode] = useState(false);
   const [selectedTaskIds, setSelectedTaskIds] = useState<string[]>([]);
   const [targetBlockId, setTargetBlockId] = useState(blocks[0]?.id ?? "");
+  const [expanded, setExpanded] = useState(false);
 
   useEffect(() => {
     setSelectedTaskIds((current) =>
@@ -32,11 +33,21 @@ export function UnplannedTasks({
 
   if (tasks.length === 0) {
     return (
-      <div className="unplanned-lane">
-        <h3 className="unplanned-lane__title">Unplanned tasks</h3>
+      <div className={`unplanned-lane${expanded ? " unplanned-lane--expanded" : ""}`}>
+        <div
+          className="unplanned-lane__header"
+          onClick={() => setExpanded((c) => !c)}
+          role="button"
+          tabIndex={0}
+          onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") setExpanded((c) => !c); }}
+        >
+          <div className="unplanned-lane__header-main">
+            <h3 className="unplanned-lane__title">Unplanned</h3>
+          </div>
+        </div>
         <div className="unplanned-lane__empty">
           <span className="unplanned-lane__empty-icon">✓</span>
-          <p>All tasks are planned!</p>
+          <p>All planned</p>
         </div>
       </div>
     );
@@ -68,8 +79,14 @@ export function UnplannedTasks({
   }
 
   return (
-    <div className="unplanned-lane">
-      <div className="unplanned-lane__header">
+    <div className={`unplanned-lane${expanded ? " unplanned-lane--expanded" : ""}`}>
+      <div
+        className="unplanned-lane__header"
+        onClick={() => setExpanded((c) => !c)}
+        role="button"
+        tabIndex={0}
+        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") setExpanded((c) => !c); }}
+      >
         <div className="unplanned-lane__header-main">
           <h3 className="unplanned-lane__title">Unplanned</h3>
           <span className="unplanned-lane__count">{tasks.length}</span>
@@ -78,7 +95,8 @@ export function UnplannedTasks({
           <button
             className="button button--ghost button--small"
             type="button"
-            onClick={() => {
+            onClick={(e) => {
+              e.stopPropagation();
               setBatchMode((current) => !current);
               setSelectedTaskIds([]);
             }}
@@ -91,7 +109,7 @@ export function UnplannedTasks({
 
       {blocks.length === 0 ? (
         <div className="unplanned-lane__helper">
-          Create a block first, then assign tasks from here or from inside a block.
+          Create a block first, then assign tasks from here.
         </div>
       ) : null}
 
