@@ -1597,6 +1597,7 @@
   flex-direction: column;
   gap: 0.75rem;
   min-width: 0;
+  padding-bottom: 2rem;
 }
 
 /* ── Time Gutter + Track ────────────────────────────── */
@@ -2304,7 +2305,10 @@
   border-radius: var(--r-xs);
   font-size: var(--fs-small);
   color: var(--text);
-  transition: background var(--dur-fast) var(--ease);
+  transition:
+    background var(--dur-fast) var(--ease),
+    box-shadow var(--dur-fast) var(--ease),
+    transform var(--dur-fast) var(--ease);
 }
 
 .planner-block__task:not(:last-child) {
@@ -2315,6 +2319,12 @@
   background: rgba(255,255,255,0.02);
 }
 
+.planner-block__task--dragging {
+  background: rgba(255,255,255,0.06);
+  box-shadow: 0 14px 30px rgba(0,0,0,0.22);
+  z-index: 2;
+}
+
 .planner-block__task--done {
   opacity: 0.5;
 }
@@ -2322,6 +2332,36 @@
 .planner-block__task--done .planner-block__task-title {
   text-decoration: line-through;
   color: var(--text-tertiary);
+}
+
+.planner-block__task-handle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.4rem;
+  height: 1.4rem;
+  padding: 0;
+  border: none;
+  border-radius: var(--r-xs);
+  background: transparent;
+  color: var(--text-tertiary);
+  cursor: grab;
+  flex-shrink: 0;
+  transition: background var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
+}
+
+.planner-block__task-handle:hover {
+  background: rgba(255,255,255,0.08);
+  color: var(--text);
+}
+
+.planner-block__task-handle:active {
+  cursor: grabbing;
+}
+
+.planner-block__task-handle:disabled {
+  cursor: default;
+  opacity: 0.45;
 }
 
 .planner-block__task-check {
@@ -2703,7 +2743,7 @@
 
 .unplanned-lane {
   position: sticky;
-  top: 1rem;
+  top: calc(var(--shell-header-height, 0px) + 1rem);
   display: flex;
   flex-direction: column;
   gap: 0.4rem;
@@ -2711,7 +2751,7 @@
   border-radius: var(--r);
   border: 1px solid var(--border);
   background: linear-gradient(180deg, var(--panel-elevated), var(--panel));
-  max-height: calc(100vh - 10rem);
+  max-height: calc(100vh - var(--shell-header-height, 0px) - 2rem);
   overflow-y: auto;
 }
 
@@ -2898,7 +2938,6 @@
 }
 
 .unplanned-task__actions {
-  position: relative;
   flex-shrink: 0;
 }
 
@@ -2929,26 +2968,27 @@
   cursor: not-allowed;
 }
 
-.unplanned-task__picker {
-  position: absolute;
-  right: 0;
-  top: calc(100% + 4px);
-  z-index: 20;
-  min-width: 200px;
+.block-target-picker__menu {
+  position: fixed;
+  z-index: 120;
+  max-height: min(22rem, calc(100vh - 1.5rem));
+  overflow-y: auto;
   padding: 0.35rem;
   border-radius: var(--r-sm);
   border: 1px solid var(--border-active);
-  background: var(--panel-elevated);
-  box-shadow: var(--shadow-md);
+  background:
+    linear-gradient(180deg, rgba(16, 24, 36, 0.98), rgba(12, 18, 28, 0.98));
+  box-shadow: 0 24px 60px rgba(0,0,0,0.35);
   animation: scaleIn 0.15s var(--ease) both;
+  backdrop-filter: blur(18px);
 }
 
-.unplanned-task__picker-item {
+.block-target-picker__item {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: 0.6rem;
   width: 100%;
-  padding: 0.45rem 0.55rem;
+  padding: 0.55rem 0.65rem;
   border-radius: var(--r-xs);
   border: none;
   background: transparent;
@@ -2960,22 +3000,27 @@
   transition: background var(--dur-fast) var(--ease);
 }
 
-.unplanned-task__picker-item:hover {
+.block-target-picker__item:hover {
   background: rgba(255,255,255,0.06);
 }
 
-.unplanned-task__picker-time {
+.block-target-picker__time {
+  min-width: 3.5rem;
   font-size: var(--fs-micro);
   font-weight: 700;
   color: var(--accent);
   flex-shrink: 0;
-  min-width: 3.5rem;
 }
 
-.unplanned-task__picker-label {
+.block-target-picker__title {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  color: var(--text-secondary);
+}
+
+.unplanned-task__picker {
+  border-color: rgba(217,153,58,0.35);
 }
 
 /* ── Planner Summary (Context Panel) ────────────────── */
@@ -3846,6 +3891,10 @@
     opacity: 1;
   }
 
+  .planner-block__task-handle {
+    color: var(--text-secondary);
+  }
+
   .planner-gap__add-btn {
     opacity: 1;
   }
@@ -3900,11 +3949,18 @@
     justify-content: center;
   }
 
+  .block-target-picker__menu {
+    left: 0.75rem !important;
+    right: 0.75rem;
+    top: auto !important;
+    bottom: 1rem;
+    min-width: 0 !important;
+    width: auto;
+    max-height: min(20rem, calc(100vh - 6rem));
+  }
+
   .unplanned-task__picker {
-    position: static;
-    width: 100%;
-    margin-top: 0.45rem;
-    min-width: 0;
+    margin-top: 0;
   }
 
   .unplanned-lane__batch-controls .button,
@@ -3922,6 +3978,10 @@
 
   .planner-block__task-actions {
     opacity: 1;
+  }
+
+  .planner-block__task-handle {
+    color: var(--text-secondary);
   }
 
   .planner-gap__add-btn {

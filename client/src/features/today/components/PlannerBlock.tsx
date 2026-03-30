@@ -1,4 +1,21 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  DndContext,
+  PointerSensor,
+  KeyboardSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  arrayMove,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import type { DayPlannerBlockItem, TaskItem } from "../../../shared/lib/api";
 import { formatTimeLabel } from "../../../shared/lib/api";
 import {
@@ -11,7 +28,7 @@ import {
   toTimeInputValue,
   validatePlannerBlockDraft,
 } from "../helpers/planner-blocks";
-import { CheckIcon } from "../helpers/icons";
+import { CheckIcon, GripIcon } from "../helpers/icons";
 
 export function PlannerBlock({
   block,
@@ -285,14 +302,6 @@ export function PlannerBlock({
     setEditing(false);
   }
 
-  function handleMoveTask(index: number, direction: -1 | 1) {
-    const ids = sortedTasks.map((bt) => bt.taskId);
-    const target = index + direction;
-    if (target < 0 || target >= ids.length) return;
-    [ids[index], ids[target]] = [ids[target], ids[index]];
-    onReorderTasks(ids);
-  }
-
   function toggleSelectedTask(taskId: string) {
     setSelectedTaskIds((current) =>
       current.includes(taskId)
@@ -321,6 +330,28 @@ export function PlannerBlock({
       : isUpNext
         ? "Next"
         : null;
+  const taskIds = sortedTasks.map((bt) => bt.taskId);
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
+
+  function handleTaskDragEnd(event: DragEndEvent) {
+    const { active, over } = event;
+    if (!over || active.id === over.id) {
+      return;
+    }
+
+    const oldIndex = taskIds.findIndex((taskId) => taskId === active.id);
+    const newIndex = taskIds.findIndex((taskId) => taskId === over.id);
+
+    if (oldIndex < 0 || newIndex < 0) {
+      return;
+    }
+
+    const reordered = arrayMove(taskIds, oldIndex, newIndex);
+    onReorderTasks(reordered);
+  }
 
   return (
     <div
@@ -667,97 +698,139 @@ export function PlannerBlock({
       />
 
       {sortedTasks.length > 0 ? (
-        <div className="planner-block__tasks">
-          {sortedTasks.map((bt, index) => (
-            <Fragment key={bt.taskId}>
-              <div
-                className={`planner-block__task ${bt.task.status === "completed" ? "planner-block__task--done" : ""}`}
-              >
-                <span className="planner-block__task-check">
-                  {bt.task.status === "completed" ? <CheckIcon /> : null}
-                </span>
-                <span className="planner-block__task-title">{bt.task.title}</span>
-                <div className="planner-block__task-actions">
-                  {index > 0 ? (
-                    <button
-                      className="planner-block__task-move"
-                      type="button"
-                      onClick={() => handleMoveTask(index, -1)}
-                      disabled={isPending}
-                      aria-label="Move task up"
-                    >
-                      ↑
-                    </button>
-                  ) : null}
-                  {index < sortedTasks.length - 1 ? (
-                    <button
-                      className="planner-block__task-move"
-                      type="button"
-                      onClick={() => handleMoveTask(index, 1)}
-                      disabled={isPending}
-                      aria-label="Move task down"
-                    >
-                      ↓
-                    </button>
-                  ) : null}
-                  <button
-                    className="planner-block__task-move planner-block__task-move--label"
-                    type="button"
-                    onClick={() =>
-                      setMovingTaskId((current) => (current === bt.taskId ? null : bt.taskId))
-                    }
-                    disabled={availableBlocks.length <= 1 || isPending}
-                    aria-label="Move task to another block"
-                  >
-                    Move
-                  </button>
-                  <button
-                    className="planner-block__task-remove"
-                    type="button"
-                    onClick={() => onRemoveTask(bt.taskId)}
-                    disabled={isPending}
-                    aria-label="Remove from block"
-                  >
-                    ✕
-                  </button>
-                </div>
-              </div>
-              {movingTaskId === bt.taskId ? (
-                <div className="planner-block__task-picker">
-                  <div className="planner-block__task-picker-label">Move to block</div>
-                  <div className="planner-block__task-picker-list">
-                    {availableBlocks
-                      .filter((candidate) => candidate.id !== block.id)
-                      .map((candidate) => (
-                        <button
-                          key={candidate.id}
-                          className="planner-block__task-picker-item"
-                          type="button"
-                          onClick={() => {
-                            onMoveTaskToBlock(bt.taskId, candidate);
-                            setMovingTaskId(null);
-                          }}
-                          disabled={isPending}
-                        >
-                          <span className="planner-block__task-picker-time">
-                            {formatTimeLabel(candidate.startsAt)}
-                          </span>
-                          <span className="planner-block__task-picker-title">
-                            {candidate.title || "Untitled block"}
-                          </span>
-                        </button>
-                      ))}
-                  </div>
-                </div>
-              ) : null}
-            </Fragment>
-          ))}
-        </div>
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCenter}
+          onDragEnd={handleTaskDragEnd}
+        >
+          <SortableContext items={taskIds} strategy={verticalListSortingStrategy}>
+            <div className="planner-block__tasks">
+              {sortedTasks.map((bt) => (
+                <SortablePlannerTaskRow
+                  key={bt.taskId}
+                  item={bt}
+                  isMovePickerOpen={movingTaskId === bt.taskId}
+                  canMoveToAnotherBlock={availableBlocks.length > 1}
+                  isPending={isPending}
+                  availableBlocks={availableBlocks}
+                  currentBlockId={block.id}
+                  onToggleMovePicker={() =>
+                    setMovingTaskId((current) => (current === bt.taskId ? null : bt.taskId))
+                  }
+                  onMoveToBlock={(targetBlock) => {
+                    onMoveTaskToBlock(bt.taskId, targetBlock);
+                    setMovingTaskId(null);
+                  }}
+                  onRemove={() => onRemoveTask(bt.taskId)}
+                />
+              ))}
+            </div>
+          </SortableContext>
+        </DndContext>
       ) : (
         <div className="planner-block__empty-hint">
           No tasks yet
         </div>
       )}
     </div>
+  );
+}
+
+function SortablePlannerTaskRow({
+  item,
+  isMovePickerOpen,
+  canMoveToAnotherBlock,
+  isPending,
+  availableBlocks,
+  currentBlockId,
+  onToggleMovePicker,
+  onMoveToBlock,
+  onRemove,
+}: {
+  item: DayPlannerBlockItem["tasks"][number];
+  isMovePickerOpen: boolean;
+  canMoveToAnotherBlock: boolean;
+  isPending: boolean;
+  availableBlocks: DayPlannerBlockItem[];
+  currentBlockId: string;
+  onToggleMovePicker: () => void;
+  onMoveToBlock: (targetBlock: DayPlannerBlockItem) => void;
+  onRemove: () => void;
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: item.taskId,
+    disabled: isPending,
+  });
+
+  return (
+    <Fragment>
+      <div
+        ref={setNodeRef}
+        style={{ transform: CSS.Transform.toString(transform), transition }}
+        className={`planner-block__task${
+          item.task.status === "completed" ? " planner-block__task--done" : ""
+        }${isDragging ? " planner-block__task--dragging" : ""}`}
+      >
+        <button
+          className="planner-block__task-handle"
+          type="button"
+          aria-label="Drag to reorder task"
+          disabled={isPending}
+          {...attributes}
+          {...listeners}
+        >
+          <GripIcon />
+        </button>
+        <span className="planner-block__task-check">
+          {item.task.status === "completed" ? <CheckIcon /> : null}
+        </span>
+        <span className="planner-block__task-title">{item.task.title}</span>
+        <div className="planner-block__task-actions">
+          <button
+            className="planner-block__task-move planner-block__task-move--label"
+            type="button"
+            onClick={onToggleMovePicker}
+            disabled={!canMoveToAnotherBlock || isPending}
+            aria-label="Move task to another block"
+          >
+            Move
+          </button>
+          <button
+            className="planner-block__task-remove"
+            type="button"
+            onClick={onRemove}
+            disabled={isPending}
+            aria-label="Remove from block"
+          >
+            ✕
+          </button>
+        </div>
+      </div>
+      {isMovePickerOpen ? (
+        <div className="planner-block__task-picker">
+          <div className="planner-block__task-picker-label">Move to block</div>
+          <div className="planner-block__task-picker-list">
+            {availableBlocks
+              .filter((candidate) => candidate.id !== currentBlockId)
+              .map((candidate) => (
+                <button
+                  key={candidate.id}
+                  className="planner-block__task-picker-item"
+                  type="button"
+                  onClick={() => onMoveToBlock(candidate)}
+                  disabled={isPending}
+                >
+                  <span className="planner-block__task-picker-time">
+                    {formatTimeLabel(candidate.startsAt)}
+                  </span>
+                  <span className="planner-block__task-picker-title">
+                    {candidate.title || "Untitled block"}
+                  </span>
+                </button>
+              ))}
+          </div>
+        </div>
+      ) : null}
+    </Fragment>
   );
 }

@@ -1,5 +1,6 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useEffect } from "react";
 import type { TaskItem, DayPlannerBlockItem } from "../../../shared/lib/api";
+import { BlockTargetPicker } from "./BlockTargetPicker";
 
 export function UnplannedTasks({
   tasks,
@@ -219,20 +220,6 @@ function UnplannedTaskRow({
   onToggleSelection: () => void;
   onQuickAssign: (block: DayPlannerBlockItem) => void;
 }) {
-  const [showPicker, setShowPicker] = useState(false);
-  const pickerRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!showPicker) return;
-    function handler(e: MouseEvent) {
-      if (pickerRef.current && !pickerRef.current.contains(e.target as Node)) {
-        setShowPicker(false);
-      }
-    }
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, [showPicker]);
-
   return (
     <div className={`unplanned-task${batchMode ? " unplanned-task--batch" : ""}`}>
       {batchMode ? (
@@ -257,7 +244,7 @@ function UnplannedTaskRow({
       </div>
 
       {!batchMode ? (
-        <div className="unplanned-task__actions" ref={pickerRef}>
+        <div className="unplanned-task__actions">
           {blocks.length > 0 ? (
             <>
               {blocks.length === 1 ? (
@@ -271,39 +258,14 @@ function UnplannedTaskRow({
                   → {formatBlockLabel(blocks[0])}
                 </button>
               ) : (
-                <>
-                  <button
-                    className="unplanned-task__assign-btn"
-                    type="button"
-                    onClick={() => setShowPicker(!showPicker)}
-                    disabled={isPending}
-                  >
-                    + Assign
-                  </button>
-                  {showPicker ? (
-                    <div className="unplanned-task__picker">
-                      {blocks.map((block) => (
-                        <button
-                          key={block.id}
-                          className="unplanned-task__picker-item"
-                          type="button"
-                          onClick={() => {
-                            onQuickAssign(block);
-                            setShowPicker(false);
-                          }}
-                          disabled={isPending}
-                        >
-                          <span className="unplanned-task__picker-time">
-                            {formatBlockTime(block)}
-                          </span>
-                          <span className="unplanned-task__picker-label">
-                            {block.title || "Untitled"}
-                          </span>
-                        </button>
-                      ))}
-                    </div>
-                  ) : null}
-                </>
+                <BlockTargetPicker
+                  label="+ Assign"
+                  blocks={blocks}
+                  disabled={isPending}
+                  triggerClassName="unplanned-task__assign-btn"
+                  menuClassName="unplanned-task__picker"
+                  onSelect={onQuickAssign}
+                />
               )}
             </>
           ) : null}
