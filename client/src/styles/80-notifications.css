@@ -289,22 +289,41 @@
 
 .shell-notif-btn {
   position: relative;
-}
-
-.shell-notif-badge {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 1.15rem;
-  height: 1.15rem;
-  padding: 0 0.3rem;
-  font-size: 0.65rem;
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+  border: none;
+  border-radius: var(--r-xs);
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.shell-notif-btn:hover {
+  background: var(--panel-hover);
+  color: var(--text);
+}
+
+.shell-notif-badge {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0.9rem;
+  height: 0.9rem;
+  padding: 0 0.2rem;
+  font-size: 0.55rem;
   font-weight: 700;
   line-height: 1;
   color: #0f0d08;
   background: var(--negative);
   border-radius: var(--r-pill);
-  margin-left: 0.35rem;
 }
 
 /* ── Notification settings ── */

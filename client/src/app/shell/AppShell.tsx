@@ -376,17 +376,21 @@ export function AppShell() {
 
       <div className="shell-main" style={shellMainStyle}>
         <header className="shell-header" ref={headerRef}>
-          <div>
-            <p className="shell-header__eyebrow">{formatLongDate(today)}</p>
+          <div className="shell-header__left">
             <h2 className="shell-header__title">{headerGreeting}</h2>
+            <span className="shell-header__date">{formatLongDate(today)}</span>
           </div>
           <div className="shell-header__actions">
             <button
-              className="button button--ghost shell-notif-btn"
+              className="shell-notif-btn"
               type="button"
               onClick={() => navigate("/notifications")}
+              aria-label={unreadCount > 0 ? `Notifications, ${unreadCount} unread` : "Notifications"}
             >
-              Notifications
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+                <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+              </svg>
               {unreadCount > 0 && (
                 <span className="shell-notif-badge" aria-label={`${unreadCount} unread`}>
                   {unreadCount > 99 ? "99+" : unreadCount}
@@ -394,7 +398,7 @@ export function AppShell() {
               )}
             </button>
             <button
-              className="button button--primary shell-header__capture"
+              className="shell-header__capture"
               onClick={() => setCaptureOpen(true)}
               type="button"
             >
