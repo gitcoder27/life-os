@@ -113,6 +113,10 @@ type DayPlannerBlocksMutationResponse = {
   plannerBlocks: DayPlannerBlockItem[];
 };
 
+type ReplacePlannerBlockTasksMutationContext = {
+  previousDayPlan?: DayPlanResponse;
+};
+
 export type DayPriorityInput = {
   id?: string;
   slot: 1 | 2 | 3;
@@ -412,7 +416,46 @@ export const useReplacePlannerBlockTasksMutation = (date: string) => {
         { method: "PUT", body: { taskIds } },
       ),
     meta: { errorMessage: "Task assignment failed." },
-    onSuccess: () => invalidateCoreData(queryClient, date),
+    onMutate: async ({ blockId, taskIds }): Promise<ReplacePlannerBlockTasksMutationContext> => {
+      await queryClient.cancelQueries({ queryKey: queryKeys.dayPlan(date) });
+
+      const previousDayPlan = queryClient.getQueryData<DayPlanResponse>(queryKeys.dayPlan(date));
+      if (!previousDayPlan) {
+        return {};
+      }
+
+      const nextDayPlan = optimisticallyReplacePlannerBlockTasks(previousDayPlan, blockId, taskIds);
+      queryClient.setQueryData<DayPlanResponse>(queryKeys.dayPlan(date), nextDayPlan);
+
+      return { previousDayPlan };
+    },
+    onError: (_error, _variables, context) => {
+      if (context?.previousDayPlan) {
+        queryClient.setQueryData<DayPlanResponse>(queryKeys.dayPlan(date), context.previousDayPlan);
+      }
+    },
+    onSuccess: (response) => {
+      queryClient.setQueryData<DayPlanResponse>(
+        queryKeys.dayPlan(date),
+        (current) => {
+          if (!current) {
+            return current;
+          }
+
+          return {
+            ...current,
+            generatedAt: response.generatedAt,
+            plannerBlocks: current.plannerBlocks.map((block) =>
+              block.id === response.plannerBlock.id ? response.plannerBlock : block,
+            ),
+          };
+        },
+      );
+      invalidateCoreData(queryClient, date);
+    },
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.dayPlan(date) });
+    },
   });
 };
 
@@ -429,6 +472,66 @@ export const useRemovePlannerBlockTaskMutation = (date: string) => {
     onSuccess: () => invalidateCoreData(queryClient, date),
   });
 };
+
+function optimisticallyReplacePlannerBlockTasks(
+  dayPlan: DayPlanResponse,
+  targetBlockId: string,
+  nextTaskIds: string[],
+): DayPlanResponse {
+  const knownTasks = new Map<string, TaskItem>();
+  for (const task of dayPlan.tasks) {
+    knownTasks.set(task.id, task);
+  }
+
+  for (const block of dayPlan.plannerBlocks) {
+    for (const blockTask of block.tasks) {
+      knownTasks.set(blockTask.taskId, blockTask.task);
+    }
+  }
+
+  const nextTaskIdSet = new Set(nextTaskIds);
+
+  return {
+    ...dayPlan,
+    plannerBlocks: dayPlan.plannerBlocks.map((block) => {
+      if (block.id === targetBlockId) {
+        return {
+          ...block,
+          tasks: nextTaskIds
+            .map((taskId, index) => {
+              const task = knownTasks.get(taskId);
+              if (!task) {
+                return null;
+              }
+
+              return {
+                taskId,
+                sortOrder: index,
+                task,
+              };
+            })
+            .filter((item): item is DayPlannerBlockTaskItem => item !== null),
+        };
+      }
+
+      const filteredTasks = block.tasks
+        .filter((blockTask) => !nextTaskIdSet.has(blockTask.taskId))
+        .map((blockTask, index) => ({
+          ...blockTask,
+          sortOrder: index,
+        }));
+
+      if (filteredTasks.length === block.tasks.length) {
+        return block;
+      }
+
+      return {
+        ...block,
+        tasks: filteredTasks,
+      };
+    }),
+  };
+}
 
 export const useUpdateTaskMutation = (date: string) => {
   const queryClient = useQueryClient();

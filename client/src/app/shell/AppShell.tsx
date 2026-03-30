@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 
 import { QuickCaptureSheet } from "../../features/capture/QuickCaptureSheet";
@@ -69,6 +69,8 @@ function navClass(isActive: boolean) {
 export function AppShell() {
   const [captureOpen, setCaptureOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => readStoredShellSidebarPreference());
+  const [headerHeight, setHeaderHeight] = useState(0);
+  const headerRef = useRef<HTMLElement>(null);
   const navigate = useNavigate();
   const today = getTodayDate();
   const sessionQuery = useSessionQuery();
@@ -111,8 +113,37 @@ export function AppShell() {
     writeStoredShellSidebarPreference(sidebarCollapsed);
   }, [sidebarCollapsed]);
 
+  useEffect(() => {
+    const headerElement = headerRef.current;
+    if (!headerElement) {
+      return;
+    }
+
+    const updateHeaderHeight = () => {
+      setHeaderHeight(headerElement.getBoundingClientRect().height);
+    };
+
+    updateHeaderHeight();
+    window.addEventListener("resize", updateHeaderHeight);
+
+    if (typeof ResizeObserver === "undefined") {
+      return () => window.removeEventListener("resize", updateHeaderHeight);
+    }
+
+    const resizeObserver = new ResizeObserver(() => updateHeaderHeight());
+    resizeObserver.observe(headerElement);
+
+    return () => {
+      window.removeEventListener("resize", updateHeaderHeight);
+      resizeObserver.disconnect();
+    };
+  }, []);
+
   const sidebarClassName = `shell${sidebarCollapsed ? " shell--sidebar-collapsed" : ""}`;
   const sidebarToggleLabel = sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar";
+  const shellMainStyle = {
+    "--shell-header-height": `${headerHeight}px`,
+  } as CSSProperties;
 
   return (
     <div className={sidebarClassName}>
@@ -206,8 +237,8 @@ export function AppShell() {
         </div>
       </aside>
 
-      <div className="shell-main">
-        <header className="shell-header">
+      <div className="shell-main" style={shellMainStyle}>
+        <header className="shell-header" ref={headerRef}>
           <div>
             <p className="shell-header__eyebrow">{formatLongDate(today)}</p>
             <h2 className="shell-header__title">{greeting}</h2>

@@ -9,7 +9,6 @@ import {
   type TaskTemplate,
 } from "../../shared/lib/api";
 import { EmptyState, InlineErrorState } from "../../shared/ui/PageState";
-import { SectionCard } from "../../shared/ui/SectionCard";
 
 type TemplateFormState = {
   name: string;
@@ -52,7 +51,6 @@ export function WorkflowTemplatesSection() {
   const createTaskTemplateMutation = useCreateTaskTemplateMutation();
   const updateTaskTemplateMutation = useUpdateTaskTemplateMutation();
   const applyTaskTemplateMutation = useApplyTaskTemplateMutation(today);
-  const [isExpanded, setIsExpanded] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [editingTemplateId, setEditingTemplateId] = useState<string | null>(null);
   const [form, setForm] = useState<TemplateFormState>(emptyTemplateForm);
@@ -72,14 +70,12 @@ export function WorkflowTemplatesSection() {
           : null;
 
   function openCreate() {
-    setIsExpanded(true);
     setEditingTemplateId(null);
     setForm(emptyTemplateForm);
     setShowForm(true);
   }
 
   function openEdit(template: TaskTemplate) {
-    setIsExpanded(true);
     setEditingTemplateId(template.id);
     setForm({
       name: template.name,
@@ -138,43 +134,8 @@ export function WorkflowTemplatesSection() {
     setApplyFeedback(`Added ${response.tasks.length} task${response.tasks.length === 1 ? "" : "s"} to Inbox.`);
   }
 
-  if (!isExpanded) {
-    return (
-      <section className="workflow-template-collapsed">
-        <div className="workflow-template-collapsed__copy">
-          <span className="workflow-template-collapsed__title">Workflow templates</span>
-          <span className="workflow-template-collapsed__meta">
-            {taskTemplatesQuery.isLoading && !taskTemplatesQuery.data
-              ? "Loading…"
-              : `${templates.length} saved template${templates.length === 1 ? "" : "s"}`}
-          </span>
-        </div>
-        <button
-          className="button button--ghost button--small"
-          type="button"
-          onClick={() => setIsExpanded(true)}
-        >
-          Show
-        </button>
-      </section>
-    );
-  }
-
   return (
-    <SectionCard
-      title="Workflow templates"
-      subtitle="Reusable checklists for recurring task bundles. Apply once, then triage in Inbox as usual."
-    >
-      <div className="workflow-template-toolbar">
-        <button
-          className="button button--ghost button--small"
-          type="button"
-          onClick={() => setIsExpanded(false)}
-        >
-          Hide templates
-        </button>
-      </div>
-
+    <div>
       {mutationError ? (
         <InlineErrorState
           message={mutationError}
@@ -297,6 +258,6 @@ export function WorkflowTemplatesSection() {
           + New template
         </button>
       ) : null}
-    </SectionCard>
+    </div>
   );
 }

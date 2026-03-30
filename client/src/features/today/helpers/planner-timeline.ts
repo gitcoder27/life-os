@@ -17,6 +17,7 @@ const BLOCK_MIN_HEIGHT_WITH_TASKS = 128;
 const GAP_MIN_HEIGHT = 52;
 const SEGMENT_PIXELS_PER_MINUTE = 1.2;
 const GAP_PIXELS_PER_MINUTE = 0.7;
+const CALENDAR_PIXELS_PER_MINUTE = 1.4;
 
 export type PlannerVisibleHoursPreference = {
   startTime: string;
@@ -41,15 +42,28 @@ export type PlannerTimelineSegment = {
   hourMarkers: number[];
   currentMarkerPercent: number | null;
   minHeight: number;
+  topPx: number;
+  heightPx: number;
   block?: DayPlannerBlockItem;
+};
+
+export type TimeGutterMarker = {
+  minutes: number;
+  label: string;
+  topPercent: number;
 };
 
 export type PlannerTimelineModel = {
   segments: PlannerTimelineSegment[];
   totalFreeMinutes: number;
+  totalRenderedMinutes: number;
+  totalHeightPx: number;
+  nowLinePx: number | null;
   currentBlockId: string | null;
   nextBlockId: string | null;
   visibleRangeLabel: string;
+  nowLinePercent: number | null;
+  gutterMarkers: TimeGutterMarker[];
   renderedRange: {
     startMinutes: number;
     endMinutes: number;
@@ -191,6 +205,7 @@ export const buildPlannerTimelineModel = (input: {
           startMinutes: cursorMinutes,
           endMinutes: blockStartMinutes,
           durationMinutes: gapDuration,
+          renderedStartMinutes,
           now: input.now,
         }),
       );
@@ -205,6 +220,7 @@ export const buildPlannerTimelineModel = (input: {
         startMinutes: blockStartMinutes,
         endMinutes: blockEndMinutes,
         durationMinutes: Math.max(blockEndMinutes - blockStartMinutes, 0),
+        renderedStartMinutes,
         now: input.now,
         block,
       }),
@@ -227,17 +243,36 @@ export const buildPlannerTimelineModel = (input: {
         startMinutes: cursorMinutes,
         endMinutes: renderedEndMinutes,
         durationMinutes: gapDuration,
+        renderedStartMinutes,
         now: input.now,
       }),
     );
   }
 
+  const totalRenderedMinutes = renderedEndMinutes - renderedStartMinutes;
+  const totalHeightPx = Math.round(totalRenderedMinutes * CALENDAR_PIXELS_PER_MINUTE);
+  const nowMinutes = input.now.getHours() * 60 + input.now.getMinutes();
+  const nowLinePercent =
+    nowMinutes >= renderedStartMinutes && nowMinutes <= renderedEndMinutes && totalRenderedMinutes > 0
+      ? ((nowMinutes - renderedStartMinutes) / totalRenderedMinutes) * 100
+      : null;
+  const nowLinePx =
+    nowMinutes >= renderedStartMinutes && nowMinutes <= renderedEndMinutes
+      ? Math.round((nowMinutes - renderedStartMinutes) * CALENDAR_PIXELS_PER_MINUTE)
+      : null;
+  const gutterMarkers = buildTimeGutterMarkers(renderedStartMinutes, renderedEndMinutes, totalRenderedMinutes);
+
   return {
     segments,
     totalFreeMinutes,
+    totalRenderedMinutes,
+    totalHeightPx,
+    nowLinePx,
     currentBlockId: currentBlock?.id ?? null,
     nextBlockId: currentBlock ? null : nextBlock?.id ?? null,
     visibleRangeLabel: `${input.preferredHours.startTime} - ${input.preferredHours.endTime}`,
+    nowLinePercent,
+    gutterMarkers,
     renderedRange,
   };
 };
@@ -250,6 +285,7 @@ const buildSegment = (input: {
   startMinutes: number;
   endMinutes: number;
   durationMinutes: number;
+  renderedStartMinutes: number;
   now: Date;
   block?: DayPlannerBlockItem;
 }): PlannerTimelineSegment => ({
@@ -271,6 +307,8 @@ const buildSegment = (input: {
           Math.round(input.durationMinutes * SEGMENT_PIXELS_PER_MINUTE),
         )
       : Math.max(GAP_MIN_HEIGHT, Math.round(input.durationMinutes * GAP_PIXELS_PER_MINUTE)),
+  topPx: Math.round((input.startMinutes - input.renderedStartMinutes) * CALENDAR_PIXELS_PER_MINUTE),
+  heightPx: Math.max(Math.round(input.durationMinutes * CALENDAR_PIXELS_PER_MINUTE), input.kind === "block" ? 40 : 20),
   block: input.block,
 });
 
@@ -344,4 +382,22 @@ const isNowWithinRange = (startsAt: string, endsAt: string, now: Date) => {
   const end = new Date(endsAt).getTime();
   const nowTime = now.getTime();
   return nowTime >= start && nowTime < end;
+};
+
+const buildTimeGutterMarkers = (
+  startMinutes: number,
+  endMinutes: number,
+  totalMinutes: number,
+): TimeGutterMarker[] => {
+  if (totalMinutes <= 0) return [];
+  const markers: TimeGutterMarker[] = [];
+  const firstHour = Math.ceil(startMinutes / 60) * 60;
+  for (let minutes = firstHour; minutes <= endMinutes; minutes += 60) {
+    markers.push({
+      minutes,
+      label: minutesToTimeString(minutes),
+      topPercent: ((minutes - startMinutes) / totalMinutes) * 100,
+    });
+  }
+  return markers;
 };

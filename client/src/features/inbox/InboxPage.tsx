@@ -2,33 +2,26 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import { useAppFeedback } from "../../app/providers";
 import {
-  getReminderDate,
   getTodayDate,
-  toIsoDate,
   useBulkUpdateTasksMutation,
   useGoalsListQuery,
   useInboxQuery,
   useUpdateTaskMutation,
   type BulkUpdateTasksInput,
-  type LinkedGoal,
-  type TaskListCounts,
   type TaskItem,
+  type TaskListCounts,
 } from "../../shared/lib/api";
+import { getQuickCaptureText } from "../../shared/lib/quickCapture";
 import {
-  getQuickCaptureDisplayText,
-  getQuickCaptureText,
-} from "../../shared/lib/quickCapture";
-import { GoalCombobox } from "../../shared/ui/GoalCombobox";
-import { PageHeader } from "../../shared/ui/PageHeader";
-import {
-  EmptyState,
   InlineErrorState,
   PageErrorState,
   PageLoadingState,
 } from "../../shared/ui/PageState";
-import { SectionCard } from "../../shared/ui/SectionCard";
-import { SmartDatePicker } from "../../shared/ui/SmartDatePicker";
-import { WorkflowTemplatesSection } from "./WorkflowTemplatesSection";
+import { InboxBulkBar } from "./InboxBulkBar";
+import { InboxEmptyState } from "./InboxEmptyState";
+import { InboxInspector } from "./InboxInspector";
+import { InboxQueueItem } from "./InboxQueueItem";
+import { InboxTemplatesModal } from "./InboxTemplatesModal";
 
 type InboxFilter = "all" | "task" | "note" | "reminder";
 
@@ -39,115 +32,45 @@ const filterOptions: Array<{ id: InboxFilter; label: string }> = [
   { id: "reminder", label: "Reminders" },
 ];
 const INBOX_PAGE_SIZE = 50;
-const EMPTY_COUNTS: TaskListCounts = {
-  all: 0,
-  task: 0,
-  note: 0,
-  reminder: 0,
-};
+const EMPTY_COUNTS: TaskListCounts = { all: 0, task: 0, note: 0, reminder: 0 };
+const STALE_THRESHOLD_MS = 3 * 24 * 60 * 60 * 1000;
 
-function getTomorrowDate(isoDate: string) {
-  const tomorrow = new Date(`${isoDate}T12:00:00`);
-  tomorrow.setDate(tomorrow.getDate() + 1);
-  return toIsoDate(tomorrow);
-}
-
-function getInboxItemKind(task: TaskItem): Exclude<InboxFilter, "all"> {
-  return task.kind;
-}
-
-function formatCreatedAt(isoDateTime: string) {
-  const date = new Date(isoDateTime);
-  const now = new Date();
-  const diffMs = now.getTime() - date.getTime();
-  const diffMinutes = Math.floor(diffMs / 60_000);
-
-  if (diffMinutes < 1) return "just now";
-  if (diffMinutes < 60) return `${diffMinutes}m ago`;
-  const diffHours = Math.floor(diffMinutes / 60);
-  if (diffHours < 24) return `${diffHours}h ago`;
-  const diffDays = Math.floor(diffHours / 24);
-  if (diffDays < 7) return `${diffDays}d ago`;
-
-  return date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
-}
-
-function getKindLabel(kind: Exclude<InboxFilter, "all">) {
-  switch (kind) {
-    case "note":
-      return "Note";
-    case "reminder":
-      return "Reminder";
-    default:
-      return "Task";
-  }
-}
-
-function getKindTagClass(kind: Exclude<InboxFilter, "all">) {
-  switch (kind) {
-    case "note":
-      return "tag tag--neutral";
-    case "reminder":
-      return "tag tag--warning";
-    default:
-      return "tag tag--positive";
-  }
+function isItemStale(item: TaskItem) {
+  return Date.now() - new Date(item.createdAt).getTime() > STALE_THRESHOLD_MS;
 }
 
 function getBulkSuccessMessage(
   action: BulkUpdateTasksInput["action"],
   taskCount: number,
-  goalTitle?: string,
 ) {
   if (action.type === "schedule") {
     const label = action.scheduledForDate === getTodayDate() ? "Moved" : "Scheduled";
     return `${label} ${taskCount} inbox item${taskCount === 1 ? "" : "s"}.`;
   }
-
-  if (action.type === "link_goal") {
-    if (!action.goalId) {
-      return `Removed the goal link from ${taskCount} inbox item${taskCount === 1 ? "" : "s"}.`;
-    }
-
-    return `Linked ${taskCount} inbox item${taskCount === 1 ? "" : "s"} to ${goalTitle ?? "the selected goal"}.`;
-  }
-
   return `Archived ${taskCount} inbox item${taskCount === 1 ? "" : "s"}.`;
-}
-
-function GoalChip({ goal }: { goal: LinkedGoal }) {
-  return (
-    <span className="goal-chip">
-      <span className={`goal-chip__dot goal-chip__dot--${goal.domain}`} />
-      <span>{goal.title}</span>
-    </span>
-  );
 }
 
 export function InboxPage() {
   const today = getTodayDate();
-  const tomorrow = getTomorrowDate(today);
   const { pushFeedback } = useAppFeedback();
   const goalsListQuery = useGoalsListQuery();
   const updateTaskMutation = useUpdateTaskMutation(today);
   const bulkSuccessMessageRef = useRef("Inbox updated.");
   const bulkUpdateTasksMutation = useBulkUpdateTasksMutation(today, {
     onSuccess: () => {
-      setSelectedTaskIds([]);
+      setCheckedIds(new Set());
       pushFeedback(bulkSuccessMessageRef.current, "success");
     },
   });
+
   const [activeFilter, setActiveFilter] = useState<InboxFilter>("all");
-  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
-  const [selectedTaskIds, setSelectedTaskIds] = useState<string[]>([]);
-  const [inspectorTab, setInspectorTab] = useState<"inspector" | "templates">("inspector");
+  const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
+  const [checkedIds, setCheckedIds] = useState<Set<string>>(new Set());
+  const [isTemplatesOpen, setIsTemplatesOpen] = useState(false);
   const [loadedItems, setLoadedItems] = useState<TaskItem[]>([]);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
-  const [scheduleDate, setScheduleDate] = useState(tomorrow);
-  const [selectedGoalId, setSelectedGoalId] = useState("");
-  const [bulkScheduleDate, setBulkScheduleDate] = useState(tomorrow);
-  const [bulkGoalId, setBulkGoalId] = useState("");
+
   const activeKind = activeFilter === "all" ? undefined : activeFilter;
   const inboxQuery = useInboxQuery({
     kind: activeKind,
@@ -155,14 +78,8 @@ export function InboxPage() {
     includeSummary: true,
   });
   const loadMoreQuery = useInboxQuery(
-    {
-      kind: activeKind,
-      cursor: nextCursor ?? undefined,
-      limit: INBOX_PAGE_SIZE,
-    },
-    {
-      enabled: false,
-    },
+    { kind: activeKind, cursor: nextCursor ?? undefined, limit: INBOX_PAGE_SIZE },
+    { enabled: false },
   );
 
   const activeGoals = useMemo(
@@ -170,92 +87,66 @@ export function InboxPage() {
     [goalsListQuery.data],
   );
 
-  const goalTitleById = useMemo(
-    () => new Map(activeGoals.map((goal) => [goal.id, goal.title])),
-    [activeGoals],
-  );
-
   const filteredItems = loadedItems;
+  const selectedItem = filteredItems.find((item) => item.id === selectedItemId) ?? null;
+  const hasBulkSelection = checkedIds.size > 0;
+  const isMutating = updateTaskMutation.isPending || bulkUpdateTasksMutation.isPending;
 
-  const selectedTask = filteredItems.find((item) => item.id === selectedTaskId) ?? filteredItems[0] ?? null;
-  const selectedTaskKind = selectedTask ? getInboxItemKind(selectedTask) : null;
-  const selectedTaskText = selectedTask ? getQuickCaptureText(selectedTask, selectedTask.title) : "";
-  const selectedTaskIdsSet = useMemo(() => new Set(selectedTaskIds), [selectedTaskIds]);
-  const bulkSelectedItems = filteredItems.filter((item) => selectedTaskIdsSet.has(item.id));
-  const hasBulkSelection = bulkSelectedItems.length > 0;
-  const allFilteredItemsSelected =
-    filteredItems.length > 0 && filteredItems.every((item) => selectedTaskIdsSet.has(item.id));
-
+  // Reset on filter change
   useEffect(() => {
     setLoadedItems([]);
     setNextCursor(null);
-    setSelectedTaskId(null);
-    setSelectedTaskIds([]);
+    setSelectedItemId(null);
+    setCheckedIds(new Set());
     setIsLoadingMore(false);
   }, [activeKind]);
 
+  // Sync loaded items from query
   useEffect(() => {
-    if (!inboxQuery.data) {
-      return;
-    }
-
+    if (!inboxQuery.data) return;
     setLoadedItems(inboxQuery.data.tasks);
     setNextCursor(inboxQuery.data.nextCursor);
     setIsLoadingMore(false);
   }, [inboxQuery.data]);
 
-  useEffect(() => {
-    const nextId = filteredItems[0]?.id ?? null;
-
-    if (!selectedTaskId || !filteredItems.some((item) => item.id === selectedTaskId)) {
-      setSelectedTaskId(nextId);
-    }
-  }, [filteredItems, selectedTaskId]);
-
+  // Clean up stale selected/checked IDs
   useEffect(() => {
     const visibleIds = new Set(filteredItems.map((item) => item.id));
-    setSelectedTaskIds((current) => current.filter((taskId) => visibleIds.has(taskId)));
-  }, [filteredItems]);
-
-  useEffect(() => {
-    if (!selectedTask) {
-      setScheduleDate(tomorrow);
-      setSelectedGoalId("");
-      return;
+    if (selectedItemId && !visibleIds.has(selectedItemId)) {
+      setSelectedItemId(null);
     }
+    setCheckedIds((current) => {
+      const cleaned = new Set([...current].filter((id) => visibleIds.has(id)));
+      return cleaned.size === current.size ? current : cleaned;
+    });
+  }, [filteredItems, selectedItemId]);
 
-    setScheduleDate(getReminderDate(selectedTask.reminderAt) ?? selectedTask.scheduledForDate ?? tomorrow);
-    setSelectedGoalId(selectedTask.goalId ?? "");
-  }, [selectedTask, tomorrow]);
+  // Close inspector when entering bulk mode
+  useEffect(() => {
+    if (hasBulkSelection) {
+      setSelectedItemId(null);
+    }
+  }, [hasBulkSelection]);
 
   const counts = inboxQuery.data?.counts ?? EMPTY_COUNTS;
-
   const mutationError =
     updateTaskMutation.error instanceof Error
       ? updateTaskMutation.error.message
       : bulkUpdateTasksMutation.error instanceof Error
         ? bulkUpdateTasksMutation.error.message
         : null;
-  const isMutating = updateTaskMutation.isPending || bulkUpdateTasksMutation.isPending;
+
   const retryAll = () => {
     void inboxQuery.refetch();
     void goalsListQuery.refetch();
   };
 
   async function handleLoadMore() {
-    if (!nextCursor || isLoadingMore) {
-      return;
-    }
-
+    if (!nextCursor || isLoadingMore) return;
     setIsLoadingMore(true);
-
     try {
       const result = await loadMoreQuery.refetch();
-
-      if (!result.data) {
-        return;
-      }
-
+      if (!result.data) return;
       setLoadedItems((current) => [...current, ...result.data.tasks]);
       setNextCursor(result.data.nextCursor);
     } finally {
@@ -263,128 +154,103 @@ export function InboxPage() {
     }
   }
 
-  function toggleTaskSelection(taskId: string) {
-    setSelectedTaskIds((current) =>
-      current.includes(taskId) ? current.filter((id) => id !== taskId) : [...current, taskId],
-    );
+  function toggleCheck(taskId: string) {
+    setCheckedIds((current) => {
+      const next = new Set(current);
+      if (next.has(taskId)) {
+        next.delete(taskId);
+      } else {
+        next.add(taskId);
+      }
+      return next;
+    });
   }
 
-  function selectAllVisibleItems() {
-    setSelectedTaskIds(filteredItems.map((item) => item.id));
+  function selectAll() {
+    setCheckedIds(new Set(filteredItems.map((item) => item.id)));
   }
 
   function clearSelection() {
-    setSelectedTaskIds([]);
+    setCheckedIds(new Set());
   }
 
-  function runBulkAction(action: BulkUpdateTasksInput["action"]) {
-    if (bulkSelectedItems.length === 0) {
-      return;
-    }
-
-    bulkSuccessMessageRef.current = getBulkSuccessMessage(
-      action,
-      bulkSelectedItems.length,
-      action.type === "link_goal" ? goalTitleById.get(action.goalId ?? "") : undefined,
-    );
-    const payload = {
-      taskIds: bulkSelectedItems.map((task) => task.id),
-      action,
-    } as BulkUpdateTasksInput;
-
-    bulkUpdateTasksMutation.mutate(payload);
-  }
-
-  function handleDoToday() {
-    if (!selectedTask) {
-      return;
-    }
-
+  // Single-item actions
+  function handleDoToday(taskId: string) {
+    const item = filteredItems.find((i) => i.id === taskId);
     updateTaskMutation.mutate({
-      taskId: selectedTask.id,
+      taskId,
       scheduledForDate: today,
-      reminderAt: selectedTask.kind === "reminder" ? today : undefined,
+      reminderAt: item?.kind === "reminder" ? today : undefined,
     });
   }
 
-  function handleSchedule() {
-    if (!selectedTask || !scheduleDate) {
-      return;
-    }
-
+  function handleSchedule(taskId: string, date: string) {
+    const item = filteredItems.find((i) => i.id === taskId);
     updateTaskMutation.mutate({
-      taskId: selectedTask.id,
-      scheduledForDate: scheduleDate,
-      reminderAt: selectedTask.kind === "reminder" ? scheduleDate : undefined,
+      taskId,
+      scheduledForDate: date,
+      reminderAt: item?.kind === "reminder" ? date : undefined,
     });
   }
 
-  function handleLinkGoal() {
-    if (!selectedTask) {
-      return;
-    }
-
-    updateTaskMutation.mutate({
-      taskId: selectedTask.id,
-      goalId: selectedGoalId || null,
-    });
+  function handleArchive(taskId: string) {
+    updateTaskMutation.mutate({ taskId, status: "dropped" });
   }
 
-  function handleConvertToNote() {
-    if (!selectedTask) {
-      return;
-    }
-
+  function handleConvertToNote(taskId: string) {
+    const item = filteredItems.find((i) => i.id === taskId);
+    if (!item) return;
+    const text = getQuickCaptureText(item, item.title);
     updateTaskMutation.mutate({
-      taskId: selectedTask.id,
+      taskId,
       kind: "note",
-      notes: selectedTaskText || selectedTask.title,
+      notes: text || item.title,
       reminderAt: null,
     });
   }
 
-  function handleArchive() {
-    if (!selectedTask) {
-      return;
-    }
-
+  function handleConvertToReminder(taskId: string) {
+    const item = filteredItems.find((i) => i.id === taskId);
+    if (!item) return;
     updateTaskMutation.mutate({
-      taskId: selectedTask.id,
-      status: "dropped",
+      taskId,
+      kind: "reminder",
     });
+  }
+
+  function handleLinkGoal(taskId: string, goalId: string | null) {
+    updateTaskMutation.mutate({ taskId, goalId });
+  }
+
+  function handleUpdateTitle(taskId: string, title: string) {
+    updateTaskMutation.mutate({ taskId, title });
+  }
+
+  function handleUpdateNotes(taskId: string, notes: string | null) {
+    updateTaskMutation.mutate({ taskId, notes });
+  }
+
+  // Bulk actions
+  function runBulkAction(action: BulkUpdateTasksInput["action"]) {
+    const taskIds = [...checkedIds];
+    if (taskIds.length === 0) return;
+    bulkSuccessMessageRef.current = getBulkSuccessMessage(action, taskIds.length);
+    bulkUpdateTasksMutation.mutate({ taskIds, action } as BulkUpdateTasksInput);
   }
 
   function handleBulkDoToday() {
-    runBulkAction({
-      type: "schedule",
-      scheduledForDate: today,
-    });
+    runBulkAction({ type: "schedule", scheduledForDate: today });
   }
 
-  function handleBulkSchedule() {
-    if (!bulkScheduleDate) {
-      return;
-    }
-
-    runBulkAction({
-      type: "schedule",
-      scheduledForDate: bulkScheduleDate,
-    });
-  }
-
-  function handleBulkLinkGoal() {
-    runBulkAction({
-      type: "link_goal",
-      goalId: bulkGoalId || null,
-    });
+  function handleBulkSchedule(date: string) {
+    runBulkAction({ type: "schedule", scheduledForDate: date });
   }
 
   function handleBulkArchive() {
-    runBulkAction({
-      type: "archive",
-    });
+    runBulkAction({ type: "archive" });
   }
 
+  // Loading / error states
   if (inboxQuery.isLoading && !inboxQuery.data) {
     return (
       <PageLoadingState
@@ -406,137 +272,93 @@ export function InboxPage() {
 
   return (
     <div className="page">
-      <PageHeader
-        eyebrow="Capture triage"
-        title="Inbox"
-        description="Everything unscheduled lands here first. Decide what belongs on Today, what should be scheduled later, and what should stay as reference."
-      />
-
-      {mutationError ? <InlineErrorState message={mutationError} onRetry={retryAll} /> : null}
-
-      <section className="inbox-summary">
-        <div className="inbox-summary__headline">
-          <span className="inbox-summary__count">{counts.all}</span>
-          <div>
-            <p className="inbox-summary__label">Pending inbox items</p>
-            <p className="inbox-summary__copy">Keep intake friction low. Add structure only when you are ready to schedule or organize.</p>
-          </div>
-        </div>
-        <div className="inbox-summary__stats">
-          <span>Tasks {counts.task}</span>
-          <span>Notes {counts.note}</span>
-          <span>Reminders {counts.reminder}</span>
-        </div>
-      </section>
-
-      <div className="two-column-grid inbox-grid">
-        <SectionCard
-          className="inbox-panel inbox-panel--queue"
-          title={`Queue (${counts[activeFilter]})`}
-          subtitle="Newest inbox items first. Open one item to inspect it, or use checkboxes to triage a batch."
+      <div className="inbox-header">
+        <h1 className="inbox-header__title">
+          Inbox
+          {counts.all > 0 && <span className="inbox-header__count">{counts.all}</span>}
+        </h1>
+        <button
+          className="button button--ghost button--small"
+          type="button"
+          onClick={() => setIsTemplatesOpen(true)}
         >
-          <div className="inbox-filter-bar" role="tablist" aria-label="Inbox filters">
-            {filterOptions.map((option) => (
-              <button
-                key={option.id}
-                className={`inbox-filter${activeFilter === option.id ? " inbox-filter--active" : ""}`}
-                type="button"
-                onClick={() => setActiveFilter(option.id)}
-              >
-                <span>{option.label}</span>
-                <strong>{counts[option.id]}</strong>
-              </button>
-            ))}
-          </div>
+          Templates
+        </button>
+      </div>
 
+      <div className="inbox-filters" role="tablist" aria-label="Inbox filters">
+        {filterOptions.map((option) => {
+          const count = counts[option.id];
+          const isActive = activeFilter === option.id;
+          const isZero = count === 0 && option.id !== "all";
+          return (
+            <button
+              key={option.id}
+              className={[
+                "inbox-filters__item",
+                isActive && "inbox-filters__item--active",
+                isZero && "inbox-filters__item--zero",
+              ]
+                .filter(Boolean)
+                .join(" ")}
+              type="button"
+              role="tab"
+              aria-selected={isActive}
+              onClick={() => setActiveFilter(option.id)}
+            >
+              {option.label} <span className="inbox-filters__count">{count}</span>
+            </button>
+          );
+        })}
+      </div>
+
+      {mutationError && <InlineErrorState message={mutationError} onRetry={retryAll} />}
+
+      <div className="inbox-workspace">
+        <div className="inbox-workspace__list">
           {filteredItems.length > 0 ? (
-            <>
-              <div className="inbox-selection-bar">
-                <div className="inbox-selection-bar__summary">
-                  <strong>{bulkSelectedItems.length}</strong>
-                  <span>{bulkSelectedItems.length === 1 ? "item selected" : "items selected"}</span>
-                </div>
-                <div className="button-row button-row--wrap">
-                  <button
-                    className="button button--ghost"
-                    type="button"
-                    onClick={allFilteredItemsSelected ? clearSelection : selectAllVisibleItems}
-                    disabled={isMutating}
-                  >
-                    {allFilteredItemsSelected ? "Clear visible" : "Select all visible"}
-                  </button>
-                  {hasBulkSelection ? (
-                    <button
-                      className="button button--ghost"
-                      type="button"
-                      onClick={clearSelection}
-                      disabled={isMutating}
-                    >
-                      Clear selection
-                    </button>
-                  ) : null}
-                </div>
-              </div>
+            <div className="inbox-queue">
+              {filteredItems.map((item, index) => (
+                <InboxQueueItem
+                  key={item.id}
+                  item={item}
+                  index={index}
+                  isActive={item.id === selectedItemId}
+                  isChecked={checkedIds.has(item.id)}
+                  isStale={isItemStale(item)}
+                  isMutating={isMutating}
+                  today={today}
+                  onSelect={() => {
+                    setSelectedItemId(item.id);
+                    setCheckedIds(new Set());
+                  }}
+                  onToggleCheck={() => toggleCheck(item.id)}
+                  onDoToday={() => handleDoToday(item.id)}
+                  onSchedule={(date) => handleSchedule(item.id, date)}
+                  onArchive={() => handleArchive(item.id)}
+                  onConvertToNote={() => handleConvertToNote(item.id)}
+                  onLinkGoal={() => {
+                    setSelectedItemId(item.id);
+                    setCheckedIds(new Set());
+                  }}
+                />
+              ))}
 
-              <ul className="inbox-list">
-                {filteredItems.map((item) => {
-                  const itemKind = getInboxItemKind(item);
-                  const isSelected = item.id === selectedTask?.id;
-                  const isChecked = selectedTaskIdsSet.has(item.id);
-                  const preview = getQuickCaptureDisplayText(item, item.title);
-
-                  return (
-                    <li key={item.id}>
-                      <button
-                        className={`inbox-item${isSelected ? " inbox-item--active" : ""}${isChecked ? " inbox-item--checked" : ""}`}
-                        type="button"
-                        onClick={() => {
-                          setSelectedTaskId(item.id);
-                          setInspectorTab("inspector");
-                        }}
-                      >
-                        <div className="inbox-item__topline">
-                          <div className="inbox-item__topline-left">
-                            <label
-                              className="inbox-item__check"
-                              onClick={(e) => e.stopPropagation()}
-                            >
-                              <input
-                                type="checkbox"
-                                checked={isChecked}
-                                onChange={() => toggleTaskSelection(item.id)}
-                                disabled={isMutating}
-                                aria-label={`Select ${preview}`}
-                              />
-                            </label>
-                            <span className={getKindTagClass(itemKind)}>{getKindLabel(itemKind)}</span>
-                          </div>
-                          <span className="inbox-item__time">{formatCreatedAt(item.createdAt)}</span>
-                        </div>
-                        <strong className="inbox-item__title">{preview}</strong>
-                        <div className="inbox-item__meta">
-                          {getReminderDate(item.reminderAt) ? (
-                            <span>⏰ {getReminderDate(item.reminderAt)}</span>
-                          ) : null}
-                          {item.goal ? <GoalChip goal={item.goal} /> : <span className="inbox-item__unlinked">Unlinked</span>}
-                        </div>
-                      </button>
-                    </li>
-                  );
-                })}
-              </ul>
-
-              {loadMoreQuery.isError ? (
+              {loadMoreQuery.isError && (
                 <InlineErrorState
-                  message={loadMoreQuery.error instanceof Error ? loadMoreQuery.error.message : "More inbox items could not load."}
+                  message={
+                    loadMoreQuery.error instanceof Error
+                      ? loadMoreQuery.error.message
+                      : "More inbox items could not load."
+                  }
                   onRetry={() => void handleLoadMore()}
                 />
-              ) : null}
+              )}
 
-              {nextCursor ? (
-                <div className="button-row" style={{ marginTop: "0.75rem" }}>
+              {nextCursor && (
+                <div className="inbox-queue__load-more">
                   <button
-                    className="button button--ghost"
+                    className="button button--ghost button--small"
                     type="button"
                     onClick={() => void handleLoadMore()}
                     disabled={isLoadingMore}
@@ -544,272 +366,57 @@ export function InboxPage() {
                     {isLoadingMore ? "Loading more..." : "Load more"}
                   </button>
                 </div>
-              ) : null}
-            </>
-          ) : (
-            <EmptyState
-              title="Inbox is clear"
-              description="Nothing is waiting for triage right now. Use Quick Capture to drop something in."
-            />
-          )}
-        </SectionCard>
-
-        <SectionCard
-          className="inbox-panel inbox-panel--detail"
-          title={hasBulkSelection ? "Bulk actions" : inspectorTab === "templates" ? "Templates" : selectedTask ? "Inspector" : "Triage"}
-          subtitle={
-            hasBulkSelection
-              ? "Apply one decision across the checked items. Clear selection to return to single-item triage."
-              : inspectorTab === "templates"
-                ? "Reusable checklists you can drop into your inbox."
-                : selectedTask
-                  ? "Promote, schedule, link, convert, or archive without leaving the queue."
-                  : "Select an item to decide where it belongs."
-          }
-        >
-          {!hasBulkSelection ? (
-            <div className="inbox-tab-bar" role="tablist" aria-label="Inspector tabs">
-              <button
-                className={`inbox-tab${inspectorTab === "inspector" ? " inbox-tab--active" : ""}`}
-                type="button"
-                role="tab"
-                aria-selected={inspectorTab === "inspector"}
-                onClick={() => setInspectorTab("inspector")}
-              >
-                Inspector
-              </button>
-              <button
-                className={`inbox-tab${inspectorTab === "templates" ? " inbox-tab--active" : ""}`}
-                type="button"
-                role="tab"
-                aria-selected={inspectorTab === "templates"}
-                onClick={() => setInspectorTab("templates")}
-              >
-                Templates
-              </button>
-            </div>
-          ) : null}
-
-          {hasBulkSelection ? (
-            <div className="inbox-detail">
-              <div className="inbox-detail__hero">
-                <div className="inbox-detail__hero-main">
-                  <span className="tag tag--neutral">Batch mode</span>
-                  <strong>{bulkSelectedItems.length} selected</strong>
-                </div>
-                <span className="inbox-detail__time">Visible selection only</span>
-              </div>
-
-              <div className="inbox-detail__content">
-                <h2 className="inbox-detail__title">Process this group together</h2>
-                <p className="inbox-detail__body">
-                  Use one action when these captures belong on the same day, under the same goal, or should all leave the queue together.
-                </p>
-              </div>
-
-              <div className="inbox-detail__meta-grid">
-                <div>
-                  <span className="inbox-detail__meta-label">Selection</span>
-                  <strong>{bulkSelectedItems.length} items</strong>
-                </div>
-                <div>
-                  <span className="inbox-detail__meta-label">Tasks</span>
-                  <strong>{bulkSelectedItems.filter((item) => getInboxItemKind(item) === "task").length}</strong>
-                </div>
-                <div>
-                  <span className="inbox-detail__meta-label">Notes</span>
-                  <strong>{bulkSelectedItems.filter((item) => getInboxItemKind(item) === "note").length}</strong>
-                </div>
-                <div>
-                  <span className="inbox-detail__meta-label">Reminders</span>
-                  <strong>{bulkSelectedItems.filter((item) => getInboxItemKind(item) === "reminder").length}</strong>
-                </div>
-              </div>
-
-              <div className="inbox-detail__actions">
-                <div className="inbox-action-block">
-                  <div className="inbox-action-block__header">
-                    <h3>Promote</h3>
-                    <p>Move the whole selection onto today or another date in one step.</p>
-                  </div>
-                  <div className="button-row button-row--wrap inbox-action-row">
-                    <button
-                      className="button button--primary"
-                      type="button"
-                      onClick={handleBulkDoToday}
-                      disabled={isMutating}
-                    >
-                      Do today
-                    </button>
-                    <SmartDatePicker
-                      value={bulkScheduleDate}
-                      onChange={setBulkScheduleDate}
-                      minDate={today}
-                      disabled={isMutating}
-                    />
-                    <button
-                      className="button button--ghost"
-                      type="button"
-                      onClick={handleBulkSchedule}
-                      disabled={isMutating || !bulkScheduleDate}
-                    >
-                      Schedule
-                    </button>
-                  </div>
-                </div>
-
-                <div className="inbox-action-block">
-                  <div className="inbox-action-block__header">
-                    <h3>Organize</h3>
-                    <p>Apply the same context or archive decision across the selected group.</p>
-                  </div>
-                  <div className="button-row button-row--wrap inbox-action-row">
-                    <GoalCombobox
-                      goals={activeGoals}
-                      value={bulkGoalId}
-                      onChange={setBulkGoalId}
-                      disabled={goalsListQuery.isLoading || isMutating}
-                    />
-                    <button
-                      className="button button--ghost"
-                      type="button"
-                      onClick={handleBulkLinkGoal}
-                      disabled={isMutating}
-                    >
-                      {bulkGoalId ? "Link to goal" : "Remove goal"}
-                    </button>
-                    <button
-                      className="button button--ghost"
-                      type="button"
-                      onClick={handleBulkArchive}
-                      disabled={isMutating}
-                    >
-                      Archive
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
-          ) : inspectorTab === "templates" ? (
-            <WorkflowTemplatesSection />
-          ) : selectedTask ? (
-            <div className="inbox-detail">
-              <div className="inbox-detail__hero">
-                <div className="inbox-detail__hero-main">
-                  <span className={getKindTagClass(selectedTaskKind ?? "task")}>
-                    {getKindLabel(selectedTaskKind ?? "task")}
-                  </span>
-                  {selectedTask.goal ? <GoalChip goal={selectedTask.goal} /> : null}
-                </div>
-                <span className="inbox-detail__time">Created {formatCreatedAt(selectedTask.createdAt)}</span>
-              </div>
-
-              <div className="inbox-detail__content">
-                <h2 className="inbox-detail__title">{getQuickCaptureDisplayText(selectedTask, selectedTask.title)}</h2>
-                <p className="inbox-detail__body">{selectedTaskText || "No detail saved for this capture."}</p>
-              </div>
-
-              <div className="inbox-detail__meta-grid">
-                <div>
-                  <span className="inbox-detail__meta-label">Status</span>
-                  <strong>Pending triage</strong>
-                </div>
-                <div>
-                  <span className="inbox-detail__meta-label">Reminder date</span>
-                  <strong>{getReminderDate(selectedTask.reminderAt) ?? "None"}</strong>
-                </div>
-                <div>
-                  <span className="inbox-detail__meta-label">Goal link</span>
-                  <strong>{selectedTask.goal?.title ?? "None"}</strong>
-                </div>
-                <div>
-                  <span className="inbox-detail__meta-label">Execution date</span>
-                  <strong>{selectedTask.scheduledForDate ?? "Not scheduled"}</strong>
-                </div>
-              </div>
-
-              <div className="inbox-detail__actions">
-                <div className="inbox-action-block">
-                  <div className="inbox-action-block__header">
-                    <h3>Promote</h3>
-                    <p>Move only the captures that deserve execution space.</p>
-                  </div>
-                  <div className="button-row button-row--wrap inbox-action-row">
-                    <button
-                      className="button button--primary"
-                      type="button"
-                      onClick={handleDoToday}
-                      disabled={isMutating}
-                    >
-                      Do today
-                    </button>
-                    <SmartDatePicker
-                      value={scheduleDate}
-                      onChange={setScheduleDate}
-                      minDate={today}
-                      disabled={isMutating}
-                    />
-                    <button
-                      className="button button--ghost"
-                      type="button"
-                      onClick={handleSchedule}
-                      disabled={isMutating || !scheduleDate}
-                    >
-                      Schedule
-                    </button>
-                  </div>
-                </div>
-
-                <div className="inbox-action-block">
-                  <div className="inbox-action-block__header">
-                    <h3>Organize</h3>
-                    <p>Attach context before this item leaves the queue.</p>
-                  </div>
-                  <div className="button-row button-row--wrap inbox-action-row">
-                    <GoalCombobox
-                      goals={activeGoals}
-                      value={selectedGoalId}
-                      onChange={setSelectedGoalId}
-                      disabled={goalsListQuery.isLoading || isMutating}
-                    />
-                    <button
-                      className="button button--ghost"
-                      type="button"
-                      onClick={handleLinkGoal}
-                      disabled={isMutating}
-                    >
-                      Link to goal
-                    </button>
-                    {selectedTaskKind === "task" ? (
-                      <button
-                        className="button button--ghost"
-                        type="button"
-                        onClick={handleConvertToNote}
-                        disabled={isMutating}
-                      >
-                        Convert to note
-                      </button>
-                    ) : null}
-                    <button
-                      className="button button--ghost"
-                      type="button"
-                      onClick={handleArchive}
-                      disabled={isMutating}
-                    >
-                      Archive
-                    </button>
-                  </div>
-                </div>
-              </div>
+              )}
             </div>
           ) : (
-            <EmptyState
-              title="Select an item"
-              description="Choose a captured task, note, or reminder from the queue to triage it."
-            />
+            <InboxEmptyState />
           )}
-        </SectionCard>
+        </div>
+
+        {selectedItem && !hasBulkSelection && (
+          <>
+            <div
+              className="inbox-inspector-backdrop"
+              onClick={() => setSelectedItemId(null)}
+            />
+            <div className="inbox-workspace__inspector">
+              <InboxInspector
+                item={selectedItem}
+                activeGoals={activeGoals}
+                goalsLoading={goalsListQuery.isLoading}
+                isMutating={isMutating}
+                onClose={() => setSelectedItemId(null)}
+                onDoToday={() => handleDoToday(selectedItem.id)}
+                onSchedule={(date) => handleSchedule(selectedItem.id, date)}
+                onLinkGoal={(goalId) => handleLinkGoal(selectedItem.id, goalId)}
+                onConvertToNote={() => handleConvertToNote(selectedItem.id)}
+                onConvertToReminder={() => handleConvertToReminder(selectedItem.id)}
+                onArchive={() => handleArchive(selectedItem.id)}
+                onUpdateTitle={(title) => handleUpdateTitle(selectedItem.id, title)}
+                onUpdateNotes={(notes) => handleUpdateNotes(selectedItem.id, notes)}
+              />
+            </div>
+          </>
+        )}
       </div>
+
+      {hasBulkSelection && (
+        <InboxBulkBar
+          selectedCount={checkedIds.size}
+          totalCount={filteredItems.length}
+          today={today}
+          isMutating={isMutating}
+          onDoToday={handleBulkDoToday}
+          onSchedule={handleBulkSchedule}
+          onArchive={handleBulkArchive}
+          onSelectAll={selectAll}
+          onClear={clearSelection}
+        />
+      )}
+
+      {isTemplatesOpen && (
+        <InboxTemplatesModal onClose={() => setIsTemplatesOpen(false)} />
+      )}
     </div>
   );
 }
