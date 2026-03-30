@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import type { TaskItem } from "../../../shared/lib/api";
 import { getTodayDate } from "../../../shared/lib/api";
 import { getRecoveryTaskDetail } from "../helpers/date-helpers";
@@ -13,8 +14,70 @@ export function RecoveryTray({
   overdueTasks: TaskItem[];
   taskActions: TaskActions;
 }) {
+  const [searchParams] = useSearchParams();
+  const recoveryView = searchParams.get("view") === "overdue";
+  const selectedTaskId = searchParams.get("taskId");
+  const deepLinkKey = searchParams.toString();
   const [expanded, setExpanded] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const trayRef = useRef<HTMLElement>(null);
+  const handledDeepLinkRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!recoveryView) {
+      handledDeepLinkRef.current = null;
+      return;
+    }
+
+    setExpanded(true);
+  }, [recoveryView]);
+
+  useEffect(() => {
+    if (!recoveryView || !expanded || overdueTasks.length === 0) {
+      return;
+    }
+
+    if (selectedTaskId && !overdueTasks.some((task) => task.id === selectedTaskId)) {
+      return;
+    }
+
+    if (handledDeepLinkRef.current === deepLinkKey) {
+      return;
+    }
+
+    let timeoutId = 0;
+    const frameId = window.requestAnimationFrame(() => {
+      timeoutId = window.setTimeout(() => {
+        const topRail = document.querySelector(".today-top-rail");
+        const topRailHeight = topRail instanceof HTMLElement
+          ? topRail.getBoundingClientRect().height
+          : 0;
+        const shellHeaderHeight = parseFloat(
+          getComputedStyle(document.documentElement).getPropertyValue("--shell-header-height") || "0",
+        );
+        const scrollOffset = shellHeaderHeight + topRailHeight + 16;
+        const scrollTarget = selectedTaskId
+          ? document.getElementById(`recovery-row-${selectedTaskId}`)
+          : trayRef.current;
+
+        if (!scrollTarget) {
+          return;
+        }
+
+        const targetTop = window.scrollY + scrollTarget.getBoundingClientRect().top - scrollOffset;
+        window.scrollTo({
+          top: Math.max(targetTop, 0),
+          behavior: "smooth",
+        });
+        handledDeepLinkRef.current = deepLinkKey;
+      }, 80);
+    });
+
+    return () => {
+      window.cancelAnimationFrame(frameId);
+      window.clearTimeout(timeoutId);
+    };
+  }, [deepLinkKey, expanded, overdueTasks, recoveryView, selectedTaskId]);
 
   if (overdueTasks.length === 0) return null;
 
@@ -61,7 +124,7 @@ export function RecoveryTray({
   }
 
   return (
-    <section className="recovery-tray">
+    <section className="recovery-tray" ref={trayRef}>
       <button
         className="recovery-tray__header"
         type="button"
@@ -160,7 +223,10 @@ function RecoveryRow({
   taskActions: TaskActions;
 }) {
   return (
-    <div className={`recovery-row${isSelected ? " recovery-row--selected" : ""}`}>
+    <div
+      className={`recovery-row${isSelected ? " recovery-row--selected" : ""}`}
+      id={`recovery-row-${task.id}`}
+    >
       <input
         type="checkbox"
         className="recovery-row__checkbox"

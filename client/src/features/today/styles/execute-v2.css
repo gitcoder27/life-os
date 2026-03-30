@@ -970,6 +970,7 @@
   border: 1px solid rgba(201, 85, 76, 0.15);
   background: var(--panel);
   overflow: hidden;
+  scroll-margin-top: calc(var(--shell-header-height, 0px) + var(--today-top-rail-height, 0px) + 1rem);
   animation: slideUp 0.4s var(--ease) 0.2s both;
 }
 
