@@ -66,6 +66,34 @@ function navClass(isActive: boolean) {
   return `shell-nav__link${isActive ? " shell-nav__link--active" : ""}`;
 }
 
+const toTitleCaseToken = (value: string) => {
+  if (!value) {
+    return value;
+  }
+
+  return value.charAt(0).toLocaleUpperCase() + value.slice(1).toLocaleLowerCase();
+};
+
+const formatGreetingName = (displayName?: string | null, email?: string | null) => {
+  const fallbackName = email?.split("@")[0]?.replace(/[._]+/g, " ");
+  const rawName = displayName?.trim() || fallbackName?.trim();
+
+  if (!rawName) {
+    return null;
+  }
+
+  return rawName
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((word) =>
+      word
+        .split(/([-'])/)
+        .map((segment) => (segment === "-" || segment === "'" ? segment : toTitleCaseToken(segment)))
+        .join(""),
+    )
+    .join(" ");
+};
+
 export function AppShell() {
   const [captureOpen, setCaptureOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => readStoredShellSidebarPreference());
@@ -79,6 +107,8 @@ export function AppShell() {
   const notificationsQuery = useNotificationsQuery();
   const userEmail = sessionQuery.data?.user?.email ?? "owner@life-os";
   const greeting = homeQuery.data?.greeting ?? "Good day";
+  const greetingName = formatGreetingName(sessionQuery.data?.user?.displayName, userEmail);
+  const headerGreeting = greetingName ? `${greeting}, ${greetingName}` : greeting;
 
   const unreadCount = useMemo(() => {
     if (!notificationsQuery.data) return 0;
@@ -241,7 +271,7 @@ export function AppShell() {
         <header className="shell-header" ref={headerRef}>
           <div>
             <p className="shell-header__eyebrow">{formatLongDate(today)}</p>
-            <h2 className="shell-header__title">{greeting}</h2>
+            <h2 className="shell-header__title">{headerGreeting}</h2>
           </div>
           <div className="shell-header__actions">
             <button

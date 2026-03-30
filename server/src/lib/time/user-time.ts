@@ -141,15 +141,23 @@ export function getUserLocalWeekday(date: Date, timezone?: string | null) {
 export function getLocalGreeting(date: Date, timezone?: string | null) {
   const hour = getUserLocalHour(date, timezone);
 
+  if (hour < 5) {
+    return "Good night";
+  }
+
   if (hour < 12) {
     return "Good morning";
   }
 
-  if (hour < 18) {
+  if (hour < 17) {
     return "Good afternoon";
   }
 
-  return "Good evening";
+  if (hour < 22) {
+    return "Good evening";
+  }
+
+  return "Good night";
 }
 
 export function getDayWindowUtc(isoDate: IsoDateString, timezone?: string | null) {

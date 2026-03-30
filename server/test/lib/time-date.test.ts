@@ -8,7 +8,7 @@ import {
   parseIsoDate,
 } from "../../src/lib/time/cycle.js";
 import { getUtcGreeting, toIsoDateString } from "../../src/lib/time/date.js";
-import { getDayWindowUtc, getUserLocalDate } from "../../src/lib/time/user-time.js";
+import { getDayWindowUtc, getLocalGreeting, getUserLocalDate } from "../../src/lib/time/user-time.js";
 
 describe("time utilities", () => {
   it("parses ISO dates at UTC midnight", () => {
@@ -55,5 +55,13 @@ describe("time utilities", () => {
 
     expect(window.start.toISOString()).toBe("2026-01-15T08:00:00.000Z");
     expect(window.end.toISOString()).toBe("2026-01-16T08:00:00.000Z");
+  });
+
+  it("returns a user-local greeting with late-night coverage", () => {
+    expect(getLocalGreeting(new Date("2026-03-14T04:00:00.000Z"), "UTC")).toBe("Good night");
+    expect(getLocalGreeting(new Date("2026-03-14T05:00:00.000Z"), "UTC")).toBe("Good morning");
+    expect(getLocalGreeting(new Date("2026-03-14T12:00:00.000Z"), "UTC")).toBe("Good afternoon");
+    expect(getLocalGreeting(new Date("2026-03-14T17:00:00.000Z"), "UTC")).toBe("Good evening");
+    expect(getLocalGreeting(new Date("2026-03-14T22:00:00.000Z"), "UTC")).toBe("Good night");
   });
 });
