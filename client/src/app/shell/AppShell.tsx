@@ -1,5 +1,15 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type FocusEvent,
+  type MouseEvent,
+} from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
+import { createPortal } from "react-dom";
 
 import { QuickCaptureSheet } from "../../features/capture/QuickCaptureSheet";
 import {
@@ -22,10 +32,17 @@ import {
 
 const SHELL_SIDEBAR_STORAGE_KEY = "lifeos:shell-sidebar";
 const SHELL_SIDEBAR_STORAGE_VERSION = 1;
+const COLLAPSED_TOOLTIP_DELAY_MS = 650;
 
 type StoredShellSidebarPreference = {
   version: 1;
   collapsed: boolean;
+};
+
+type CollapsedTooltipState = {
+  label: string;
+  top: number;
+  left: number;
 };
 
 const readStoredShellSidebarPreference = () => {
@@ -97,8 +114,10 @@ const formatGreetingName = (displayName?: string | null, email?: string | null) 
 export function AppShell() {
   const [captureOpen, setCaptureOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => readStoredShellSidebarPreference());
+  const [collapsedTooltip, setCollapsedTooltip] = useState<CollapsedTooltipState | null>(null);
   const [headerHeight, setHeaderHeight] = useState(0);
   const headerRef = useRef<HTMLElement>(null);
+  const collapsedTooltipTimeoutRef = useRef<number | null>(null);
   const navigate = useNavigate();
   const today = getTodayDate();
   const sessionQuery = useSessionQuery();
@@ -144,6 +163,18 @@ export function AppShell() {
   }, [sidebarCollapsed]);
 
   useEffect(() => {
+    if (!sidebarCollapsed) {
+      setCollapsedTooltip(null);
+    }
+  }, [sidebarCollapsed]);
+
+  useEffect(() => () => {
+    if (collapsedTooltipTimeoutRef.current !== null) {
+      window.clearTimeout(collapsedTooltipTimeoutRef.current);
+    }
+  }, []);
+
+  useEffect(() => {
     const headerElement = headerRef.current;
     if (!headerElement) {
       return;
@@ -169,6 +200,64 @@ export function AppShell() {
     };
   }, []);
 
+  useEffect(() => {
+    if (!collapsedTooltip) {
+      return;
+    }
+
+    const dismissTooltip = () => setCollapsedTooltip(null);
+
+    window.addEventListener("scroll", dismissTooltip, true);
+    window.addEventListener("resize", dismissTooltip);
+
+    return () => {
+      window.removeEventListener("scroll", dismissTooltip, true);
+      window.removeEventListener("resize", dismissTooltip);
+    };
+  }, [collapsedTooltip]);
+
+  const hideCollapsedTooltip = useCallback(() => {
+    if (collapsedTooltipTimeoutRef.current !== null) {
+      window.clearTimeout(collapsedTooltipTimeoutRef.current);
+      collapsedTooltipTimeoutRef.current = null;
+    }
+    setCollapsedTooltip(null);
+  }, []);
+
+  const showCollapsedTooltip = useCallback((target: HTMLElement) => {
+    if (!sidebarCollapsed) {
+      return;
+    }
+
+    const label = target.dataset.shellLabel;
+    if (!label) {
+      return;
+    }
+
+    const bounds = target.getBoundingClientRect();
+    setCollapsedTooltip({
+      label,
+      top: bounds.top + bounds.height / 2,
+      left: bounds.right + 14,
+    });
+  }, [sidebarCollapsed]);
+
+  const queueCollapsedTooltip = useCallback((target: HTMLElement) => {
+    hideCollapsedTooltip();
+    collapsedTooltipTimeoutRef.current = window.setTimeout(() => {
+      showCollapsedTooltip(target);
+      collapsedTooltipTimeoutRef.current = null;
+    }, COLLAPSED_TOOLTIP_DELAY_MS);
+  }, [hideCollapsedTooltip, showCollapsedTooltip]);
+
+  const handleCollapsedTooltipMouseEnter = useCallback((event: MouseEvent<HTMLElement>) => {
+    queueCollapsedTooltip(event.currentTarget);
+  }, [queueCollapsedTooltip]);
+
+  const handleCollapsedTooltipFocus = useCallback((event: FocusEvent<HTMLElement>) => {
+    queueCollapsedTooltip(event.currentTarget);
+  }, [queueCollapsedTooltip]);
+
   const sidebarClassName = `shell${sidebarCollapsed ? " shell--sidebar-collapsed" : ""}`;
   const sidebarToggleLabel = sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar";
   const shellMainStyle = {
@@ -188,6 +277,10 @@ export function AppShell() {
               aria-label={sidebarToggleLabel}
               aria-expanded={!sidebarCollapsed}
               data-shell-label={sidebarToggleLabel}
+              onMouseEnter={handleCollapsedTooltipMouseEnter}
+              onMouseLeave={hideCollapsedTooltip}
+              onFocus={handleCollapsedTooltipFocus}
+              onBlur={hideCollapsedTooltip}
             >
               <span className="shell-action__icon" aria-hidden="true">
                 {sidebarCollapsed ? <ExpandIcon /> : <CollapseIcon />}
@@ -216,6 +309,10 @@ export function AppShell() {
                 to={item.to}
                 aria-label={sidebarCollapsed ? item.label : undefined}
                 data-shell-label={item.label}
+                onMouseEnter={handleCollapsedTooltipMouseEnter}
+                onMouseLeave={hideCollapsedTooltip}
+                onFocus={handleCollapsedTooltipFocus}
+                onBlur={hideCollapsedTooltip}
               >
                 <span className="shell-nav__icon" aria-hidden="true">
                   <Icon />
@@ -236,6 +333,10 @@ export function AppShell() {
             type="button"
             aria-label={sidebarCollapsed ? "Quick capture" : undefined}
             data-shell-label="Quick capture"
+            onMouseEnter={handleCollapsedTooltipMouseEnter}
+            onMouseLeave={hideCollapsedTooltip}
+            onFocus={handleCollapsedTooltipFocus}
+            onBlur={hideCollapsedTooltip}
           >
             <span className="shell-action__icon" aria-hidden="true">
               <CaptureIcon />
@@ -247,6 +348,8 @@ export function AppShell() {
             className={`account-chip${sidebarCollapsed ? " account-chip--collapsed shell-collapsed-label" : ""}`}
             data-shell-label={userEmail}
             title={sidebarCollapsed ? userEmail : undefined}
+            onMouseEnter={handleCollapsedTooltipMouseEnter}
+            onMouseLeave={hideCollapsedTooltip}
           >
             <span className="account-chip__dot" />
             <span className="account-chip__text">{userEmail}</span>
@@ -258,6 +361,10 @@ export function AppShell() {
             }
             aria-label={sidebarCollapsed ? "Settings" : undefined}
             data-shell-label="Settings"
+            onMouseEnter={handleCollapsedTooltipMouseEnter}
+            onMouseLeave={hideCollapsedTooltip}
+            onFocus={handleCollapsedTooltipFocus}
+            onBlur={hideCollapsedTooltip}
           >
             <span className="shell-action__icon" aria-hidden="true">
               <SettingsIcon />
@@ -325,6 +432,21 @@ export function AppShell() {
         onClose={() => setCaptureOpen(false)}
         open={captureOpen}
       />
+      {collapsedTooltip
+        ? createPortal(
+          <div
+            className="shell-collapsed-tooltip"
+            role="tooltip"
+            style={{
+              top: `${collapsedTooltip.top}px`,
+              left: `${collapsedTooltip.left}px`,
+            }}
+          >
+            {collapsedTooltip.label}
+          </div>,
+          document.body,
+        )
+        : null}
     </div>
   );
 }
