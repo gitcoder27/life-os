@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useCreateTaskMutation } from "../../../shared/lib/api";
 
 type TodayTaskCaptureSheetProps = {
@@ -24,8 +25,16 @@ export function TodayTaskCaptureSheet({
       return;
     }
 
+    const scrollPosition = { x: window.scrollX, y: window.scrollY };
+
     requestAnimationFrame(() => {
-      firstInputRef.current?.focus();
+      const input = firstInputRef.current;
+      if (!input) {
+        return;
+      }
+
+      input.focus({ preventScroll: true });
+      window.scrollTo(scrollPosition.x, scrollPosition.y);
     });
   }, [open]);
 
@@ -67,7 +76,7 @@ export function TodayTaskCaptureSheet({
 
   const isDisabled = createTaskMutation.isPending || !textValue.trim();
 
-  return (
+  const sheet = (
     <div
       aria-hidden={!open}
       className={`capture-sheet${open ? " capture-sheet--open" : ""}`}
@@ -128,4 +137,10 @@ export function TodayTaskCaptureSheet({
       </section>
     </div>
   );
+
+  if (typeof document === "undefined") {
+    return sheet;
+  }
+
+  return createPortal(sheet, document.body);
 }

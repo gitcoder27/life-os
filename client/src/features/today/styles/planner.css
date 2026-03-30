@@ -188,7 +188,7 @@
 
 .planner__body {
   display: grid;
-  grid-template-columns: 1fr 260px;
+  grid-template-columns: minmax(0, 1fr) minmax(300px, 20rem);
   gap: 1rem;
   align-items: start;
 }
@@ -2668,5 +2668,4 @@
     transform: translateY(0) scale(1);
   }
 }
-
 

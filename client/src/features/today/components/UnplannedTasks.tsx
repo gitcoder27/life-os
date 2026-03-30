@@ -234,7 +234,7 @@ function UnplannedTaskRow({
         </label>
       ) : null}
 
-      <div className="unplanned-task__info">
+      <div className="unplanned-task__info" title={task.title}>
         <span className="unplanned-task__title">{task.title}</span>
         {task.goal ? (
           <span className={`unplanned-task__goal goal-chip__dot--${task.goal.domain}`}>
