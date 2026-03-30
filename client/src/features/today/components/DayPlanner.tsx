@@ -483,11 +483,11 @@ export function DayPlanner({
                   <div
                     key={marker.minutes}
                     className={`planner__gutter-hour${
-                      timeline.nowLinePx !== null && marker.topPercent < (timeline.nowLinePercent ?? 0)
+                      timeline.nowLinePx !== null && marker.topPx < timeline.nowLinePx
                         ? " planner__gutter-hour--past"
                         : ""
                     }`}
-                    style={{ top: `${marker.topPercent}%` }}
+                    style={{ top: `${marker.topPx}px` }}
                   >
                     {marker.label}
                   </div>

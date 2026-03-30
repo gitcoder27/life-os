@@ -18,6 +18,11 @@ const GAP_MIN_HEIGHT = 52;
 const SEGMENT_PIXELS_PER_MINUTE = 1.2;
 const GAP_PIXELS_PER_MINUTE = 0.7;
 const CALENDAR_PIXELS_PER_MINUTE = 1.4;
+const BLOCK_HEADER_PX = 42;
+const TASK_ROW_PX = 34;
+const TASKS_PADDING_PX = 12;
+const EMPTY_HINT_PX = 32;
+const RESIZE_HANDLE_PX = 8;
 
 export type PlannerVisibleHoursPreference = {
   startTime: string;
@@ -50,7 +55,7 @@ export type PlannerTimelineSegment = {
 export type TimeGutterMarker = {
   minutes: number;
   label: string;
-  topPercent: number;
+  topPx: number;
 };
 
 export type PlannerTimelineModel = {
@@ -250,7 +255,39 @@ export const buildPlannerTimelineModel = (input: {
   }
 
   const totalRenderedMinutes = renderedEndMinutes - renderedStartMinutes;
-  const totalHeightPx = Math.round(totalRenderedMinutes * CALENDAR_PIXELS_PER_MINUTE);
+
+  // Adjust segment positions so blocks with many tasks push subsequent segments down
+  let pxCursor = 0;
+  for (const seg of segments) {
+    const contentHeight =
+      seg.kind === "block" && seg.block
+        ? estimateBlockContentHeight(seg.block.tasks.length)
+        : seg.heightPx;
+    seg.topPx = pxCursor;
+    seg.heightPx = Math.max(seg.heightPx, contentHeight);
+    pxCursor += seg.heightPx;
+  }
+
+  const totalHeightPx = pxCursor;
+
+  const minutesToAdjustedPx = (minutes: number): number => {
+    for (const seg of segments) {
+      if (minutes >= seg.startMinutes && minutes <= seg.endMinutes) {
+        if (seg.endMinutes === seg.startMinutes) return seg.topPx;
+        const fraction = (minutes - seg.startMinutes) / (seg.endMinutes - seg.startMinutes);
+        return Math.round(seg.topPx + fraction * seg.heightPx);
+      }
+    }
+    if (segments.length > 0) {
+      if (minutes < segments[0].startMinutes) {
+        return Math.round(segments[0].topPx - (segments[0].startMinutes - minutes) * CALENDAR_PIXELS_PER_MINUTE);
+      }
+      const last = segments[segments.length - 1];
+      return Math.round(last.topPx + last.heightPx + (minutes - last.endMinutes) * CALENDAR_PIXELS_PER_MINUTE);
+    }
+    return Math.round((minutes - renderedStartMinutes) * CALENDAR_PIXELS_PER_MINUTE);
+  };
+
   const nowMinutes = input.now.getHours() * 60 + input.now.getMinutes();
   const nowLinePercent =
     nowMinutes >= renderedStartMinutes && nowMinutes <= renderedEndMinutes && totalRenderedMinutes > 0
@@ -258,9 +295,9 @@ export const buildPlannerTimelineModel = (input: {
       : null;
   const nowLinePx =
     nowMinutes >= renderedStartMinutes && nowMinutes <= renderedEndMinutes
-      ? Math.round((nowMinutes - renderedStartMinutes) * CALENDAR_PIXELS_PER_MINUTE)
+      ? minutesToAdjustedPx(nowMinutes)
       : null;
-  const gutterMarkers = buildTimeGutterMarkers(renderedStartMinutes, renderedEndMinutes, totalRenderedMinutes);
+  const gutterMarkers = buildAdjustedGutterMarkers(renderedStartMinutes, renderedEndMinutes, minutesToAdjustedPx);
 
   return {
     segments,
@@ -384,19 +421,25 @@ const isNowWithinRange = (startsAt: string, endsAt: string, now: Date) => {
   return nowTime >= start && nowTime < end;
 };
 
-const buildTimeGutterMarkers = (
+const estimateBlockContentHeight = (taskCount: number): number => {
+  const body = taskCount > 0
+    ? taskCount * TASK_ROW_PX + TASKS_PADDING_PX
+    : EMPTY_HINT_PX;
+  return BLOCK_HEADER_PX + body + RESIZE_HANDLE_PX;
+};
+
+const buildAdjustedGutterMarkers = (
   startMinutes: number,
   endMinutes: number,
-  totalMinutes: number,
+  minutesToPx: (m: number) => number,
 ): TimeGutterMarker[] => {
-  if (totalMinutes <= 0) return [];
   const markers: TimeGutterMarker[] = [];
   const firstHour = Math.ceil(startMinutes / 60) * 60;
   for (let minutes = firstHour; minutes <= endMinutes; minutes += 60) {
     markers.push({
       minutes,
       label: minutesToTimeString(minutes),
-      topPercent: ((minutes - startMinutes) / totalMinutes) * 100,
+      topPx: minutesToPx(minutes),
     });
   }
   return markers;

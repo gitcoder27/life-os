@@ -228,13 +228,12 @@ body.planner-dragging-cursor * {
   font-size: 0.6rem;
   font-weight: 600;
   font-family: var(--font-body);
-  color: var(--text-tertiary);
+  color: rgba(190, 180, 160, 0.9);
   letter-spacing: 0.02em;
   white-space: nowrap;
   pointer-events: none;
   transition: color var(--dur) var(--ease), opacity var(--dur) var(--ease);
   font-variant-numeric: tabular-nums;
-  opacity: 0.65;
 }
 
 .planner__gutter-hour::after {
@@ -244,12 +243,12 @@ body.planner-dragging-cursor * {
   top: 50%;
   width: calc(100vw - 100px);
   height: 1px;
-  background: rgba(255,255,255,0.025);
+  background: rgba(255,255,255,0.045);
   pointer-events: none;
 }
 
 .planner__gutter-hour--past {
-  opacity: 0.3;
+  opacity: 0.5;
 }
 
 .planner__gutter-now {
@@ -540,7 +539,7 @@ body.planner-dragging-cursor * {
 }
 
 .planner-block__info-sep {
-  color: rgba(255,255,255,0.12);
+  color: rgba(255,255,255,0.22);
   font-size: var(--fs-micro);
   flex-shrink: 0;
 }
@@ -548,7 +547,7 @@ body.planner-dragging-cursor * {
 .planner-block__time-badge {
   font-size: var(--fs-micro);
   font-weight: 600;
-  color: var(--text-tertiary);
+  color: rgba(190, 180, 160, 0.9);
   letter-spacing: 0.02em;
   white-space: nowrap;
   flex-shrink: 0;
@@ -562,15 +561,14 @@ body.planner-dragging-cursor * {
 .planner-block__duration {
   font-size: var(--fs-micro);
   font-weight: 600;
-  color: var(--text-tertiary);
+  color: rgba(190, 180, 160, 0.8);
   white-space: nowrap;
   flex-shrink: 0;
-  opacity: 0.7;
 }
 
 .planner-block__task-count {
   font-size: var(--fs-micro);
-  color: var(--text-tertiary);
+  color: rgba(190, 180, 160, 0.8);
   white-space: nowrap;
   flex-shrink: 0;
   font-variant-numeric: tabular-nums;
@@ -1350,7 +1348,7 @@ body.planner-dragging-cursor * {
 .planner-gap__time {
   font-size: var(--fs-micro);
   font-weight: 500;
-  color: var(--text-tertiary);
+  color: rgba(190, 180, 160, 0.75);
   white-space: nowrap;
   opacity: 0.65;
   font-variant-numeric: tabular-nums;
@@ -1358,9 +1356,8 @@ body.planner-dragging-cursor * {
 
 .planner-gap__duration {
   font-size: var(--fs-micro);
-  color: var(--text-tertiary);
+  color: rgba(190, 180, 160, 0.65);
   font-weight: 600;
-  opacity: 0.5;
 }
 
 .planner-gap__free-label {
