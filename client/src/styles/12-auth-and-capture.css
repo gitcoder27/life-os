@@ -1,0 +1,140 @@
+/* ── Auth ── */
+
+.auth-layout {
+  display: grid;
+  place-items: center;
+  min-height: 100vh;
+  padding: 1.5rem;
+  background:
+    radial-gradient(ellipse at 50% 30%, rgba(217,153,58,0.08), transparent 50%),
+    var(--bg-deep);
+}
+
+.auth-layout__panel {
+  width: min(100%, 28rem);
+  padding: 2rem;
+  border-radius: var(--r-lg);
+  border: 1px solid var(--border-active);
+  background: linear-gradient(180deg, var(--panel-elevated), var(--panel));
+  box-shadow: var(--shadow-lg), var(--shadow-glow);
+  animation: scaleIn 0.5s var(--ease) both;
+}
+
+.auth-layout__title {
+  font-family: var(--font-display);
+  font-size: clamp(1.8rem, 3.5vw, 2.4rem);
+  font-weight: 500;
+  margin: 0.6rem 0 0;
+  letter-spacing: -0.02em;
+}
+
+.auth-layout__copy {
+  color: var(--text-secondary);
+  font-size: var(--fs-body);
+  margin: 0.5rem 0 1.5rem;
+  line-height: 1.6;
+}
+
+/* ── Capture Sheet ── */
+
+.capture-sheet {
+  pointer-events: none;
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+}
+
+.capture-sheet--open {
+  pointer-events: auto;
+}
+
+.capture-sheet__backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0,0,0,0.55);
+  opacity: 0;
+  transition: opacity var(--dur-slow) var(--ease);
+  backdrop-filter: blur(4px);
+}
+
+.capture-sheet--open .capture-sheet__backdrop {
+  opacity: 1;
+}
+
+.capture-sheet__panel {
+  position: absolute;
+  right: 1.25rem;
+  bottom: 1.25rem;
+  width: min(100% - 2rem, 30rem);
+  border-radius: var(--r-lg);
+  border: 1px solid var(--border-active);
+  background: linear-gradient(180deg, var(--panel-elevated), var(--panel));
+  padding: 1.25rem;
+  box-shadow: var(--shadow-lg);
+  transform: translateY(1.5rem);
+  opacity: 0;
+  transition: all 0.3s var(--ease);
+}
+
+.capture-sheet--open .capture-sheet__panel {
+  transform: translateY(0);
+  opacity: 1;
+}
+
+.capture-sheet__header {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.capture-sheet__title {
+  font-family: var(--font-display);
+  font-size: var(--fs-h2);
+  font-weight: 600;
+}
+
+.capture-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.capture-chip {
+  padding: 0.5rem 0.8rem;
+  border-radius: var(--r-xs);
+  border: 1px solid var(--border);
+  background: rgba(255,255,255,0.03);
+  color: var(--text-secondary);
+  font-size: var(--fs-small);
+  font-weight: 500;
+  transition: all var(--dur) var(--ease);
+  cursor: pointer;
+}
+
+.capture-chip:hover,
+.capture-chip--active {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--text);
+}
+
+/* ── Progress Bar ── */
+
+.progress-bar {
+  height: 8px;
+  border-radius: var(--r-pill);
+  background: rgba(255,255,255,0.06);
+  overflow: hidden;
+  position: relative;
+}
+
+.progress-bar__fill {
+  height: 100%;
+  border-radius: var(--r-pill);
+  background: linear-gradient(90deg, var(--accent), var(--accent-bright));
+  transition: width 0.8s var(--ease);
+  position: relative;
+}

@@ -1,6 +1,12 @@
 /* Global stylesheet entrypoint. Keep imports ordered to preserve cascade. */
 @import "./styles/00-foundations.css";
 @import "./styles/10-app-shell.css";
+@import "./styles/11-page-and-primitives.css";
+@import "./styles/12-auth-and-capture.css";
+@import "./styles/13-shared-widgets.css";
+@import "./styles/14-review-and-domain.css";
+@import "./styles/15-inbox.css";
+@import "./styles/16-responsive.css";
 @import "./styles/20-controls-and-settings.css";
 @import "./styles/30-home-and-recurrence.css";
 @import "./styles/40-today-workspace.css";
