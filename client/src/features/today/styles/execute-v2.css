@@ -12,7 +12,7 @@
 
 .today-execute-v2 {
   display: grid;
-  grid-template-columns: 1fr 300px;
+  grid-template-columns: 1fr 380px;
   gap: 1.5rem;
   align-items: start;
   margin-top: 1rem;
@@ -31,8 +31,8 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 1rem;
-  padding: 0.65rem 1rem;
+  gap: 0.75rem;
+  padding: 0.5rem 0.85rem;
   border-radius: var(--r);
   border: 1px solid var(--border);
   background: var(--panel);
@@ -42,47 +42,26 @@
 .command-bar__left {
   display: flex;
   align-items: center;
-  gap: 1rem;
+  gap: 0.65rem;
   min-width: 0;
 }
 
 .command-bar__right {
   display: flex;
   align-items: center;
-  gap: 0.75rem;
+  gap: 0.6rem;
   flex-shrink: 0;
-}
-
-.command-bar__date {
-  display: flex;
-  align-items: baseline;
-  gap: 0.5rem;
-}
-
-.command-bar__day {
-  font-family: var(--font-display);
-  font-size: var(--fs-h3);
-  font-weight: 600;
-  color: var(--text);
-  white-space: nowrap;
-}
-
-.command-bar__phase {
-  font-size: var(--fs-micro);
-  font-weight: 600;
-  color: var(--accent);
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
 }
 
 .command-bar__score {
   display: flex;
   align-items: center;
-  gap: 0.35rem;
-  padding: 0.2rem 0.65rem 0.2rem 0.35rem;
+  gap: 0.3rem;
+  padding: 0.15rem 0.55rem 0.15rem 0.3rem;
   border-radius: var(--r-pill);
   background: var(--accent-soft);
   transition: transform var(--dur-fast) var(--ease);
+  flex-shrink: 0;
 }
 
 .command-bar__score--bumped {
@@ -105,6 +84,75 @@
   font-weight: 700;
   color: var(--text);
   min-width: 1.5ch;
+}
+
+/* Execution chip — inline status for current block / gap / off-track */
+
+.command-bar__exec-chip {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.2rem 0.6rem;
+  border-radius: var(--r-pill);
+  font-size: var(--fs-micro);
+  font-weight: 600;
+  white-space: nowrap;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.command-bar__exec-chip--active {
+  border-color: rgba(93, 184, 106, 0.2);
+  color: var(--positive);
+}
+
+.command-bar__exec-chip--gap {
+  border-color: var(--border);
+  color: var(--text-secondary);
+}
+
+.command-bar__exec-chip--off_track {
+  border-color: rgba(201, 85, 76, 0.2);
+  color: var(--negative);
+}
+
+.command-bar__exec-chip--complete {
+  border-color: rgba(93, 184, 106, 0.2);
+  color: var(--positive);
+}
+
+.command-bar__exec-chip--no_plan {
+  border-style: dashed;
+  color: var(--text-tertiary);
+}
+
+.command-bar__exec-icon {
+  font-size: 0.65rem;
+  line-height: 1;
+}
+
+.command-bar__exec-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 28ch;
+}
+
+.command-bar__exec-action {
+  font-size: var(--fs-micro);
+  font-weight: 700;
+  color: var(--accent);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0 0.15rem;
+  text-decoration: underline;
+  text-decoration-color: rgba(217, 153, 58, 0.3);
+  text-underline-offset: 2px;
+  transition: color var(--dur-fast) var(--ease);
+}
+
+.command-bar__exec-action:hover {
+  color: var(--accent-bright);
 }
 
 .command-bar__win-status {
@@ -138,7 +186,7 @@
   background: var(--accent-soft);
   border: 1px solid rgba(217, 153, 58, 0.2);
   border-radius: var(--r-sm);
-  padding: 0.3rem 0.75rem;
+  padding: 0.25rem 0.65rem;
   cursor: pointer;
   transition: all var(--dur-fast) var(--ease);
   white-space: nowrap;
@@ -166,7 +214,7 @@
 .command-bar__mode-btn {
   font-size: var(--fs-small);
   font-weight: 600;
-  padding: 0.3rem 0.65rem;
+  padding: 0.25rem 0.6rem;
   border-radius: calc(var(--r-sm) - 2px);
   border: none;
   background: transparent;
@@ -197,146 +245,46 @@
   line-height: 1.5;
 }
 
-/* ── Focus Stack ────────────────────────────────────── */
+/* ── Sidebar ───────────────────────────────────────── */
+
+.today-sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  position: sticky;
+  top: 1rem;
+  animation: slideUp 0.35s var(--ease) both;
+}
+
+/* ── Focus Stack (in sidebar) ──────────────────────── */
 
 .focus-stack {
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
-  animation: slideUp 0.35s var(--ease) both;
-  position: relative;
-  z-index: 2;
+  gap: 0.5rem;
 }
-
-/* Focus State Badge */
-
-.focus-state {
-  padding: 0.65rem 0.85rem;
-  border-radius: var(--r-sm);
-  border: 1px solid var(--border);
-  background: var(--panel);
-  display: flex;
-  flex-direction: column;
-  gap: 0.35rem;
-}
-
-.focus-state--on_track { border-color: rgba(93, 184, 106, 0.2); }
-.focus-state--at_risk { border-color: rgba(217, 153, 58, 0.25); background: rgba(217, 153, 58, 0.04); }
-.focus-state--off_track { border-color: rgba(201, 85, 76, 0.2); background: rgba(201, 85, 76, 0.04); }
-.focus-state--gap { border-color: var(--border); }
-.focus-state--no-plan { border-style: dashed; }
-.focus-state--complete { border-color: rgba(93, 184, 106, 0.2); background: rgba(93, 184, 106, 0.03); }
-
-.focus-state__row {
-  display: flex;
-  align-items: center;
-  gap: 0.6rem;
-  flex-wrap: wrap;
-}
-
-.focus-state__label {
-  font-size: var(--fs-micro);
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--accent);
-}
-
-.focus-state--off_track .focus-state__label { color: var(--negative); }
-.focus-state--complete .focus-state__label { color: var(--positive); }
-
-.focus-state__block-name {
-  font-size: var(--fs-small);
-  font-weight: 600;
-  color: var(--text);
-}
-
-.focus-state__time {
-  font-size: var(--fs-micro);
-  color: var(--text-tertiary);
-}
-
-.focus-state__progress {
-  font-size: var(--fs-small);
-  color: var(--text-secondary);
-}
-
-.focus-state__remaining {
-  font-size: var(--fs-micro);
-  color: var(--text-tertiary);
-}
-
-.focus-state__risk-badge {
-  font-size: var(--fs-micro);
-  font-weight: 600;
-  color: var(--accent);
-  background: var(--accent-soft);
-  padding: 0.1rem 0.4rem;
-  border-radius: var(--r-pill);
-}
-
-.focus-state__detail {
-  font-size: var(--fs-small);
-  color: var(--text-secondary);
-}
-
-.focus-state__action {
-  align-self: flex-start;
-  font-size: var(--fs-micro);
-  font-weight: 600;
-  color: var(--accent);
-  background: none;
-  border: 1px solid rgba(217, 153, 58, 0.2);
-  border-radius: var(--r-sm);
-  padding: 0.2rem 0.55rem;
-  cursor: pointer;
-  margin-top: 0.15rem;
-  transition: all var(--dur-fast) var(--ease);
-}
-
-.focus-state__action:hover {
-  background: var(--accent-soft);
-}
-
-.focus-state__bar {
-  height: 3px;
-  background: rgba(255, 255, 255, 0.06);
-  border-radius: 2px;
-  overflow: hidden;
-  margin-top: 0.15rem;
-}
-
-.focus-state__bar-fill {
-  height: 100%;
-  border-radius: 2px;
-  transition: width 0.5s var(--ease);
-  background: var(--accent);
-}
-
-.focus-state__bar-fill--on_track { background: var(--positive); }
-.focus-state__bar-fill--at_risk { background: var(--accent); }
-.focus-state__bar-fill--off_track { background: var(--negative); }
-.focus-state__bar-fill--complete { background: var(--positive); }
 
 /* Priority section inside Focus Stack */
 
 .focus-stack__priorities {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: 0.4rem;
 }
 
 .focus-stack__priorities-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  padding: 0 0.1rem;
 }
 
 .focus-stack__priorities-title {
-  font-family: var(--font-display);
-  font-size: var(--fs-h3);
-  font-weight: 600;
-  color: var(--text);
+  font-size: var(--fs-micro);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
 }
 
 .focus-stack__priority-list {
@@ -345,11 +293,11 @@
   margin: 0;
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: 0.35rem;
 }
 
 .focus-stack__empty {
-  padding: 0.75rem;
+  padding: 0.65rem;
   border: 1px dashed var(--border);
   border-radius: var(--r-sm);
   text-align: center;
@@ -366,7 +314,7 @@
   color: var(--accent);
   background: none;
   border: none;
-  padding: 0.25rem 0;
+  padding: 0.2rem 0;
   cursor: pointer;
   text-align: left;
   transition: color var(--dur-fast) var(--ease);
@@ -767,9 +715,6 @@
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
-  animation: slideUp 0.4s var(--ease) 0.15s both;
-  position: sticky;
-  top: 1rem;
 }
 
 .daily-essentials__title {
@@ -1190,12 +1135,12 @@
 
 /* ── V2 Responsive ──────────────────────────────────── */
 
-@media (max-width: 900px) {
+@media (max-width: 960px) {
   .today-execute-v2 {
     grid-template-columns: 1fr;
   }
 
-  .daily-essentials {
+  .today-sidebar {
     position: static;
   }
 
@@ -1210,6 +1155,10 @@
   .command-bar__prompt {
     display: none;
   }
+
+  .command-bar__exec-text {
+    max-width: 20ch;
+  }
 }
 
 @media (max-width: 600px) {
@@ -1221,6 +1170,10 @@
   .command-bar__right {
     flex-wrap: wrap;
     gap: 0.4rem;
+  }
+
+  .command-bar__exec-chip {
+    display: none;
   }
 
   .recovery-tray__batch-actions {

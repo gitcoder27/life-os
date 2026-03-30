@@ -97,6 +97,9 @@ export function TodayPage() {
         overdueCount={data.overdueTasks.length}
         hasDrift={plannerExecution.slippedBlocks.length > 0}
         onAddTask={() => setTodayTaskCaptureOpen(true)}
+        execution={plannerExecution}
+        topPriorityTitle={priorityDraft.draft.find((p) => p.status === "pending")?.title}
+        onSwitchToPlanner={() => setMode("plan")}
       />
 
       {allErrors ? (
@@ -106,14 +109,6 @@ export function TodayPage() {
       {mode === "execute" ? (
         <div className="today-execute-v2">
           <div className="today-main-v2">
-            <FocusStack
-              priorityDraft={priorityDraft}
-              activeGoals={data.activeGoals}
-              execution={plannerExecution}
-              phase={phase}
-              onSwitchToPlanner={() => setMode("plan")}
-            />
-
             <ExecutionStream
               executionTasks={data.executionTasks}
               execution={plannerExecution}
@@ -129,10 +124,17 @@ export function TodayPage() {
             />
           </div>
 
-          <DailyEssentials
-            currentDay={data.currentDay}
-            phase={phase}
-          />
+          <aside className="today-sidebar">
+            <FocusStack
+              priorityDraft={priorityDraft}
+              activeGoals={data.activeGoals}
+              phase={phase}
+            />
+            <DailyEssentials
+              currentDay={data.currentDay}
+              phase={phase}
+            />
+          </aside>
         </div>
       ) : (
         <DayPlanner

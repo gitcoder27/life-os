@@ -2,11 +2,11 @@ import { useEffect, useRef, useState } from "react";
 import { useDailyScoreQuery, getTodayDate } from "../../../shared/lib/api";
 import {
   getDayPhase,
-  getDayPhaseLabel,
   getDayPhasePrompt,
   getWinStatus,
-  formatTodayDate,
 } from "../helpers/day-phase";
+import { formatDurationMinutes } from "../helpers/planner-blocks";
+import type { PlannerExecutionModel } from "../helpers/planner-execution";
 
 function getScoreColor(value: number) {
   if (value >= 85) return "var(--positive)";
@@ -28,6 +28,9 @@ export function CommandBar({
   overdueCount,
   hasDrift,
   onAddTask,
+  execution,
+  topPriorityTitle,
+  onSwitchToPlanner,
 }: {
   mode: "execute" | "plan";
   onModeChange: (mode: "execute" | "plan") => void;
@@ -41,6 +44,9 @@ export function CommandBar({
   overdueCount: number;
   hasDrift: boolean;
   onAddTask: () => void;
+  execution: PlannerExecutionModel;
+  topPriorityTitle: string | undefined;
+  onSwitchToPlanner: () => void;
 }) {
   const today = getTodayDate();
   const scoreQuery = useDailyScoreQuery(today);
@@ -58,7 +64,6 @@ export function CommandBar({
   }, [score?.value]);
 
   const phase = getDayPhase(now);
-  const phaseLabel = getDayPhaseLabel(phase);
   const phasePrompt = getDayPhasePrompt(phase, {
     priorityCount: totalPriorityCount,
     pendingTaskCount,
@@ -72,19 +77,34 @@ export function CommandBar({
     totalTaskCount,
   );
 
+  const executionChip = buildExecutionChip(execution, topPriorityTitle);
+
   return (
     <header className="command-bar">
       <div className="command-bar__left">
-        <div className="command-bar__date">
-          <span className="command-bar__day">{formatTodayDate(now)}</span>
-          <span className="command-bar__phase">{phaseLabel}</span>
-        </div>
-
         {score ? (
           <div className={`command-bar__score${bumped ? " command-bar__score--bumped" : ""}`}>
             <MiniScoreRing value={score.value} color={getScoreColor(score.value)} />
             <span className="command-bar__score-label">{score.label}</span>
             <span className="command-bar__score-value">{score.value}</span>
+          </div>
+        ) : null}
+
+        {executionChip ? (
+          <div className={`command-bar__exec-chip command-bar__exec-chip--${executionChip.tone}`}>
+            {executionChip.icon ? (
+              <span className="command-bar__exec-icon">{executionChip.icon}</span>
+            ) : null}
+            <span className="command-bar__exec-text">{executionChip.text}</span>
+            {executionChip.action ? (
+              <button
+                className="command-bar__exec-action"
+                type="button"
+                onClick={onSwitchToPlanner}
+              >
+                {executionChip.action}
+              </button>
+            ) : null}
           </div>
         ) : null}
 
@@ -131,6 +151,82 @@ export function CommandBar({
       </div>
     </header>
   );
+}
+
+type ExecutionChip = {
+  tone: "active" | "gap" | "off_track" | "complete" | "no_plan";
+  icon: string | null;
+  text: string;
+  action: string | null;
+};
+
+function buildExecutionChip(
+  execution: PlannerExecutionModel,
+  topPriorityTitle: string | undefined,
+): ExecutionChip | null {
+  const currentBlock = execution.currentBlock;
+  const nextBlock = execution.nextBlock;
+  const slippedCount = execution.slippedTaskCount;
+
+  // Current block active
+  if (currentBlock && currentBlock.health !== "complete") {
+    const blockName = currentBlock.block.title || "Current block";
+    const progress = `${currentBlock.completedCount}/${currentBlock.totalCount}`;
+    const remaining = formatDurationMinutes(currentBlock.remainingMinutes);
+    return {
+      tone: "active",
+      icon: "▶",
+      text: `${blockName} · ${progress} done · ${remaining} left`,
+      action: null,
+    };
+  }
+
+  // Off track
+  if (slippedCount > 0) {
+    return {
+      tone: "off_track",
+      icon: "!",
+      text: `${slippedCount} task${slippedCount === 1 ? "" : "s"} slipped`,
+      action: "Replan",
+    };
+  }
+
+  // Gap before next block
+  if (execution.focusState === "gap_before_next" && nextBlock) {
+    const timeText = nextBlock.startsInMinutes != null && nextBlock.startsInMinutes > 0
+      ? formatDurationMinutes(nextBlock.startsInMinutes)
+      : "now";
+    const blockTitle = nextBlock.block.title || "next block";
+    return {
+      tone: "gap",
+      icon: null,
+      text: timeText === "now" ? `${blockTitle} starting now` : `${timeText} until ${blockTitle}`,
+      action: null,
+    };
+  }
+
+  // No plan
+  if (execution.focusState === "no_plan") {
+    return {
+      tone: "no_plan",
+      icon: null,
+      text: topPriorityTitle ? `Focus: ${topPriorityTitle}` : "No plan yet",
+      action: "Plan",
+    };
+  }
+
+  // Plan complete
+  if (execution.focusState === "plan_complete") {
+    const unplanned = execution.unplannedTaskCount;
+    return {
+      tone: "complete",
+      icon: "✓",
+      text: unplanned > 0 ? `Done · ${unplanned} unplanned` : "All blocks done",
+      action: null,
+    };
+  }
+
+  return null;
 }
 
 function MiniScoreRing({ value, color }: { value: number; color: string }) {
