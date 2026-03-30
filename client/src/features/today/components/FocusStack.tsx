@@ -84,7 +84,7 @@ export function FocusStack({
                     isMutating={priorityDraft.isMutating}
                     activeGoals={activeGoals}
                     onTitleChange={(title) => priorityDraft.updateTitle(index, title)}
-                    onTitleBlur={() => priorityDraft.scheduleSave()}
+                    onTitleBlur={priorityDraft.saveNow}
                     onGoalChange={(goalId) => priorityDraft.updateGoal(index, goalId)}
                     onRemove={() => priorityDraft.removePriority(index)}
                     onStatusChange={(status) => {

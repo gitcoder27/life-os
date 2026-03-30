@@ -253,9 +253,10 @@
   padding: 0.3rem;
   border-radius: var(--r-sm);
   border: 1px solid var(--border-active);
-  background: linear-gradient(180deg, var(--panel-elevated), var(--panel));
-  box-shadow: var(--shadow-md);
+  background: var(--panel-elevated);
+  box-shadow: var(--shadow-lg);
   z-index: 30;
+  isolation: isolate;
   animation: fadeSlideIn var(--dur-fast) var(--ease);
 }
 
@@ -646,4 +647,3 @@
     padding-left: 0;
   }
 }
-

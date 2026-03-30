@@ -96,6 +96,11 @@ export function usePriorityDraft(today: string, priorities: ServerPriority[], da
     saveTimerRef.current = setTimeout(doSave, AUTO_SAVE_DELAY);
   }, [doSave]);
 
+  const saveNow = useCallback(() => {
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    doSave();
+  }, [doSave]);
+
   useEffect(() => {
     return () => {
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
@@ -175,6 +180,7 @@ export function usePriorityDraft(today: string, priorities: ServerPriority[], da
     addGoalNudge,
     changeStatus,
     scheduleSave,
+    saveNow,
     mutationError: updateDayPrioritiesMutation.error ?? updatePriorityMutation.error,
   };
 }

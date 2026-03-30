@@ -412,6 +412,7 @@
               box-shadow var(--dur) var(--ease),
               opacity var(--dur) var(--ease);
   position: relative;
+  z-index: 0;
 }
 
 .today-priority-card:hover {
@@ -426,6 +427,11 @@
   border-color: var(--accent);
   background: var(--panel-elevated);
   z-index: 10;
+}
+
+.today-priority-card:focus-within,
+.today-priority-card--menu-open {
+  z-index: 20;
 }
 
 .today-priority-card--done {
@@ -598,6 +604,7 @@
   flex-shrink: 0;
   opacity: 0;
   transition: opacity var(--dur-fast) var(--ease);
+  z-index: 1;
 }
 
 .today-priority-card:hover .today-priority-card__actions,
@@ -1408,4 +1415,3 @@
 .recovery-lane__body {
   animation: slideUp 0.3s var(--ease) both;
 }
-

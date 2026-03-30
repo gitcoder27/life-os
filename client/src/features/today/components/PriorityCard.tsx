@@ -65,6 +65,7 @@ export function PriorityCard({
       style={style}
       className={
         "today-priority-card" +
+        (menuOpen ? " today-priority-card--menu-open" : "") +
         (isDragging ? " today-priority-card--dragging" : "") +
         (isDone ? " today-priority-card--done" : "") +
         (isDropped ? " today-priority-card--dropped" : "")
@@ -111,6 +112,11 @@ export function PriorityCard({
         placeholder="What's the focus?"
         onChange={(e) => onTitleChange(e.target.value)}
         onBlur={onTitleBlur}
+        onKeyDown={(e) => {
+          if (e.key !== "Enter" || e.nativeEvent.isComposing) return;
+          e.preventDefault();
+          onTitleBlur();
+        }}
         aria-label={`Priority ${index + 1} title`}
       />
 
