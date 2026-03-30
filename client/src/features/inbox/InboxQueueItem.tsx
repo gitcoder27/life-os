@@ -3,9 +3,11 @@ import { useEffect, useRef, useState } from "react";
 import type { TaskItem } from "../../shared/lib/api";
 import { getQuickCaptureDisplayText } from "../../shared/lib/quickCapture";
 import { SmartDatePicker } from "../../shared/ui/SmartDatePicker";
+import { domainColors, formatCreatedAt } from "./inbox-utils";
 
 type InboxQueueItemProps = {
   item: TaskItem;
+  index: number;
   isActive: boolean;
   isChecked: boolean;
   isStale: boolean;
@@ -20,33 +22,9 @@ type InboxQueueItemProps = {
   onLinkGoal: () => void;
 };
 
-const domainColors: Record<string, string> = {
-  health: "#5db86a",
-  money: "#d9993a",
-  work_growth: "#6b9fc4",
-  home_admin: "#a08ed4",
-  discipline: "#d97a73",
-  other: "#8a8270",
-};
-
-function formatCreatedAt(isoDateTime: string): string {
-  const date = new Date(isoDateTime);
-  const now = new Date();
-  const diffMs = now.getTime() - date.getTime();
-  const diffMinutes = Math.floor(diffMs / 60_000);
-
-  if (diffMinutes < 1) return "just now";
-  if (diffMinutes < 60) return `${diffMinutes}m ago`;
-  const diffHours = Math.floor(diffMinutes / 60);
-  if (diffHours < 24) return `${diffHours}h ago`;
-  const diffDays = Math.floor(diffHours / 24);
-  if (diffDays < 7) return `${diffDays}d ago`;
-
-  return date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
-}
-
 export function InboxQueueItem({
   item,
+  index,
   isActive,
   isChecked,
   isStale,
@@ -92,6 +70,7 @@ export function InboxQueueItem({
   return (
     <div
       className={itemClassName}
+      style={{ animation: `slideUp 0.3s var(--ease) both`, animationDelay: `${Math.min(index, 10) * 0.04}s` }}
       onClick={onSelect}
       role="button"
       tabIndex={0}
@@ -120,7 +99,7 @@ export function InboxQueueItem({
 
         <span className="inbox-queue__right">
           <span className="inbox-queue__age">{formatCreatedAt(item.createdAt)}</span>
-          {isStale ? <span className="inbox-queue__stale-icon" aria-label="Stale item">!</span> : null}
+          {isStale ? <span className="inbox-queue__stale-icon" aria-label="Stale item">&#9888;</span> : null}
 
           <span className="inbox-queue__hover-actions">
             <button
@@ -151,7 +130,7 @@ export function InboxQueueItem({
               </button>
               {showCalendar ? (
                 <div
-                  style={{ position: "absolute", right: 0, top: "100%", zIndex: 20 }}
+                  className="inbox-queue__datepicker-popover"
                   onClick={(e) => e.stopPropagation()}
                 >
                   <SmartDatePicker
@@ -183,25 +162,13 @@ export function InboxQueueItem({
               </button>
               {showMoreMenu ? (
                 <div
-                  style={{
-                    position: "absolute",
-                    right: 0,
-                    top: "100%",
-                    zIndex: 20,
-                    background: "var(--panel-elevated)",
-                    border: "1px solid var(--border)",
-                    borderRadius: "var(--r-xs)",
-                    padding: "0.25rem 0",
-                    minWidth: "140px",
-                    boxShadow: "var(--shadow-lg)",
-                  }}
+                  className="inbox-queue__dropdown"
                   onClick={(e) => e.stopPropagation()}
                 >
                   {item.kind === "task" ? (
                     <button
-                      className="inbox-inspector__text-btn"
+                      className="inbox-queue__dropdown-btn"
                       type="button"
-                      style={{ width: "100%", padding: "0.4rem 0.75rem" }}
                       disabled={isMutating}
                       onClick={() => {
                         onConvertToNote();
@@ -212,9 +179,8 @@ export function InboxQueueItem({
                     </button>
                   ) : null}
                   <button
-                    className="inbox-inspector__text-btn"
+                    className="inbox-queue__dropdown-btn"
                     type="button"
-                    style={{ width: "100%", padding: "0.4rem 0.75rem" }}
                     disabled={isMutating}
                     onClick={() => {
                       onLinkGoal();
@@ -224,9 +190,8 @@ export function InboxQueueItem({
                     Link goal
                   </button>
                   <button
-                    className="inbox-inspector__text-btn inbox-inspector__text-btn--danger"
+                    className="inbox-queue__dropdown-btn inbox-queue__dropdown-btn--danger"
                     type="button"
-                    style={{ width: "100%", padding: "0.4rem 0.75rem" }}
                     disabled={isMutating}
                     onClick={() => {
                       onArchive();

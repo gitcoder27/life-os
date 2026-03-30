@@ -12,6 +12,7 @@ import {
 } from "../../shared/lib/quickCapture";
 import { GoalCombobox } from "../../shared/ui/GoalCombobox";
 import { SmartDatePicker } from "../../shared/ui/SmartDatePicker";
+import { formatCreatedAt } from "./inbox-utils";
 
 type InboxInspectorProps = {
   item: TaskItem;
@@ -23,6 +24,7 @@ type InboxInspectorProps = {
   onSchedule: (date: string) => void;
   onLinkGoal: (goalId: string | null) => void;
   onConvertToNote: () => void;
+  onConvertToReminder: () => void;
   onArchive: () => void;
   onUpdateTitle: (title: string) => void;
   onUpdateNotes: (notes: string | null) => void;
@@ -32,22 +34,6 @@ function getTomorrowDate(isoDate: string) {
   const tomorrow = new Date(`${isoDate}T12:00:00`);
   tomorrow.setDate(tomorrow.getDate() + 1);
   return toIsoDate(tomorrow);
-}
-
-function formatCreatedAt(isoDateTime: string) {
-  const date = new Date(isoDateTime);
-  const now = new Date();
-  const diffMs = now.getTime() - date.getTime();
-  const diffMinutes = Math.floor(diffMs / 60_000);
-
-  if (diffMinutes < 1) return "just now";
-  if (diffMinutes < 60) return `${diffMinutes}m ago`;
-  const diffHours = Math.floor(diffMinutes / 60);
-  if (diffHours < 24) return `${diffHours}h ago`;
-  const diffDays = Math.floor(diffHours / 24);
-  if (diffDays < 7) return `${diffDays}d ago`;
-
-  return date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
 function getKindLabel(kind: TaskItem["kind"]) {
@@ -71,6 +57,7 @@ export function InboxInspector({
   onSchedule,
   onLinkGoal,
   onConvertToNote,
+  onConvertToReminder,
   onArchive,
   onUpdateTitle,
   onUpdateNotes,
@@ -101,7 +88,7 @@ export function InboxInspector({
     setIsEditingNotes(false);
     setEditNotes(getQuickCaptureText(item, ""));
     setScheduleDate(getReminderDate(item.reminderAt) ?? getTomorrowDate(getTodayDate()));
-  }, [item.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [item.id, item.reminderAt, item.scheduledForDate, item.goalId]);
 
   function commitTitle() {
     setIsEditingTitle(false);
@@ -291,6 +278,16 @@ export function InboxInspector({
               Convert to note
             </button>
           ) : null}
+          {item.kind !== "reminder" && (
+            <button
+              className="inbox-inspector__text-btn"
+              type="button"
+              onClick={onConvertToReminder}
+              disabled={isMutating}
+            >
+              Convert to reminder
+            </button>
+          )}
           <button
             className="inbox-inspector__text-btn inbox-inspector__text-btn--danger"
             type="button"

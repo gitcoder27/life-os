@@ -42,17 +42,10 @@ function isItemStale(item: TaskItem) {
 function getBulkSuccessMessage(
   action: BulkUpdateTasksInput["action"],
   taskCount: number,
-  goalTitle?: string,
 ) {
   if (action.type === "schedule") {
     const label = action.scheduledForDate === getTodayDate() ? "Moved" : "Scheduled";
     return `${label} ${taskCount} inbox item${taskCount === 1 ? "" : "s"}.`;
-  }
-  if (action.type === "link_goal") {
-    if (!action.goalId) {
-      return `Removed the goal link from ${taskCount} inbox item${taskCount === 1 ? "" : "s"}.`;
-    }
-    return `Linked ${taskCount} inbox item${taskCount === 1 ? "" : "s"} to ${goalTitle ?? "the selected goal"}.`;
   }
   return `Archived ${taskCount} inbox item${taskCount === 1 ? "" : "s"}.`;
 }
@@ -92,10 +85,6 @@ export function InboxPage() {
   const activeGoals = useMemo(
     () => (goalsListQuery.data?.goals ?? []).filter((goal) => goal.status === "active"),
     [goalsListQuery.data],
-  );
-  const goalTitleById = useMemo(
-    () => new Map(activeGoals.map((goal) => [goal.id, goal.title])),
-    [activeGoals],
   );
 
   const filteredItems = loadedItems;
@@ -220,6 +209,15 @@ export function InboxPage() {
     });
   }
 
+  function handleConvertToReminder(taskId: string) {
+    const item = filteredItems.find((i) => i.id === taskId);
+    if (!item) return;
+    updateTaskMutation.mutate({
+      taskId,
+      kind: "reminder",
+    });
+  }
+
   function handleLinkGoal(taskId: string, goalId: string | null) {
     updateTaskMutation.mutate({ taskId, goalId });
   }
@@ -236,11 +234,7 @@ export function InboxPage() {
   function runBulkAction(action: BulkUpdateTasksInput["action"]) {
     const taskIds = [...checkedIds];
     if (taskIds.length === 0) return;
-    bulkSuccessMessageRef.current = getBulkSuccessMessage(
-      action,
-      taskIds.length,
-      action.type === "link_goal" ? goalTitleById.get(action.goalId ?? "") : undefined,
-    );
+    bulkSuccessMessageRef.current = getBulkSuccessMessage(action, taskIds.length);
     bulkUpdateTasksMutation.mutate({ taskIds, action } as BulkUpdateTasksInput);
   }
 
@@ -324,10 +318,11 @@ export function InboxPage() {
         <div className="inbox-workspace__list">
           {filteredItems.length > 0 ? (
             <div className="inbox-queue">
-              {filteredItems.map((item) => (
+              {filteredItems.map((item, index) => (
                 <InboxQueueItem
                   key={item.id}
                   item={item}
+                  index={index}
                   isActive={item.id === selectedItemId}
                   isChecked={checkedIds.has(item.id)}
                   isStale={isItemStale(item)}
@@ -342,7 +337,10 @@ export function InboxPage() {
                   onSchedule={(date) => handleSchedule(item.id, date)}
                   onArchive={() => handleArchive(item.id)}
                   onConvertToNote={() => handleConvertToNote(item.id)}
-                  onLinkGoal={() => {}}
+                  onLinkGoal={() => {
+                    setSelectedItemId(item.id);
+                    setCheckedIds(new Set());
+                  }}
                 />
               ))}
 
@@ -392,6 +390,7 @@ export function InboxPage() {
                 onSchedule={(date) => handleSchedule(selectedItem.id, date)}
                 onLinkGoal={(goalId) => handleLinkGoal(selectedItem.id, goalId)}
                 onConvertToNote={() => handleConvertToNote(selectedItem.id)}
+                onConvertToReminder={() => handleConvertToReminder(selectedItem.id)}
                 onArchive={() => handleArchive(selectedItem.id)}
                 onUpdateTitle={(title) => handleUpdateTitle(selectedItem.id, title)}
                 onUpdateNotes={(notes) => handleUpdateNotes(selectedItem.id, notes)}

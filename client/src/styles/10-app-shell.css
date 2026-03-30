@@ -2368,6 +2368,47 @@
   color: #1a1408;
 }
 
+/* Queue dropdown menu */
+.inbox-queue__dropdown {
+  position: absolute;
+  right: 0;
+  top: 100%;
+  z-index: 20;
+  min-width: 10rem;
+  padding: 0.35rem;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--border);
+  background: var(--panel-elevated);
+  box-shadow: var(--shadow-md);
+}
+
+.inbox-queue__dropdown-btn {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  padding: 0.45rem 0.6rem;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: var(--fs-small);
+  font-weight: 500;
+  cursor: pointer;
+  border-radius: var(--r-xs);
+  transition: all var(--dur-fast) var(--ease);
+}
+
+.inbox-queue__dropdown-btn:hover {
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text);
+}
+
+.inbox-queue__datepicker-popover {
+  position: absolute;
+  right: 0;
+  top: 100%;
+  z-index: 20;
+}
+
 /* Goal sub-row */
 .inbox-queue__goal {
   display: flex;
