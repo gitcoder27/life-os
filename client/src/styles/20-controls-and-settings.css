@@ -64,6 +64,11 @@
   gap: 0.75rem;
 }
 
+.smart-date-picker__popover--portal {
+  z-index: 80;
+  max-width: calc(100vw - 1.5rem);
+}
+
 .smart-date-picker__popover--flip {
   top: auto;
   bottom: calc(100% + 6px);
@@ -1126,4 +1131,3 @@
     grid-template-columns: 1fr;
   }
 }
-

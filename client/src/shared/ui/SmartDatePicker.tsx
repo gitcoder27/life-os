@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { createPortal } from "react-dom";
 
 import { toIsoDate } from "../lib/api";
 
@@ -45,19 +46,16 @@ function getCalendarDays(year: number, month: number) {
 
   const days: Array<{ date: Date; iso: string; inMonth: boolean }> = [];
 
-  // Fill leading blanks from previous month
   for (let i = startOffset - 1; i >= 0; i--) {
     const d = new Date(year, month, -i);
     days.push({ date: d, iso: toIsoDate(d), inMonth: false });
   }
 
-  // Current month days
   for (let i = 1; i <= totalDays; i++) {
     const d = new Date(year, month, i);
     days.push({ date: d, iso: toIsoDate(d), inMonth: true });
   }
 
-  // Fill trailing blanks to complete the last week
   const remaining = 7 - (days.length % 7);
   if (remaining < 7) {
     for (let i = 1; i <= remaining; i++) {
@@ -88,12 +86,13 @@ function formatDisplayDate(isoDate: string) {
 export function SmartDatePicker({ value, onChange, minDate, disabled }: SmartDatePickerProps) {
   const [open, setOpen] = useState(false);
   const [flipUp, setFlipUp] = useState(false);
+  const [popoverStyle, setPopoverStyle] = useState<CSSProperties>();
   const containerRef = useRef<HTMLDivElement>(null);
+  const popoverRef = useRef<HTMLDivElement>(null);
 
   const today = toIsoDate(new Date());
   const smartOptions = getSmartOptions(today);
 
-  // Calendar state — derive initial month from the current value
   const valueParts = value ? value.split("-").map(Number) : today.split("-").map(Number);
   const [viewYear, setViewYear] = useState(valueParts[0]);
   const [viewMonth, setViewMonth] = useState(valueParts[1] - 1);
@@ -101,24 +100,59 @@ export function SmartDatePicker({ value, onChange, minDate, disabled }: SmartDat
   const calendarDays = getCalendarDays(viewYear, viewMonth);
 
   useEffect(() => {
-    if (open && containerRef.current) {
+    if (!open) return;
+
+    const updatePopoverPosition = () => {
+      if (!containerRef.current) return;
+
       const rect = containerRef.current.getBoundingClientRect();
       const spaceBelow = window.innerHeight - rect.bottom;
-      setFlipUp(spaceBelow < 380);
-    }
+      const shouldFlipUp = spaceBelow < 380 && rect.top > spaceBelow;
+      const width = Math.max(rect.width, 280);
+      const left = Math.min(Math.max(12, rect.left), window.innerWidth - width - 12);
+
+      setFlipUp(shouldFlipUp);
+      setPopoverStyle(
+        shouldFlipUp
+          ? {
+              position: "fixed",
+              left,
+              bottom: Math.max(12, window.innerHeight - rect.top + 6),
+              width,
+            }
+          : {
+              position: "fixed",
+              left,
+              top: Math.min(window.innerHeight - 12, rect.bottom + 6),
+              width,
+            },
+      );
+    };
+
+    updatePopoverPosition();
+    window.addEventListener("resize", updatePopoverPosition);
+    window.addEventListener("scroll", updatePopoverPosition, true);
+
+    return () => {
+      window.removeEventListener("resize", updatePopoverPosition);
+      window.removeEventListener("scroll", updatePopoverPosition, true);
+    };
   }, [open]);
 
   useEffect(() => {
+    if (!open) return;
+
     function handleClickOutside(event: MouseEvent) {
-      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+      const target = event.target as Node;
+      const clickedTrigger = containerRef.current?.contains(target);
+      const clickedPopover = popoverRef.current?.contains(target);
+
+      if (!clickedTrigger && !clickedPopover) {
         setOpen(false);
       }
     }
 
-    if (open) {
-      document.addEventListener("mousedown", handleClickOutside);
-    }
-
+    document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [open]);
 
@@ -131,23 +165,106 @@ export function SmartDatePicker({ value, onChange, minDate, disabled }: SmartDat
     if (viewMonth === 0) {
       setViewYear((y) => y - 1);
       setViewMonth(11);
-    } else {
-      setViewMonth((m) => m - 1);
+      return;
     }
+
+    setViewMonth((m) => m - 1);
   }
 
   function nextMonth() {
     if (viewMonth === 11) {
       setViewYear((y) => y + 1);
       setViewMonth(0);
-    } else {
-      setViewMonth((m) => m + 1);
+      return;
     }
+
+    setViewMonth((m) => m + 1);
   }
 
   function isBeforeMin(iso: string) {
     return minDate ? iso < minDate : false;
   }
+
+  const popover = (
+    <div
+      ref={popoverRef}
+      className={`smart-date-picker__popover smart-date-picker__popover--portal${flipUp ? " smart-date-picker__popover--flip" : ""}`}
+      style={popoverStyle}
+      role="dialog"
+      aria-label="Schedule date"
+    >
+      <div className="smart-date-picker__shortcuts">
+        {smartOptions.map((opt) => {
+          const optDate = opt.getDate();
+          const isDisabled = isBeforeMin(optDate);
+          return (
+            <button
+              key={opt.label}
+              className={`smart-date-picker__shortcut${value === optDate ? " smart-date-picker__shortcut--active" : ""}`}
+              type="button"
+              disabled={isDisabled}
+              onClick={() => selectDate(optDate)}
+            >
+              {opt.label}
+            </button>
+          );
+        })}
+      </div>
+
+      <div className="smart-date-picker__calendar">
+        <div className="smart-date-picker__cal-header">
+          <button
+            className="smart-date-picker__cal-nav"
+            type="button"
+            onClick={prevMonth}
+            aria-label="Previous month"
+          >
+            ‹
+          </button>
+          <span className="smart-date-picker__cal-title">
+            {MONTH_NAMES[viewMonth]} {viewYear}
+          </span>
+          <button
+            className="smart-date-picker__cal-nav"
+            type="button"
+            onClick={nextMonth}
+            aria-label="Next month"
+          >
+            ›
+          </button>
+        </div>
+
+        <div className="smart-date-picker__cal-grid">
+          {DAY_HEADERS.map((d) => (
+            <span key={d} className="smart-date-picker__cal-day-header">{d}</span>
+          ))}
+          {calendarDays.map((day, i) => {
+            const isSelected = day.iso === value;
+            const isToday = day.iso === today;
+            const isDisabled = !day.inMonth || isBeforeMin(day.iso);
+            let cls = "smart-date-picker__cal-day";
+            if (!day.inMonth) cls += " smart-date-picker__cal-day--outside";
+            if (isSelected) cls += " smart-date-picker__cal-day--selected";
+            if (isToday) cls += " smart-date-picker__cal-day--today";
+            if (isDisabled) cls += " smart-date-picker__cal-day--disabled";
+
+            return (
+              <button
+                key={i}
+                className={cls}
+                type="button"
+                disabled={isDisabled}
+                onClick={() => selectDate(day.iso)}
+                aria-label={day.iso}
+              >
+                {day.date.getDate()}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
 
   return (
     <div className="smart-date-picker" ref={containerRef}>
@@ -166,79 +283,7 @@ export function SmartDatePicker({ value, onChange, minDate, disabled }: SmartDat
         <span className="smart-date-picker__caret">{open ? "▲" : "▼"}</span>
       </button>
 
-      {open ? (
-        <div className={`smart-date-picker__popover${flipUp ? " smart-date-picker__popover--flip" : ""}`} role="dialog" aria-label="Schedule date">
-          <div className="smart-date-picker__shortcuts">
-            {smartOptions.map((opt) => {
-              const optDate = opt.getDate();
-              const isDisabled = isBeforeMin(optDate);
-              return (
-                <button
-                  key={opt.label}
-                  className={`smart-date-picker__shortcut${value === optDate ? " smart-date-picker__shortcut--active" : ""}`}
-                  type="button"
-                  disabled={isDisabled}
-                  onClick={() => selectDate(optDate)}
-                >
-                  {opt.label}
-                </button>
-              );
-            })}
-          </div>
-
-          <div className="smart-date-picker__calendar">
-            <div className="smart-date-picker__cal-header">
-              <button
-                className="smart-date-picker__cal-nav"
-                type="button"
-                onClick={prevMonth}
-                aria-label="Previous month"
-              >
-                ‹
-              </button>
-              <span className="smart-date-picker__cal-title">
-                {MONTH_NAMES[viewMonth]} {viewYear}
-              </span>
-              <button
-                className="smart-date-picker__cal-nav"
-                type="button"
-                onClick={nextMonth}
-                aria-label="Next month"
-              >
-                ›
-              </button>
-            </div>
-            <div className="smart-date-picker__cal-grid">
-              {DAY_HEADERS.map((d) => (
-                <span key={d} className="smart-date-picker__cal-day-header">{d}</span>
-              ))}
-              {calendarDays.map((day, i) => {
-                const isSelected = day.iso === value;
-                const isToday = day.iso === today;
-                const isDisabled = !day.inMonth || isBeforeMin(day.iso);
-                let cls = "smart-date-picker__cal-day";
-                if (!day.inMonth) cls += " smart-date-picker__cal-day--outside";
-                if (isSelected) cls += " smart-date-picker__cal-day--selected";
-                if (isToday) cls += " smart-date-picker__cal-day--today";
-                if (isDisabled) cls += " smart-date-picker__cal-day--disabled";
-
-                return (
-                  <button
-                    key={i}
-                    className={cls}
-                    type="button"
-                    disabled={isDisabled}
-                    onClick={() => selectDate(day.iso)}
-                    aria-label={day.iso}
-                  >
-                    {day.date.getDate()}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-      ) : null}
+      {open && popoverStyle ? createPortal(popover, document.body) : null}
     </div>
   );
 }

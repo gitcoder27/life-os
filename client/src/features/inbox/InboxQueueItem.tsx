@@ -5,6 +5,13 @@ import { getQuickCaptureDisplayText } from "../../shared/lib/quickCapture";
 import { SmartDatePicker } from "../../shared/ui/SmartDatePicker";
 import { domainColors, formatCreatedAt } from "./inbox-utils";
 
+const CalendarIcon = () => (
+  <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <rect x="2" y="3" width="10" height="9" rx="1.8" />
+    <path d="M4.5 2v2.2M9.5 2v2.2M2 5.2h10" />
+  </svg>
+);
+
 type InboxQueueItemProps = {
   item: TaskItem;
   index: number;
@@ -51,10 +58,18 @@ export function InboxQueueItem({
 
     function handleClickOutside(event: MouseEvent) {
       const target = event.target as Node;
+      const insideDatePickerPopover =
+        target instanceof Element && Boolean(target.closest(".smart-date-picker__popover"));
+
       if (showMoreMenu && moreMenuRef.current && !moreMenuRef.current.contains(target)) {
         setShowMoreMenu(false);
       }
-      if (showCalendar && calendarRef.current && !calendarRef.current.contains(target)) {
+      if (
+        showCalendar &&
+        calendarRef.current &&
+        !calendarRef.current.contains(target) &&
+        !insideDatePickerPopover
+      ) {
         setShowCalendar(false);
       }
     }
@@ -66,6 +81,7 @@ export function InboxQueueItem({
   let itemClassName = "inbox-queue__item";
   if (isActive) itemClassName += " inbox-queue__item--active";
   if (isStale) itemClassName += " inbox-queue__item--stale";
+  if (showMoreMenu || showCalendar) itemClassName += " inbox-queue__item--actions-open";
 
   return (
     <div
@@ -116,17 +132,18 @@ export function InboxQueueItem({
 
             <div ref={calendarRef} style={{ position: "relative" }}>
               <button
-                className="inbox-queue__hover-btn"
+                className="inbox-queue__hover-btn inbox-queue__hover-btn--icon"
                 type="button"
                 disabled={isMutating}
                 aria-label="Schedule for date"
+                aria-expanded={showCalendar}
                 onClick={(e) => {
                   e.stopPropagation();
                   setShowCalendar((prev) => !prev);
                   setShowMoreMenu(false);
                 }}
               >
-                Cal
+                <CalendarIcon />
               </button>
               {showCalendar ? (
                 <div
