@@ -6,7 +6,6 @@
   align-items: baseline;
   justify-content: space-between;
   gap: 1rem;
-  max-width: 48rem;
 }
 
 .inbox-header__title {
@@ -38,7 +37,6 @@
   display: flex;
   gap: 0.35rem;
   margin-top: 0.5rem;
-  max-width: 48rem;
 }
 
 .inbox-filters__item {
@@ -82,10 +80,15 @@
   max-width: 100%;
 }
 
+/* List-only: center with comfortable width */
 .inbox-workspace__list {
   flex: 1;
   min-width: 0;
-  max-width: 48rem;
+}
+
+/* When inspector is open, constrain list to leave room */
+.inbox-workspace--has-inspector .inbox-workspace__list {
+  max-width: none;
 }
 
 /* Queue */
@@ -104,7 +107,7 @@
   display: flex;
   flex-direction: column;
   gap: 0.15rem;
-  padding: 0.7rem 0.5rem;
+  padding: 0.75rem 0.85rem;
   border-bottom: 1px solid var(--border);
   border-radius: var(--r-xs);
   cursor: pointer;
@@ -117,18 +120,18 @@
 }
 
 .inbox-queue__item:hover {
-  background: rgba(255, 255, 255, 0.025);
+  background: rgba(255, 255, 255, 0.03);
 }
 
 .inbox-queue__item--active {
   background: var(--accent-soft);
   border-left: 2px solid var(--accent);
-  padding-left: calc(0.5rem - 2px);
+  padding-left: calc(0.85rem - 2px);
 }
 
 .inbox-queue__item--stale {
   border-left: 2px solid rgba(217, 153, 58, 0.25);
-  padding-left: calc(0.5rem - 2px);
+  padding-left: calc(0.85rem - 2px);
 }
 
 .inbox-queue__item--active.inbox-queue__item--stale {
@@ -312,9 +315,9 @@
 }
 
 .inbox-workspace__inspector {
-  width: 380px;
+  width: 420px;
   flex-shrink: 0;
-  margin-left: 1.25rem;
+  margin-left: 1.5rem;
   position: sticky;
   top: 5rem;
   max-height: calc(100vh - 6rem);
@@ -683,8 +686,8 @@
   line-height: 1.5;
 }
 
-/* ── Inbox responsive ── */
-@media (max-width: 768px) {
+/* Medium screens: overlay the inspector instead of side-by-side */
+@media (max-width: 960px) {
   .inbox-inspector-backdrop {
     display: block;
     position: fixed;
@@ -695,17 +698,35 @@
     animation: fadeIn 0.25s var(--ease) both;
   }
 
+  .inbox-workspace--has-inspector .inbox-workspace__list {
+    max-width: none;
+  }
+
   .inbox-workspace__inspector {
-    width: 100%;
+    width: min(420px, calc(100% - 2rem));
     margin-left: 0;
     position: fixed;
-    top: 0;
-    left: 0;
+    top: 50%;
+    right: 1rem;
+    left: auto;
+    bottom: auto;
+    transform: translateY(-50%);
+    max-height: calc(100vh - 4rem);
+    z-index: 40;
+    animation: slideInRight 0.3s var(--ease) both;
+  }
+}
+
+/* Small screens: full screen inspector */
+@media (max-width: 640px) {
+  .inbox-workspace__inspector {
+    width: 100%;
     right: 0;
+    top: 0;
     bottom: 0;
+    transform: none;
     max-height: 100vh;
     border-radius: 0;
-    z-index: 40;
     animation: slideUp 0.35s var(--ease) both;
   }
 }

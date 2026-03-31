@@ -314,7 +314,7 @@ export function InboxPage() {
 
       {mutationError && <InlineErrorState message={mutationError} onRetry={retryAll} />}
 
-      <div className="inbox-workspace">
+      <div className={`inbox-workspace${selectedItem && !hasBulkSelection ? " inbox-workspace--has-inspector" : ""}`}>
         <div className="inbox-workspace__list">
           {filteredItems.length > 0 ? (
             <div className="inbox-queue">
