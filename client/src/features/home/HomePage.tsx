@@ -2,6 +2,7 @@ import {
   formatTimeLabel,
   getTodayDate,
   useDailyScoreQuery,
+  useHomeQuoteQuery,
   useInboxQuery,
   useHomeOverviewQuery,
   useWeeklyMomentumQuery,
@@ -15,30 +16,22 @@ import {
 import { AtRiskLane } from "./AtRiskLane";
 import { CommandBlock } from "./CommandBlock";
 import { EssentialsBand } from "./EssentialsBand";
-import { QuoteFooter } from "./QuoteFooter";
 import { SecondaryContext } from "./SecondaryContext";
 import { StatusStrip } from "./StatusStrip";
 import { TodayControl } from "./TodayControl";
 
-type TimePhase = "morning" | "midday" | "evening";
-
-function getTimePhase(): TimePhase {
-  const hour = new Date().getHours();
-  if (hour < 12) return "morning";
-  if (hour < 17) return "midday";
-  return "evening";
-}
-
 export function HomePage() {
   const today = getTodayDate();
   const homeQuery = useHomeOverviewQuery(today);
-  const inboxQuery = useInboxQuery({ limit: 3 });
+  const inboxQuery = useInboxQuery({ limit: 4 });
+  const quoteQuery = useHomeQuoteQuery();
   const scoreQuery = useDailyScoreQuery(today);
   const weeklyMomentumQuery = useWeeklyMomentumQuery(today);
 
   const retryAll = () => {
     void homeQuery.refetch();
     void inboxQuery.refetch();
+    void quoteQuery.refetch();
     void scoreQuery.refetch();
     void weeklyMomentumQuery.refetch();
   };
@@ -65,7 +58,6 @@ export function HomePage() {
   const home = homeQuery.data;
   const score = scoreQuery.data ?? home.dailyScore;
   const topReasonLabel = scoreQuery.data?.topReasons[0]?.label ?? null;
-  const phase = getTimePhase();
 
   // Derive action data
   const allTasks = home.tasks;
@@ -97,7 +89,7 @@ export function HomePage() {
         strongDayStreak={weeklyMomentumQuery.data?.strongDayStreak ?? 0}
         dailyScores={weeklyMomentumQuery.data?.dailyScores ?? null}
         reviewClosed={Boolean(scoreQuery.data?.finalizedAt)}
-        phase={phase}
+        phase={home.phase}
       />
 
       <div className="home-operator__core">
@@ -110,7 +102,7 @@ export function HomePage() {
               : null
           }
           recovery={home.guidance.recovery}
-          phase={phase}
+          phase={home.phase}
           topScoreReason={topReasonLabel}
         />
 
@@ -137,12 +129,11 @@ export function HomePage() {
       </div>
 
       <SecondaryContext
-        inboxItems={inboxItems}
-        inboxHasMore={inboxItems.length >= 3}
+        inboxItems={inboxItems.slice(0, 3)}
+        inboxHasMore={inboxItems.length > 3}
         weeklyChallenge={home.guidance.weeklyChallenge}
+        quote={quoteQuery.data?.quote ?? null}
       />
-
-      <QuoteFooter />
     </div>
   );
 }

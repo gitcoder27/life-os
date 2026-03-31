@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { formatMajorCurrency, formatWorkoutStatus } from "../../shared/lib/api";
+import { formatMinorCurrency, formatWorkoutStatus } from "../../shared/lib/api";
 
 type EssentialsBandProps = {
   routines: {
@@ -18,7 +18,8 @@ type EssentialsBandProps = {
     workoutStatus: "completed" | "recovery_respected" | "fallback" | "missed" | "none";
   };
   finance: {
-    spentThisMonth: number;
+    spentThisMonthMinor: number;
+    currencyCode: string;
     budgetLabel: string;
     upcomingBills: number;
   };
@@ -38,10 +39,6 @@ export function EssentialsBand({
     health.waterTargetMl > 0
       ? Math.min(Math.round((health.waterMl / health.waterTargetMl) * 100), 100)
       : 0;
-  const periodLabel =
-    routines.currentPeriod === "none"
-      ? "Routines"
-      : `${routines.currentPeriod[0].toUpperCase()}${routines.currentPeriod.slice(1)}`;
 
   return (
     <div className="essentials-band">
@@ -54,7 +51,7 @@ export function EssentialsBand({
             <span className="essential__value">
               {routines.completedItems}/{routines.totalItems}
             </span>
-            <span className="essential__context">{periodLabel}</span>
+            <span className="essential__context">Today</span>
           </div>
           <div className="essential__bar">
             <div className="essential__bar-fill essential__bar-fill--routine" style={{ width: `${routinePercent}%` }} />
@@ -90,14 +87,14 @@ export function EssentialsBand({
           <span className="essential__label">Money</span>
           <div className="essential__row">
             <span className="essential__value">
-              {formatMajorCurrency(finance.spentThisMonth)}
+              {formatMinorCurrency(finance.spentThisMonthMinor, finance.currencyCode)}
             </span>
             <span className="essential__context">this month</span>
           </div>
           <span className="essential__note">
             {finance.budgetLabel || "Tracking"}
             {finance.upcomingBills > 0
-              ? ` · ${finance.upcomingBills} bill${finance.upcomingBills !== 1 ? "s" : ""} due`
+              ? ` · ${finance.upcomingBills} pending bill${finance.upcomingBills !== 1 ? "s" : ""} this month`
               : ""}
           </span>
         </Link>

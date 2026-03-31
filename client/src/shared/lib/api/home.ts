@@ -11,6 +11,7 @@ type HomeOverviewResponse = {
   date: string;
   generatedAt: string;
   greeting: string;
+  phase: "morning" | "midday" | "evening";
   dailyScore: {
     value: number;
     label: string;
@@ -56,7 +57,8 @@ type HomeOverviewResponse = {
     workoutStatus: "completed" | "recovery_respected" | "fallback" | "missed" | "none";
   };
   financeSummary: {
-    spentThisMonth: number;
+    spentThisMonthMinor: number;
+    currencyCode: string;
     budgetLabel: string;
     upcomingBills: number;
   };

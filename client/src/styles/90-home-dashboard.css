@@ -795,6 +795,11 @@
   background: var(--panel-elevated);
 }
 
+.secondary-context__block--quote:hover {
+  border-color: var(--border);
+  background: var(--panel);
+}
+
 .secondary-context__header {
   display: flex;
   align-items: center;
@@ -856,20 +861,7 @@
   color: var(--text-tertiary);
 }
 
-/* ── Quote Footer ───────────────────────────── */
-
-.quote-footer {
-  padding-top: 1rem;
-  border-top: 1px solid rgba(255, 255, 255, 0.03);
-  opacity: 0.7;
-  transition: opacity var(--dur) var(--ease);
-}
-
-.quote-footer:hover {
-  opacity: 1;
-}
-
-.quote-footer__text {
+.secondary-context__quote-text {
   font-family: var(--font-display);
   font-size: var(--fs-small);
   line-height: 1.55;
@@ -878,27 +870,26 @@
   margin: 0;
 }
 
-.quote-footer__author {
+.secondary-context__quote-meta {
   display: block;
   margin-top: 0.35rem;
   font-size: var(--fs-micro);
   color: var(--text-tertiary);
 }
 
-.quote-footer__attribution {
+.secondary-context__quote-link {
   color: var(--accent-bright);
   font-weight: 600;
 }
 
-.quote-footer__attribution:hover {
+.secondary-context__quote-link:hover {
   text-decoration: underline;
 }
 
 /* ── Dividers between major sections ────────── */
 
 .home-operator__middle,
-.secondary-context,
-.quote-footer {
+.secondary-context {
   padding-top: 1.5rem;
   border-top: 1px solid var(--border);
 }

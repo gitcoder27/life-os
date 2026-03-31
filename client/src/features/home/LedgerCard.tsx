@@ -1,14 +1,16 @@
 import { Link } from "react-router-dom";
-import { formatMajorCurrency } from "../../shared/lib/api";
+import { formatMinorCurrency } from "../../shared/lib/api";
 
 type LedgerCardProps = {
-  spentThisMonth: number;
+  spentThisMonthMinor: number;
+  currencyCode: string;
   budgetLabel: string;
   upcomingBills: number;
 };
 
 export function LedgerCard({
-  spentThisMonth,
+  spentThisMonthMinor,
+  currencyCode,
   budgetLabel,
   upcomingBills,
 }: LedgerCardProps) {
@@ -21,7 +23,7 @@ export function LedgerCard({
       <div className="ledger-amount">
         <span className="ledger-amount__label">Month spend</span>
         <span className="ledger-amount__value">
-          {formatMajorCurrency(spentThisMonth)}
+          {formatMinorCurrency(spentThisMonthMinor, currencyCode)}
         </span>
       </div>
       <div className="ledger-meta">
@@ -29,7 +31,7 @@ export function LedgerCard({
           {budgetLabel || "Tracking"}
         </span>
         <span className="ledger-meta__item">
-          {upcomingBills} upcoming bill{upcomingBills !== 1 ? "s" : ""}
+          {upcomingBills} pending bill{upcomingBills !== 1 ? "s" : ""} this month
         </span>
       </div>
     </Link>

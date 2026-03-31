@@ -62,6 +62,23 @@ const dateQuerySchema = z.object({
 const ACCOUNTABILITY_LOOKBACK_DAYS = 30;
 const ACCOUNTABILITY_SURFACED_ITEMS = 5;
 
+function currentHomePhase(
+  date: Date,
+  timezone?: string | null,
+): HomeOverviewResponse["phase"] {
+  const hour = getUserLocalHour(date, timezone);
+
+  if (hour < 12) {
+    return "morning";
+  }
+
+  if (hour < 17) {
+    return "midday";
+  }
+
+  return "evening";
+}
+
 function currentRoutinePeriod(date: Date, timezone?: string | null): RoutineSummary["currentPeriod"] {
   const hour = getUserLocalHour(date, timezone);
 
@@ -176,6 +193,10 @@ async function buildHomeOverview(
   const weekStartDate = parseIsoDate(weekStartIsoDate);
   const overdueWindowStartIsoDate = addIsoDays(targetIsoDate, -ACCOUNTABILITY_LOOKBACK_DAYS);
   const overdueWindowStartDate = parseIsoDate(overdueWindowStartIsoDate);
+  const monthStartDate = parseIsoDate(getMonthStartIsoDate(targetIsoDate));
+  const nextMonthStartDate = new Date(
+    Date.UTC(targetDate.getUTCFullYear(), targetDate.getUTCMonth() + 1, 1),
+  );
   await materializeRecurringTasksInRange(
     app.prisma,
     userId,
@@ -183,7 +204,7 @@ async function buildHomeOverview(
     parseIsoDate(addIsoDays(targetIsoDate, -1)),
   );
 
-  const [dayCycle, weekCycle, score, momentum, tasks, overdueTasks, staleInboxTasks, habits, recentHabitCheckins, routines, routineCheckins, waterLogs, mealLogs, workoutDay, expenses, adminItems, notifications] =
+  const [dayCycle, weekCycle, score, momentum, tasks, overdueTasks, staleInboxTasks, habits, recentHabitCheckins, routines, routineCheckins, waterLogs, mealLogs, workoutDay, expenses, todayAdminItems, monthlyPendingAdminItems, notifications] =
     await Promise.all([
       ensureCycle(app.prisma, {
         userId,
@@ -315,8 +336,8 @@ async function buildHomeOverview(
         where: {
           userId,
           spentOn: {
-            gte: parseIsoDate(getMonthStartIsoDate(targetIsoDate)),
-            lt: new Date(Date.UTC(targetDate.getUTCFullYear(), targetDate.getUTCMonth() + 1, 1)),
+            gte: monthStartDate,
+            lt: nextMonthStartDate,
           },
         },
       }),
@@ -324,6 +345,17 @@ async function buildHomeOverview(
         where: {
           userId,
           dueOn: targetDate,
+          status: "PENDING",
+        },
+        orderBy: [{ dueOn: "asc" }],
+      }),
+      app.prisma.adminItem.findMany({
+        where: {
+          userId,
+          dueOn: {
+            gte: monthStartDate,
+            lt: nextMonthStartDate,
+          },
           status: "PENDING",
         },
         orderBy: [{ dueOn: "asc" }],
@@ -514,7 +546,7 @@ async function buildHomeOverview(
       },
     });
   }
-  for (const item of adminItems.slice(0, 2)) {
+  for (const item of todayAdminItems.slice(0, 2)) {
     attentionItems.push({
       id: item.id,
       title: item.title,
@@ -604,6 +636,7 @@ async function buildHomeOverview(
   return withGeneratedAt({
     date: targetIsoDate,
     greeting: getLocalGreeting(now, preferences?.timezone),
+    phase: currentHomePhase(now, preferences?.timezone),
     dailyScore: {
       value: score.value,
       label: score.label,
@@ -642,9 +675,10 @@ async function buildHomeOverview(
     habitSummary,
     healthSummary,
     financeSummary: {
-      spentThisMonth: expenses.reduce((sum, expense) => sum + expense.amountMinor, 0),
+      spentThisMonthMinor: expenses.reduce((sum, expense) => sum + expense.amountMinor, 0),
+      currencyCode: preferences?.currencyCode ?? "USD",
       budgetLabel: expenses.length === 0 ? "No spend logged" : "Current month spend",
-      upcomingBills: adminItems.length,
+      upcomingBills: monthlyPendingAdminItems.length,
     },
     accountabilityRadar,
     attentionItems: attentionItems.slice(0, 6),

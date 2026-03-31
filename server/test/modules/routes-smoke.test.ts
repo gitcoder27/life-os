@@ -271,6 +271,8 @@ describe("module route smoke tests", () => {
     if (app) {
       await app.close();
     }
+
+    vi.useRealTimers();
   });
 
   it("serves admin endpoints", async () => {
@@ -859,6 +861,9 @@ describe("module route smoke tests", () => {
   });
 
   it("serves home overview with accountability radar data", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-03-14T06:30:00.000Z"));
+
     scoringMock.ensureCycle.mockImplementation(async (_prisma: unknown, input: { cycleType: string }) => {
       if (input.cycleType === "WEEK") {
         return {
@@ -969,24 +974,44 @@ describe("module route smoke tests", () => {
     } as any;
     prisma.waterLog = { findMany: vi.fn().mockResolvedValue([]) } as any;
     prisma.mealLog = { findMany: vi.fn().mockResolvedValue([]) } as any;
+    const dueTodayAdminItem = {
+      id: "admin-1",
+      userId: "user-1",
+      title: "Pay utilities",
+      itemType: "BILL",
+      dueOn: new Date("2026-03-14T00:00:00.000Z"),
+      status: "PENDING",
+      relatedTaskId: null,
+      recurringExpenseTemplateId: null,
+      amountMinor: 12000,
+      note: null,
+      completedAt: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    const laterAdminItem = {
+      id: "admin-2",
+      userId: "user-1",
+      title: "Pay rent",
+      itemType: "BILL",
+      dueOn: new Date("2026-03-20T00:00:00.000Z"),
+      status: "PENDING",
+      relatedTaskId: null,
+      recurringExpenseTemplateId: null,
+      amountMinor: 450000,
+      note: null,
+      completedAt: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
     prisma.adminItem = {
-      findMany: vi.fn().mockResolvedValue([
-        {
-          id: "admin-1",
-          userId: "user-1",
-          title: "Pay utilities",
-          itemType: "BILL",
-          dueOn: new Date("2026-03-14T00:00:00.000Z"),
-          status: "PENDING",
-          relatedTaskId: null,
-          recurringExpenseTemplateId: null,
-          amountMinor: 12000,
-          note: null,
-          completedAt: null,
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        },
-      ]),
+      findMany: vi.fn().mockImplementation(async ({ where }: { where: { dueOn: Date | { gte: Date; lt: Date } } }) => {
+        if (where.dueOn instanceof Date) {
+          return [dueTodayAdminItem];
+        }
+
+        return [dueTodayAdminItem, laterAdminItem];
+      }),
     } as any;
     prisma.habitCheckin = {
       findMany: vi.fn().mockResolvedValue([
@@ -1004,10 +1029,31 @@ describe("module route smoke tests", () => {
     } as any;
     prisma.routine = { findMany: vi.fn().mockResolvedValue([{ id: "routine-1", items: [] }]) } as any;
     prisma.routineItemCheckin = { findMany: vi.fn().mockResolvedValue([]) } as any;
-    prisma.expense = { findMany: vi.fn().mockResolvedValue([]) } as any;
+    prisma.expense = {
+      findMany: vi.fn().mockResolvedValue([
+        {
+          id: "expense-1",
+          userId: "user-1",
+          amountMinor: 12345,
+          currencyCode: "INR",
+          spentOn: new Date("2026-03-10T00:00:00.000Z"),
+          description: "Groceries",
+          expenseCategoryId: null,
+          recurringExpenseTemplateId: null,
+          source: "MANUAL",
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      ]),
+    } as any;
     prisma.notification = { findMany: vi.fn().mockResolvedValue([]) } as any;
     prisma.userPreference = {
-      findUnique: vi.fn().mockResolvedValue({ dailyWaterTargetMl: 2500, timezone: "UTC", weekStartsOn: 1 }),
+      findUnique: vi.fn().mockResolvedValue({
+        dailyWaterTargetMl: 2500,
+        timezone: "Asia/Kolkata",
+        weekStartsOn: 1,
+        currencyCode: "INR",
+      }),
     } as any;
     prisma.workoutDay = { findUnique: vi.fn().mockResolvedValue(null) } as any;
     prisma.routineItem = { findMany: vi.fn().mockResolvedValue([]) } as any;
@@ -1073,6 +1119,14 @@ describe("module route smoke tests", () => {
         habitId: "habit-1",
       }),
     );
+    expect(payload.phase).toBe("midday");
+    expect(payload.financeSummary).toEqual(
+      expect.objectContaining({
+        spentThisMonthMinor: 12345,
+        currencyCode: "INR",
+        upcomingBills: 2,
+      }),
+    );
     expect(payload.guidance.recommendations[0]).toEqual(
       expect.objectContaining({
         kind: "habit",
@@ -1098,7 +1152,7 @@ describe("module route smoke tests", () => {
           originType: "QUICK_CAPTURE",
           scheduledForDate: null,
           createdAt: expect.objectContaining({
-            lt: new Date("2026-03-11T00:00:00.000Z"),
+            lt: new Date("2026-03-10T18:30:00.000Z"),
           }),
         }),
       }),

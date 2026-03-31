@@ -53,7 +53,8 @@ export interface HealthSummary {
 }
 
 export interface FinanceSummary {
-  spentThisMonth: number;
+  spentThisMonthMinor: number;
+  currencyCode: string;
   budgetLabel: string;
   upcomingBills: number;
 }
@@ -140,6 +141,7 @@ export interface HomeQuoteResponse extends ApiMeta {
 export interface HomeOverviewResponse extends ApiMeta {
   date: IsoDateString;
   greeting: string;
+  phase: "morning" | "midday" | "evening";
   dailyScore: DailyScoreSnapshot;
   weeklyMomentum: number;
   topPriorities: PriorityItem[];
