@@ -60,15 +60,20 @@ export function ReviewsPage() {
   const summaryRetryMessage =
     state.reviewQuery.data.cadence === "weekly" ? state.reviewQuery.data.momentumError?.message ?? null : null;
 
+  const isDailyCompleted =
+    state.reviewQuery.data.cadence === "daily" && state.reviewQuery.data.review.isCompleted;
+
   return (
     <div className="page">
       <ReviewsCadenceNav cadenceKey={state.cadenceKey} />
 
-      <PageHeader
-        eyebrow={`${state.config.label} review`}
-        title={state.config.title}
-        description={state.config.description}
-      />
+      {!isDailyCompleted && (
+        <PageHeader
+          eyebrow={`${state.config.label} review`}
+          title={state.config.title}
+          description={state.config.description}
+        />
+      )}
 
       {state.windowPresentation && state.cadenceKey !== "daily" ? (
         <ReviewWindowBanner

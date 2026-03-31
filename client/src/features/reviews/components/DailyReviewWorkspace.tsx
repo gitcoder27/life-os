@@ -233,57 +233,84 @@ const CompletedView = ({
   onEdit: (() => void) | null;
 }) => (
   <div className="dr-completed">
-    <div className="dr-completed__banner">Daily review closed for {review.date}</div>
-    {onEdit ? (
-      <div className="dr-completed__actions">
-        <button className="button button--ghost button--small" type="button" onClick={onEdit}>
-          Edit today's review
-        </button>
+    <div className="dr-completed__header">
+      <div className="dr-completed__header-left">
+        <span className="dr-completed__check" aria-hidden="true">
+          &#10003;
+        </span>
+        <span className="dr-completed__header-eyebrow">Daily review</span>
+        <span className="dr-completed__header-date">{review.date}</span>
       </div>
-    ) : null}
+      {onEdit && (
+        <button className="button button--ghost button--small" type="button" onClick={onEdit}>
+          Edit review
+        </button>
+      )}
+    </div>
 
     <SummaryStrip review={review} />
 
     <div className="dr-completed__grid">
-      <div className="dr-completed__section">
-        <span className="dr-section__title">Reflection</span>
+      <div className="dr-completed__card">
+        <span className="dr-completed__card-title">Reflection</span>
         {review.existingReview ? (
-          <>
-            <div className="dr-completed__row">
-              <span className="dr-completed__label">Win</span>
-              <span className="dr-completed__value">{review.existingReview.biggestWin}</span>
+          <div className="dr-completed__entries">
+            <div className="dr-completed__entry dr-completed__entry--win">
+              <span className="dr-completed__entry-label">Win</span>
+              <p className="dr-completed__entry-value">
+                {review.existingReview.biggestWin}
+              </p>
             </div>
-            <div className="dr-completed__row">
-              <span className="dr-completed__label">Friction</span>
-              <span className="dr-completed__value">
-                {review.existingReview.frictionTag}
-                {review.existingReview.frictionNote
-                  ? `\n${review.existingReview.frictionNote}`
-                  : ""}
-              </span>
+            <div className="dr-completed__entry dr-completed__entry--friction">
+              <span className="dr-completed__entry-label">Friction</span>
+              <div className="dr-completed__entry-value">
+                <span className="dr-completed__tag">
+                  {review.existingReview.frictionTag}
+                </span>
+                {review.existingReview.frictionNote && (
+                  <p className="dr-completed__friction-detail">
+                    {review.existingReview.frictionNote}
+                  </p>
+                )}
+              </div>
             </div>
-            <div className="dr-completed__row">
-              <span className="dr-completed__label">Energy</span>
-              <span className="dr-completed__value">
-                {review.existingReview.energyRating}/5
-              </span>
-            </div>
-            {review.existingReview.optionalNote && (
-              <div className="dr-completed__row">
-                <span className="dr-completed__label">Note</span>
-                <span className="dr-completed__value">
-                  {review.existingReview.optionalNote}
+            <div className="dr-completed__entry dr-completed__entry--energy">
+              <span className="dr-completed__entry-label">Energy</span>
+              <div
+                className="dr-completed__energy"
+                data-rating={review.existingReview.energyRating}
+              >
+                {[1, 2, 3, 4, 5].map((n) => (
+                  <span
+                    key={n}
+                    className={`dr-completed__energy-pip${
+                      review.existingReview!.energyRating >= n
+                        ? " dr-completed__energy-pip--active"
+                        : ""
+                    }`}
+                  />
+                ))}
+                <span className="dr-completed__energy-text">
+                  {review.existingReview.energyRating}/5
                 </span>
               </div>
+            </div>
+            {review.existingReview.optionalNote && (
+              <div className="dr-completed__entry dr-completed__entry--note">
+                <span className="dr-completed__entry-label">Note</span>
+                <p className="dr-completed__entry-value">
+                  {review.existingReview.optionalNote}
+                </p>
+              </div>
             )}
-          </>
+          </div>
         ) : (
-          <span className="dr-completed__value--muted">No reflection captured</span>
+          <span className="dr-completed__empty">No reflection captured</span>
         )}
       </div>
 
-      <div className="dr-completed__section">
-        <span className="dr-section__title">Tomorrow's priorities</span>
+      <div className="dr-completed__card">
+        <span className="dr-completed__card-title">Tomorrow's priorities</span>
         {review.seededTomorrowPriorities.length > 0 ? (
           <div className="dr-completed__priorities">
             {[...review.seededTomorrowPriorities]
@@ -291,12 +318,12 @@ const CompletedView = ({
               .map((p, i) => (
                 <div key={p.id} className="dr-completed__priority">
                   <span className="dr-priority__number">{i + 1}</span>
-                  <span>{p.title}</span>
+                  <span className="dr-completed__priority-text">{p.title}</span>
                 </div>
               ))}
           </div>
         ) : (
-          <span className="dr-completed__value--muted">No priorities seeded</span>
+          <span className="dr-completed__empty">No priorities seeded</span>
         )}
       </div>
     </div>

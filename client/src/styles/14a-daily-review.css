@@ -533,49 +533,112 @@
 .dr-completed {
   display: flex;
   flex-direction: column;
-  gap: 1rem;
+  gap: 1.25rem;
   animation: slideUp 0.35s var(--ease) both;
 }
 
-.dr-completed__actions {
+/* ── Compact Header ── */
+
+.dr-completed__header {
   display: flex;
-  justify-content: flex-end;
-  margin-top: -0.45rem;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
 }
 
-.dr-completed__banner {
+.dr-completed__header-left {
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  padding: 0.55rem 0.85rem;
-  border-radius: var(--r-sm);
-  border: 1px solid rgba(93, 184, 106, 0.18);
-  background: linear-gradient(135deg, rgba(93, 184, 106, 0.04) 0%, var(--panel) 100%);
-  font-size: var(--fs-small);
-  font-weight: 500;
-  color: var(--positive);
 }
+
+.dr-completed__check {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: rgba(93, 184, 106, 0.12);
+  color: var(--positive);
+  font-size: 0.65rem;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.dr-completed__header-eyebrow {
+  font-size: var(--fs-micro);
+  font-weight: 650;
+  color: var(--positive);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.dr-completed__header-date {
+  font-size: var(--fs-small);
+  color: var(--text-tertiary);
+}
+
+/* ── Card Grid ── */
 
 .dr-completed__grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 1.5rem;
+  gap: 1.25rem;
   align-items: start;
 }
 
-.dr-completed__section {
+.dr-completed__card {
   display: flex;
   flex-direction: column;
-  gap: 0.6rem;
+  gap: 0.85rem;
+  padding: 1rem 1.1rem;
+  border-radius: var(--r-sm);
+  background: rgba(255, 255, 255, 0.018);
+  border: 1px solid var(--border);
 }
 
-.dr-completed__row {
+.dr-completed__card-title {
+  font-size: var(--fs-micro);
+  font-weight: 650;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+/* ── Reflection Entries ── */
+
+.dr-completed__entries {
   display: flex;
   flex-direction: column;
-  gap: 0.1rem;
+  gap: 0.85rem;
 }
 
-.dr-completed__label {
+.dr-completed__entry {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  padding-left: 0.75rem;
+  border-left: 2px solid var(--border);
+}
+
+.dr-completed__entry--win {
+  border-left-color: var(--positive);
+}
+
+.dr-completed__entry--friction {
+  border-left-color: var(--negative);
+}
+
+.dr-completed__entry--energy {
+  border-left-color: var(--accent);
+}
+
+.dr-completed__entry--note {
+  border-left-color: var(--text-tertiary);
+}
+
+.dr-completed__entry-label {
   font-size: var(--fs-micro);
   font-weight: 600;
   color: var(--text-tertiary);
@@ -583,29 +646,99 @@
   letter-spacing: 0.04em;
 }
 
-.dr-completed__value {
+.dr-completed__entry-value {
   font-size: var(--fs-body);
   color: var(--text);
-  line-height: 1.5;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  margin: 0;
+}
+
+/* ── Friction Tag ── */
+
+.dr-completed__tag {
+  display: inline-block;
+  padding: 0.12rem 0.5rem;
+  border-radius: var(--r-pill);
+  background: var(--negative-soft);
+  color: var(--negative);
+  font-size: var(--fs-micro);
+  font-weight: 600;
+  text-transform: capitalize;
+}
+
+.dr-completed__friction-detail {
+  margin: 0.3rem 0 0;
+  font-size: var(--fs-body);
+  color: var(--text);
+  line-height: 1.55;
   white-space: pre-wrap;
 }
 
-.dr-completed__value--muted {
+/* ── Energy Pips ── */
+
+.dr-completed__energy {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.dr-completed__energy-pip {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.dr-completed__energy-pip--active {
+  background: var(--accent-bright);
+}
+
+.dr-completed__energy[data-rating="1"] .dr-completed__energy-pip--active { background: #c86a5c; }
+.dr-completed__energy[data-rating="2"] .dr-completed__energy-pip--active { background: #d58a4a; }
+.dr-completed__energy[data-rating="4"] .dr-completed__energy-pip--active { background: #78ba74; }
+.dr-completed__energy[data-rating="5"] .dr-completed__energy-pip--active { background: var(--positive); }
+
+.dr-completed__energy-text {
+  margin-left: 0.25rem;
+  font-size: var(--fs-small);
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+/* ── Empty ── */
+
+.dr-completed__empty {
   color: var(--text-tertiary);
   font-size: var(--fs-small);
+  font-style: italic;
 }
+
+/* ── Priorities ── */
 
 .dr-completed__priorities {
   display: flex;
   flex-direction: column;
-  gap: 0.3rem;
+  gap: 0.15rem;
 }
 
 .dr-completed__priority {
   display: flex;
   align-items: center;
-  gap: 0.4rem;
+  gap: 0.55rem;
+  padding: 0.4rem 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.dr-completed__priority:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.dr-completed__priority-text {
   font-size: var(--fs-body);
+  color: var(--text);
+  font-weight: 500;
 }
 
 /* ── Empty State ── */
@@ -658,5 +791,9 @@
 
   .dr-summary__metrics {
     padding-left: 0;
+  }
+
+  .dr-completed__header {
+    flex-wrap: wrap;
   }
 }
