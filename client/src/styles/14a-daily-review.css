@@ -537,6 +537,12 @@
   animation: slideUp 0.35s var(--ease) both;
 }
 
+.dr-completed__actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: -0.45rem;
+}
+
 .dr-completed__banner {
   display: flex;
   align-items: center;
@@ -581,6 +587,7 @@
   font-size: var(--fs-body);
   color: var(--text);
   line-height: 1.5;
+  white-space: pre-wrap;
 }
 
 .dr-completed__value--muted {

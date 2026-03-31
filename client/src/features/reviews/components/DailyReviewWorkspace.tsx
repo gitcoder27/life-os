@@ -1,4 +1,4 @@
-import type { Dispatch, MouseEvent, SetStateAction } from "react";
+import { useEffect, useState, type Dispatch, type MouseEvent, type SetStateAction } from "react";
 
 import type {
   DailyReviewMutationResponse,
@@ -225,9 +225,22 @@ const EnergyDots = ({
 
 /* ── Completed View ── */
 
-const CompletedView = ({ review }: { review: DailyReviewResponse }) => (
+const CompletedView = ({
+  review,
+  onEdit,
+}: {
+  review: DailyReviewResponse;
+  onEdit: (() => void) | null;
+}) => (
   <div className="dr-completed">
     <div className="dr-completed__banner">Daily review closed for {review.date}</div>
+    {onEdit ? (
+      <div className="dr-completed__actions">
+        <button className="button button--ghost button--small" type="button" onClick={onEdit}>
+          Edit today's review
+        </button>
+      </div>
+    ) : null}
 
     <SummaryStrip review={review} />
 
@@ -245,7 +258,7 @@ const CompletedView = ({ review }: { review: DailyReviewResponse }) => (
               <span className="dr-completed__value">
                 {review.existingReview.frictionTag}
                 {review.existingReview.frictionNote
-                  ? ` — ${review.existingReview.frictionNote}`
+                  ? `\n${review.existingReview.frictionNote}`
                   : ""}
               </span>
             </div>
@@ -311,8 +324,28 @@ export const DailyReviewWorkspace = ({
   windowPresentation,
   onSubmit,
 }: DailyReviewWorkspaceProps) => {
-  if (review.isCompleted) {
-    return <CompletedView review={review} />;
+  const [isEditingSubmittedReview, setIsEditingSubmittedReview] = useState(false);
+
+  useEffect(() => {
+    setIsEditingSubmittedReview(false);
+  }, [review.date, review.existingReview?.completedAt, review.canEditSubmittedReview]);
+
+  useEffect(() => {
+    if (submitResult) {
+      setIsEditingSubmittedReview(false);
+    }
+  }, [submitResult]);
+
+  const showCompletedView =
+    review.isCompleted && (!review.canEditSubmittedReview || !isEditingSubmittedReview);
+
+  if (showCompletedView) {
+    return (
+      <CompletedView
+        review={review}
+        onEdit={review.canEditSubmittedReview ? () => setIsEditingSubmittedReview(true) : null}
+      />
+    );
   }
 
   const tasksComplete =
@@ -336,6 +369,19 @@ export const DailyReviewWorkspace = ({
       <WorkflowProgress steps={[reflectStarted, planComplete, tasksComplete]} />
 
       <SummaryStrip review={review} />
+
+      {review.isCompleted && review.canEditSubmittedReview ? (
+        <div className="inline-state">
+          <span>You can still update today's review until this review window closes.</span>
+          <button
+            className="button button--ghost button--small"
+            type="button"
+            onClick={() => setIsEditingSubmittedReview(false)}
+          >
+            Back to summary
+          </button>
+        </div>
+      ) : null}
 
       {/* ── Two-column: Reflect (left) | Plan + Tasks (right) ── */}
       <div className="dr-columns">
@@ -464,7 +510,9 @@ export const DailyReviewWorkspace = ({
         <div className="dr-submit__left">
           {submitResult ? (
             <span className="dr-submit__success">
-              Closed — {submitResult.tomorrowPriorities.length} priorities seeded.
+              {review.isCompleted
+                ? `Changes saved — ${submitResult.tomorrowPriorities.length} priorities updated.`
+                : `Closed — ${submitResult.tomorrowPriorities.length} priorities seeded.`}
             </span>
           ) : submitErrorText ? (
             <span className="dr-submit__error">{submitErrorText}</span>
@@ -493,7 +541,7 @@ export const DailyReviewWorkspace = ({
           onClick={onSubmit}
           disabled={!canSubmitDaily}
         >
-          {isSubmitting ? "Submitting..." : "Submit review"}
+          {isSubmitting ? "Submitting..." : review.isCompleted ? "Save changes" : "Submit review"}
         </button>
       </div>
     </div>

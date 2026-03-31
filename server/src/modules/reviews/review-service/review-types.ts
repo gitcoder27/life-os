@@ -147,6 +147,7 @@ export interface DailyReviewResponse {
   incompleteTasks: PlanningTaskItem[];
   existingReview: ExistingDailyReview | null;
   isCompleted: boolean;
+  canEditSubmittedReview: boolean;
   submissionWindow: ReviewSubmissionWindow;
   seededTomorrowPriorities: Array<{
     id: string;

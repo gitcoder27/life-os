@@ -90,6 +90,7 @@ export type DailyReviewResponse = {
     completedAt: string;
   } | null;
   isCompleted: boolean;
+  canEditSubmittedReview: boolean;
   submissionWindow: ReviewSubmissionWindow;
   seededTomorrowPriorities: Array<{
     id: string;

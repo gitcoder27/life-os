@@ -66,6 +66,7 @@ export interface DailyReviewResponse extends ApiMeta {
   incompleteTasks: PlanningTaskItem[];
   existingReview: ExistingDailyReview | null;
   isCompleted: boolean;
+  canEditSubmittedReview: boolean;
   submissionWindow: ReviewSubmissionWindow;
   seededTomorrowPriorities: PlanningPriorityItem[];
 }

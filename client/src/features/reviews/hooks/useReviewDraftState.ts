@@ -60,9 +60,11 @@ export const useReviewDraftState = ({
     if (reviewData.cadence === "daily") {
       const review = reviewData.review;
       const existing = review.existingReview;
-      const storedDraft = review.isCompleted
-        ? null
-        : readStoredReviewDraft<DailyReviewDraft>(draftStorageKey);
+      const canEditSubmittedReview = review.isCompleted && review.canEditSubmittedReview;
+      const storedDraft =
+        !review.isCompleted || canEditSubmittedReview
+          ? readStoredReviewDraft<DailyReviewDraft>(draftStorageKey)
+          : null;
       const baseDailyInputs: DailyInputs = {
         biggestWin: existing?.biggestWin ?? "",
         frictionNote: existing?.frictionNote ?? "",
@@ -81,7 +83,7 @@ export const useReviewDraftState = ({
         .slice(0, 3)
         .map((task) => ({ title: task.title }));
 
-      if (review.isCompleted) {
+      if (review.isCompleted && !review.canEditSubmittedReview) {
         clearStoredReviewDraft(draftStorageKey);
       }
 
@@ -168,7 +170,7 @@ export const useReviewDraftState = ({
     let draftPayload: DailyReviewDraft | WeeklyReviewDraft | MonthlyReviewDraft | null = null;
 
     if (reviewData.cadence === "daily") {
-      if (reviewData.review.isCompleted) {
+      if (reviewData.review.isCompleted && !reviewData.review.canEditSubmittedReview) {
         return;
       }
 

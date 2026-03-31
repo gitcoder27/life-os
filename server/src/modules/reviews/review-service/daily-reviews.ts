@@ -10,7 +10,7 @@ import {
 import { serializeRecurrenceDefinition } from "../../../lib/recurrence/store.js";
 import { addDays, parseIsoDate } from "../../../lib/time/cycle.js";
 import { toIsoDateString } from "../../../lib/time/date.js";
-import { getDayWindowUtc } from "../../../lib/time/user-time.js";
+import { getDayWindowUtc, getUserLocalDate } from "../../../lib/time/user-time.js";
 import { calculateDailyScore, ensureCycle, finalizeDailyScore } from "../../scoring/service.js";
 import { resolveDailyReviewSubmissionWindow } from "../submission-window.js";
 
@@ -216,11 +216,21 @@ async function getDailySummary(prisma: PrismaClient, userId: string, date: Date)
   };
 }
 
+function canEditSubmittedDailyReview(
+  reviewDate: string,
+  submissionWindow: DailyReviewResponse["submissionWindow"],
+  timezone?: string | null,
+  now: Date = new Date(),
+) {
+  return submissionWindow.isOpen && reviewDate === getUserLocalDate(now, timezone);
+}
+
 export async function getDailyReviewModel(
   prisma: PrismaClient,
   userId: string,
   date: Date,
 ): Promise<DailyReviewResponse> {
+  const now = new Date();
   const tomorrowDate = addDays(date, 1);
   const [preferences, { cycle, summary, incompleteTasks }, score, tomorrowCycle] = await Promise.all([
     getUserPreferences(prisma, userId),
@@ -254,15 +264,20 @@ export async function getDailyReviewModel(
         completedAt: cycle.dailyReview.completedAt.toISOString(),
       }
     : null;
-  const submissionWindow = resolveDailyReviewSubmissionWindow(toIsoDateString(date), new Date(), preferences);
+  const reviewDate = toIsoDateString(date);
+  const submissionWindow = resolveDailyReviewSubmissionWindow(reviewDate, now, preferences);
+  const canEditCompletedReview = Boolean(existingReview)
+    ? canEditSubmittedDailyReview(reviewDate, submissionWindow, preferences?.timezone, now)
+    : false;
 
   return {
-    date: toIsoDateString(date),
+    date: reviewDate,
     summary,
     score,
     incompleteTasks,
     existingReview,
     isCompleted: Boolean(existingReview),
+    canEditSubmittedReview: canEditCompletedReview,
     submissionWindow,
     seededTomorrowPriorities: tomorrowCycle?.priorities.map(serializePriority) ?? [],
     generatedAt: new Date().toISOString(),
@@ -336,12 +351,15 @@ export async function submitDailyReview(
   date: Date,
   payload: SubmitDailyReviewRequest,
 ) {
+  const now = new Date();
   dedupeTaskIds(payload);
   await materializeRecurringTasksInRange(prisma, userId, date, date);
   const preferences = await getUserPreferences(prisma, userId);
+  const reviewDate = toIsoDateString(date);
+  const submissionWindow = resolveDailyReviewSubmissionWindow(reviewDate, now, preferences);
   assertReviewSubmissionWindow(
     "Daily review",
-    resolveDailyReviewSubmissionWindow(toIsoDateString(date), new Date(), preferences),
+    submissionWindow,
   );
   const cycle = await ensureCycle(prisma, {
     userId,
@@ -350,7 +368,10 @@ export async function submitDailyReview(
     cycleEndDate: date,
   });
 
-  if (cycle.dailyReview) {
+  if (
+    cycle.dailyReview &&
+    !canEditSubmittedDailyReview(reviewDate, submissionWindow, preferences?.timezone, now)
+  ) {
     throw new AppError({
       statusCode: 409,
       code: "CONFLICT",

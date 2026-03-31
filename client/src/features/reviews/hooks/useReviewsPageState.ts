@@ -194,7 +194,7 @@ export const useReviewsPageState = () => {
       : [];
   const canSubmitDaily =
     reviewQuery.data?.cadence === "daily" &&
-    !reviewQuery.data.review.isCompleted &&
+    (!reviewQuery.data.review.isCompleted || reviewQuery.data.review.canEditSubmittedReview) &&
     isWindowOpen &&
     hasDecisionForEveryPendingTask &&
     hasThreeTomorrowPriorities &&
