@@ -9,7 +9,8 @@
       "Bash(grep -l \"shell\\\\|sidebar\\\\|nav\" /home/ubuntu/Development/life-os/client/src/styles/*.css)",
       "Bash(grep -E \"\\\\.\\(ts|tsx\\)$\")",
       "Bash(grep -n \"export\" /home/ubuntu/Development/life-os/client/src/shared/lib/api/*.ts)",
-      "Bash(grep -n \"PIXELS_PER_MINUTE\\\\|SEGMENT_PIXELS_PER_MINUTE\\\\|GAP_PIXELS_PER_MINUTE\\\\|CALENDAR_PIXELS_PER_MINUTE\" /home/ubuntu/Development/life-os/client/src/features/today/helpers/*.ts)"
+      "Bash(grep -n \"PIXELS_PER_MINUTE\\\\|SEGMENT_PIXELS_PER_MINUTE\\\\|GAP_PIXELS_PER_MINUTE\\\\|CALENDAR_PIXELS_PER_MINUTE\" /home/ubuntu/Development/life-os/client/src/features/today/helpers/*.ts)",
+      "Bash(grep -n \"today-\" /home/ubuntu/Development/life-os/client/src/styles/*.css)"
     ]
   }
 }

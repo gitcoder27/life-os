@@ -635,3 +635,444 @@
   }
 }
 
+/* ═══════════════════════════════════════════════
+   Habits Page — Redesigned Layout
+   ═══════════════════════════════════════════════ */
+
+/* ── Daily Flow ── */
+
+.habits-daily {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin-bottom: 1.5rem;
+}
+
+/* ── Checklist Group ── */
+
+.habits-group {
+  padding: 0.85rem 1rem;
+  border-radius: var(--r);
+  border: 1px solid var(--border);
+  background: linear-gradient(180deg, var(--panel-elevated) 0%, var(--panel) 100%);
+}
+
+.habits-group__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.5rem;
+}
+
+.habits-group__label {
+  font-size: var(--fs-body);
+  font-weight: 650;
+  letter-spacing: -0.005em;
+}
+
+.habits-group__count {
+  font-size: var(--fs-small);
+  font-weight: 600;
+  color: var(--text-tertiary);
+  padding: 0.1rem 0.5rem;
+  border-radius: var(--r-pill);
+  background: rgba(255,255,255,0.04);
+}
+
+.habits-group__count--done {
+  color: var(--positive);
+  background: var(--positive-soft);
+}
+
+.habits-group__items {
+  display: flex;
+  flex-direction: column;
+}
+
+.habits-group__empty {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.55rem 0.65rem;
+  border-radius: var(--r-sm);
+  background: rgba(255,255,255,0.02);
+  border: 1px dashed rgba(255,255,255,0.08);
+}
+
+.habits-group__empty-text {
+  font-size: var(--fs-small);
+  color: var(--text-tertiary);
+}
+
+/* ── Check Row (shared for routines and habits) ── */
+
+.habits-check-row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.45rem 0.15rem;
+  border-bottom: 1px solid rgba(255,255,255,0.03);
+  border-radius: 0;
+  background: transparent;
+  color: var(--text);
+  font-family: var(--font-body);
+  font-size: var(--fs-body);
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease);
+  border-left: 3px solid transparent;
+  width: 100%;
+}
+
+.habits-check-row:last-child {
+  border-bottom: 0;
+}
+
+.habits-check-row:hover:not(.habits-check-row--done) {
+  background: rgba(255,255,255,0.02);
+}
+
+.habits-check-row--done {
+  opacity: 0.5;
+}
+
+.habits-check-row--done .habits-check-row__title {
+  text-decoration: line-through;
+  text-decoration-color: rgba(255,255,255,0.2);
+}
+
+.habits-check-row--at-risk {
+  border-left-color: var(--accent);
+  padding-left: 0.5rem;
+}
+
+.habits-check-row--drifting {
+  border-left-color: var(--text-tertiary);
+  padding-left: 0.5rem;
+}
+
+.habits-check-row__box {
+  width: 22px;
+  height: 22px;
+  border-radius: var(--r-xs);
+  border: 2px solid var(--border-active);
+  background: transparent;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: transparent;
+  font-size: 0.7rem;
+  transition: all var(--dur) var(--ease-bounce);
+  flex-shrink: 0;
+  cursor: pointer;
+  padding: 0;
+}
+
+.habits-check-row__box:hover {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.habits-check-row__box--done {
+  border-color: var(--positive);
+  background: var(--positive);
+  color: #0f0d08;
+}
+
+.habits-check-row__body {
+  flex: 1;
+  min-width: 0;
+}
+
+.habits-check-row__title {
+  font-weight: 500;
+  font-size: var(--fs-body);
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.habits-check-row__meta {
+  display: flex;
+  gap: 0.5rem;
+  font-size: var(--fs-micro);
+  color: var(--text-tertiary);
+  margin-top: 0.1rem;
+}
+
+.habits-check-row__actions {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-shrink: 0;
+}
+
+/* ── Rest Day (subtle button) ── */
+
+.habits-rest-btn {
+  padding: 0.15rem 0.45rem;
+  border-radius: var(--r-xs);
+  border: 1px solid rgba(255,255,255,0.06);
+  background: transparent;
+  color: var(--text-tertiary);
+  font-size: var(--fs-micro);
+  font-family: var(--font-body);
+  cursor: pointer;
+  transition: all var(--dur-fast) var(--ease);
+}
+
+.habits-rest-btn:hover {
+  border-color: rgba(255,255,255,0.12);
+  color: var(--text-secondary);
+  background: rgba(255,255,255,0.03);
+}
+
+/* ── Signals Section ── */
+
+.habits-signals {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-bottom: 1.5rem;
+}
+
+/* ── Weekly Challenge Hint ── */
+
+.challenge-card__hint {
+  font-size: var(--fs-micro);
+  color: var(--text-tertiary);
+  margin-top: 0.2rem;
+  font-style: italic;
+}
+
+/* ── Consistency Trend ── */
+
+.habits-consistency {
+  padding: 0.85rem 1rem;
+  border-radius: var(--r);
+  border: 1px solid var(--border);
+  background: linear-gradient(180deg, var(--panel-elevated) 0%, var(--panel) 100%);
+}
+
+.habits-consistency__header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 0.65rem;
+}
+
+.habits-consistency__label {
+  font-size: var(--fs-small);
+  font-weight: 650;
+  color: var(--text-secondary);
+}
+
+.habits-consistency__period {
+  font-size: var(--fs-micro);
+  color: var(--text-tertiary);
+}
+
+.habits-consistency__bars {
+  display: flex;
+  gap: 0.5rem;
+  align-items: end;
+  height: 3rem;
+}
+
+.habits-consistency__bar {
+  flex: 1;
+  border-radius: var(--r-xs);
+  transition: height 0.6s var(--ease);
+}
+
+.habits-consistency__axis {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 0.4rem;
+  font-size: var(--fs-micro);
+  color: var(--text-tertiary);
+}
+
+/* ── Collapsible Manage Section ── */
+
+.habits-collapsible {
+  border-radius: var(--r);
+  border: 1px solid var(--border);
+  background: linear-gradient(180deg, var(--panel-elevated) 0%, var(--panel) 100%);
+  margin-bottom: 0.5rem;
+  overflow: hidden;
+}
+
+.habits-collapsible__toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  width: 100%;
+  padding: 0.85rem 1rem;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  font-family: var(--font-body);
+  cursor: pointer;
+  text-align: left;
+  transition: background var(--dur-fast) var(--ease);
+}
+
+.habits-collapsible__toggle:hover {
+  background: rgba(255,255,255,0.02);
+}
+
+.habits-collapsible__title {
+  font-size: var(--fs-h3);
+  font-weight: 650;
+  letter-spacing: -0.01em;
+}
+
+.habits-collapsible__subtitle {
+  font-size: var(--fs-micro);
+  color: var(--text-tertiary);
+  margin-top: 0.1rem;
+}
+
+.habits-collapsible__right {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.habits-collapsible__chevron {
+  font-size: 1rem;
+  color: var(--text-tertiary);
+  transition: transform var(--dur) var(--ease);
+  display: inline-block;
+}
+
+.habits-collapsible__chevron--open {
+  transform: rotate(90deg);
+}
+
+.habits-collapsible__body {
+  padding: 0 1rem 1rem;
+  animation: slideUp 0.2s var(--ease) both;
+}
+
+/* ── Advanced Toggle (Habit Form) ── */
+
+.habits-advanced-toggle {
+  align-self: flex-start;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--text-tertiary);
+  font-size: var(--fs-small);
+  font-family: var(--font-body);
+  cursor: pointer;
+  transition: color var(--dur-fast) var(--ease);
+}
+
+.habits-advanced-toggle:hover {
+  color: var(--text-secondary);
+}
+
+/* ── Pause Pills ── */
+
+.habits-pause-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.35rem 0.45rem 0.35rem 0.7rem;
+  border-radius: 999px;
+  border: 1px solid rgba(255,255,255,0.08);
+  background: rgba(255,255,255,0.05);
+  max-width: 100%;
+}
+
+.habits-pause-pill__label {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.habits-pause-pill__label--active {
+  color: var(--text-primary);
+  border-color: rgba(217,153,58,0.35);
+  background: rgba(217,153,58,0.16);
+}
+
+.habits-pause-pill__remove {
+  white-space: nowrap;
+  min-height: 1.9rem;
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+  background: rgba(210, 72, 72, 0.18);
+  border: 1px solid rgba(210, 72, 72, 0.32);
+  color: #ffd7d7;
+  box-shadow: none;
+  font-size: var(--fs-micro);
+  font-family: var(--font-body);
+  cursor: pointer;
+  transition: all var(--dur-fast) var(--ease);
+}
+
+.habits-pause-pill__remove:hover {
+  background: rgba(210, 72, 72, 0.28);
+  border-color: rgba(210, 72, 72, 0.45);
+}
+
+/* ── Manage Actions (wrapping row) ── */
+
+.habits-manage-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  align-items: center;
+}
+
+/* ── Responsive — Habits Page ── */
+
+@media (max-width: 640px) {
+  .habits-daily {
+    gap: 0.25rem;
+  }
+
+  .habits-group {
+    padding: 0.7rem 0.75rem;
+  }
+
+  .habits-group__empty {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.5rem;
+  }
+
+  .habits-check-row {
+    gap: 0.45rem;
+  }
+
+  .habits-check-row__actions {
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 0.2rem;
+  }
+
+  .habits-signals {
+    margin-bottom: 1rem;
+  }
+
+  .habits-collapsible__toggle {
+    padding: 0.7rem 0.75rem;
+  }
+
+  .habits-collapsible__body {
+    padding: 0 0.75rem 0.75rem;
+  }
+
+  .habits-manage-actions {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.25rem;
+  }
+}
+
