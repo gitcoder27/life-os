@@ -270,7 +270,7 @@ const CompletedView = ({ review }: { review: DailyReviewResponse }) => (
       </div>
 
       <div className="dr-completed__section">
-        <span className="dr-section__title">Tomorrow priorities</span>
+        <span className="dr-section__title">Tomorrow's priorities</span>
         {review.seededTomorrowPriorities.length > 0 ? (
           <div className="dr-completed__priorities">
             {[...review.seededTomorrowPriorities]
@@ -391,7 +391,7 @@ export const DailyReviewWorkspace = ({
         <div className="dr-col">
           <div className="dr-section">
             <div className="dr-section__header">
-              <span className="dr-section__title">Plan tomorrow</span>
+              <span className="dr-section__title">Plan tomorrow's priorities</span>
               <span className="dr-section__badge">
                 {dailyTomorrowPriorities.filter((p) => p.title.trim().length > 0).length}/3
               </span>
@@ -403,7 +403,7 @@ export const DailyReviewWorkspace = ({
                   <input
                     type="text"
                     className="dr-priority__input"
-                    placeholder="Tomorrow's priority"
+                    placeholder="Tomorrow's top priority"
                     value={priority.title}
                     onChange={(e) =>
                       setDailyTomorrowPriorities((current) =>
