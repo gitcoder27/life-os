@@ -243,6 +243,12 @@
   line-height: 1.45;
 }
 
+.review-prompt__input {
+  min-height: calc(1.5em * 3 + 1.5rem);
+  resize: none;
+  overflow: hidden;
+}
+
 /* Disabled submit state */
 .button--primary:disabled,
 .button--primary[disabled] {

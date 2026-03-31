@@ -70,7 +70,7 @@ export function ReviewsPage() {
         description={state.config.description}
       />
 
-      {state.windowPresentation ? (
+      {state.windowPresentation && state.cadenceKey !== "daily" ? (
         <ReviewWindowBanner
           presentation={state.windowPresentation}
           cadence={state.cadenceKey}

@@ -1,23 +1,19 @@
-import type { Dispatch, SetStateAction } from "react";
+import type { Dispatch, MouseEvent, SetStateAction } from "react";
 
 import type {
   DailyReviewMutationResponse,
   DailyReviewResponse,
   TaskItem,
 } from "../../../shared/lib/api";
-import { getQuickCaptureDisplayText } from "../../../shared/lib/quickCapture";
 import { isRecurring } from "../../../shared/lib/recurrence";
-import { EmptyState } from "../../../shared/ui/PageState";
 import { RecurrenceBadge } from "../../../shared/ui/RecurrenceBadge";
-import { SectionCard } from "../../../shared/ui/SectionCard";
 import {
-  formatClosedWindowStatus,
   type DailyInputs,
   type DailyPriorityDraft,
   type DailyTaskDecision,
 } from "../reviewDraftModel";
-import { isOutOfWindowError, type ReviewWindowPresentation } from "../reviewWindowModel";
-import { ReviewSummaryPanel } from "./ReviewSummaryPanel";
+import type { ReviewWindowPresentation } from "../reviewWindowModel";
+import { ReviewTextarea } from "./ReviewTextarea";
 
 type DailyReviewWorkspaceProps = {
   review: DailyReviewResponse;
@@ -42,293 +38,262 @@ type DailyReviewWorkspaceProps = {
   onSubmit: () => void;
 };
 
-const DailyPendingTasksPanel = ({
-  dailyPendingTasks,
-  dailyTaskDecisions,
-  setDailyTaskDecisions,
-  isDailyCompleted,
-  tomorrow,
-}: {
-  dailyPendingTasks: TaskItem[];
-  dailyTaskDecisions: Record<string, DailyTaskDecision>;
-  setDailyTaskDecisions: Dispatch<SetStateAction<Record<string, DailyTaskDecision>>>;
-  isDailyCompleted: boolean;
-  tomorrow: string;
-}) => (
-  <SectionCard
-    title="Pending tasks"
-    subtitle={isDailyCompleted ? "Review closed" : "Choose one decision per task"}
-  >
-    {dailyPendingTasks.length > 0 ? (
-      <div className="review-decision-list">
-        {dailyPendingTasks.map((task) => {
-          const decision = dailyTaskDecisions[task.id];
-          const isCarry = decision?.type === "carry_forward";
-          const isDrop = decision?.type === "drop";
-          const isReschedule = decision?.type === "reschedule";
+/* ── Helpers ── */
 
-          return (
-            <div key={task.id} className="review-decision-item">
-              <div>
-                <strong>
-                  {task.title}
-                  {isRecurring(task.recurrence) && <RecurrenceBadge recurrence={task.recurrence} compact />}
-                </strong>
-                <div className="list__subtle">
-                  {isRecurring(task.recurrence)
-                    ? "Recurring - your decision updates the series"
-                    : getQuickCaptureDisplayText(task, task.title)}
-                </div>
-              </div>
+const formatShortDate = (iso: string) => {
+  const d = new Date(`${iso}T12:00:00`);
+  return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+};
 
-              {isDailyCompleted ? (
-                <span className="tag tag--neutral">closed</span>
-              ) : (
-                <>
-                  <div className="button-row button-row--tight button-row--wrap">
-                    <button
-                      className={`button ${isCarry ? "button--primary" : "button--ghost"} button--small`}
-                      type="button"
-                      onClick={() =>
-                        setDailyTaskDecisions((current) => ({
-                          ...current,
-                          [task.id]: {
-                            type: "carry_forward",
-                          },
-                        }))
-                      }
-                    >
-                      Carry forward
-                    </button>
-                    <button
-                      className={`button ${isDrop ? "button--primary" : "button--ghost"} button--small`}
-                      type="button"
-                      onClick={() =>
-                        setDailyTaskDecisions((current) => ({
-                          ...current,
-                          [task.id]: {
-                            type: "drop",
-                          },
-                        }))
-                      }
-                    >
-                      Drop
-                    </button>
-                    <button
-                      className={`button ${isReschedule ? "button--primary" : "button--ghost"} button--small`}
-                      type="button"
-                      onClick={() =>
-                        setDailyTaskDecisions((current) => ({
-                          ...current,
-                          [task.id]: {
-                            type: "reschedule",
-                            targetDate: current[task.id]?.targetDate ?? tomorrow,
-                          },
-                        }))
-                      }
-                    >
-                      Reschedule
-                    </button>
-                  </div>
+const shortWindowStatus = (wp: ReviewWindowPresentation | null): string => {
+  if (!wp) return "Window unavailable";
+  if (wp.opensAtLocal) return `Opens ${wp.opensAtLocal}`;
+  return "Window closed";
+};
 
-                  {isReschedule ? (
-                    <label className="field" style={{ marginTop: "0.5rem" }}>
-                      <span>Target date</span>
-                      <input
-                        type="date"
-                        value={decision.targetDate ?? tomorrow}
-                        onChange={(event) =>
-                          setDailyTaskDecisions((current) => ({
-                            ...current,
-                            [task.id]: {
-                              type: "reschedule",
-                              targetDate: event.target.value,
-                            },
-                          }))
-                        }
-                      />
-                    </label>
-                  ) : null}
-                </>
-              )}
-            </div>
-          );
-        })}
+/* ── Progress Bar ── */
+
+const WorkflowProgress = ({ steps }: { steps: boolean[] }) => (
+  <div className="dr-progress">
+    {steps.map((done, i) => (
+      <div key={i} className={`dr-progress__step${done ? " dr-progress__step--done" : ""}`} />
+    ))}
+  </div>
+);
+
+/* ── Summary Strip — score LEFT, metrics RIGHT ── */
+
+const SummaryStrip = ({ review }: { review: DailyReviewResponse }) => {
+  const s = review.summary;
+  return (
+    <div className="dr-summary">
+      <div className="dr-summary__score">
+        <span className="dr-summary__score-value">{review.score.value}</span>
+        <span className="dr-summary__score-label">{review.score.label}</span>
       </div>
-    ) : (
-      <EmptyState title="No pending tasks" description="All day tasks are already resolved." />
-    )}
-  </SectionCard>
-);
-
-const DailyReflectionPanel = ({
-  dailyInputs,
-  setDailyInputs,
-}: {
-  dailyInputs: DailyInputs;
-  setDailyInputs: Dispatch<SetStateAction<DailyInputs>>;
-}) => (
-  <SectionCard title="Daily reflection" subtitle="Short and practical">
-    <div className="stack-form">
-      <label className="field">
-        <span>Biggest win</span>
-        <textarea
-          rows={2}
-          placeholder="What moved the day forward?"
-          value={dailyInputs.biggestWin}
-          onChange={(event) =>
-            setDailyInputs((current) => ({
-              ...current,
-              biggestWin: event.target.value,
-            }))
-          }
-        />
-      </label>
-      <label className="field">
-        <span>Main friction note</span>
-        <textarea
-          rows={2}
-          placeholder="What created the most friction?"
-          value={dailyInputs.frictionNote}
-          onChange={(event) =>
-            setDailyInputs((current) => ({
-              ...current,
-              frictionNote: event.target.value,
-            }))
-          }
-        />
-      </label>
-      <label className="field">
-        <span>Energy rating (1-5)</span>
-        <input
-          type="number"
-          min={1}
-          max={5}
-          value={dailyInputs.energyRating}
-          onChange={(event) =>
-            setDailyInputs((current) => ({
-              ...current,
-              energyRating: event.target.value,
-            }))
-          }
-        />
-      </label>
-      <label className="field">
-        <span>Optional note</span>
-        <textarea
-          rows={2}
-          placeholder="Anything else worth capturing?"
-          value={dailyInputs.optionalNote}
-          onChange={(event) =>
-            setDailyInputs((current) => ({
-              ...current,
-              optionalNote: event.target.value,
-            }))
-          }
-        />
-      </label>
+      <div className="dr-summary__metrics">
+        <span className="dr-summary__item">
+          <span className="dr-summary__value">
+            {s.prioritiesCompleted}/{s.prioritiesTotal}
+          </span>{" "}
+          pri
+        </span>
+        <span className="dr-summary__item">
+          <span className="dr-summary__value">
+            {s.tasksCompleted}/{s.tasksScheduled}
+          </span>{" "}
+          tasks
+        </span>
+        <span className="dr-summary__item">
+          <span className="dr-summary__value">
+            {s.habitsCompleted}/{s.habitsDue}
+          </span>{" "}
+          habits
+        </span>
+        <span className="dr-summary__item">
+          <span className="dr-summary__value">{s.waterMl}</span>/{s.waterTargetMl} ml
+        </span>
+        <span className="dr-summary__item">
+          {s.workoutStatus === "none" ? "No workout" : s.workoutStatus.replace(/_/g, " ")}
+        </span>
+      </div>
     </div>
-  </SectionCard>
-);
+  );
+};
 
-const TomorrowPrioritiesPanel = ({
-  dailyTomorrowPriorities,
-  setDailyTomorrowPriorities,
+/* ── Task Row — actions on hover, decided tag at rest ── */
+
+const TaskRow = ({
+  task,
+  decision,
+  tomorrow,
+  onDecide,
 }: {
-  dailyTomorrowPriorities: DailyPriorityDraft[];
-  setDailyTomorrowPriorities: Dispatch<SetStateAction<DailyPriorityDraft[]>>;
-}) => (
-  <SectionCard title="Tomorrow priorities" subtitle="Exactly 3 priorities required">
-    <div className="stack-form">
-      {dailyTomorrowPriorities.map((priority, index) => (
-        <label key={`tomorrow-priority-${index}`} className="field">
-          <span>Priority {index + 1}</span>
-          <input
-            type="text"
-            value={priority.title}
-            placeholder="Enter tomorrow's priority"
-            onChange={(event) =>
-              setDailyTomorrowPriorities((current) =>
-                current.map((entry, entryIndex) =>
-                  entryIndex === index
-                    ? {
-                        ...entry,
-                        title: event.target.value,
-                      }
-                    : entry,
-                ),
-              )
+  task: TaskItem;
+  decision: DailyTaskDecision | undefined;
+  tomorrow: string;
+  onDecide: (decision: DailyTaskDecision) => void;
+}) => {
+  const isCarry = decision?.type === "carry_forward";
+  const isDrop = decision?.type === "drop";
+  const isDefer = decision?.type === "reschedule";
+
+  const handleTitleHover = (e: MouseEvent<HTMLSpanElement>) => {
+    const el = e.currentTarget;
+    if (el.scrollWidth > el.clientWidth) {
+      el.title = task.title;
+    } else {
+      el.removeAttribute("title");
+    }
+  };
+
+  return (
+    <div className="dr-task">
+      <div className="dr-task__info">
+        <span className="dr-task__title" onMouseEnter={handleTitleHover}>
+          {task.title}
+        </span>
+        {isRecurring(task.recurrence) && <RecurrenceBadge recurrence={task.recurrence} compact />}
+      </div>
+      <div className="dr-task__toggle">
+        {/* Decided tag — visible at rest, fades on hover */}
+        {decision && (
+          <span
+            className={`dr-task__decided-tag dr-task__decided-tag--${
+              isCarry ? "carry" : isDrop ? "drop" : "defer"
+            }`}
+          >
+            {isCarry && "Carry"}
+            {isDrop && "Drop"}
+            {isDefer && decision.targetDate && formatShortDate(decision.targetDate)}
+            {isDefer && !decision?.targetDate && "Deferred"}
+          </span>
+        )}
+        {/* Action pills — hidden at rest, shown on hover/focus */}
+        <div className="dr-task__actions">
+          <button
+            type="button"
+            className={`dr-task__pill dr-task__pill--carry${isCarry ? " dr-task__pill--active" : ""}`}
+            onClick={() => onDecide({ type: "carry_forward" })}
+          >
+            Carry
+          </button>
+          <button
+            type="button"
+            className={`dr-task__pill dr-task__pill--drop${isDrop ? " dr-task__pill--active" : ""}`}
+            onClick={() => onDecide({ type: "drop" })}
+          >
+            Drop
+          </button>
+          <button
+            type="button"
+            className={`dr-task__pill dr-task__pill--defer${isDefer ? " dr-task__pill--active" : ""}`}
+            onClick={() =>
+              onDecide({
+                type: "reschedule",
+                targetDate: decision?.targetDate ?? tomorrow,
+              })
             }
-          />
-        </label>
-      ))}
+          >
+            Defer
+          </button>
+          {isDefer && decision && (
+            <input
+              type="date"
+              className="dr-task__date"
+              value={decision.targetDate ?? tomorrow}
+              onChange={(e) => onDecide({ type: "reschedule", targetDate: e.target.value })}
+            />
+          )}
+        </div>
+      </div>
     </div>
-  </SectionCard>
-);
+  );
+};
 
-const SubmittedDailyReflectionPanel = ({ review }: { review: DailyReviewResponse }) => (
-  <SectionCard title="Submitted daily reflection" subtitle="Read-only closed state">
-    {review.existingReview ? (
-      <ul className="list">
-        <li>
-          <strong>Biggest win</strong>
-          <span className="list__subtle">{review.existingReview.biggestWin}</span>
-        </li>
-        <li>
-          <strong>Friction tag</strong>
-          <span className="list__subtle">{review.existingReview.frictionTag}</span>
-        </li>
-        <li>
-          <strong>Friction note</strong>
-          <span className="list__subtle">{review.existingReview.frictionNote ?? "None"}</span>
-        </li>
-        <li>
-          <strong>Energy</strong>
-          <span className="list__subtle">{review.existingReview.energyRating}/5</span>
-        </li>
-        <li>
-          <strong>Optional note</strong>
-          <span className="list__subtle">{review.existingReview.optionalNote ?? "None"}</span>
-        </li>
-      </ul>
-    ) : (
-      <EmptyState
-        title="No reflection captured"
-        description="The review is closed but no reflection details were returned."
-      />
-    )}
-  </SectionCard>
-);
+/* ── Energy Dots ── */
 
-const SeededTomorrowPrioritiesPanel = ({ review }: { review: DailyReviewResponse }) => (
-  <SectionCard title="Seeded tomorrow priorities" subtitle="Submitted output">
-    {review.seededTomorrowPriorities.length > 0 ? (
-      <ol className="priority-list">
-        {[...review.seededTomorrowPriorities]
-          .sort((left, right) => left.slot - right.slot)
-          .map((priority, index) => (
-            <li key={priority.id} className="priority-list__item">
-              <span>
-                <span className="tag tag--neutral" style={{ marginRight: "0.5rem" }}>
-                  P{index + 1}
-                </span>
-                {priority.title}
+const EnergyDots = ({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+}) => {
+  const rating = parseInt(value) || 3;
+  return (
+    <div className="dr-field">
+      <span className="dr-field__label">Energy</span>
+      <div className="dr-energy__dots" data-rating={rating}>
+        {[1, 2, 3, 4, 5].map((n) => (
+          <button
+            key={n}
+            type="button"
+            aria-label={`Set energy to ${n} out of 5`}
+            className={`dr-energy__dot dr-energy__dot--level-${n}${
+              rating >= n ? " dr-energy__dot--active" : ""
+            }`}
+            onClick={() => onChange(String(n))}
+          >
+            {n}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+/* ── Completed View ── */
+
+const CompletedView = ({ review }: { review: DailyReviewResponse }) => (
+  <div className="dr-completed">
+    <div className="dr-completed__banner">Daily review closed for {review.date}</div>
+
+    <SummaryStrip review={review} />
+
+    <div className="dr-completed__grid">
+      <div className="dr-completed__section">
+        <span className="dr-section__title">Reflection</span>
+        {review.existingReview ? (
+          <>
+            <div className="dr-completed__row">
+              <span className="dr-completed__label">Win</span>
+              <span className="dr-completed__value">{review.existingReview.biggestWin}</span>
+            </div>
+            <div className="dr-completed__row">
+              <span className="dr-completed__label">Friction</span>
+              <span className="dr-completed__value">
+                {review.existingReview.frictionTag}
+                {review.existingReview.frictionNote
+                  ? ` — ${review.existingReview.frictionNote}`
+                  : ""}
               </span>
-            </li>
-          ))}
-      </ol>
-    ) : (
-      <EmptyState
-        title="No priorities seeded"
-        description="No tomorrow priorities were returned with this closed review."
-      />
-    )}
-  </SectionCard>
+            </div>
+            <div className="dr-completed__row">
+              <span className="dr-completed__label">Energy</span>
+              <span className="dr-completed__value">
+                {review.existingReview.energyRating}/5
+              </span>
+            </div>
+            {review.existingReview.optionalNote && (
+              <div className="dr-completed__row">
+                <span className="dr-completed__label">Note</span>
+                <span className="dr-completed__value">
+                  {review.existingReview.optionalNote}
+                </span>
+              </div>
+            )}
+          </>
+        ) : (
+          <span className="dr-completed__value--muted">No reflection captured</span>
+        )}
+      </div>
+
+      <div className="dr-completed__section">
+        <span className="dr-section__title">Tomorrow priorities</span>
+        {review.seededTomorrowPriorities.length > 0 ? (
+          <div className="dr-completed__priorities">
+            {[...review.seededTomorrowPriorities]
+              .sort((a, b) => a.slot - b.slot)
+              .map((p, i) => (
+                <div key={p.id} className="dr-completed__priority">
+                  <span className="dr-priority__number">{i + 1}</span>
+                  <span>{p.title}</span>
+                </div>
+              ))}
+          </div>
+        ) : (
+          <span className="dr-completed__value--muted">No priorities seeded</span>
+        )}
+      </div>
+    </div>
+  </div>
 );
+
+/* ── Main Workspace ── */
 
 export const DailyReviewWorkspace = ({
   review,
-  summaryItems,
   dailyPendingTasks,
   dailyInputs,
   setDailyInputs,
@@ -341,120 +306,196 @@ export const DailyReviewWorkspace = ({
   canSubmitDaily,
   isWindowOpen,
   dailySubmitBlockers,
-  draftStatusText,
-  submitError,
   submitErrorText,
   submitResult,
   windowPresentation,
   onSubmit,
 }: DailyReviewWorkspaceProps) => {
-  const statusText = canSubmitDaily
-    ? "Everything required is filled in. You can submit the daily review now."
-    : isWindowOpen
-      ? "The review window is open, but the form is still incomplete."
-      : formatClosedWindowStatus(windowPresentation);
-
   if (review.isCompleted) {
-    return (
-      <>
-        <div className="two-column-grid stagger">
-          <ReviewSummaryPanel
-            title="Generated summary"
-            subtitle="System-generated overview"
-            items={summaryItems}
-            footer={
-              <p className="support-copy" style={{ marginTop: "0.7rem" }}>
-                Score band: {review.score.label} ({review.score.value})
-              </p>
-            }
-          />
-
-          <DailyPendingTasksPanel
-            dailyPendingTasks={dailyPendingTasks}
-            dailyTaskDecisions={dailyTaskDecisions}
-            setDailyTaskDecisions={setDailyTaskDecisions}
-            isDailyCompleted
-            tomorrow={tomorrow}
-          />
-
-          <SubmittedDailyReflectionPanel review={review} />
-          <SeededTomorrowPrioritiesPanel review={review} />
-        </div>
-
-        <div className="inline-state inline-state--success" style={{ marginTop: "0.75rem" }}>
-          Daily review is already closed for {review.date}.
-        </div>
-      </>
-    );
+    return <CompletedView review={review} />;
   }
 
+  const tasksComplete =
+    dailyPendingTasks.length === 0 ||
+    dailyPendingTasks.every((task) => {
+      const d = dailyTaskDecisions[task.id];
+      return d && (d.type !== "reschedule" || d.targetDate);
+    });
+  const reflectStarted = dailyInputs.biggestWin.trim().length > 0;
+  const planComplete =
+    dailyTomorrowPriorities.length === 3 &&
+    dailyTomorrowPriorities.every((p) => p.title.trim().length > 0);
+
+  const decidedCount = dailyPendingTasks.filter((t) => {
+    const d = dailyTaskDecisions[t.id];
+    return d && (d.type !== "reschedule" || d.targetDate);
+  }).length;
+
   return (
-    <>
-      <div className="two-column-grid stagger">
-        <ReviewSummaryPanel
-          title="Generated summary"
-          subtitle="System-generated overview"
-          items={summaryItems}
-          footer={
-            <p className="support-copy" style={{ marginTop: "0.7rem" }}>
-              Score band: {review.score.label} ({review.score.value})
-            </p>
-          }
-        />
+    <div className="dr-layout">
+      <WorkflowProgress steps={[reflectStarted, planComplete, tasksComplete]} />
 
-        <DailyPendingTasksPanel
-          dailyPendingTasks={dailyPendingTasks}
-          dailyTaskDecisions={dailyTaskDecisions}
-          setDailyTaskDecisions={setDailyTaskDecisions}
-          isDailyCompleted={false}
-          tomorrow={tomorrow}
-        />
+      <SummaryStrip review={review} />
 
-        <DailyReflectionPanel dailyInputs={dailyInputs} setDailyInputs={setDailyInputs} />
-        <TomorrowPrioritiesPanel
-          dailyTomorrowPriorities={dailyTomorrowPriorities}
-          setDailyTomorrowPriorities={setDailyTomorrowPriorities}
-        />
+      {/* ── Two-column: Reflect (left) | Plan + Tasks (right) ── */}
+      <div className="dr-columns">
+        {/* Column 1 — Reflect */}
+        <div className="dr-col">
+          <div className="dr-section">
+            <div className="dr-section__header">
+              <span className="dr-section__title">Reflect</span>
+            </div>
+            <div className="dr-reflect">
+              <div className="dr-field">
+                <span className="dr-field__label">Biggest win</span>
+                <ReviewTextarea
+                  className="dr-field__input"
+                  placeholder="What moved the day forward?"
+                  value={dailyInputs.biggestWin}
+                  onChange={(e) =>
+                    setDailyInputs((c) => ({ ...c, biggestWin: e.target.value }))
+                  }
+                />
+              </div>
+              <div className="dr-field">
+                <span className="dr-field__label">Main friction</span>
+                <ReviewTextarea
+                  className="dr-field__input"
+                  placeholder="What created the most friction?"
+                  value={dailyInputs.frictionNote}
+                  onChange={(e) =>
+                    setDailyInputs((c) => ({ ...c, frictionNote: e.target.value }))
+                  }
+                />
+              </div>
+              <EnergyDots
+                value={dailyInputs.energyRating}
+                onChange={(v) => setDailyInputs((c) => ({ ...c, energyRating: v }))}
+              />
+              <div className="dr-field">
+                <span className="dr-field__label">Note</span>
+                <ReviewTextarea
+                  className="dr-field__input"
+                  placeholder="Anything else worth capturing?"
+                  value={dailyInputs.optionalNote}
+                  onChange={(e) =>
+                    setDailyInputs((c) => ({ ...c, optionalNote: e.target.value }))
+                  }
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Column 2 — Plan tomorrow + Task triage */}
+        <div className="dr-col">
+          <div className="dr-section">
+            <div className="dr-section__header">
+              <span className="dr-section__title">Plan tomorrow</span>
+              <span className="dr-section__badge">
+                {dailyTomorrowPriorities.filter((p) => p.title.trim().length > 0).length}/3
+              </span>
+            </div>
+            <div className="dr-tomorrow">
+              {dailyTomorrowPriorities.map((priority, index) => (
+                <div key={`priority-${index}`} className="dr-priority">
+                  <span className="dr-priority__number">{index + 1}</span>
+                  <input
+                    type="text"
+                    className="dr-priority__input"
+                    placeholder="Tomorrow's priority"
+                    value={priority.title}
+                    onChange={(e) =>
+                      setDailyTomorrowPriorities((current) =>
+                        current.map((entry, i) =>
+                          i === index ? { ...entry, title: e.target.value } : entry,
+                        ),
+                      )
+                    }
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="dr-section">
+            <div className="dr-section__header">
+              <span className="dr-section__title">
+                {dailyPendingTasks.length > 0 ? "Pending tasks" : "Tasks"}
+              </span>
+              {dailyPendingTasks.length > 0 && (
+                <span
+                  className={`dr-section__badge${tasksComplete ? " dr-section__badge--done" : ""}`}
+                >
+                  {tasksComplete
+                    ? "All resolved"
+                    : `${decidedCount}/${dailyPendingTasks.length}`}
+                </span>
+              )}
+            </div>
+            {dailyPendingTasks.length > 0 ? (
+              <div
+                className={`dr-tasks${dailyPendingTasks.length > 10 ? " dr-tasks--scroll" : ""}`}
+              >
+                {dailyPendingTasks.map((task) => (
+                  <TaskRow
+                    key={task.id}
+                    task={task}
+                    decision={dailyTaskDecisions[task.id]}
+                    tomorrow={tomorrow}
+                    onDecide={(decision) =>
+                      setDailyTaskDecisions((current) => ({
+                        ...current,
+                        [task.id]: decision,
+                      }))
+                    }
+                  />
+                ))}
+              </div>
+            ) : (
+              <span className="dr-empty">All tasks resolved.</span>
+            )}
+          </div>
+        </div>
       </div>
 
-      <div className="button-row" style={{ paddingTop: "0.5rem" }}>
-        <span className="support-copy">{statusText}</span>
+      {/* ── Sticky Submit ── */}
+      <div className="dr-submit">
+        <div className="dr-submit__left">
+          {submitResult ? (
+            <span className="dr-submit__success">
+              Closed — {submitResult.tomorrowPriorities.length} priorities seeded.
+            </span>
+          ) : submitErrorText ? (
+            <span className="dr-submit__error">{submitErrorText}</span>
+          ) : (
+            <span
+              className={`dr-submit__status${canSubmitDaily ? " dr-submit__status--ready" : ""}`}
+            >
+              {canSubmitDaily
+                ? "Ready to submit"
+                : isWindowOpen
+                  ? "Complete all sections"
+                  : shortWindowStatus(windowPresentation)}
+            </span>
+          )}
+          {!submitResult &&
+            !submitErrorText &&
+            !canSubmitDaily &&
+            isWindowOpen &&
+            dailySubmitBlockers.length > 0 && (
+              <span className="dr-submit__blockers">{dailySubmitBlockers.join(" · ")}</span>
+            )}
+        </div>
         <button
           className="button button--primary"
           type="button"
           onClick={onSubmit}
           disabled={!canSubmitDaily}
         >
-          {isSubmitting ? "Submitting..." : "Submit daily review"}
+          {isSubmitting ? "Submitting..." : "Submit review"}
         </button>
       </div>
-
-      {!canSubmitDaily && dailySubmitBlockers.length > 0 ? (
-        <div className="inline-state inline-state--out-of-window" style={{ marginTop: "0.75rem" }}>
-          {dailySubmitBlockers.map((blocker) => (
-            <div key={blocker}>{blocker}</div>
-          ))}
-        </div>
-      ) : null}
-
-      <p className="support-copy" style={{ marginTop: "0.5rem" }}>
-        {draftStatusText}
-      </p>
-
-      {submitErrorText ? (
-        <div
-          className={`inline-state ${isOutOfWindowError(submitError) ? "inline-state--out-of-window" : "inline-state--error"}`}
-          style={{ marginTop: "0.75rem" }}
-        >
-          {submitErrorText}
-        </div>
-      ) : null}
-
-      {submitResult ? (
-        <div className="inline-state inline-state--success" style={{ marginTop: "0.75rem" }}>
-          Daily review closed. {submitResult.tomorrowPriorities.length} priorities seeded for tomorrow.
-        </div>
-      ) : null}
-    </>
+    </div>
   );
 };

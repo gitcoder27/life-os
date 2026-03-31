@@ -8,6 +8,7 @@ import { EmptyState } from "../../../shared/ui/PageState";
 import { SectionCard } from "../../../shared/ui/SectionCard";
 import { reviewCadences } from "../reviewCadenceConfig";
 import { ReviewSummaryPanel } from "./ReviewSummaryPanel";
+import { ReviewTextarea } from "./ReviewTextarea";
 
 type ActiveHabitOption = {
   id: string;
@@ -121,9 +122,9 @@ const PromptComposer = ({
       {prompts.map((prompt, index) => (
         <label key={prompt} className="field">
           <span>{prompt}</span>
-          <textarea
+          <ReviewTextarea
+            className="review-prompt__input"
             placeholder="Type your response..."
-            rows={2}
             value={responses[index] ?? ""}
             onChange={(event) =>
               setResponses((current) =>
