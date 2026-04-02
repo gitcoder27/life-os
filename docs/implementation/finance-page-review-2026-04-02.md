@@ -732,18 +732,18 @@ Phase focus: backend-heavy, because real goal links and review integrations need
 
 #### Frontend checklist for the frontend-focused AI agent
 
-- [ ] Add the money goals section to Finance: show goal amount, progress, next milestone, and this month’s contribution plan in the right rail or overview area.
-- [ ] Build finance review blocks: show weekly spend watch, monthly drift, what improved, and what to adjust next in a review-friendly format.
-- [ ] Surface review-driven finance focus on the page: show the current spend-watch category as a live focus state inside Finance.
-- [ ] Connect finance navigation to goals and reviews: make it easy to jump between the finance page, goal detail, and review flows.
+- [x] Add the money goals section to Finance: show goal amount, progress, next milestone, and this month’s contribution plan in the right rail or overview area.
+- [x] Build finance review blocks: show weekly spend watch, monthly drift, what improved, and what to adjust next in a review-friendly format.
+- [x] Surface review-driven finance focus on the page: show the current spend-watch category as a live focus state inside Finance.
+- [x] Connect finance navigation to goals and reviews: make it easy to jump between the finance page, goal detail, and review flows.
 
 #### Backend checklist for the backend-focused AI agent
 
-- [ ] Add finance-to-goal linking: support money goals such as emergency fund, debt payoff, travel fund, and large-purchase targets.
-- [ ] Add contribution and progress support for money goals: let the product track how monthly finance activity relates to goal progress.
-- [ ] Produce finance review aggregates: return weekly and monthly money summaries that can power review blocks and finance insights.
-- [ ] Surface spend-watch category and review context: expose weekly review finance focus back to the finance page as live data.
-- [ ] Add stable contracts for finance review insight blocks: provide the frontend with ready-to-render summaries instead of raw data only.
+- [x] Add finance-to-goal linking: support money goals such as emergency fund, debt payoff, travel fund, and large-purchase targets.
+- [x] Add contribution and progress support for money goals: let the product track how monthly finance activity relates to goal progress.
+- [x] Produce finance review aggregates: return weekly and monthly money summaries that can power review blocks and finance insights.
+- [x] Surface spend-watch category and review context: expose weekly review finance focus back to the finance page as live data.
+- [x] Add stable contracts for finance review insight blocks: provide the frontend with ready-to-render summaries instead of raw data only.
 
 ### Phase 4: Add world-class productivity features
 

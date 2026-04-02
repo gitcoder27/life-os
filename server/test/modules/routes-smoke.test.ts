@@ -547,6 +547,259 @@ describe("module route smoke tests", () => {
     );
   });
 
+  it("serves finance goal and review insights", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-03-14T06:30:00.000Z"));
+    const categoryId = "11111111-1111-4111-8111-111111111111";
+
+    prisma.userPreference = {
+      findUnique: vi.fn().mockResolvedValue({ currencyCode: "USD", timezone: "UTC", weekStartsOn: 1 }),
+    } as any;
+    prisma.financeMonthPlan = {
+      findUnique: vi.fn().mockResolvedValue({
+        id: "plan-1",
+        userId: "user-1",
+        monthStart: new Date("2026-03-01T00:00:00.000Z"),
+        plannedSpendMinor: 120000,
+        fixedObligationsMinor: 60000,
+        flexibleSpendTargetMinor: 45000,
+        plannedIncomeMinor: 180000,
+        expectedLargeExpensesMinor: 20000,
+        categoryWatches: [],
+      }),
+    } as any;
+    prisma.goal = {
+      findMany: vi.fn().mockResolvedValue([
+        {
+          id: "goal-1",
+          userId: "user-1",
+          domainId: "domain-money",
+          horizonId: null,
+          parentGoalId: null,
+          title: "Emergency fund",
+          why: "Safety",
+          status: "ACTIVE",
+          targetDate: new Date("2026-12-31T00:00:00.000Z"),
+          notes: null,
+          sortOrder: 0,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          domain: {
+            id: "domain-money",
+            userId: "user-1",
+            systemKey: "MONEY",
+            name: "Money",
+            sortOrder: 0,
+            isArchived: false,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          },
+          horizon: null,
+          milestones: [
+            {
+              id: "milestone-1",
+              goalId: "goal-1",
+              title: "Reach first 1k",
+              targetDate: new Date("2026-04-30T00:00:00.000Z"),
+              status: "PENDING",
+              completedAt: null,
+              sortOrder: 0,
+              createdAt: new Date(),
+              updatedAt: new Date(),
+            },
+          ],
+          financeGoal: {
+            id: "finance-goal-1",
+            goalId: "goal-1",
+            goalType: "EMERGENCY_FUND",
+            targetAmountMinor: 500000,
+            currentAmountMinor: 150000,
+            monthlyContributionTargetMinor: 25000,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          },
+        },
+      ]),
+    } as any;
+    prisma.expenseCategory = {
+      findFirst: vi.fn().mockResolvedValue({
+        id: categoryId,
+        userId: "user-1",
+        name: "Food",
+        color: "#ff9900",
+        sortOrder: 0,
+        createdAt: new Date(),
+        archivedAt: null,
+      }),
+    } as any;
+    prisma.expense = {
+      findMany: vi.fn().mockResolvedValue([]),
+      aggregate: vi.fn().mockResolvedValue({ _sum: { amountMinor: 18000 } }),
+    } as any;
+    prisma.adminItem = {
+      findMany: vi.fn().mockResolvedValue([]),
+    } as any;
+
+    reviewsMock.getWeeklyReviewModel.mockResolvedValue({
+      startDate: "2026-03-10",
+      endDate: "2026-03-16",
+      summary: {
+        averageDailyScore: 81,
+        strongDayCount: 2,
+        habitCompletionRate: 60,
+        routineCompletionRate: 50,
+        workoutsCompleted: 2,
+        workoutsPlanned: 3,
+        waterTargetHitCount: 3,
+        mealsLoggedCount: 8,
+        spendingTotal: 42000,
+        topSpendCategory: "Food",
+        topFrictionTags: [],
+      },
+      existingReview: {
+        biggestWin: "Stayed under impulse spending",
+        biggestMiss: "Ate out too often",
+        mainLesson: "Prep meals earlier",
+        keepText: "Keep meal prep on Sundays",
+        improveText: "Watch restaurant spend this week",
+        focusHabitId: null,
+        healthTargetText: null,
+        spendingWatchCategoryId: categoryId,
+        notes: null,
+        completedAt: new Date().toISOString(),
+      },
+      seededNextWeekPriorities: [],
+      submissionWindow: {
+        isOpen: false,
+        status: "wrong_period",
+        requestedDate: "2026-03-10",
+        allowedDate: null,
+        opensAt: null,
+        closesAt: null,
+        timezone: "UTC",
+      },
+      generatedAt: new Date().toISOString(),
+    });
+    reviewsMock.getMonthlyReviewModel.mockResolvedValue({
+      startDate: "2026-03-01",
+      endDate: "2026-03-31",
+      summary: {
+        averageWeeklyMomentum: 76,
+        bestScore: 90,
+        worstScore: 58,
+        workoutCount: 5,
+        waterSuccessRate: 63,
+        spendingByCategory: [{ category: "Food", amountMinor: 62000 }],
+        topHabits: [],
+        commonFrictionTags: [],
+      },
+      existingReview: {
+        monthVerdict: "Good month with one leak",
+        biggestWin: "Saved steadily",
+        biggestLeak: "Food delivery",
+        ratings: {},
+        nextMonthTheme: "Tighten food routines",
+        nextMonthOutcomes: [],
+        habitChanges: [],
+        simplifyText: "Automate transfers",
+        notes: null,
+        completedAt: new Date().toISOString(),
+      },
+      seededNextMonthTheme: null,
+      seededNextMonthOutcomes: [],
+      submissionWindow: {
+        isOpen: false,
+        status: "wrong_period",
+        requestedDate: "2026-03-01",
+        allowedDate: null,
+        opensAt: null,
+        closesAt: null,
+        timezone: "UTC",
+      },
+      generatedAt: new Date().toISOString(),
+    });
+
+    const response = await app!.inject({
+      method: "GET",
+      url: "/api/finance/insights?month=2026-03",
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(JSON.parse(response.body).insights).toEqual(
+      expect.objectContaining({
+        month: "2026-03",
+        currentFocus: expect.objectContaining({
+          expenseCategoryId: categoryId,
+          monthSpentMinor: 18000,
+        }),
+        moneyGoals: [
+          expect.objectContaining({
+            goalId: "goal-1",
+            progressPercent: 30,
+            contributionFit: "on_track",
+          }),
+        ],
+      }),
+    );
+  });
+
+  it("updates finance goal settings", async () => {
+    prisma.goal = {
+      findFirst: vi.fn().mockResolvedValue({
+        id: "goal-1",
+        userId: "user-1",
+        domainId: "domain-money",
+        horizonId: null,
+        parentGoalId: null,
+        title: "Emergency fund",
+        why: null,
+        status: "ACTIVE",
+        targetDate: null,
+        notes: null,
+        sortOrder: 0,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        domain: {
+          id: "domain-money",
+          userId: "user-1",
+          systemKey: "MONEY",
+          name: "Money",
+          sortOrder: 0,
+          isArchived: false,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+        milestones: [],
+        financeGoal: null,
+      }),
+    } as any;
+    prisma.financeGoal = {
+      upsert: vi.fn().mockResolvedValue({
+        id: "finance-goal-1",
+        goalId: "goal-1",
+      }),
+    } as any;
+
+    const response = await app!.inject({
+      method: "PUT",
+      url: "/api/finance/goals/goal-1",
+      payload: {
+        goalType: "emergency_fund",
+        targetAmountMinor: 500000,
+        currentAmountMinor: 100000,
+        monthlyContributionTargetMinor: 25000,
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect((prisma.financeGoal as { upsert: ReturnType<typeof vi.fn> }).upsert).toHaveBeenCalled();
+    expect(JSON.parse(response.body)).toEqual(
+      expect.objectContaining({
+        goalId: "goal-1",
+      }),
+    );
+  });
+
   it("serves health endpoints", async () => {
     prisma.userPreference = { findUnique: vi.fn().mockResolvedValue({ dailyWaterTargetMl: 2500 }) } as any;
     prisma.waterLog = { findMany: vi.fn().mockResolvedValue([]) } as any;

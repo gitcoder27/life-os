@@ -18,6 +18,7 @@ import {
   useUpdateAdminItemMutation,
   useUpdateCategoryMutation,
   useUpdateExpenseMutation,
+  useUpdateFinanceGoalMutation,
   useUpdateFinanceMonthPlanMutation,
   useUpdateRecurringExpenseMutation,
 } from "../../shared/lib/api";
@@ -38,6 +39,7 @@ import {
 } from "../../shared/ui/PageState";
 import { RecurrenceEditor, buildRecurrenceInput } from "../../shared/ui/RecurrenceEditor";
 import { SectionCard } from "../../shared/ui/SectionCard";
+import { FinanceInsightsPanel } from "./FinanceInsightsPanel";
 import { FinancePlanPanel } from "./FinancePlanPanel";
 
 type CategoryForm = { name: string; color: string };
@@ -98,6 +100,7 @@ export function FinancePage() {
   const updateExpenseMutation = useUpdateExpenseMutation(today);
   const deleteExpenseMutation = useDeleteExpenseMutation(today);
   const updateAdminItemMutation = useUpdateAdminItemMutation(today);
+  const updateFinanceGoalMutation = useUpdateFinanceGoalMutation(selectedMonth);
   const updateFinanceMonthPlanMutation = useUpdateFinanceMonthPlanMutation(selectedMonth);
   const createCategoryMutation = useCreateCategoryMutation();
   const updateCategoryMutation = useUpdateCategoryMutation();
@@ -146,6 +149,7 @@ export function FinancePage() {
   const recurringExpenses = financeData?.recurringExpenses?.recurringExpenses ?? [];
   const categories = financeData?.categories?.categories ?? [];
   const monthPlan = financeData?.monthPlan?.monthPlan ?? null;
+  const insights = financeData?.insights?.insights ?? null;
   const activeCategories = categories.filter((c) => !c.archivedAt);
   const categoryMap = new Map(categories.map((c) => [c.id, c]));
   const currency = summary?.currencyCode ?? "USD";
@@ -426,6 +430,16 @@ export function FinancePage() {
 
   async function handleMonthPlanSave(payload: Parameters<typeof updateFinanceMonthPlanMutation.mutateAsync>[0]) {
     await updateFinanceMonthPlanMutation.mutateAsync(payload);
+  }
+
+  async function handleFinanceGoalSave(
+    goalId: string,
+    payload: Omit<Parameters<typeof updateFinanceGoalMutation.mutateAsync>[0], "goalId">,
+  ) {
+    await updateFinanceGoalMutation.mutateAsync({
+      goalId,
+      ...payload,
+    });
   }
 
   // ── Render ──
@@ -823,6 +837,15 @@ export function FinancePage() {
             isSaving={updateFinanceMonthPlanMutation.isPending}
             onRetry={() => void financeQuery.refetch()}
             onSave={handleMonthPlanSave}
+          />
+
+          <FinanceInsightsPanel
+            insights={insights}
+            currencyCode={currency}
+            errorMessage={financeQuery.data.sectionErrors.insights?.message ?? null}
+            savingGoalId={updateFinanceGoalMutation.isPending ? updateFinanceGoalMutation.variables?.goalId ?? null : null}
+            onRetry={() => void financeQuery.refetch()}
+            onSaveGoal={handleFinanceGoalSave}
           />
 
           {/* Top categories */}

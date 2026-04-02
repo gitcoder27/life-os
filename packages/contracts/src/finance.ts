@@ -6,6 +6,8 @@ export type RecurringExpenseStatus = "active" | "paused" | "archived";
 export type AdminItemStatus = "pending" | "done" | "rescheduled" | "dropped";
 export type FinancePaceStatus = "no_plan" | "on_pace" | "slightly_heavy" | "off_track";
 export type FinanceWatchStatus = "within_limit" | "near_limit" | "over_limit";
+export type FinanceGoalType = "emergency_fund" | "debt_payoff" | "travel" | "large_purchase" | "other";
+export type FinanceContributionFit = "on_track" | "tight" | "needs_plan";
 
 export interface ExpenseItem {
   id: EntityId;
@@ -95,6 +97,82 @@ export interface UpdateFinanceMonthPlanRequest {
 
 export interface FinanceMonthPlanMutationResponse extends ApiMeta {
   monthPlan: FinanceMonthPlanItem;
+}
+
+export interface FinanceGoalInsightItem {
+  goalId: EntityId;
+  title: string;
+  status: "active" | "paused" | "completed" | "archived";
+  route: string;
+  goalType: FinanceGoalType | null;
+  targetDate: IsoDateString | null;
+  targetAmountMinor: number | null;
+  currentAmountMinor: number | null;
+  progressPercent: number;
+  remainingAmountMinor: number | null;
+  monthlyContributionTargetMinor: number | null;
+  contributionFit: FinanceContributionFit;
+  contributionSummary: string;
+  nextMilestoneTitle: string | null;
+  nextMilestoneDate: IsoDateString | null;
+}
+
+export interface FinanceFocusCategory {
+  expenseCategoryId: EntityId;
+  name: string;
+  color: string | null;
+  monthSpentMinor: number;
+  guidance: string;
+  route: string;
+}
+
+export interface FinanceWeeklyReviewInsight {
+  route: string;
+  startDate: IsoDateString;
+  endDate: IsoDateString;
+  spendingTotalMinor: number;
+  topSpendCategory: string | null;
+  biggestWin: string | null;
+  keepText: string | null;
+  improveText: string | null;
+  spendWatchCategoryName: string | null;
+}
+
+export interface FinanceMonthlyReviewInsight {
+  route: string;
+  startDate: IsoDateString;
+  endDate: IsoDateString;
+  monthVerdict: string | null;
+  biggestWin: string | null;
+  biggestLeak: string | null;
+  nextMonthTheme: string | null;
+  topSpendingCategories: Array<{
+    category: string;
+    amountMinor: number;
+  }>;
+}
+
+export interface FinanceInsightsItem {
+  month: IsoMonthString;
+  moneyGoals: FinanceGoalInsightItem[];
+  currentFocus: FinanceFocusCategory | null;
+  weeklyReview: FinanceWeeklyReviewInsight | null;
+  monthlyReview: FinanceMonthlyReviewInsight | null;
+}
+
+export interface FinanceInsightsResponse extends ApiMeta {
+  insights: FinanceInsightsItem;
+}
+
+export interface UpdateFinanceGoalRequest {
+  goalType?: FinanceGoalType | null;
+  targetAmountMinor?: number | null;
+  currentAmountMinor?: number | null;
+  monthlyContributionTargetMinor?: number | null;
+}
+
+export interface FinanceGoalMutationResponse extends ApiMeta {
+  goalId: EntityId;
 }
 
 export interface CreateExpenseRequest {
