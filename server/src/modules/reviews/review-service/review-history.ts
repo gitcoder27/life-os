@@ -2,7 +2,7 @@ import type { PrismaClient } from "@prisma/client";
 import { normalizeTimezone, getDateRangeWindowUtc } from "../../../lib/time/user-time.js";
 import { toIsoDateString } from "../../../lib/time/date.js";
 import { countWaterTargetHits } from "../../../lib/health/water.js";
-import { isHabitDueOnIsoDate, resolveHabitRecurrence } from "../../../lib/habits/schedule.js";
+import { getHabitCompletionCountForIsoDate, isHabitDueOnIsoDate, resolveHabitRecurrence } from "../../../lib/habits/schedule.js";
 import { getWeeklyMomentum } from "../../scoring/service.js";
 
 import {
@@ -299,21 +299,14 @@ async function buildWeeklyHistoryMetricsMap(
     const habitTotals = habits.reduce(
       (totals, habit) => {
         const scheduleRule = resolveHabitRecurrence(habit, toIsoDateString(startDate));
-        const completedDates = new Set(
-          habit.checkins
-            .filter((checkin) => checkin.status === "COMPLETED")
-            .map((checkin) => toIsoDateString(checkin.occurredOn)),
-        );
 
         for (const isoDate of scopedIsoDates) {
           if (!isHabitDueOnIsoDate(scheduleRule, isoDate, habit.pauseWindows)) {
             continue;
           }
 
-          totals.due += 1;
-          if (completedDates.has(isoDate)) {
-            totals.completed += 1;
-          }
+          totals.due += habit.targetPerDay;
+          totals.completed += Math.min(getHabitCompletionCountForIsoDate(habit.checkins, isoDate), habit.targetPerDay);
         }
 
         return totals;
@@ -333,7 +326,7 @@ async function buildWeeklyHistoryMetricsMap(
           : 0,
       habitCompletionRate:
         habitTotals.due > 0 ? roundToPercent(habitTotals.completed / habitTotals.due) : 0,
-      strongDayCount: periodScores.filter((score) => score.scoreValue >= 70).length,
+      strongDayCount: periodScores.filter((score) => score.scoreValue >= 85).length,
       topFrictionTags: getTopFrictionTags(frictionCounts).map((entry) => entry.tag),
     });
   }

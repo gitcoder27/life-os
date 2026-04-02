@@ -388,6 +388,11 @@ function PlanInspector({
                   <span className={`linked-item__status linked-item__status--${h.status}`} />
                   <span className="linked-item__title">{h.title}</span>
                   {h.streakCount > 0 && <span className="linked-habit__streak">{h.streakCount}d</span>}
+                  {!h.completedToday && h.dueToday && h.completedCountToday > 0 && (
+                    <span className="tag tag--neutral">
+                      {Math.min(h.completedCountToday, h.targetPerDay)}/{h.targetPerDay} today
+                    </span>
+                  )}
                   {h.completedToday && <span className="tag tag--positive">done</span>}
                   {h.dueToday && !h.completedToday && <span className="tag tag--warning">due</span>}
                 </div>

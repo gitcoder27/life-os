@@ -20,6 +20,8 @@ import {
   calculateHabitRisk,
 } from "../../lib/habits/guidance.js";
 import {
+  getHabitCompletionCountForIsoDate,
+  isHabitCompletedOnIsoDate,
   isHabitDueOnIsoDate,
   isHabitPermanentlyInactive,
   resolveHabitRecurrence,
@@ -150,10 +152,8 @@ export const serializeHabit = (
   const dueToday = isHabitPermanentlyInactive(habit)
     ? false
     : isHabitDueOnIsoDate(recurrence, targetIsoDate, pauseWindows);
-  const completedToday = checkins.some(
-    (checkin) =>
-      toIsoDateString(checkin.occurredOn) === targetIsoDate && checkin.status === "COMPLETED",
-  );
+  const completedCountToday = getHabitCompletionCountForIsoDate(checkins, targetIsoDate);
+  const completedToday = isHabitCompletedOnIsoDate(checkins, targetIsoDate, habit.targetPerDay);
 
   return {
     id: habit.id,
@@ -167,7 +167,8 @@ export const serializeHabit = (
     status: fromPrismaHabitStatus(habit.status),
     dueToday,
     completedToday,
-    streakCount: calculateHabitActiveStreak(checkins, recurrence, targetIsoDate, pauseWindows),
+    completedCountToday,
+    streakCount: calculateHabitActiveStreak(checkins, recurrence, targetIsoDate, pauseWindows, habit.targetPerDay),
     risk: isHabitPermanentlyInactive(habit)
       ? {
           level: "none",
@@ -177,7 +178,7 @@ export const serializeHabit = (
           completedCount7d: 0,
           completionRate7d: 100,
         }
-      : calculateHabitRisk(checkins, recurrence, targetIsoDate, pauseWindows),
+      : calculateHabitRisk(checkins, recurrence, targetIsoDate, pauseWindows, habit.targetPerDay),
     pauseWindows: pauseWindows
       .filter(
         (pauseWindow) =>

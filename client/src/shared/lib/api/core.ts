@@ -1,11 +1,5 @@
 import type { QueryClient } from "@tanstack/react-query";
 
-import {
-  getMonthStartDate,
-  getMonthString,
-  getWeekStartDate,
-} from "../date";
-
 type ApiFieldError = {
   field: string;
   message: string;
@@ -206,23 +200,17 @@ export const apiRequest = async <TResponse>(
   return response.json() as Promise<TResponse>;
 };
 
-export const invalidateCoreData = (queryClient: QueryClient, date: string) => {
-  const month = getMonthString(date);
-  const weekStart = getWeekStartDate(date);
-  const monthStart = getMonthStartDate(date);
-
+export const invalidateCoreData = (queryClient: QueryClient, _date: string) => {
   void queryClient.invalidateQueries({ queryKey: ["tasks"] });
-  void queryClient.invalidateQueries({ queryKey: queryKeys.home(date) });
-  void queryClient.invalidateQueries({ queryKey: queryKeys.score(date) });
-  void queryClient.invalidateQueries({ queryKey: queryKeys.weeklyMomentum(date) });
-  void queryClient.invalidateQueries({ queryKey: queryKeys.dayPlan(date) });
+  void queryClient.invalidateQueries({ queryKey: ["home"] });
+  void queryClient.invalidateQueries({ queryKey: ["score"] });
+  void queryClient.invalidateQueries({ queryKey: ["planning", "day"] });
   void queryClient.invalidateQueries({ queryKey: queryKeys.habits });
-  void queryClient.invalidateQueries({ queryKey: queryKeys.health(date) });
-  void queryClient.invalidateQueries({ queryKey: queryKeys.finance(month) });
-  void queryClient.invalidateQueries({ queryKey: queryKeys.goals(weekStart, monthStart) });
-  void queryClient.invalidateQueries({ queryKey: queryKeys.review("daily", date) });
-  void queryClient.invalidateQueries({ queryKey: queryKeys.review("weekly", weekStart) });
-  void queryClient.invalidateQueries({ queryKey: queryKeys.review("monthly", monthStart) });
+  void queryClient.invalidateQueries({ queryKey: ["health"] });
+  void queryClient.invalidateQueries({ queryKey: ["finance"] });
+  void queryClient.invalidateQueries({ queryKey: ["goals"] });
+  void queryClient.invalidateQueries({ queryKey: ["review"] });
+  void queryClient.invalidateQueries({ queryKey: ["reviewHistory"] });
 };
 
 export const invalidateTaskTemplateData = (queryClient: QueryClient) => {

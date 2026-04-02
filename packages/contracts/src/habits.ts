@@ -25,6 +25,7 @@ export interface HabitItem {
   status: HabitStatus;
   dueToday: boolean;
   completedToday: boolean;
+  completedCountToday: number;
   streakCount: number;
   risk: HabitRiskState;
   pauseWindows: HabitPauseWindow[];

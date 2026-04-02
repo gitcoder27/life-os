@@ -17,6 +17,7 @@ import {
 interface HabitCheckinLike {
   occurredOn: Date;
   status: "COMPLETED" | "SKIPPED";
+  completionCount?: number | null;
 }
 
 export interface HabitPauseWindowLike {
@@ -176,18 +177,47 @@ export function filterDueHabits<T extends HabitRecurrenceCarrier>(habits: T[], i
   });
 }
 
+function normalizeCompletionCount(checkin: HabitCheckinLike) {
+  if (checkin.status !== "COMPLETED") {
+    return 0;
+  }
+
+  if (typeof checkin.completionCount === "number" && Number.isFinite(checkin.completionCount)) {
+    return Math.max(0, Math.trunc(checkin.completionCount));
+  }
+
+  return 1;
+}
+
+export function getHabitCompletionCountForIsoDate(
+  checkins: HabitCheckinLike[],
+  isoDate: IsoDateString,
+) {
+  return checkins.reduce((sum, checkin) => {
+    if (toIsoDateString(checkin.occurredOn) !== isoDate) {
+      return sum;
+    }
+
+    return sum + normalizeCompletionCount(checkin);
+  }, 0);
+}
+
+export function isHabitCompletedOnIsoDate(
+  checkins: HabitCheckinLike[],
+  isoDate: IsoDateString,
+  targetPerDay = 1,
+) {
+  return getHabitCompletionCountForIsoDate(checkins, isoDate) >= Math.max(1, targetPerDay);
+}
+
 export function calculateHabitStreak(
   checkins: HabitCheckinLike[],
   scheduleInput: HabitScheduleRule | RecurrenceDefinition,
   onDate: IsoDateString,
   startOffset = 0,
   pauseWindows: HabitPauseWindowLike[] = [],
+  targetPerDay = 1,
 ) {
-  const completedDates = new Set(
-    checkins
-      .filter((checkin) => checkin.status === "COMPLETED")
-      .map((checkin) => toIsoDateString(checkin.occurredOn)),
-  );
   let streak = 0;
 
   for (let offset = startOffset; offset < startOffset + 30; offset += 1) {
@@ -197,7 +227,7 @@ export function calculateHabitStreak(
       continue;
     }
 
-    if (!completedDates.has(targetDate)) {
+    if (!isHabitCompletedOnIsoDate(checkins, targetDate, targetPerDay)) {
       break;
     }
 

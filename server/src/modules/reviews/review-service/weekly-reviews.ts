@@ -1,6 +1,6 @@
 import type { PrismaClient } from "@prisma/client";
 
-import { isHabitDueOnIsoDate, resolveHabitRecurrence } from "../../../lib/habits/schedule.js";
+import { getHabitCompletionCountForIsoDate, isHabitDueOnIsoDate, resolveHabitRecurrence } from "../../../lib/habits/schedule.js";
 import { countWaterTargetHits } from "../../../lib/health/water.js";
 import { addDays, getWeekEndDate } from "../../../lib/time/cycle.js";
 import { toIsoDateString } from "../../../lib/time/date.js";
@@ -223,25 +223,18 @@ export async function getWeeklyReviewModel(
     acc[review.frictionTag] = (acc[review.frictionTag] ?? 0) + 1;
     return acc;
   }, {});
+  const requiredRoutineItemIds = new Set(routines.filter((item) => item.isRequired).map((item) => item.id));
   const habitTotals = habits.reduce(
     (totals, habit) => {
       const scheduleRule = resolveHabitRecurrence(habit, startIsoDate);
-      const completedDates = new Set<string>(
-        habit.checkins
-          .filter((checkin) => checkin.status === "COMPLETED")
-          .map((checkin) => toIsoDateString(checkin.occurredOn)),
-      );
 
       for (const isoDate of scopedIsoDates) {
         if (!isHabitDueOnIsoDate(scheduleRule, isoDate, habit.pauseWindows)) {
           continue;
         }
 
-        totals.due += 1;
-
-        if (completedDates.has(isoDate)) {
-          totals.completed += 1;
-        }
+        totals.due += habit.targetPerDay;
+        totals.completed += Math.min(getHabitCompletionCountForIsoDate(habit.checkins, isoDate), habit.targetPerDay);
       }
 
       return totals;
@@ -254,10 +247,16 @@ export async function getWeeklyReviewModel(
     endDate: toIsoDateString(cycle.cycleEndDate),
     summary: {
       averageDailyScore,
-      strongDayCount: scores.filter((score) => score.scoreValue >= 70).length,
+      strongDayCount: scores.filter((score) => score.scoreValue >= 85).length,
       habitCompletionRate:
         habitTotals.due > 0 ? roundToPercent(habitTotals.completed / habitTotals.due) : 0,
-      routineCompletionRate: routines.length > 0 ? roundToPercent(routineCheckins.length / routines.length) : 0,
+      routineCompletionRate:
+        requiredRoutineItemIds.size > 0
+          ? roundToPercent(
+              routineCheckins.filter((checkin) => requiredRoutineItemIds.has(checkin.routineItemId)).length /
+                (requiredRoutineItemIds.size * scopedIsoDates.length),
+            )
+          : 0,
       workoutsCompleted: workoutDays.filter((day) => day.actualStatus === "COMPLETED").length,
       workoutsPlanned: workoutDays.filter((day) => day.planType === "WORKOUT").length,
       waterTargetHitCount: countWaterTargetHits(waterLogs, timezone, waterTargetMl),

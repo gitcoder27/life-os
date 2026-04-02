@@ -403,8 +403,8 @@ describe("reviews service", () => {
       },
       dailyScore: {
         findMany: vi.fn().mockResolvedValue([
-          { scoreValue: 70, scoreBand: "Solid Day", planningCycle: { cycleStartDate: new Date("2026-03-14") } },
-          { scoreValue: 80, scoreBand: "Strong Day", planningCycle: { cycleStartDate: new Date("2026-03-15") } },
+          { scoreValue: 60, scoreBand: "Recovering Day", planningCycle: { cycleStartDate: new Date("2026-03-14") } },
+          { scoreValue: 90, scoreBand: "Strong Day", planningCycle: { cycleStartDate: new Date("2026-03-15") } },
           { scoreValue: 90, scoreBand: "Strong Day", planningCycle: { cycleStartDate: new Date("2026-03-16") } },
         ]),
       },
@@ -414,6 +414,7 @@ describe("reviews service", () => {
             id: "habit-1",
             title: "Push-up",
             scheduleRuleJson: {},
+            targetPerDay: 1,
             checkins: [
               { occurredOn: new Date("2026-03-14T00:00:00.000Z"), status: "COMPLETED" },
               { occurredOn: new Date("2026-03-15T00:00:00.000Z"), status: "COMPLETED" },
@@ -440,7 +441,7 @@ describe("reviews service", () => {
 
     expect(response.startDate).toBe("2026-03-14");
     expect(response.summary.averageDailyScore).toBe(80);
-    expect(response.summary.strongDayCount).toBe(3);
+    expect(response.summary.strongDayCount).toBe(2);
     expect(response.summary.topFrictionTags).toHaveLength(2);
     expect(response.summary.topFrictionTags[0]).toEqual({ tag: "low energy", count: 1 });
     expect(response.summary.workoutsCompleted).toBe(1);
@@ -498,6 +499,7 @@ describe("reviews service", () => {
             id: "habit-1",
             title: "Push-up",
             scheduleRuleJson: { daysOfWeek: [2, 5] },
+            targetPerDay: 1,
             checkins: [
               { occurredOn: new Date("2026-03-10T00:00:00.000Z"), status: "COMPLETED" },
               { occurredOn: new Date("2026-03-20T00:00:00.000Z"), status: "COMPLETED" },
@@ -507,6 +509,7 @@ describe("reviews service", () => {
             id: "habit-2",
             title: "Read",
             scheduleRuleJson: { daysOfWeek: [3] },
+            targetPerDay: 1,
             checkins: [{ occurredOn: new Date("2026-03-11T00:00:00.000Z"), status: "SKIPPED" }],
           },
         ]),
@@ -967,6 +970,7 @@ describe("reviews service", () => {
           {
             id: "habit-1",
             scheduleRuleJson: {},
+            targetPerDay: 1,
             checkins: [
               { status: "COMPLETED", occurredOn: new Date("2026-03-09T00:00:00.000Z") },
               { status: "COMPLETED", occurredOn: new Date("2026-03-10T00:00:00.000Z") },

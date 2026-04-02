@@ -398,6 +398,11 @@ function LinkedHabitsSection({ habits }: { habits: GoalLinkedHabitItem[] }) {
                 {h.riskLevel === "at_risk" ? "at risk" : "drifting"}
               </span>
             )}
+            {!h.completedToday && h.dueToday && h.completedCountToday > 0 && (
+              <span className="tag tag--neutral" style={{ fontSize: "var(--fs-micro)" }}>
+                {Math.min(h.completedCountToday, h.targetPerDay)}/{h.targetPerDay} today
+              </span>
+            )}
             {h.dueToday && !h.completedToday && (
               <span className="tag tag--warning" style={{ fontSize: "var(--fs-micro)" }}>due</span>
             )}

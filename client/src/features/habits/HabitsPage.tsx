@@ -419,7 +419,11 @@ export function HabitsPage() {
   const scorePercent = score
     ? Math.round((score.earnedPoints / Math.max(score.possiblePoints, 1)) * 100)
     : 0;
-  const dueCompleted = dueHabits.filter((h) => h.completedToday).length;
+  const dueCompletedUnits = dueHabits.reduce(
+    (sum, habit) => sum + Math.min(habit.completedCountToday, habit.targetPerDay),
+    0,
+  );
+  const dueTargetUnits = dueHabits.reduce((sum, habit) => sum + habit.targetPerDay, 0);
   const routineCompleted = activeRoutines.reduce((sum, routine) => sum + routine.completedItems, 0);
   const routineTotal = activeRoutines.reduce((sum, routine) => sum + routine.totalItems, 0);
   const strongDayStreak = weeklyMomentumQuery.data?.strongDayStreak ?? 0;
@@ -597,8 +601,8 @@ export function HabitsPage() {
         <div className="habits-group__header">
           <span className="habits-group__label">Due today</span>
           {dueHabits.length > 0 ? (
-            <span className={`habits-group__count${dueCompleted === dueHabits.length && dueHabits.length > 0 ? " habits-group__count--done" : ""}`}>
-              {dueCompleted}/{dueHabits.length}
+            <span className={`habits-group__count${dueCompletedUnits === dueTargetUnits && dueTargetUnits > 0 ? " habits-group__count--done" : ""}`}>
+              {dueCompletedUnits}/{dueTargetUnits}
             </span>
           ) : null}
         </div>
@@ -616,7 +620,7 @@ export function HabitsPage() {
                     type="button"
                     onClick={() => { if (!habit.completedToday) habitCheckinMutation.mutate(habit.id); }}
                     disabled={habit.completedToday || habitCheckinMutation.isPending}
-                    aria-label={`Mark ${habit.title} ${habit.completedToday ? "complete" : "incomplete"}`}
+                    aria-label={`Log progress for ${habit.title}`}
                   >
                     {habit.completedToday ? "\u2713" : ""}
                   </button>
@@ -631,8 +635,9 @@ export function HabitsPage() {
                     </div>
                     {(habit.risk?.message || habit.risk?.dueCount7d) ? (
                       <div className="habits-check-row__meta">
+                        <span>{Math.min(habit.completedCountToday, habit.targetPerDay)}/{habit.targetPerDay} today</span>
                         {habit.risk && habit.risk.dueCount7d > 0 ? (
-                          <span>{habit.risk.completedCount7d}/{habit.risk.dueCount7d} this week</span>
+                          <span>{habit.risk.completedCount7d}/{habit.risk.dueCount7d} last 7 days</span>
                         ) : null}
                         {habit.risk?.message ? <span>{habit.risk.message}</span> : null}
                       </div>
@@ -756,9 +761,9 @@ export function HabitsPage() {
           style={{ "--stats-count": statsCount } as CSSProperties}
         >
           <div className="habits-score-strip__stat">
-            <span className="habits-score-strip__stat-label">Habits due</span>
+            <span className="habits-score-strip__stat-label">Habit progress</span>
             <span className="habits-score-strip__stat-value">
-              {dueHabits.length > 0 ? `${dueCompleted}/${dueHabits.length}` : "None"}
+              {dueTargetUnits > 0 ? `${dueCompletedUnits}/${dueTargetUnits}` : "None"}
             </span>
           </div>
           <div className="habits-score-strip__stat">
