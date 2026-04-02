@@ -227,15 +227,10 @@ function RoutineForm({
             autoFocus
           />
         </label>
-        <label className="field">
-          <span>Steps (one per line)</span>
-          <textarea
-            rows={4}
-            placeholder={"Stretch\nReview priorities\nPrep for tomorrow"}
-            value={values.itemsText}
-            onChange={(e) => setValues((v) => ({ ...v, itemsText: e.target.value }))}
-          />
-        </label>
+        <RoutineItemEditor
+          items={values.items}
+          onChange={(items) => setValues((v) => ({ ...v, items }))}
+        />
       </div>
       <div className="button-row button-row--tight">
         <button className="button button--primary button--small" type="submit" disabled={isPending || !values.name.trim() || !values.items.some((i) => i.title.trim())}>
@@ -1090,7 +1085,7 @@ export function HabitsPage() {
                         {routine.name}
                       </div>
                       <div className="manage-list__meta">
-                        {routine.items.length} step{routine.items.length !== 1 ? "s" : ""} \u00b7 {routine.completedItems}/{routine.totalItems} today
+                        {routine.items.length} item{routine.items.length !== 1 ? "s" : ""}{" · "}{routine.completedItems}/{routine.totalItems} today
                       </div>
                     </div>
                     <div className="habits-manage-actions">
