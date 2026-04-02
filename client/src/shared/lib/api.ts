@@ -111,10 +111,15 @@ export {
   useCreateExpenseMutation,
   useCreateRecurringExpenseMutation,
   useFinanceDataQuery,
+  useUpdateAdminItemMutation,
   useUpdateCategoryMutation,
   useUpdateExpenseMutation,
   useUpdateRecurringExpenseMutation,
   useDeleteExpenseMutation,
+} from "./api/finance";
+export type {
+  AdminItemRecord,
+  AdminItemStatus,
 } from "./api/finance";
 export {
   useCreateGoalMutation,

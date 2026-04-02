@@ -54,6 +54,7 @@ interface FinanceSummaryResponse {
   month: IsoMonthString;
   currencyCode: string;
   totalSpentMinor: number;
+  previousMonthTotalSpentMinor: number;
   categoryTotals: Array<{
     expenseCategoryId: string | null;
     name: string;
@@ -66,6 +67,7 @@ interface FinanceSummaryResponse {
     dueOn: IsoDateString;
     amountMinor: number | null;
     status: AdminItemStatus;
+    recurringExpenseTemplateId: string | null;
   }>;
 }
 
@@ -631,7 +633,12 @@ export const registerFinanceRoutes: FastifyPluginAsync = async (app) => {
     const { monthStart, nextMonthStart } = getMonthBounds(query.month);
     const currencyCode = await getUserCurrencyCode(app, user.id);
 
-    const [expenses, categories, upcomingBills] = await Promise.all([
+    // Compute previous month bounds for comparison
+    const prevMonthStart = new Date(monthStart);
+    prevMonthStart.setUTCMonth(prevMonthStart.getUTCMonth() - 1);
+    const prevMonthEnd = new Date(monthStart);
+
+    const [expenses, categories, upcomingBills, overdueBills, prevMonthExpenses] = await Promise.all([
       app.prisma.expense.findMany({
         where: {
           userId: user.id,
@@ -661,6 +668,33 @@ export const registerFinanceRoutes: FastifyPluginAsync = async (app) => {
         },
         take: 10,
       }),
+      // Overdue bills from prior months that are still pending
+      app.prisma.adminItem.findMany({
+        where: {
+          userId: user.id,
+          dueOn: {
+            lt: monthStart,
+          },
+          status: "PENDING",
+        },
+        orderBy: {
+          dueOn: "asc",
+        },
+        take: 10,
+      }),
+      // Previous month spending for comparison
+      app.prisma.expense.aggregate({
+        where: {
+          userId: user.id,
+          spentOn: {
+            gte: prevMonthStart,
+            lt: prevMonthEnd,
+          },
+        },
+        _sum: {
+          amountMinor: true,
+        },
+      }),
     ]);
 
     const categoryLookup = new Map(categories.map((category) => [category.id, category]));
@@ -689,19 +723,23 @@ export const registerFinanceRoutes: FastifyPluginAsync = async (app) => {
       });
     }
 
+    const allPendingBills = [...overdueBills, ...upcomingBills];
+
     const response: FinanceSummaryResponse = withGeneratedAt({
       month: query.month,
       currencyCode,
       totalSpentMinor,
+      previousMonthTotalSpentMinor: prevMonthExpenses._sum.amountMinor ?? 0,
       categoryTotals: Array.from(categoryTotalsMap.values()).sort(
         (left, right) => right.totalAmountMinor - left.totalAmountMinor,
       ),
-      upcomingBills: upcomingBills.map((bill) => ({
+      upcomingBills: allPendingBills.map((bill) => ({
         id: bill.id,
         title: bill.title,
         dueOn: toIsoDateString(bill.dueOn),
         amountMinor: bill.amountMinor,
         status: fromPrismaAdminItemStatus(bill.status),
+        recurringExpenseTemplateId: bill.recurringExpenseTemplateId,
       })),
     });
 
