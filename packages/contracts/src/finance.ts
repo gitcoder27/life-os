@@ -4,6 +4,8 @@ import type { RecurrenceDefinition, RecurrenceInput } from "./recurrence.js";
 export type ExpenseSource = "manual" | "quick_capture" | "template";
 export type RecurringExpenseStatus = "active" | "paused" | "archived";
 export type AdminItemStatus = "pending" | "done" | "rescheduled" | "dropped";
+export type FinancePaceStatus = "no_plan" | "on_pace" | "slightly_heavy" | "off_track";
+export type FinanceWatchStatus = "within_limit" | "near_limit" | "over_limit";
 
 export interface ExpenseItem {
   id: EntityId;
@@ -41,6 +43,58 @@ export interface FinanceSummaryResponse extends ApiMeta {
   previousMonthTotalSpentMinor?: number;
   categoryTotals: FinanceCategoryTotal[];
   upcomingBills: UpcomingBillItem[];
+}
+
+export interface FinanceMonthPlanCategoryWatchItem {
+  expenseCategoryId: EntityId;
+  name: string;
+  color: string | null;
+  watchLimitMinor: number;
+  actualSpentMinor: number;
+  status: FinanceWatchStatus;
+}
+
+export interface FinanceBillTimeline {
+  today: UpcomingBillItem[];
+  thisWeek: UpcomingBillItem[];
+  laterThisMonth: UpcomingBillItem[];
+}
+
+export interface FinanceMonthPlanItem {
+  id: EntityId | null;
+  month: IsoMonthString;
+  plannedSpendMinor: number | null;
+  fixedObligationsMinor: number | null;
+  flexibleSpendTargetMinor: number | null;
+  plannedIncomeMinor: number | null;
+  expectedLargeExpensesMinor: number | null;
+  categoryWatches: FinanceMonthPlanCategoryWatchItem[];
+  billTimeline: FinanceBillTimeline;
+  paceStatus: FinancePaceStatus;
+  paceSummary: string;
+  expectedSpendToDateMinor: number | null;
+  remainingPlannedSpendMinor: number | null;
+  remainingFlexibleSpendMinor: number | null;
+}
+
+export interface FinanceMonthPlanResponse extends ApiMeta {
+  monthPlan: FinanceMonthPlanItem;
+}
+
+export interface UpdateFinanceMonthPlanRequest {
+  plannedSpendMinor?: number | null;
+  fixedObligationsMinor?: number | null;
+  flexibleSpendTargetMinor?: number | null;
+  plannedIncomeMinor?: number | null;
+  expectedLargeExpensesMinor?: number | null;
+  categoryWatches?: Array<{
+    expenseCategoryId: EntityId;
+    watchLimitMinor: number;
+  }>;
+}
+
+export interface FinanceMonthPlanMutationResponse extends ApiMeta {
+  monthPlan: FinanceMonthPlanItem;
 }
 
 export interface CreateExpenseRequest {

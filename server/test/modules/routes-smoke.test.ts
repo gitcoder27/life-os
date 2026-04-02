@@ -314,6 +314,239 @@ describe("module route smoke tests", () => {
     expect(response.statusCode).toBe(200);
   });
 
+  it("serves finance month planning data", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-03-14T06:30:00.000Z"));
+    const categoryId = "11111111-1111-4111-8111-111111111111";
+
+    prisma.userPreference = {
+      findUnique: vi.fn().mockResolvedValue({ currencyCode: "USD", timezone: "UTC" }),
+    } as any;
+    prisma.financeMonthPlan = {
+      findUnique: vi.fn().mockResolvedValue({
+        id: "plan-1",
+        userId: "user-1",
+        monthStart: new Date("2026-03-01T00:00:00.000Z"),
+        plannedSpendMinor: 120000,
+        fixedObligationsMinor: 60000,
+        flexibleSpendTargetMinor: 45000,
+        plannedIncomeMinor: 180000,
+        expectedLargeExpensesMinor: 20000,
+        categoryWatches: [
+          {
+            expenseCategoryId: categoryId,
+            watchLimitMinor: 30000,
+            expenseCategory: {
+              id: categoryId,
+              userId: "user-1",
+              name: "Food",
+              color: "#ff9900",
+              sortOrder: 1,
+              createdAt: new Date(),
+              archivedAt: null,
+            },
+          },
+        ],
+      }),
+    } as any;
+    prisma.expense = {
+      findMany: vi.fn().mockResolvedValue([
+        {
+          id: "expense-1",
+          userId: "user-1",
+          expenseCategoryId: categoryId,
+          amountMinor: 18000,
+          currencyCode: "USD",
+          spentOn: new Date("2026-03-05T00:00:00.000Z"),
+          description: "Groceries",
+          source: "MANUAL",
+          recurringExpenseTemplateId: null,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      ]),
+    } as any;
+    prisma.adminItem = {
+      findMany: vi
+        .fn()
+        .mockResolvedValueOnce([
+          {
+            id: "bill-1",
+            userId: "user-1",
+            title: "Internet",
+            itemType: "BILL",
+            dueOn: new Date("2026-03-14T00:00:00.000Z"),
+            status: "PENDING",
+            relatedTaskId: null,
+            recurringExpenseTemplateId: null,
+            amountMinor: 5500,
+            note: null,
+            completedAt: null,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          },
+          {
+            id: "bill-2",
+            userId: "user-1",
+            title: "Insurance",
+            itemType: "BILL",
+            dueOn: new Date("2026-03-20T00:00:00.000Z"),
+            status: "PENDING",
+            relatedTaskId: null,
+            recurringExpenseTemplateId: null,
+            amountMinor: 8900,
+            note: null,
+            completedAt: null,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          },
+        ])
+        .mockResolvedValueOnce([
+          {
+            id: "bill-0",
+            userId: "user-1",
+            title: "Rent",
+            itemType: "BILL",
+            dueOn: new Date("2026-03-01T00:00:00.000Z"),
+            status: "PENDING",
+            relatedTaskId: null,
+            recurringExpenseTemplateId: null,
+            amountMinor: 50000,
+            note: null,
+            completedAt: null,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          },
+        ]),
+    } as any;
+
+    const response = await app!.inject({
+      method: "GET",
+      url: "/api/finance/month-plan?month=2026-03",
+    });
+
+    expect(response.statusCode).toBe(200);
+
+    const payload = JSON.parse(response.body);
+    expect(payload.monthPlan).toEqual(
+      expect.objectContaining({
+        plannedSpendMinor: 120000,
+        paceStatus: "on_pace",
+        plannedIncomeMinor: 180000,
+        expectedLargeExpensesMinor: 20000,
+      }),
+    );
+    expect(payload.monthPlan.billTimeline.today).toHaveLength(2);
+    expect(payload.monthPlan.billTimeline.thisWeek).toHaveLength(1);
+    expect(payload.monthPlan.categoryWatches[0]).toEqual(
+      expect.objectContaining({
+        expenseCategoryId: categoryId,
+        actualSpentMinor: 18000,
+        status: "within_limit",
+      }),
+    );
+  });
+
+  it("updates finance month planning data", async () => {
+    const categoryId = "11111111-1111-4111-8111-111111111111";
+
+    prisma.userPreference = {
+      findUnique: vi.fn().mockResolvedValue({ currencyCode: "USD", timezone: "UTC" }),
+    } as any;
+    prisma.expenseCategory = {
+      findFirst: vi.fn().mockResolvedValue({
+        id: categoryId,
+        userId: "user-1",
+        archivedAt: null,
+      }),
+    } as any;
+    prisma.financeMonthPlan = {
+      upsert: vi.fn().mockResolvedValue({
+        id: "plan-1",
+        userId: "user-1",
+        monthStart: new Date("2026-03-01T00:00:00.000Z"),
+      }),
+      findUnique: vi.fn().mockResolvedValue({
+        id: "plan-1",
+        userId: "user-1",
+        monthStart: new Date("2026-03-01T00:00:00.000Z"),
+        plannedSpendMinor: 150000,
+        fixedObligationsMinor: 70000,
+        flexibleSpendTargetMinor: 50000,
+        plannedIncomeMinor: 200000,
+        expectedLargeExpensesMinor: 15000,
+        categoryWatches: [
+          {
+            expenseCategoryId: categoryId,
+            watchLimitMinor: 25000,
+            expenseCategory: {
+              id: categoryId,
+              userId: "user-1",
+              name: "Food",
+              color: "#ff9900",
+              sortOrder: 1,
+              createdAt: new Date(),
+              archivedAt: null,
+            },
+          },
+        ],
+      }),
+    } as any;
+    prisma.financeMonthPlanCategoryWatch = {
+      deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
+      createMany: vi.fn().mockResolvedValue({ count: 1 }),
+    } as any;
+    prisma.expense = {
+      findMany: vi.fn().mockResolvedValue([
+        {
+          id: "expense-1",
+          userId: "user-1",
+          expenseCategoryId: categoryId,
+          amountMinor: 9000,
+          currencyCode: "USD",
+          spentOn: new Date("2026-03-10T00:00:00.000Z"),
+          description: "Food",
+          source: "MANUAL",
+          recurringExpenseTemplateId: null,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      ]),
+    } as any;
+    prisma.adminItem = {
+      findMany: vi.fn().mockResolvedValue([]),
+    } as any;
+
+    const response = await app!.inject({
+      method: "PUT",
+      url: "/api/finance/month-plan?month=2026-03",
+      payload: {
+        plannedSpendMinor: 150000,
+        fixedObligationsMinor: 70000,
+        flexibleSpendTargetMinor: 50000,
+        plannedIncomeMinor: 200000,
+        expectedLargeExpensesMinor: 15000,
+        categoryWatches: [
+          {
+            expenseCategoryId: categoryId,
+            watchLimitMinor: 25000,
+          },
+        ],
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect((prisma.financeMonthPlan as { upsert: ReturnType<typeof vi.fn> }).upsert).toHaveBeenCalled();
+    expect((prisma.financeMonthPlanCategoryWatch as { createMany: ReturnType<typeof vi.fn> }).createMany).toHaveBeenCalled();
+    expect(JSON.parse(response.body).monthPlan).toEqual(
+      expect.objectContaining({
+        plannedSpendMinor: 150000,
+        plannedIncomeMinor: 200000,
+        expectedLargeExpensesMinor: 15000,
+      }),
+    );
+  });
+
   it("serves health endpoints", async () => {
     prisma.userPreference = { findUnique: vi.fn().mockResolvedValue({ dailyWaterTargetMl: 2500 }) } as any;
     prisma.waterLog = { findMany: vi.fn().mockResolvedValue([]) } as any;

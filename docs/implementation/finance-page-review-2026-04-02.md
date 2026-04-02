@@ -712,19 +712,19 @@ Phase focus: balanced, with backend slightly leading because planning data needs
 
 #### Frontend checklist for the frontend-focused AI agent
 
-- [ ] Build the monthly plan panel: show planned monthly spend, fixed obligations, flexible target, and watched categories in a simple planning block.
-- [ ] Add month pace visuals: show whether the month is on pace, slightly heavy, or off track instead of only showing a raw total.
-- [ ] Build the bill timeline view: present due today, due this week, and later-this-month obligations in a lightweight timeline or grouped list.
-- [ ] Add lightweight planned-income and large-expense UI: let users enter payday reminders, planned one-off costs, and expected large expenses.
-- [ ] Add plan-versus-actual explanation copy: make it easy for the user to understand why the page is calling the month healthy or risky.
+- [x] Build the monthly plan panel: show planned monthly spend, fixed obligations, flexible target, and watched categories in a simple planning block.
+- [x] Add month pace visuals: show whether the month is on pace, slightly heavy, or off track instead of only showing a raw total.
+- [x] Build the bill timeline view: present due today, due this week, and later-this-month obligations in a lightweight timeline or grouped list.
+- [x] Add lightweight planned-income and large-expense UI: let users enter payday reminders, planned one-off costs, and expected large expenses.
+- [x] Add plan-versus-actual explanation copy: make it easy for the user to understand why the page is calling the month healthy or risky.
 
 #### Backend checklist for the backend-focused AI agent
 
-- [ ] Add a monthly finance planning model: store planned monthly spend, fixed obligations total, flexible target, and category watch limits.
-- [ ] Compute pace and plan comparison values: return actual versus plan, remaining flexible spend, and clear pace status for the selected month.
-- [ ] Add bill timeline payloads: return due items grouped for today, this week, and later this month.
-- [ ] Add planned-income and planned-cost support: store payday reminders and expected one-off expenses without turning this into full budgeting software.
-- [ ] Return explanation-friendly summary fields: provide the frontend with plain signals for why the month is on pace or drifting.
+- [x] Add a monthly finance planning model: store planned monthly spend, fixed obligations total, flexible target, and category watch limits.
+- [x] Compute pace and plan comparison values: return actual versus plan, remaining flexible spend, and clear pace status for the selected month.
+- [x] Add bill timeline payloads: return due items grouped for today, this week, and later this month.
+- [x] Add planned-income and planned-cost support: store payday reminders and expected one-off expenses without turning this into full budgeting software.
+- [x] Return explanation-friendly summary fields: provide the frontend with plain signals for why the month is on pace or drifting.
 
 ### Phase 3: Connect finance to goals and reviews
 

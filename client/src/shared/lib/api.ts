@@ -111,6 +111,7 @@ export {
   useCreateExpenseMutation,
   useCreateRecurringExpenseMutation,
   useFinanceDataQuery,
+  useUpdateFinanceMonthPlanMutation,
   useUpdateAdminItemMutation,
   useUpdateCategoryMutation,
   useUpdateExpenseMutation,
@@ -120,6 +121,11 @@ export {
 export type {
   AdminItemRecord,
   AdminItemStatus,
+  FinanceMonthPlanItem,
+  FinanceMonthPlanResponse,
+  FinancePaceStatus,
+  FinanceWatchStatus,
+  UpdateFinanceMonthPlanRequest,
 } from "./api/finance";
 export {
   useCreateGoalMutation,
