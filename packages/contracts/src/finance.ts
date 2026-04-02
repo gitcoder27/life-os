@@ -31,12 +31,14 @@ export interface UpcomingBillItem {
   dueOn: IsoDateString;
   amountMinor: number | null;
   status: AdminItemStatus;
+  recurringExpenseTemplateId: EntityId | null;
 }
 
 export interface FinanceSummaryResponse extends ApiMeta {
   month: IsoMonthString;
   currencyCode: string;
   totalSpentMinor: number;
+  previousMonthTotalSpentMinor?: number;
   categoryTotals: FinanceCategoryTotal[];
   upcomingBills: UpcomingBillItem[];
 }

@@ -302,7 +302,7 @@ describe("module route smoke tests", () => {
 
   it("serves finance endpoints", async () => {
     prisma.expenseCategory = { findMany: vi.fn().mockResolvedValue([]) } as any;
-    prisma.expense = { findMany: vi.fn().mockResolvedValue([]) } as any;
+    prisma.expense = { findMany: vi.fn().mockResolvedValue([]), aggregate: vi.fn().mockResolvedValue({ _sum: { amountMinor: 0 } }) } as any;
     prisma.userPreference = { findUnique: vi.fn().mockResolvedValue({ currencyCode: "USD", weeklyWindow: null }) } as any;
     prisma.adminItem = { findMany: vi.fn().mockResolvedValue([]) } as any;
 

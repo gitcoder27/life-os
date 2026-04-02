@@ -26,6 +26,7 @@ type FinanceSummaryResponse = {
   month: string;
   currencyCode: string;
   totalSpentMinor: number;
+  previousMonthTotalSpentMinor: number;
   categoryTotals: Array<{
     expenseCategoryId: string | null;
     name: string;
@@ -38,6 +39,7 @@ type FinanceSummaryResponse = {
     dueOn: string;
     amountMinor: number | null;
     status: "pending" | "done" | "rescheduled" | "dropped";
+    recurringExpenseTemplateId: string | null;
   }>;
 };
 
@@ -110,16 +112,37 @@ type RecurringExpenseMutationResponse = {
   recurringExpense: RecurringExpensesResponse["recurringExpenses"][number];
 };
 
+export type AdminItemStatus = "pending" | "done" | "rescheduled" | "dropped";
+
+export type AdminItemRecord = {
+  id: string;
+  title: string;
+  itemType: "bill" | "admin";
+  dueOn: string;
+  status: AdminItemStatus;
+  relatedTaskId: string | null;
+  recurringExpenseTemplateId: string | null;
+  amountMinor: number | null;
+  note: string | null;
+  completedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+type AdminItemMutationResponse = {
+  generatedAt: string;
+  adminItem: AdminItemRecord;
+};
+
 const invalidateFinanceCollections = (queryClient: ReturnType<typeof useQueryClient>) => {
   void queryClient.invalidateQueries({ queryKey: queryKeys.financeCategories });
   void queryClient.invalidateQueries({ queryKey: queryKeys.financeRecurring });
   void queryClient.invalidateQueries({ queryKey: ["finance"] });
 };
 
-export const useFinanceDataQuery = (date: string) => {
-  const month = getMonthString(date);
-  const monthStart = getMonthStartDate(date);
-  const monthEnd = getMonthEndDate(date);
+export const useFinanceDataQuery = (month: string) => {
+  const monthStart = getMonthStartDate(`${month}-01`);
+  const monthEnd = getMonthEndDate(`${month}-01`);
 
   return useQuery({
     queryKey: queryKeys.finance(month),
@@ -164,7 +187,7 @@ export const useFinanceDataQuery = (date: string) => {
   });
 };
 
-export const useCreateExpenseMutation = (date: string) => {
+export const useCreateExpenseMutation = (todayDate: string) => {
   const queryClient = useQueryClient();
 
   return useMutation({
@@ -185,11 +208,11 @@ export const useCreateExpenseMutation = (date: string) => {
       successMessage: "Expense logged.",
       errorMessage: "Expense log failed.",
     },
-    onSuccess: () => invalidateCoreData(queryClient, date),
+    onSuccess: () => invalidateCoreData(queryClient, todayDate),
   });
 };
 
-export const useUpdateExpenseMutation = (date: string) => {
+export const useUpdateExpenseMutation = (todayDate: string) => {
   const queryClient = useQueryClient();
 
   return useMutation({
@@ -212,11 +235,11 @@ export const useUpdateExpenseMutation = (date: string) => {
       successMessage: "Expense updated.",
       errorMessage: "Expense update failed.",
     },
-    onSuccess: () => invalidateCoreData(queryClient, date),
+    onSuccess: () => invalidateCoreData(queryClient, todayDate),
   });
 };
 
-export const useDeleteExpenseMutation = (date: string) => {
+export const useDeleteExpenseMutation = (todayDate: string) => {
   const queryClient = useQueryClient();
 
   return useMutation({
@@ -228,7 +251,34 @@ export const useDeleteExpenseMutation = (date: string) => {
       successMessage: "Expense deleted.",
       errorMessage: "Expense deletion failed.",
     },
-    onSuccess: () => invalidateCoreData(queryClient, date),
+    onSuccess: () => invalidateCoreData(queryClient, todayDate),
+  });
+};
+
+export const useUpdateAdminItemMutation = (todayDate: string) => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      adminItemId,
+      ...payload
+    }: {
+      adminItemId: string;
+      title?: string;
+      dueOn?: string;
+      status?: AdminItemStatus;
+      amountMinor?: number | null;
+      note?: string | null;
+    }) =>
+      apiRequest<AdminItemMutationResponse>(`/api/admin/admin-items/${adminItemId}`, {
+        method: "PATCH",
+        body: payload,
+      }),
+    meta: {
+      successMessage: "Bill updated.",
+      errorMessage: "Bill update failed.",
+    },
+    onSuccess: () => invalidateCoreData(queryClient, todayDate),
   });
 };
 
@@ -260,7 +310,7 @@ export const useUpdateCategoryMutation = () => {
       categoryId: string;
       name?: string;
       color?: string | null;
-      archivedAt?: string | null;
+      archived?: boolean;
     }) =>
       apiRequest<CategoryMutationResponse>(`/api/finance/categories/${categoryId}`, {
         method: "PATCH",
