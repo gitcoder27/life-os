@@ -81,7 +81,7 @@
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
-  animation: slideUp 0.35s var(--ease) both;
+  animation: fadeIn 0.2s var(--ease) both;
   margin-top: 0.75rem;
 }
 
@@ -109,7 +109,7 @@ body.planner-dragging-cursor * {
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
-  padding: 0.5rem 0.65rem;
+  padding: 0.5rem 0.9rem;
   border-radius: var(--r-pill);
   border: 1px solid var(--border);
   background: var(--panel);
@@ -186,17 +186,20 @@ body.planner-dragging-cursor * {
 
 .planner-date-nav__copy {
   display: flex;
+  flex: 1 1 auto;
   flex-direction: column;
   align-items: flex-end;
   gap: 0.15rem;
   min-width: 0;
+  padding-inline: 0.4rem 0.15rem;
+  text-align: right;
 }
 
 .planner-date-nav__title {
   font-size: var(--fs-small);
   font-weight: 700;
   color: var(--text);
-  white-space: nowrap;
+  white-space: normal;
 }
 
 .planner-date-nav__subtitle {
@@ -327,6 +330,14 @@ body.planner-dragging-cursor * {
   gap: 1rem;
   align-items: start;
   position: relative;
+}
+
+.planner__sidebar-pane {
+  position: sticky;
+  top: var(--planner-sidebar-top, var(--today-sticky-offset));
+  align-self: start;
+  min-width: 0;
+  z-index: 8;
 }
 
 .planner-block__task-handle--static {
@@ -1562,10 +1573,6 @@ body.planner-dragging-cursor * {
 /* ── Unplanned Tasks Lane ───────────────────────────── */
 
 .unplanned-lane {
-  position: sticky;
-  top: var(--today-sticky-offset);
-  align-self: start;
-  z-index: 8;
   display: flex;
   flex-direction: column;
   gap: 0.35rem;
@@ -1574,8 +1581,9 @@ body.planner-dragging-cursor * {
   border: 1px solid rgba(255,255,255,0.05);
   background: rgba(255,255,255,0.02);
   backdrop-filter: blur(8px);
-  max-height: calc(
-    100vh - var(--shell-header-height, 0px) - var(--today-top-rail-height, 0px) - 2rem
+  max-height: var(
+    --planner-lane-max-height,
+    calc(100vh - var(--today-sticky-offset) - 1.5rem)
   );
   overflow-y: auto;
 }
@@ -2616,7 +2624,10 @@ body.planner-dragging-cursor * {
   }
 
   .planner-date-nav__copy {
+    width: 100%;
     align-items: flex-start;
+    padding-inline: 0;
+    text-align: left;
   }
 
   .planner__hours-card {
@@ -2631,6 +2642,10 @@ body.planner-dragging-cursor * {
 
   .planner__hours-controls {
     width: 100%;
+  }
+
+  .planner__sidebar-pane {
+    position: static;
   }
 
   /* Mobile: unplanned panel becomes fixed bottom bar */

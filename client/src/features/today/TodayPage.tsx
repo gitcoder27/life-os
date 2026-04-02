@@ -1,5 +1,5 @@
 import "./today.css";
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { useSearchParams } from "react-router-dom";
 import {
   InlineErrorState,
@@ -33,6 +33,8 @@ export function TodayPage() {
   const [plannerNow, setPlannerNow] = useState(() => new Date());
   const [todayTaskCaptureOpen, setTodayTaskCaptureOpen] = useState(false);
   const [topRailHeight, setTopRailHeight] = useState(0);
+  const [stickyTop, setStickyTop] = useState(0);
+  const [stickyMaxHeight, setStickyMaxHeight] = useState(0);
   const topRailRef = useRef<HTMLDivElement>(null);
   const rawPlannerDate = searchParams.get("planDate");
   const plannerDate = rawPlannerDate && ISO_DATE_PATTERN.test(rawPlannerDate)
@@ -103,28 +105,66 @@ export function TodayPage() {
     return () => window.clearInterval(intervalId);
   }, []);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const topRailElement = topRailRef.current;
     if (!topRailElement) {
       return;
     }
 
-    const updateTopRailHeight = () => {
-      setTopRailHeight(topRailElement.getBoundingClientRect().height);
+    let frameId = 0;
+
+    const updateStickyLayout = () => {
+      frameId = 0;
+
+      const nextTopRailHeight = topRailElement.getBoundingClientRect().height;
+      const shellHeaderHeight = Number.parseFloat(
+        getComputedStyle(topRailElement).getPropertyValue("--shell-header-height") || "0",
+      ) || 0;
+      const rootFontSize = Number.parseFloat(
+        getComputedStyle(document.documentElement).fontSize || "16",
+      ) || 16;
+      const nextStickyTop = Math.max(shellHeaderHeight + nextTopRailHeight + rootFontSize, 0);
+      const nextStickyMaxHeight = Math.max(
+        window.innerHeight - nextStickyTop - rootFontSize * 1.5,
+        240,
+      );
+
+      setTopRailHeight(nextTopRailHeight);
+      setStickyTop(nextStickyTop);
+      setStickyMaxHeight(nextStickyMaxHeight);
     };
 
-    updateTopRailHeight();
-    window.addEventListener("resize", updateTopRailHeight);
+    const scheduleStickyLayoutUpdate = () => {
+      if (frameId !== 0) {
+        window.cancelAnimationFrame(frameId);
+      }
+
+      frameId = window.requestAnimationFrame(updateStickyLayout);
+    };
+
+    scheduleStickyLayoutUpdate();
+    window.addEventListener("resize", scheduleStickyLayoutUpdate);
+    window.addEventListener("pageshow", scheduleStickyLayoutUpdate);
 
     if (typeof ResizeObserver === "undefined") {
-      return () => window.removeEventListener("resize", updateTopRailHeight);
+      return () => {
+        if (frameId !== 0) {
+          window.cancelAnimationFrame(frameId);
+        }
+        window.removeEventListener("resize", scheduleStickyLayoutUpdate);
+        window.removeEventListener("pageshow", scheduleStickyLayoutUpdate);
+      };
     }
 
-    const resizeObserver = new ResizeObserver(() => updateTopRailHeight());
+    const resizeObserver = new ResizeObserver(() => scheduleStickyLayoutUpdate());
     resizeObserver.observe(topRailElement);
 
     return () => {
-      window.removeEventListener("resize", updateTopRailHeight);
+      if (frameId !== 0) {
+        window.cancelAnimationFrame(frameId);
+      }
+      window.removeEventListener("resize", scheduleStickyLayoutUpdate);
+      window.removeEventListener("pageshow", scheduleStickyLayoutUpdate);
       resizeObserver.disconnect();
     };
   }, []);
@@ -218,10 +258,17 @@ export function TodayPage() {
   const pendingTaskCount = data.executionTasks.filter((t) => t.status === "pending").length;
   const todayLayoutStyle = {
     "--today-top-rail-height": `${topRailHeight}px`,
+    "--today-sticky-offset": `${stickyTop}px`,
   } as CSSProperties;
   const todaySidebarStyle = {
-    top: `calc(var(--shell-header-height, 0px) + ${topRailHeight}px + 1rem)`,
-    maxHeight: `calc(100vh - var(--shell-header-height, 0px) - ${topRailHeight}px - 1.5rem)`,
+    top: `${stickyTop}px`,
+    maxHeight: `${stickyMaxHeight}px`,
+  } as CSSProperties;
+  const plannerSidebarStyle = {
+    top: `${stickyTop}px`,
+  } as CSSProperties;
+  const plannerLaneStyle = {
+    "--planner-lane-max-height": `${stickyMaxHeight}px`,
   } as CSSProperties;
 
   return (
@@ -294,6 +341,8 @@ export function TodayPage() {
           taskActions={plannerTaskActions}
           onSelectDate={setPlannerDate}
           onStepDate={stepPlannerDate}
+          sidebarStyle={plannerSidebarStyle}
+          laneStyle={plannerLaneStyle}
         />
       )}
 

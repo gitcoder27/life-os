@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 
 import type {
@@ -6,7 +6,6 @@ import type {
   GoalHorizonItem,
   GoalOverviewItem,
   GoalDetailItem,
-  GoalLinkedPriorityItem,
   GoalHierarchySummary,
   MonthPlanResponse,
   WeekPlanResponse,
@@ -21,6 +20,7 @@ import {
   GoalFormDialog,
   type GoalFormData,
 } from "./GoalFormDialog";
+import { GoalsPlanGraphView } from "./GoalsPlanGraphView";
 
 /* ── Helpers ── */
 
@@ -98,7 +98,7 @@ function HierarchyRail({
   return (
     <div className={`ghq-tree${depth === 0 ? " ghq-tree--root" : ""}`}>
       {sorted.map((node) => (
-        <HierarchyNode
+        <HierarchyNodeRow
           key={node.id}
           node={node}
           horizons={horizons}
@@ -111,7 +111,7 @@ function HierarchyRail({
   );
 }
 
-function HierarchyNode({
+function HierarchyNodeRow({
   node,
   horizons,
   selectedGoalId,
@@ -191,7 +191,7 @@ function PlanInspector({
   weekPlan: WeekPlanResponse | null;
   monthPlan: MonthPlanResponse | null;
   onSelectGoal: (goalId: string) => void;
-  onCreateChild: (parentGoal: GoalDetailItem) => void;
+  onCreateChild: (parentGoal: GoalOverviewItem) => void;
 }) {
   const detailQuery = useGoalDetailQuery(goalId);
 
@@ -497,6 +497,10 @@ function HorizonRoadmap({
   );
 }
 
+/* ── Subview type ── */
+
+type PlanSubview = "outline" | "graph";
+
 /* ── Main Plan Workspace ── */
 
 export function GoalsPlanWorkspace({
@@ -525,7 +529,7 @@ export function GoalsPlanWorkspace({
   selectedGoalId: string | null;
   onSelectGoal: (goalId: string) => void;
   onOpenCreateGoal: () => void;
-  onStartCreateChild: (parentGoal: GoalDetailItem) => void;
+  onStartCreateChild: (parentGoal: GoalOverviewItem) => void;
   showChildForm: boolean;
   childFormParent: GoalOverviewItem | null;
   childForm: GoalFormData;
@@ -534,100 +538,147 @@ export function GoalsPlanWorkspace({
   onCancelChildForm: () => void;
   createIsPending: boolean;
 }) {
+  const [planView, setPlanView] = useState<PlanSubview>("outline");
+
   const activeGoals = goals.filter((g) => g.status === "active");
   const tree = useMemo(() => buildHierarchyTree(activeGoals), [activeGoals]);
 
+  // Graph: trigger child creation for the selected goal
+  const handleGraphAddChild = useCallback(() => {
+    const goal = goals.find((g) => g.id === selectedGoalId);
+    if (goal) onStartCreateChild(goal);
+  }, [goals, selectedGoalId, onStartCreateChild]);
+
+  // Shared inspector content
+  const inspectorContent = showChildForm && childFormParent ? (
+    <div className="ghq-inspector">
+      <div className="ghq-inspector__header">
+        <h2 className="ghq-inspector__title">Create sub-goal</h2>
+      </div>
+      <div className="ghq-inspector__body">
+        <GoalFormDialog
+          form={childForm}
+          editing={false}
+          isPending={createIsPending}
+          domains={domains}
+          horizons={horizons}
+          parentGoal={childFormParent}
+          onChangeForm={onChangeChildForm}
+          onSubmit={onSubmitChildForm}
+          onCancel={onCancelChildForm}
+        />
+      </div>
+    </div>
+  ) : selectedGoalId ? (
+    <PlanInspector
+      goalId={selectedGoalId}
+      goals={goals}
+      domains={domains}
+      horizons={horizons}
+      weekPlan={weekPlan}
+      monthPlan={monthPlan}
+      onSelectGoal={onSelectGoal}
+      onCreateChild={onStartCreateChild}
+    />
+  ) : (
+    <div className="ghq-inspector ghq-inspector--empty">
+      <div className="ghq-inspector__empty-state">
+        <span className="ghq-inspector__empty-icon">◫</span>
+        <h3>Select a goal</h3>
+        <p>
+          Choose a goal from the {planView === "graph" ? "graph" : "hierarchy"} to
+          see its full context, milestones, and alignment with your weekly and
+          monthly planning.
+        </p>
+      </div>
+    </div>
+  );
+
   return (
-    <div className="ghq-plan">
-      {/* Left: hierarchy rail */}
-      <div className="ghq-plan__rail">
-        <div className="ghq-plan__rail-header">
-          <h2 className="ghq-plan__rail-title">Goal hierarchy</h2>
-          <button
-            className="button button--ghost button--small"
-            type="button"
-            onClick={onOpenCreateGoal}
-          >
-            + New
-          </button>
-        </div>
-
-        {/* Horizon roadmap */}
-        <HorizonRoadmap horizons={horizons} goals={goals} />
-
-        {/* Tree */}
-        {tree.length > 0 ? (
-          <HierarchyRail
-            roots={tree}
-            horizons={horizons}
-            selectedGoalId={selectedGoalId}
-            onSelectGoal={onSelectGoal}
-          />
-        ) : (
-          <div className="ghq-plan__empty-tree">
-            <p>No active goals yet.</p>
-            <button
-              className="button button--primary button--small"
-              type="button"
-              onClick={onOpenCreateGoal}
-            >
-              Create your first goal
-            </button>
-          </div>
-        )}
-
-        {/* Settings links */}
-        <div className="ghq-plan__rail-footer">
-          <Link to="/settings#goal-domains" className="ghq-plan__settings-link">
-            Manage domains
-          </Link>
-          <Link to="/settings#planning-layers" className="ghq-plan__settings-link">
-            Manage planning layers
-          </Link>
-        </div>
+    <div className="ghq-plan-container">
+      {/* Subview toggle */}
+      <div className="ghq-plan-subview">
+        <button
+          className={`ghq-plan-subview__btn${planView === "outline" ? " ghq-plan-subview__btn--active" : ""}`}
+          type="button"
+          onClick={() => setPlanView("outline")}
+        >
+          Outline
+        </button>
+        <button
+          className={`ghq-plan-subview__btn ghq-plan-subview__btn--graph${planView === "graph" ? " ghq-plan-subview__btn--active" : ""}`}
+          type="button"
+          onClick={() => setPlanView("graph")}
+        >
+          Graph
+        </button>
       </div>
 
-      {/* Right: inspector */}
-      <div className="ghq-plan__inspector">
-        {showChildForm && childFormParent ? (
-          <div className="ghq-inspector">
-            <div className="ghq-inspector__header">
-              <h2 className="ghq-inspector__title">Create sub-goal</h2>
+      <div className={`ghq-plan${planView === "graph" ? " ghq-plan--graph" : ""}`}>
+        {/* Left: outline rail OR graph canvas */}
+        {planView === "outline" ? (
+          <div className="ghq-plan__rail">
+            <div className="ghq-plan__rail-header">
+              <h2 className="ghq-plan__rail-title">Goal hierarchy</h2>
+              <button
+                className="button button--ghost button--small"
+                type="button"
+                onClick={onOpenCreateGoal}
+              >
+                + New
+              </button>
             </div>
-            <div className="ghq-inspector__body">
-              <GoalFormDialog
-                form={childForm}
-                editing={false}
-                isPending={createIsPending}
-                domains={domains}
+
+            <HorizonRoadmap horizons={horizons} goals={goals} />
+
+            {tree.length > 0 ? (
+              <HierarchyRail
+                roots={tree}
                 horizons={horizons}
-                parentGoal={childFormParent}
-                onChangeForm={onChangeChildForm}
-                onSubmit={onSubmitChildForm}
-                onCancel={onCancelChildForm}
+                selectedGoalId={selectedGoalId}
+                onSelectGoal={onSelectGoal}
               />
+            ) : (
+              <div className="ghq-plan__empty-tree">
+                <p>No active goals yet.</p>
+                <button
+                  className="button button--primary button--small"
+                  type="button"
+                  onClick={onOpenCreateGoal}
+                >
+                  Create your first goal
+                </button>
+              </div>
+            )}
+
+            <div className="ghq-plan__rail-footer">
+              <Link to="/settings#goal-domains" className="ghq-plan__settings-link">
+                Manage domains
+              </Link>
+              <Link to="/settings#planning-layers" className="ghq-plan__settings-link">
+                Manage planning layers
+              </Link>
             </div>
           </div>
-        ) : selectedGoalId ? (
-          <PlanInspector
-            goalId={selectedGoalId}
-            goals={goals}
-            domains={domains}
-            horizons={horizons}
-            weekPlan={weekPlan}
-            monthPlan={monthPlan}
-            onSelectGoal={onSelectGoal}
-            onCreateChild={onStartCreateChild}
-          />
         ) : (
-          <div className="ghq-inspector ghq-inspector--empty">
-            <div className="ghq-inspector__empty-state">
-              <span className="ghq-inspector__empty-icon">◫</span>
-              <h3>Select a goal</h3>
-              <p>Choose a goal from the hierarchy to see its full context, milestones, and alignment with your weekly and monthly planning.</p>
-            </div>
+          <div className="ghq-plan__graph">
+            <GoalsPlanGraphView
+              goals={goals}
+              domains={domains}
+              horizons={horizons}
+              weekPlan={weekPlan}
+              monthPlan={monthPlan}
+              selectedGoalId={selectedGoalId}
+              onSelectGoal={onSelectGoal}
+              onAddChild={handleGraphAddChild}
+            />
           </div>
         )}
+
+        {/* Right: inspector (shared between outline and graph) */}
+        <div className="ghq-plan__inspector">
+          {inspectorContent}
+        </div>
       </div>
     </div>
   );

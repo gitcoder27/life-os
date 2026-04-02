@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import {
   DndContext,
   DragOverlay,
@@ -68,6 +68,8 @@ export function DayPlanner({
   taskActions,
   onSelectDate,
   onStepDate,
+  sidebarStyle,
+  laneStyle,
 }: {
   date: string;
   todayDate: string;
@@ -81,6 +83,8 @@ export function DayPlanner({
   taskActions: TaskActions;
   onSelectDate: (isoDate: string) => void;
   onStepDate: (direction: -1 | 1) => void;
+  sidebarStyle?: CSSProperties;
+  laneStyle?: CSSProperties;
 }) {
   const [formDraft, setFormDraft] = useState<PlannerFormDraft | null>(null);
   const [showHoursEditor, setShowHoursEditor] = useState(false);
@@ -500,166 +504,168 @@ export function DayPlanner({
       >
         <div className="planner__body">
           <div className="planner__timeline-pane">
-          {orderedBlocks.length === 0 && !formDraft ? (
-            <div className="planner__empty">
-              <div className="planner__empty-icon">✦</div>
-              <h3 className="planner__empty-title">
-                {isEditable ? "Shape the day" : "No saved plan"}
-              </h3>
-              <p className="planner__empty-desc">
-                {isEditable
-                  ? "Add your first block to start building a plan."
-                  : hasHistoryContent
-                    ? "This day has no saved time blocks."
-                    : "There is no saved planning history for this day."}
-              </p>
-              {isEditable ? (
-                <button
-                  className="button button--primary button--small"
-                  type="button"
-                  onClick={() => openBlockForm()}
-                >
-                  Add block
-                </button>
-              ) : null}
-            </div>
-          ) : null}
-
-          {formDraft ? (
-            <PlannerBlockForm
-              key={formDraft.key}
-              date={date}
-              existingBlocks={orderedBlocks}
-              initialValues={formDraft}
-              onSubmit={(payload) => {
-                actions.addBlock(payload);
-                setFormDraft(null);
-              }}
-              onCancel={() => setFormDraft(null)}
-            />
-          ) : null}
-
-          {orderedBlocks.length > 0 || formDraft ? (
-            <div className="planner__timeline-area">
-              <div
-                className="planner__gutter"
-                aria-hidden="true"
-                style={{ height: `${timeline.totalHeightPx}px` }}
-              >
-                {timeline.gutterMarkers.map((marker) => (
-                  <div
-                    key={marker.minutes}
-                    className={`planner__gutter-hour${
-                      timeline.nowLinePx !== null && marker.topPx < timeline.nowLinePx
-                        ? " planner__gutter-hour--past"
-                        : ""
-                    }`}
-                    style={{ top: `${marker.topPx}px` }}
+            {orderedBlocks.length === 0 && !formDraft ? (
+              <div className="planner__empty">
+                <div className="planner__empty-icon">✦</div>
+                <h3 className="planner__empty-title">
+                  {isEditable ? "Shape the day" : "No saved plan"}
+                </h3>
+                <p className="planner__empty-desc">
+                  {isEditable
+                    ? "Add your first block to start building a plan."
+                    : hasHistoryContent
+                      ? "This day has no saved time blocks."
+                      : "There is no saved planning history for this day."}
+                </p>
+                {isEditable ? (
+                  <button
+                    className="button button--primary button--small"
+                    type="button"
+                    onClick={() => openBlockForm()}
                   >
-                    {marker.label}
-                  </div>
-                ))}
-                {timeline.nowLinePx !== null ? (
-                  <div
-                    className="planner__gutter-now"
-                    style={{ top: `${timeline.nowLinePx}px` }}
-                  />
+                    Add block
+                  </button>
                 ) : null}
               </div>
+            ) : null}
+            {formDraft ? (
+              <PlannerBlockForm
+                key={formDraft.key}
+                date={date}
+                existingBlocks={orderedBlocks}
+                initialValues={formDraft}
+                onSubmit={(payload) => {
+                  actions.addBlock(payload);
+                  setFormDraft(null);
+                }}
+                onCancel={() => setFormDraft(null)}
+              />
+            ) : null}
 
-              <div
-                className="planner__timeline-track"
-                style={{ height: `${timeline.totalHeightPx}px` }}
-              >
-                {timeline.segments.map((segment) =>
-                  segment.kind === "gap" ? (
-                    <PlannerGapCard
-                      key={segment.id}
-                      segment={segment}
-                      isEditable={isEditable}
-                      onAddBlock={() =>
-                        openBlockForm({
-                          startTime: minutesToTimeString(segment.startMinutes),
-                          endTime: minutesToTimeString(
-                            Math.min(segment.startMinutes + 60, segment.endMinutes),
-                          ),
-                        })
-                      }
+            {orderedBlocks.length > 0 || formDraft ? (
+              <div className="planner__timeline-area">
+                <div
+                  className="planner__gutter"
+                  aria-hidden="true"
+                  style={{ height: `${timeline.totalHeightPx}px` }}
+                >
+                  {timeline.gutterMarkers.map((marker) => (
+                    <div
+                      key={marker.minutes}
+                      className={`planner__gutter-hour${
+                        timeline.nowLinePx !== null && marker.topPx < timeline.nowLinePx
+                          ? " planner__gutter-hour--past"
+                          : ""
+                      }`}
+                      style={{ top: `${marker.topPx}px` }}
+                    >
+                      {marker.label}
+                    </div>
+                  ))}
+                  {timeline.nowLinePx !== null ? (
+                    <div
+                      className="planner__gutter-now"
+                      style={{ top: `${timeline.nowLinePx}px` }}
                     />
-                  ) : (
-                    <PlannerBlock
-                      key={segment.id}
-                      block={segment.block!}
-                      existingBlocks={orderedBlocks}
-                      availableTasks={unplannedTasks}
-                      availableBlocks={orderedBlocks}
-                      canMoveUp={(blockIndexMap.get(segment.block!.id) ?? -1) > 0}
-                      canMoveDown={(blockIndexMap.get(segment.block!.id) ?? -1) < orderedBlocks.length - 1}
-                      onMoveBlock={(direction) =>
-                        handleMoveBlock(
-                          blockIndexMap.get(segment.block!.id) ?? -1,
-                          direction,
-                        )
-                      }
-                      onAddTasks={(taskIds) => actions.assignTasksToBlock(segment.block!, taskIds)}
-                      onMoveTaskToBlock={(taskId, targetBlock) =>
-                        actions.moveTaskToBlock(targetBlock, taskId)
-                      }
-                      onEditBlock={(updates) => actions.editBlock(segment.block!.id, updates)}
-                      onDeleteBlock={() => actions.removeBlock(segment.block!.id)}
-                      onRemoveTask={(taskId) => actions.removeTaskFromBlock(segment.block!.id, taskId)}
-                      onReorderTasks={(taskIds) => actions.reorderTasksInBlock(segment.block!, taskIds)}
-                      onNudgeDuration={(direction) => handleNudgeBlock(segment.block!, direction)}
-                      onDuplicateBlock={() => handleDuplicateBlock(segment.block!)}
-                      onSplitBlock={() => handleSplitBlock(segment.block!)}
-                      onCarryPendingToNext={() =>
-                        handleCarryPendingToNext(
-                          segment.block!,
-                          orderedBlocks[(blockIndexMap.get(segment.block!.id) ?? -1) + 1] ?? null,
-                        )
-                      }
-                      timelineStatus={segment.status}
-                      isUpNext={timeline.nextBlockId === segment.block!.id}
-                      durationLabel={segment.durationLabel}
-                      segmentStartMinutes={segment.startMinutes}
-                      segmentEndMinutes={segment.endMinutes}
-                      hourMarkers={segment.hourMarkers}
-                      currentMarkerPercent={segment.currentMarkerPercent}
-                      minHeight={segment.minHeight}
-                      topPx={segment.topPx}
-                      heightPx={segment.heightPx}
-                      nextBlock={orderedBlocks[(blockIndexMap.get(segment.block!.id) ?? -1) + 1] ?? null}
-                      canDuplicate={!formDraft}
-                      readOnly={!isEditable}
-                      isPending={actions.isPending}
-                      activeUnplannedTaskId={draggedTaskId}
-                    />
-                  ),
-                )}
+                  ) : null}
+                </div>
 
-                {isLiveDate && timeline.nowLinePx !== null ? (
-                  <div
-                    className="planner__now-line"
-                    style={{ top: `${timeline.nowLinePx}px` }}
-                    aria-hidden="true"
-                  />
-                ) : null}
+                <div
+                  className="planner__timeline-track"
+                  style={{ height: `${timeline.totalHeightPx}px` }}
+                >
+                  {timeline.segments.map((segment) =>
+                    segment.kind === "gap" ? (
+                      <PlannerGapCard
+                        key={segment.id}
+                        segment={segment}
+                        isEditable={isEditable}
+                        onAddBlock={() =>
+                          openBlockForm({
+                            startTime: minutesToTimeString(segment.startMinutes),
+                            endTime: minutesToTimeString(
+                              Math.min(segment.startMinutes + 60, segment.endMinutes),
+                            ),
+                          })
+                        }
+                      />
+                    ) : (
+                      <PlannerBlock
+                        key={segment.id}
+                        block={segment.block!}
+                        existingBlocks={orderedBlocks}
+                        availableTasks={unplannedTasks}
+                        availableBlocks={orderedBlocks}
+                        canMoveUp={(blockIndexMap.get(segment.block!.id) ?? -1) > 0}
+                        canMoveDown={(blockIndexMap.get(segment.block!.id) ?? -1) < orderedBlocks.length - 1}
+                        onMoveBlock={(direction) =>
+                          handleMoveBlock(
+                            blockIndexMap.get(segment.block!.id) ?? -1,
+                            direction,
+                          )
+                        }
+                        onAddTasks={(taskIds) => actions.assignTasksToBlock(segment.block!, taskIds)}
+                        onMoveTaskToBlock={(taskId, targetBlock) =>
+                          actions.moveTaskToBlock(targetBlock, taskId)
+                        }
+                        onEditBlock={(updates) => actions.editBlock(segment.block!.id, updates)}
+                        onDeleteBlock={() => actions.removeBlock(segment.block!.id)}
+                        onRemoveTask={(taskId) => actions.removeTaskFromBlock(segment.block!.id, taskId)}
+                        onReorderTasks={(taskIds) => actions.reorderTasksInBlock(segment.block!, taskIds)}
+                        onNudgeDuration={(direction) => handleNudgeBlock(segment.block!, direction)}
+                        onDuplicateBlock={() => handleDuplicateBlock(segment.block!)}
+                        onSplitBlock={() => handleSplitBlock(segment.block!)}
+                        onCarryPendingToNext={() =>
+                          handleCarryPendingToNext(
+                            segment.block!,
+                            orderedBlocks[(blockIndexMap.get(segment.block!.id) ?? -1) + 1] ?? null,
+                          )
+                        }
+                        timelineStatus={segment.status}
+                        isUpNext={timeline.nextBlockId === segment.block!.id}
+                        durationLabel={segment.durationLabel}
+                        segmentStartMinutes={segment.startMinutes}
+                        segmentEndMinutes={segment.endMinutes}
+                        hourMarkers={segment.hourMarkers}
+                        currentMarkerPercent={segment.currentMarkerPercent}
+                        minHeight={segment.minHeight}
+                        topPx={segment.topPx}
+                        heightPx={segment.heightPx}
+                        nextBlock={orderedBlocks[(blockIndexMap.get(segment.block!.id) ?? -1) + 1] ?? null}
+                        canDuplicate={!formDraft}
+                        readOnly={!isEditable}
+                        isPending={actions.isPending}
+                        activeUnplannedTaskId={draggedTaskId}
+                      />
+                    ),
+                  )}
+
+                  {isLiveDate && timeline.nowLinePx !== null ? (
+                    <div
+                      className="planner__now-line"
+                      style={{ top: `${timeline.nowLinePx}px` }}
+                      aria-hidden="true"
+                    />
+                  ) : null}
+                </div>
               </div>
-            </div>
-          ) : null}
+            ) : null}
           </div>
 
-        <UnplannedTasks
-          tasks={unplannedTasks}
-          blocks={orderedBlocks}
-          readOnly={!isEditable}
-          isHistoryDate={isHistoryDate}
-          isPending={actions.isPending}
-          draggedTaskId={draggedTaskId}
-          suppressedTaskId={suppressedTaskId}
-            onQuickAssign={(taskId, block) => actions.assignTaskToBlock(block, taskId)}
-            onBulkAssign={(taskIds, block) => actions.assignTasksToBlock(block, taskIds)}
-          />
+          <div className="planner__sidebar-pane" style={sidebarStyle}>
+            <UnplannedTasks
+              tasks={unplannedTasks}
+              blocks={orderedBlocks}
+              readOnly={!isEditable}
+              isHistoryDate={isHistoryDate}
+              isPending={actions.isPending}
+              draggedTaskId={draggedTaskId}
+              suppressedTaskId={suppressedTaskId}
+              laneStyle={laneStyle}
+              onQuickAssign={(taskId, block) => actions.assignTaskToBlock(block, taskId)}
+              onBulkAssign={(taskIds, block) => actions.assignTasksToBlock(block, taskIds)}
+            />
+          </div>
         </div>
 
         {createPortal(

@@ -7,7 +7,6 @@ import {
   useCreateGoalMutation,
   useGoalsWorkspaceQuery,
   useUpdateGoalMutation,
-  type GoalDetailItem,
   type GoalOverviewItem,
 } from "../../shared/lib/api";
 import {
@@ -146,7 +145,7 @@ export function GoalsPage() {
     if (goalId) setSelectedGoalId(goalId);
   }
 
-  function handleCreateChildFromPlan(parentGoal: GoalDetailItem) {
+  function handleCreateChildFromPlan(parentGoal: GoalOverviewItem) {
     const suggestedHorizon = suggestChildHorizon(parentGoal.horizonId, horizons);
     setChildFormParent(parentGoal);
     setChildForm(emptyGoalForm({

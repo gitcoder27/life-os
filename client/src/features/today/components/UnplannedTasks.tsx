@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, type CSSProperties } from "react";
 import { useDraggable } from "@dnd-kit/core";
 import type { TaskItem, DayPlannerBlockItem } from "../../../shared/lib/api";
 import { UNPLANNED_TASK_DRAG_TYPE, getUnplannedTaskDragId } from "../helpers/planner-drag";
@@ -12,6 +12,7 @@ export function UnplannedTasks({
   isPending,
   draggedTaskId,
   suppressedTaskId,
+  laneStyle,
   onQuickAssign,
   onBulkAssign,
 }: {
@@ -22,6 +23,7 @@ export function UnplannedTasks({
   isPending: boolean;
   draggedTaskId: string | null;
   suppressedTaskId: string | null;
+  laneStyle?: CSSProperties;
   onQuickAssign: (taskId: string, block: DayPlannerBlockItem) => void;
   onBulkAssign: (taskIds: string[], block: DayPlannerBlockItem) => Promise<void> | void;
 }) {
@@ -44,7 +46,10 @@ export function UnplannedTasks({
 
   if (tasks.length === 0) {
     return (
-      <div className={`unplanned-lane${expanded ? " unplanned-lane--expanded" : ""}`}>
+      <div
+        className={`unplanned-lane${expanded ? " unplanned-lane--expanded" : ""}`}
+        style={laneStyle}
+      >
         <div
           className="unplanned-lane__header"
           onClick={() => setExpanded((c) => !c)}
@@ -90,7 +95,10 @@ export function UnplannedTasks({
   }
 
   return (
-    <div className={`unplanned-lane${expanded ? " unplanned-lane--expanded" : ""}`}>
+    <div
+      className={`unplanned-lane${expanded ? " unplanned-lane--expanded" : ""}`}
+      style={laneStyle}
+    >
       <div
         className="unplanned-lane__header"
         onClick={() => setExpanded((c) => !c)}
