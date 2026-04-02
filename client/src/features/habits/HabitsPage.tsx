@@ -787,6 +787,7 @@ export function HabitsPage() {
 
       {/* ═══ Daily Focus ═══ */}
       <div className="habits-daily">
+        {renderDueHabitsGroup()}
         {activeRoutines.length > 0 ? (
           activeRoutines.map((routine) => renderRoutineGroup(routine))
         ) : (
@@ -799,7 +800,6 @@ export function HabitsPage() {
             </div>
           </div>
         )}
-        {renderDueHabitsGroup()}
       </div>
 
       {/* ═══ Signals ═══ */}
