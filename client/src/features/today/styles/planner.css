@@ -97,6 +97,55 @@ body.planner-dragging-cursor * {
   gap: 0.75rem;
 }
 
+.planner__header-main {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  min-width: 0;
+}
+
+.planner-date-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.85rem;
+  padding: 0.75rem 0.9rem;
+  border-radius: 1rem;
+  border: 1px solid rgba(255,255,255,0.06);
+  background:
+    linear-gradient(135deg, rgba(255,255,255,0.05), rgba(255,255,255,0.02)),
+    rgba(17, 16, 14, 0.75);
+}
+
+.planner-date-nav__controls {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.planner-date-nav__copy {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.15rem;
+  min-width: 0;
+}
+
+.planner-date-nav__title {
+  font-size: var(--fs-small);
+  font-weight: 700;
+  color: var(--text);
+  white-space: nowrap;
+}
+
+.planner-date-nav__subtitle {
+  font-size: var(--fs-micro);
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
 .planner__meta {
   display: flex;
   flex-wrap: wrap;
@@ -119,6 +168,11 @@ body.planner-dragging-cursor * {
   gap: 0.4rem;
   flex-shrink: 0;
   align-items: center;
+}
+
+.planner__history-note {
+  font-size: var(--fs-small);
+  color: var(--text-secondary);
 }
 
 .planner__error {
@@ -197,6 +251,12 @@ body.planner-dragging-cursor * {
   gap: 1rem;
   align-items: start;
   position: relative;
+}
+
+.planner-block__task-handle--static {
+  cursor: default;
+  opacity: 0;
+  pointer-events: none;
 }
 
 .planner__timeline-pane {
@@ -2467,6 +2527,16 @@ body.planner-dragging-cursor * {
 
   .planner__header {
     flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .planner-date-nav {
+    width: 100%;
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .planner-date-nav__copy {
     align-items: flex-start;
   }
 

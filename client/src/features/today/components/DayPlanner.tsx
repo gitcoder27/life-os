@@ -43,6 +43,7 @@ import { PlannerBlock } from "./PlannerBlock";
 import { PlannerBlockForm } from "./PlannerBlockForm";
 import { UnplannedTasks } from "./UnplannedTasks";
 import type { useTaskActions } from "../hooks/useTaskActions";
+import { PlannerDateNavigator } from "./PlannerDateNavigator";
 
 type PlannerActions = ReturnType<typeof usePlannerActions>;
 type TaskActions = ReturnType<typeof useTaskActions>;
@@ -56,18 +57,30 @@ type PlannerFormDraft = {
 
 export function DayPlanner({
   date,
+  todayDate,
+  isEditable,
+  isLiveDate,
+  isHistoryDate,
   blocks,
   unplannedTasks,
   execution,
   actions,
   taskActions,
+  onSelectDate,
+  onStepDate,
 }: {
   date: string;
+  todayDate: string;
+  isEditable: boolean;
+  isLiveDate: boolean;
+  isHistoryDate: boolean;
   blocks: DayPlannerBlockItem[];
   unplannedTasks: TaskItem[];
   execution: PlannerExecutionModel;
   actions: PlannerActions;
   taskActions: TaskActions;
+  onSelectDate: (isoDate: string) => void;
+  onStepDate: (direction: -1 | 1) => void;
 }) {
   const [formDraft, setFormDraft] = useState<PlannerFormDraft | null>(null);
   const [showHoursEditor, setShowHoursEditor] = useState(false);
@@ -89,12 +102,13 @@ export function DayPlanner({
         blocks: orderedBlocks,
         now,
         preferredHours: visibleHours,
+        isLiveDate,
       }),
-    [orderedBlocks, now, visibleHours],
+    [isLiveDate, orderedBlocks, now, visibleHours],
   );
   const hoursValidation = validatePlannerVisibleHours(hoursDraft);
-  const cleanupTarget = execution.cleanup.targetBlock?.block ?? null;
   const isCleanupPending = actions.isPending || taskActions.isPending;
+  const hasHistoryContent = orderedBlocks.length > 0 || unplannedTasks.length > 0;
   const activeDraggedTask = useMemo(
     () => unplannedTasks.find((task) => task.id === draggedTaskId) ?? null,
     [draggedTaskId, unplannedTasks],
@@ -143,6 +157,10 @@ export function DayPlanner({
     startTime?: string;
     endTime?: string;
   }) {
+    if (!isEditable) {
+      return;
+    }
+
     setFormDraft({
       key: nextDraftKey(),
       ...initialValues,
@@ -150,6 +168,10 @@ export function DayPlanner({
   }
 
   function handleMoveBlock(index: number, direction: -1 | 1) {
+    if (!isEditable) {
+      return;
+    }
+
     const target = index + direction;
     if (target < 0 || target >= orderedBlocks.length) {
       return;
@@ -161,6 +183,10 @@ export function DayPlanner({
   }
 
   function handleNudgeBlock(block: DayPlannerBlockItem, direction: -1 | 1) {
+    if (!isEditable) {
+      return;
+    }
+
     const currentEnd = toTimeInputValue(block.endsAt);
     const nextEndTime = addMinutes(currentEnd, direction * 15);
     const validation = validatePlannerBlockDraft({
@@ -180,6 +206,10 @@ export function DayPlanner({
   }
 
   function handleDuplicateBlock(block: DayPlannerBlockItem) {
+    if (!isEditable) {
+      return;
+    }
+
     const duplicateWindow = getDuplicateBlockWindow({
       block,
       existingBlocks: orderedBlocks,
@@ -207,6 +237,10 @@ export function DayPlanner({
   }
 
   function handleSplitBlock(block: DayPlannerBlockItem) {
+    if (!isEditable) {
+      return;
+    }
+
     const splitTime = getSplitBlockTime(block);
     if (!splitTime) {
       return;
@@ -219,6 +253,10 @@ export function DayPlanner({
   }
 
   function handleCarryPendingToNext(block: DayPlannerBlockItem, nextBlock: DayPlannerBlockItem | null) {
+    if (!isEditable) {
+      return;
+    }
+
     if (!nextBlock) {
       return;
     }
@@ -244,16 +282,8 @@ export function DayPlanner({
     setShowHoursEditor(false);
   }
 
-  function handleCleanupMoveAll(targetBlock: DayPlannerBlockItem | null) {
-    if (!targetBlock || execution.cleanup.taskIds.length === 0) {
-      return;
-    }
-
-    void actions.assignTasksToBlock(targetBlock, execution.cleanup.taskIds);
-  }
-
   function handleCleanupUnplanAll() {
-    if (execution.slippedBlocks.length === 0) {
+    if (!isLiveDate || !isEditable || execution.slippedBlocks.length === 0) {
       return;
     }
 
@@ -263,7 +293,7 @@ export function DayPlanner({
   }
 
   function handleCleanupTomorrow() {
-    if (execution.cleanup.taskIds.length === 0) {
+    if (!isLiveDate || !isEditable || execution.cleanup.taskIds.length === 0) {
       return;
     }
 
@@ -271,6 +301,10 @@ export function DayPlanner({
   }
 
   function handleUnplannedTaskDragStart(event: DragStartEvent) {
+    if (!isEditable) {
+      return;
+    }
+
     setDisableDropAnimation(false);
 
     if (event.active.data.current?.type !== UNPLANNED_TASK_DRAG_TYPE) {
@@ -287,6 +321,12 @@ export function DayPlanner({
   }
 
   function handleUnplannedTaskDragEnd(event: DragEndEvent) {
+    if (!isEditable) {
+      setDraggedTaskId(null);
+      setDisableDropAnimation(false);
+      return;
+    }
+
     const activeTaskId =
       event.active.data.current?.type === UNPLANNED_TASK_DRAG_TYPE
         ? event.active.data.current?.taskId
@@ -313,14 +353,31 @@ export function DayPlanner({
   return (
     <div className="planner">
       <div className="planner__header">
-        <div className="planner__meta">
-          <span>{orderedBlocks.length} block{orderedBlocks.length === 1 ? "" : "s"}</span>
-          <span>
-            {timeline.totalFreeMinutes > 0
-              ? `${formatDurationMinutes(timeline.totalFreeMinutes)} free`
-              : "Fully allocated"}
-          </span>
-          <span>{timeline.visibleRangeLabel}</span>
+        <div className="planner__header-main">
+          <PlannerDateNavigator
+            date={date}
+            todayDate={todayDate}
+            onSelectDate={onSelectDate}
+            onStepDate={onStepDate}
+          />
+          <div className="planner__meta">
+            <span>{orderedBlocks.length} block{orderedBlocks.length === 1 ? "" : "s"}</span>
+            <span>
+              {timeline.totalFreeMinutes > 0
+                ? `${formatDurationMinutes(timeline.totalFreeMinutes)} free`
+                : "Fully allocated"}
+            </span>
+            <span>{timeline.visibleRangeLabel}</span>
+          </div>
+          {isHistoryDate ? (
+            <div className="planner__history-note">
+              History snapshot. Past days are read-only.
+            </div>
+          ) : !isLiveDate ? (
+            <div className="planner__history-note">
+              Planning ahead. This day stays editable until it becomes history.
+            </div>
+          ) : null}
         </div>
         <div className="planner__header-actions">
           <button
@@ -332,14 +389,16 @@ export function DayPlanner({
           >
             ⚙
           </button>
-          <button
-            className="button button--primary button--small"
-            type="button"
-            onClick={() => openBlockForm()}
-            disabled={Boolean(formDraft)}
-          >
-            + Add block
-          </button>
+          {isEditable ? (
+            <button
+              className="button button--primary button--small"
+              type="button"
+              onClick={() => openBlockForm()}
+              disabled={Boolean(formDraft)}
+            >
+              + Add block
+            </button>
+          ) : null}
         </div>
       </div>
 
@@ -400,7 +459,7 @@ export function DayPlanner({
         <div className="planner__error">{actions.mutationError}</div>
       ) : null}
 
-      {execution.cleanup.state !== "none" ? (
+      {isLiveDate && execution.cleanup.state !== "none" ? (
         <div className="planner__cleanup-banner">
           <div className="planner__cleanup-indicator" />
           <div className="planner__cleanup-copy">
@@ -444,17 +503,25 @@ export function DayPlanner({
           {orderedBlocks.length === 0 && !formDraft ? (
             <div className="planner__empty">
               <div className="planner__empty-icon">✦</div>
-              <h3 className="planner__empty-title">Shape the day</h3>
+              <h3 className="planner__empty-title">
+                {isEditable ? "Shape the day" : "No saved plan"}
+              </h3>
               <p className="planner__empty-desc">
-                Add your first block to start building a plan.
+                {isEditable
+                  ? "Add your first block to start building a plan."
+                  : hasHistoryContent
+                    ? "This day has no saved time blocks."
+                    : "There is no saved planning history for this day."}
               </p>
-              <button
-                className="button button--primary button--small"
-                type="button"
-                onClick={() => openBlockForm()}
-              >
-                Add block
-              </button>
+              {isEditable ? (
+                <button
+                  className="button button--primary button--small"
+                  type="button"
+                  onClick={() => openBlockForm()}
+                >
+                  Add block
+                </button>
+              ) : null}
             </div>
           ) : null}
 
@@ -509,6 +576,7 @@ export function DayPlanner({
                     <PlannerGapCard
                       key={segment.id}
                       segment={segment}
+                      isEditable={isEditable}
                       onAddBlock={() =>
                         openBlockForm({
                           startTime: minutesToTimeString(segment.startMinutes),
@@ -562,13 +630,14 @@ export function DayPlanner({
                       heightPx={segment.heightPx}
                       nextBlock={orderedBlocks[(blockIndexMap.get(segment.block!.id) ?? -1) + 1] ?? null}
                       canDuplicate={!formDraft}
+                      readOnly={!isEditable}
                       isPending={actions.isPending}
                       activeUnplannedTaskId={draggedTaskId}
                     />
                   ),
                 )}
 
-                {timeline.nowLinePx !== null ? (
+                {isLiveDate && timeline.nowLinePx !== null ? (
                   <div
                     className="planner__now-line"
                     style={{ top: `${timeline.nowLinePx}px` }}
@@ -580,12 +649,14 @@ export function DayPlanner({
           ) : null}
           </div>
 
-          <UnplannedTasks
-            tasks={unplannedTasks}
-            blocks={orderedBlocks}
-            isPending={actions.isPending}
-            draggedTaskId={draggedTaskId}
-            suppressedTaskId={suppressedTaskId}
+        <UnplannedTasks
+          tasks={unplannedTasks}
+          blocks={orderedBlocks}
+          readOnly={!isEditable}
+          isHistoryDate={isHistoryDate}
+          isPending={actions.isPending}
+          draggedTaskId={draggedTaskId}
+          suppressedTaskId={suppressedTaskId}
             onQuickAssign={(taskId, block) => actions.assignTaskToBlock(block, taskId)}
             onBulkAssign={(taskIds, block) => actions.assignTasksToBlock(block, taskIds)}
           />
@@ -604,9 +675,11 @@ export function DayPlanner({
 
 function PlannerGapCard({
   segment,
+  isEditable,
   onAddBlock,
 }: {
   segment: PlannerTimelineSegment;
+  isEditable: boolean;
   onAddBlock: () => void;
 }) {
   return (
@@ -629,7 +702,7 @@ function PlannerGapCard({
           <span className="planner-gap__free-label">Free now</span>
         ) : null}
       </div>
-      {segment.status !== "past" ? (
+      {isEditable && segment.status !== "past" ? (
         <button
           className="planner-gap__add-btn"
           type="button"

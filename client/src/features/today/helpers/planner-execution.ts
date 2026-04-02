@@ -2,7 +2,7 @@ import type { DayPlannerBlockItem, DayPlannerBlockTaskItem, TaskItem } from "../
 
 const AT_RISK_ELAPSED_PERCENT = 75;
 
-export type PlannerExecutionTimelineStatus = "past" | "current" | "upcoming";
+export type PlannerExecutionTimelineStatus = "past" | "current" | "upcoming" | "neutral";
 export type PlannerExecutionHealth = "on_track" | "at_risk" | "off_track" | "complete";
 export type PlannerExecutionFocusState =
   | "no_plan"
@@ -57,9 +57,10 @@ export const buildPlannerExecutionModel = (input: {
   blocks: DayPlannerBlockItem[];
   unplannedTasks: TaskItem[];
   now: Date;
+  isLiveDate: boolean;
 }): PlannerExecutionModel => {
   const orderedBlocks = sortPlannerBlocksByTime(input.blocks).map((block) =>
-    buildExecutionBlock(block, input.now),
+    buildExecutionBlock(block, input.now, input.isLiveDate),
   );
   const currentBlock =
     orderedBlocks.find((block) => block.timelineStatus === "current") ?? null;
@@ -138,6 +139,7 @@ export const sortPlannerBlocksByTime = (blocks: DayPlannerBlockItem[]) =>
 const buildExecutionBlock = (
   block: DayPlannerBlockItem,
   now: Date,
+  isLiveDate: boolean,
 ): PlannerExecutionBlockModel => {
   const tasks = [...block.tasks].sort((left, right) => left.sortOrder - right.sortOrder);
   const pendingTasks = tasks.filter((item) => item.task.status === "pending");
@@ -148,9 +150,11 @@ const buildExecutionBlock = (
   const durationMinutes = Math.max(Math.round((endTime - startTime) / 60_000), 0);
   const elapsedMinutes = getElapsedMinutes(startTime, endTime, nowTime);
   const remainingMinutes = Math.max(durationMinutes - elapsedMinutes, 0);
-  const timelineStatus = getTimelineStatus(startTime, endTime, nowTime);
+  const timelineStatus = isLiveDate
+    ? getTimelineStatus(startTime, endTime, nowTime)
+    : "neutral";
   const timeProgressPercent =
-    durationMinutes > 0 ? Math.min((elapsedMinutes / durationMinutes) * 100, 100) : 0;
+    isLiveDate && durationMinutes > 0 ? Math.min((elapsedMinutes / durationMinutes) * 100, 100) : 0;
   const totalCount = tasks.length;
   const completedCount = completedTasks.length;
   const pendingCount = pendingTasks.length;
@@ -174,8 +178,8 @@ const buildExecutionBlock = (
     totalCount,
     taskProgressPercent: totalCount > 0 ? (completedCount / totalCount) * 100 : 0,
     timeProgressPercent,
-    elapsedMinutes,
-    remainingMinutes,
+    elapsedMinutes: isLiveDate ? elapsedMinutes : 0,
+    remainingMinutes: isLiveDate ? remainingMinutes : 0,
     startsInMinutes:
       timelineStatus === "upcoming" ? Math.max(Math.round((startTime - nowTime) / 60_000), 0) : null,
     endedMinutesAgo:

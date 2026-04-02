@@ -43,7 +43,7 @@ export type PlannerTimelineSegment = {
   endMinutes: number;
   durationMinutes: number;
   durationLabel: string;
-  status: "past" | "current" | "upcoming";
+  status: "past" | "current" | "upcoming" | "neutral";
   hourMarkers: number[];
   currentMarkerPercent: number | null;
   minHeight: number;
@@ -166,12 +166,15 @@ export const buildPlannerTimelineModel = (input: {
   blocks: DayPlannerBlockItem[];
   now: Date;
   preferredHours: PlannerVisibleHoursPreference;
+  isLiveDate: boolean;
 }): PlannerTimelineModel => {
   const blocks = sortPlannerBlocksByTime(input.blocks);
-  const currentBlock =
-    blocks.find((block) => isNowWithinRange(block.startsAt, block.endsAt, input.now)) ?? null;
-  const nextBlock =
-    blocks.find((block) => new Date(block.startsAt).getTime() > input.now.getTime()) ?? null;
+  const currentBlock = input.isLiveDate
+    ? blocks.find((block) => isNowWithinRange(block.startsAt, block.endsAt, input.now)) ?? null
+    : null;
+  const nextBlock = input.isLiveDate
+    ? blocks.find((block) => new Date(block.startsAt).getTime() > input.now.getTime()) ?? null
+    : null;
 
   const preferredStartMinutes = timeStringToMinutes(input.preferredHours.startTime);
   const preferredEndMinutes = timeStringToMinutes(input.preferredHours.endTime);
@@ -212,6 +215,7 @@ export const buildPlannerTimelineModel = (input: {
           durationMinutes: gapDuration,
           renderedStartMinutes,
           now: input.now,
+          isLiveDate: input.isLiveDate,
         }),
       );
     }
@@ -227,6 +231,7 @@ export const buildPlannerTimelineModel = (input: {
         durationMinutes: Math.max(blockEndMinutes - blockStartMinutes, 0),
         renderedStartMinutes,
         now: input.now,
+        isLiveDate: input.isLiveDate,
         block,
       }),
     );
@@ -250,6 +255,7 @@ export const buildPlannerTimelineModel = (input: {
         durationMinutes: gapDuration,
         renderedStartMinutes,
         now: input.now,
+        isLiveDate: input.isLiveDate,
       }),
     );
   }
@@ -290,11 +296,16 @@ export const buildPlannerTimelineModel = (input: {
 
   const nowMinutes = input.now.getHours() * 60 + input.now.getMinutes();
   const nowLinePercent =
-    nowMinutes >= renderedStartMinutes && nowMinutes <= renderedEndMinutes && totalRenderedMinutes > 0
+    input.isLiveDate &&
+    nowMinutes >= renderedStartMinutes &&
+    nowMinutes <= renderedEndMinutes &&
+    totalRenderedMinutes > 0
       ? ((nowMinutes - renderedStartMinutes) / totalRenderedMinutes) * 100
       : null;
   const nowLinePx =
-    nowMinutes >= renderedStartMinutes && nowMinutes <= renderedEndMinutes
+    input.isLiveDate &&
+    nowMinutes >= renderedStartMinutes &&
+    nowMinutes <= renderedEndMinutes
       ? minutesToAdjustedPx(nowMinutes)
       : null;
   const gutterMarkers = buildAdjustedGutterMarkers(renderedStartMinutes, renderedEndMinutes, minutesToAdjustedPx);
@@ -324,6 +335,7 @@ const buildSegment = (input: {
   durationMinutes: number;
   renderedStartMinutes: number;
   now: Date;
+  isLiveDate: boolean;
   block?: DayPlannerBlockItem;
 }): PlannerTimelineSegment => ({
   id: input.id,
@@ -334,9 +346,11 @@ const buildSegment = (input: {
   endMinutes: input.endMinutes,
   durationMinutes: input.durationMinutes,
   durationLabel: formatDurationMinutes(input.durationMinutes),
-  status: getSegmentStatus(input.startsAt, input.endsAt, input.now),
+  status: input.isLiveDate ? getSegmentStatus(input.startsAt, input.endsAt, input.now) : "neutral",
   hourMarkers: getHourMarkers(input.startMinutes, input.endMinutes),
-  currentMarkerPercent: getCurrentMarkerPercent(input.startsAt, input.endsAt, input.now),
+  currentMarkerPercent: input.isLiveDate
+    ? getCurrentMarkerPercent(input.startsAt, input.endsAt, input.now)
+    : null,
   minHeight:
     input.kind === "block"
       ? Math.max(

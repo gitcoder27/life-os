@@ -126,8 +126,7 @@ async function carryForwardTask(
   if (task.recurrenceRuleId) {
     const recurringTask = await applyRecurringTaskCarryForward(tx, userId, task, targetDate);
     if (recurringTask) {
-      if (hasPlannerAssignment) {
-        await removePlannerAssignmentForTask(tx, task.id);
+      if (hasPlannerAssignment && recurringTask.id !== task.id) {
         return tx.task.update({
           where: {
             id: recurringTask.id,

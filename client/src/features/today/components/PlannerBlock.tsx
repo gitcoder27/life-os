@@ -62,6 +62,7 @@ export function PlannerBlock({
   heightPx,
   nextBlock,
   canDuplicate,
+  readOnly,
   isPending,
   activeUnplannedTaskId,
 }: {
@@ -86,7 +87,7 @@ export function PlannerBlock({
   onDuplicateBlock: () => void;
   onSplitBlock: () => void;
   onCarryPendingToNext: () => void;
-  timelineStatus: "past" | "current" | "upcoming";
+  timelineStatus: "past" | "current" | "upcoming" | "neutral";
   isUpNext: boolean;
   durationLabel: string;
   segmentStartMinutes: number;
@@ -98,6 +99,7 @@ export function PlannerBlock({
   heightPx: number;
   nextBlock: DayPlannerBlockItem | null;
   canDuplicate: boolean;
+  readOnly: boolean;
   isPending: boolean;
   activeUnplannedTaskId: string | null;
 }) {
@@ -135,6 +137,7 @@ export function PlannerBlock({
     ? Math.max(Math.round((displayedEndMinutes - segmentStartMinutes) * PIXELS_PER_MINUTE), 40)
     : heightPx;
   const canDropUnplannedTask =
+    !readOnly &&
     activeUnplannedTaskId !== null &&
     !block.tasks.some((blockTask) => blockTask.taskId === activeUnplannedTaskId) &&
     !isPending;
@@ -481,119 +484,123 @@ export function PlannerBlock({
               ) : null}
             </div>
             <div className="planner-block__actions">
-              <button
-                className="planner-block__action-icon"
-                type="button"
-                onClick={() => setEditing(true)}
-                aria-label="Edit block"
-                title="Edit"
-              >
-                ✎
-              </button>
-              <button
-                className="planner-block__action-icon"
-                type="button"
-                onClick={() => setShowAddTaskPicker((current) => !current)}
-                disabled={availableTasks.length === 0 || isPending}
-                aria-label="Add tasks to block"
-                title="Add tasks"
-              >
-                +
-              </button>
-              <div className="planner-block__overflow" ref={overflowRef}>
-                <button
-                  className="planner-block__action-icon planner-block__overflow-trigger"
-                  type="button"
-                  onClick={() => setShowOverflow((current) => !current)}
-                  aria-label="More actions"
-                  title="More"
-                >
-                  ···
-                </button>
-                {showOverflow ? (
-                  <div className="planner-block__overflow-menu">
+              {!readOnly ? (
+                <>
+                  <button
+                    className="planner-block__action-icon"
+                    type="button"
+                    onClick={() => setEditing(true)}
+                    aria-label="Edit block"
+                    title="Edit"
+                  >
+                    ✎
+                  </button>
+                  <button
+                    className="planner-block__action-icon"
+                    type="button"
+                    onClick={() => setShowAddTaskPicker((current) => !current)}
+                    disabled={availableTasks.length === 0 || isPending}
+                    aria-label="Add tasks to block"
+                    title="Add tasks"
+                  >
+                    +
+                  </button>
+                  <div className="planner-block__overflow" ref={overflowRef}>
                     <button
-                      className="planner-block__overflow-item"
+                      className="planner-block__action-icon planner-block__overflow-trigger"
                       type="button"
-                      onClick={() => { onNudgeDuration(-1); setShowOverflow(false); }}
-                      disabled={isPending || Boolean(shortenValidation.error)}
+                      onClick={() => setShowOverflow((current) => !current)}
+                      aria-label="More actions"
+                      title="More"
                     >
-                      Shorten 15m
+                      ···
                     </button>
-                    <button
-                      className="planner-block__overflow-item"
-                      type="button"
-                      onClick={() => { onNudgeDuration(1); setShowOverflow(false); }}
-                      disabled={isPending || Boolean(extendValidation.error)}
-                    >
-                      Extend 15m
-                    </button>
-                    <div className="planner-block__overflow-divider" />
-                    <button
-                      className="planner-block__overflow-item"
-                      type="button"
-                      onClick={() => { onMoveBlock(-1); setShowOverflow(false); }}
-                      disabled={!canMoveUp || isPending}
-                    >
-                      Move up
-                    </button>
-                    <button
-                      className="planner-block__overflow-item"
-                      type="button"
-                      onClick={() => { onMoveBlock(1); setShowOverflow(false); }}
-                      disabled={!canMoveDown || isPending}
-                    >
-                      Move down
-                    </button>
-                    <div className="planner-block__overflow-divider" />
-                    <button
-                      className="planner-block__overflow-item"
-                      type="button"
-                      onClick={() => { onDuplicateBlock(); setShowOverflow(false); }}
-                      disabled={!canDuplicate || isPending}
-                    >
-                      Duplicate
-                    </button>
-                    <button
-                      className="planner-block__overflow-item"
-                      type="button"
-                      onClick={() => { onSplitBlock(); setShowOverflow(false); }}
-                      disabled={!canSplit || isPending}
-                    >
-                      Split in two
-                    </button>
-                    {canCarryPending && nextBlock ? (
-                      <button
-                        className="planner-block__overflow-item"
-                        type="button"
-                        onClick={() => { onCarryPendingToNext(); setShowOverflow(false); }}
-                        disabled={isPending}
-                      >
-                        Carry open to {nextBlock.title || formatTimeLabel(nextBlock.startsAt)}
-                      </button>
-                    ) : null}
-                    {isEmpty ? (
-                      <>
+                    {showOverflow ? (
+                      <div className="planner-block__overflow-menu">
+                        <button
+                          className="planner-block__overflow-item"
+                          type="button"
+                          onClick={() => { onNudgeDuration(-1); setShowOverflow(false); }}
+                          disabled={isPending || Boolean(shortenValidation.error)}
+                        >
+                          Shorten 15m
+                        </button>
+                        <button
+                          className="planner-block__overflow-item"
+                          type="button"
+                          onClick={() => { onNudgeDuration(1); setShowOverflow(false); }}
+                          disabled={isPending || Boolean(extendValidation.error)}
+                        >
+                          Extend 15m
+                        </button>
                         <div className="planner-block__overflow-divider" />
                         <button
-                          className="planner-block__overflow-item planner-block__overflow-item--danger"
+                          className="planner-block__overflow-item"
                           type="button"
-                          onClick={() => { onDeleteBlock(); setShowOverflow(false); }}
-                          disabled={isPending}
+                          onClick={() => { onMoveBlock(-1); setShowOverflow(false); }}
+                          disabled={!canMoveUp || isPending}
                         >
-                          Delete block
+                          Move up
                         </button>
-                      </>
+                        <button
+                          className="planner-block__overflow-item"
+                          type="button"
+                          onClick={() => { onMoveBlock(1); setShowOverflow(false); }}
+                          disabled={!canMoveDown || isPending}
+                        >
+                          Move down
+                        </button>
+                        <div className="planner-block__overflow-divider" />
+                        <button
+                          className="planner-block__overflow-item"
+                          type="button"
+                          onClick={() => { onDuplicateBlock(); setShowOverflow(false); }}
+                          disabled={!canDuplicate || isPending}
+                        >
+                          Duplicate
+                        </button>
+                        <button
+                          className="planner-block__overflow-item"
+                          type="button"
+                          onClick={() => { onSplitBlock(); setShowOverflow(false); }}
+                          disabled={!canSplit || isPending}
+                        >
+                          Split in two
+                        </button>
+                        {canCarryPending && nextBlock ? (
+                          <button
+                            className="planner-block__overflow-item"
+                            type="button"
+                            onClick={() => { onCarryPendingToNext(); setShowOverflow(false); }}
+                            disabled={isPending}
+                          >
+                            Carry open to {nextBlock.title || formatTimeLabel(nextBlock.startsAt)}
+                          </button>
+                        ) : null}
+                        {isEmpty ? (
+                          <>
+                            <div className="planner-block__overflow-divider" />
+                            <button
+                              className="planner-block__overflow-item planner-block__overflow-item--danger"
+                              type="button"
+                              onClick={() => { onDeleteBlock(); setShowOverflow(false); }}
+                              disabled={isPending}
+                            >
+                              Delete block
+                            </button>
+                          </>
+                        ) : null}
+                      </div>
                     ) : null}
                   </div>
-                ) : null}
-              </div>
+                </>
+              ) : null}
             </div>
           </>
         )}
       </div>
 
-      {showAddTaskPicker ? (
+      {!readOnly && showAddTaskPicker ? (
         <div
           className="planner-block__picker"
           onKeyDown={(event) => {
@@ -709,12 +716,14 @@ export function PlannerBlock({
       ) : null}
 
       {/* Resize handle */}
-      <div
-        className="planner-block__resize-handle"
-        onMouseDown={handleResizeStart}
-        onTouchStart={handleResizeStart}
-        title="Drag to resize"
-      />
+      {!readOnly ? (
+        <div
+          className="planner-block__resize-handle"
+          onMouseDown={handleResizeStart}
+          onTouchStart={handleResizeStart}
+          title="Drag to resize"
+        />
+      ) : null}
 
       {sortedTasks.length > 0 ? (
         <DndContext
@@ -730,6 +739,7 @@ export function PlannerBlock({
                   item={bt}
                   isMovePickerOpen={movingTaskId === bt.taskId}
                   canMoveToAnotherBlock={availableBlocks.length > 1}
+                  readOnly={readOnly}
                   isPending={isPending}
                   availableBlocks={availableBlocks}
                   currentBlockId={block.id}
@@ -759,6 +769,7 @@ function SortablePlannerTaskRow({
   item,
   isMovePickerOpen,
   canMoveToAnotherBlock,
+  readOnly,
   isPending,
   availableBlocks,
   currentBlockId,
@@ -769,6 +780,7 @@ function SortablePlannerTaskRow({
   item: DayPlannerBlockItem["tasks"][number];
   isMovePickerOpen: boolean;
   canMoveToAnotherBlock: boolean;
+  readOnly: boolean;
   isPending: boolean;
   availableBlocks: DayPlannerBlockItem[];
   currentBlockId: string;
@@ -778,7 +790,7 @@ function SortablePlannerTaskRow({
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: item.taskId,
-    disabled: isPending,
+    disabled: isPending || readOnly,
   });
 
   return (
@@ -790,42 +802,48 @@ function SortablePlannerTaskRow({
           item.task.status === "completed" ? " planner-block__task--done" : ""
         }${isDragging ? " planner-block__task--dragging" : ""}`}
       >
-        <button
-          className="planner-block__task-handle"
-          type="button"
-          aria-label="Drag to reorder task"
-          disabled={isPending}
-          {...attributes}
-          {...listeners}
-        >
-          <GripIcon />
-        </button>
+        {!readOnly ? (
+          <button
+            className="planner-block__task-handle"
+            type="button"
+            aria-label="Drag to reorder task"
+            disabled={isPending}
+            {...attributes}
+            {...listeners}
+          >
+            <GripIcon />
+          </button>
+        ) : (
+          <span className="planner-block__task-handle planner-block__task-handle--static" />
+        )}
         <span className="planner-block__task-check">
           {item.task.status === "completed" ? <CheckIcon /> : null}
         </span>
         <span className="planner-block__task-title">{item.task.title}</span>
-        <div className="planner-block__task-actions">
-          <button
-            className="planner-block__task-move planner-block__task-move--label"
-            type="button"
-            onClick={onToggleMovePicker}
-            disabled={!canMoveToAnotherBlock || isPending}
-            aria-label="Move task to another block"
-          >
-            Move
-          </button>
-          <button
-            className="planner-block__task-remove"
-            type="button"
-            onClick={onRemove}
-            disabled={isPending}
-            aria-label="Remove from block"
-          >
-            ✕
-          </button>
-        </div>
+        {!readOnly ? (
+          <div className="planner-block__task-actions">
+            <button
+              className="planner-block__task-move planner-block__task-move--label"
+              type="button"
+              onClick={onToggleMovePicker}
+              disabled={!canMoveToAnotherBlock || isPending}
+              aria-label="Move task to another block"
+            >
+              Move
+            </button>
+            <button
+              className="planner-block__task-remove"
+              type="button"
+              onClick={onRemove}
+              disabled={isPending}
+              aria-label="Remove from block"
+            >
+              ✕
+            </button>
+          </div>
+        ) : null}
       </div>
-      {isMovePickerOpen ? (
+      {!readOnly && isMovePickerOpen ? (
         <div className="planner-block__task-picker">
           <div className="planner-block__task-picker-label">Move to block</div>
           <div className="planner-block__task-picker-list">

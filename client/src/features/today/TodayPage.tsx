@@ -1,5 +1,6 @@
 import "./today.css";
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { useSearchParams } from "react-router-dom";
 import {
   InlineErrorState,
   PageErrorState,
@@ -18,29 +19,81 @@ import { useTodayData } from "./hooks/useTodayData";
 import { usePriorityDraft } from "./hooks/usePriorityDraft";
 import { useTaskActions } from "./hooks/useTaskActions";
 import { usePlannerActions } from "./hooks/usePlannerActions";
+import { useDayPlanQuery } from "../../shared/lib/api";
+import { isQuickCaptureReferenceTask } from "../../shared/lib/quickCapture";
+import { getOffsetDate } from "./helpers/date-helpers";
+
+const ISO_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+const isPlannerAssignableTask = (task: { kind: string }) => task.kind === "task";
 
 export function TodayPage() {
+  const [searchParams, setSearchParams] = useSearchParams();
   const data = useTodayData();
   const [mode, setMode] = useState<"execute" | "plan">("execute");
   const [plannerNow, setPlannerNow] = useState(() => new Date());
   const [todayTaskCaptureOpen, setTodayTaskCaptureOpen] = useState(false);
   const [topRailHeight, setTopRailHeight] = useState(0);
   const topRailRef = useRef<HTMLDivElement>(null);
+  const rawPlannerDate = searchParams.get("planDate");
+  const plannerDate = rawPlannerDate && ISO_DATE_PATTERN.test(rawPlannerDate)
+    ? rawPlannerDate
+    : data.today;
+  const isPastPlannerDate = plannerDate < data.today;
+  const isLivePlannerDate = plannerDate === data.today;
+  const isEditablePlannerDate = plannerDate >= data.today;
+  const plannerDayPlanQuery = useDayPlanQuery(plannerDate);
   const priorityDraft = usePriorityDraft(
     data.today,
     data.priorities,
     Boolean(data.dayPlanQuery.data),
   );
   const taskActions = useTaskActions(data.today);
-  const plannerActions = usePlannerActions(data.today);
-  const plannerExecution = useMemo(
+  const plannerTaskActions = useTaskActions(plannerDate);
+  const plannerActions = usePlannerActions(plannerDate);
+  const plannerDayPlan = plannerDayPlanQuery.data;
+  const plannerExecutionTasks = useMemo(
+    () => (plannerDayPlan?.tasks ?? []).filter((task) => !isQuickCaptureReferenceTask(task)),
+    [plannerDayPlan?.tasks],
+  );
+  const plannerBlocks = plannerDayPlan?.plannerBlocks ?? [];
+  const plannerTaskIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const block of plannerBlocks) {
+      for (const blockTask of block.tasks) {
+        ids.add(blockTask.taskId);
+      }
+    }
+    return ids;
+  }, [plannerBlocks]);
+  const plannerUnplannedTasks = useMemo(
+    () =>
+      plannerExecutionTasks.filter(
+        (task) =>
+          task.status === "pending" &&
+          isPlannerAssignableTask(task) &&
+          !plannerTaskIds.has(task.id),
+      ),
+    [plannerExecutionTasks, plannerTaskIds],
+  );
+  const todayPlannerExecution = useMemo(
     () =>
       buildPlannerExecutionModel({
         blocks: data.plannerBlocks,
         unplannedTasks: data.unplannedTasks,
         now: plannerNow,
+        isLiveDate: true,
       }),
     [data.plannerBlocks, data.unplannedTasks, plannerNow],
+  );
+  const plannerExecution = useMemo(
+    () =>
+      buildPlannerExecutionModel({
+        blocks: plannerBlocks,
+        unplannedTasks: plannerUnplannedTasks,
+        now: plannerNow,
+        isLiveDate: isLivePlannerDate,
+      }),
+    [isLivePlannerDate, plannerBlocks, plannerNow, plannerUnplannedTasks],
   );
 
   const phase = getDayPhase(plannerNow);
@@ -76,6 +129,38 @@ export function TodayPage() {
     };
   }, []);
 
+  useEffect(() => {
+    if (!rawPlannerDate) {
+      return;
+    }
+
+    if (ISO_DATE_PATTERN.test(rawPlannerDate)) {
+      return;
+    }
+
+    setSearchParams((current) => {
+      const next = new URLSearchParams(current);
+      next.delete("planDate");
+      return next;
+    }, { replace: true });
+  }, [rawPlannerDate, setSearchParams]);
+
+  function setPlannerDate(nextDate: string) {
+    setSearchParams((current) => {
+      const next = new URLSearchParams(current);
+      if (nextDate === data.today) {
+        next.delete("planDate");
+      } else {
+        next.set("planDate", nextDate);
+      }
+      return next;
+    });
+  }
+
+  function stepPlannerDate(direction: -1 | 1) {
+    setPlannerDate(getOffsetDate(plannerDate, direction));
+  }
+
   if (data.isLoading) {
     return (
       <PageLoadingState
@@ -95,12 +180,34 @@ export function TodayPage() {
     );
   }
 
+  if (mode === "plan" && plannerDayPlanQuery.isLoading && !plannerDayPlan) {
+    return (
+      <PageLoadingState
+        title="Loading day plan"
+        description="Pulling the selected day's planner blocks and tasks."
+      />
+    );
+  }
+
+  if (mode === "plan" && (plannerDayPlanQuery.isError || !plannerDayPlan)) {
+    return (
+      <PageErrorState
+        title="Selected day could not load"
+        message={plannerDayPlanQuery.error instanceof Error ? plannerDayPlanQuery.error.message : undefined}
+        onRetry={() => {
+          void plannerDayPlanQuery.refetch();
+        }}
+      />
+    );
+  }
+
+  const activeTaskActions = mode === "plan" ? plannerTaskActions : taskActions;
   const allErrors = [
     priorityDraft.mutationError instanceof Error
       ? priorityDraft.mutationError.message
       : null,
-    taskActions.mutationError,
-    plannerActions.mutationError,
+    activeTaskActions.mutationError,
+    mode === "plan" ? plannerActions.mutationError : null,
   ]
     .filter((e): e is string => typeof e === "string" && e.length > 0)
     .join("; ");
@@ -131,9 +238,9 @@ export function TodayPage() {
           completedTaskCount={data.completedTaskCount}
           totalTaskCount={data.totalTaskCount}
           overdueCount={data.overdueTasks.length}
-          hasDrift={plannerExecution.slippedBlocks.length > 0}
+          hasDrift={todayPlannerExecution.slippedBlocks.length > 0}
           onAddTask={() => setTodayTaskCaptureOpen(true)}
-          execution={plannerExecution}
+          execution={todayPlannerExecution}
           topPriorityTitle={priorityDraft.draft.find((p) => p.status === "pending")?.title}
           onSwitchToPlanner={() => setMode("plan")}
         />
@@ -148,7 +255,7 @@ export function TodayPage() {
           <div className="today-main-v2">
             <ExecutionStream
               executionTasks={data.executionTasks}
-              execution={plannerExecution}
+              execution={todayPlannerExecution}
               taskActions={taskActions}
               plannerBlocks={data.plannerBlocks}
               phase={phase}
@@ -175,12 +282,18 @@ export function TodayPage() {
         </div>
       ) : (
         <DayPlanner
-          date={data.today}
-          blocks={data.plannerBlocks}
-          unplannedTasks={data.unplannedTasks}
+          date={plannerDate}
+          todayDate={data.today}
+          isEditable={isEditablePlannerDate}
+          isLiveDate={isLivePlannerDate}
+          isHistoryDate={isPastPlannerDate}
+          blocks={plannerBlocks}
+          unplannedTasks={plannerUnplannedTasks}
           execution={plannerExecution}
           actions={plannerActions}
-          taskActions={taskActions}
+          taskActions={plannerTaskActions}
+          onSelectDate={setPlannerDate}
+          onStepDate={stepPlannerDate}
         />
       )}
 

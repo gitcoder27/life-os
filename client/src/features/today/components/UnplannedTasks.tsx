@@ -7,6 +7,8 @@ import { BlockTargetPicker } from "./BlockTargetPicker";
 export function UnplannedTasks({
   tasks,
   blocks,
+  readOnly,
+  isHistoryDate,
   isPending,
   draggedTaskId,
   suppressedTaskId,
@@ -15,6 +17,8 @@ export function UnplannedTasks({
 }: {
   tasks: TaskItem[];
   blocks: DayPlannerBlockItem[];
+  readOnly: boolean;
+  isHistoryDate: boolean;
   isPending: boolean;
   draggedTaskId: string | null;
   suppressedTaskId: string | null;
@@ -54,7 +58,7 @@ export function UnplannedTasks({
         </div>
         <div className="unplanned-lane__empty">
           <span className="unplanned-lane__empty-icon">✓</span>
-          <p>All planned</p>
+          <p>{isHistoryDate ? "No unplanned tasks saved" : "All planned"}</p>
         </div>
       </div>
     );
@@ -98,7 +102,7 @@ export function UnplannedTasks({
           <h3 className="unplanned-lane__title">Unplanned</h3>
           <span className="unplanned-lane__count">{tasks.length}</span>
         </div>
-        {blocks.length > 0 ? (
+        {!readOnly && blocks.length > 0 ? (
           <button
             className="button button--ghost button--small"
             type="button"
@@ -114,19 +118,19 @@ export function UnplannedTasks({
         ) : null}
       </div>
 
-      {blocks.length === 0 ? (
+      {!readOnly && blocks.length === 0 ? (
         <div className="unplanned-lane__helper">
           Create a block first, then assign tasks from here.
         </div>
       ) : null}
 
-      {draggedTaskId ? (
+      {!readOnly && draggedTaskId ? (
         <div className="unplanned-lane__drag-hint">
           Drop on a time block to assign this task.
         </div>
       ) : null}
 
-      {batchMode && blocks.length > 0 ? (
+      {!readOnly && batchMode && blocks.length > 0 ? (
         <div
           className="unplanned-lane__batch"
           onKeyDown={(event) => {
@@ -203,6 +207,7 @@ export function UnplannedTasks({
             key={task.id}
             task={task}
             blocks={blocks}
+            readOnly={readOnly}
             batchMode={batchMode}
             checked={selectedTaskIds.includes(task.id)}
             isPending={isPending}
@@ -220,6 +225,7 @@ export function UnplannedTasks({
 function UnplannedTaskRow({
   task,
   blocks,
+  readOnly,
   batchMode,
   checked,
   isPending,
@@ -230,6 +236,7 @@ function UnplannedTaskRow({
 }: {
   task: TaskItem;
   blocks: DayPlannerBlockItem[];
+  readOnly: boolean;
   batchMode: boolean;
   checked: boolean;
   isPending: boolean;
@@ -238,7 +245,7 @@ function UnplannedTaskRow({
   isSuppressed: boolean;
   onQuickAssign: (block: DayPlannerBlockItem) => void;
 }) {
-  const isDraggable = !batchMode && blocks.length > 0 && !isPending;
+  const isDraggable = !readOnly && !batchMode && blocks.length > 0 && !isPending;
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id: getUnplannedTaskDragId(task.id),
     data: {
@@ -283,7 +290,7 @@ function UnplannedTaskRow({
         ) : null}
       </div>
 
-      {!batchMode ? (
+      {!readOnly && !batchMode ? (
         <div className="unplanned-task__actions">
           {blocks.length > 0 ? (
             <>

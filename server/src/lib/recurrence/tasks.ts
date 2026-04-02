@@ -216,44 +216,40 @@ export async function applyRecurringTaskCarryForward(
 
   const carryPolicy = fromPrismaCarryPolicy(ruleRecord.carryPolicy) ?? "complete_and_clone";
   if (carryPolicy === "move_due_date") {
-    const preferences = await tx.userPreference.findUnique({
-      where: {
-        userId,
-      },
-      select: {
-        timezone: true,
-      },
-    });
-
-    return tx.task.update({
+    await tx.task.update({
       where: {
         id: task.id,
       },
       data: {
-        scheduledForDate: new Date(`${targetDate}T00:00:00.000Z`),
-        reminderAt:
-          task.kind === "REMINDER"
-            ? getUtcDateForLocalTime(targetDate, "00:00", preferences?.timezone)
-            : undefined,
-        reminderTriggeredAt: task.kind === "REMINDER" ? null : undefined,
-        status: "PENDING",
+        status: "DROPPED",
         completedAt: null,
       },
-      include: {
-        goal: {
-          include: goalSummaryInclude,
+    });
+
+    if (hasTaskOnIsoDate(ruleRecord, targetDate)) {
+      return tx.task.findFirstOrThrow({
+        where: {
+          recurrenceRuleId: ruleRecord.id,
+          scheduledForDate: new Date(`${targetDate}T00:00:00.000Z`),
         },
-        recurrenceRule: {
-          include: {
-            exceptions: {
-              orderBy: {
-                occurrenceDate: "asc",
+        include: {
+          goal: {
+            include: goalSummaryInclude,
+          },
+          recurrenceRule: {
+            include: {
+              exceptions: {
+                orderBy: {
+                  occurrenceDate: "asc",
+                },
               },
             },
           },
         },
-      },
-    });
+      });
+    }
+
+    return createTaskOccurrence(tx, task, ruleRecord.id, targetDate, task.id);
   }
 
   await tx.task.update({
