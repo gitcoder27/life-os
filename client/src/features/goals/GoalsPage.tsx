@@ -204,6 +204,7 @@ export function GoalsPage() {
           horizons={horizons}
           weekPlan={weekPlan}
           monthPlan={monthPlan}
+          todayAlignment={todayAlignment}
           selectedGoalId={selectedGoalId}
           onSelectGoal={handleSelectGoal}
           onOpenCreateGoal={openCreateGoal}

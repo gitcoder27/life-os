@@ -249,7 +249,7 @@ type GoalsConfigResponse = {
   horizons: GoalHorizonItem[];
 };
 
-type GoalsWorkspaceTodayAlignment = {
+export type GoalsWorkspaceTodayAlignment = {
   date: string;
   priorities: Array<{
     id: string;

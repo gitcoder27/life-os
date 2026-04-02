@@ -738,8 +738,24 @@
 /* ── Plan Inspector ── */
 
 .ghq-plan__inspector {
+  position: relative;
   overflow-y: auto;
   max-height: calc(100vh - 12rem);
+}
+
+.ghq-plan__inspector-close {
+  position: absolute;
+  top: 0.9rem;
+  right: 0.9rem;
+  z-index: 5;
+  width: 2rem;
+  min-width: 2rem;
+  height: 2rem;
+  padding: 0;
+  font-size: 1.15rem;
+  line-height: 1;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.04);
 }
 
 .ghq-inspector {
@@ -788,6 +804,15 @@
   top: 0;
   background: var(--panel);
   z-index: 2;
+}
+
+.ghq-inspector__eyebrow {
+  font-size: var(--fs-micro);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin-bottom: 0.45rem;
 }
 
 .ghq-inspector__breadcrumb {
@@ -947,6 +972,43 @@
   flex-direction: column;
   gap: 0.5rem;
   align-items: flex-start;
+}
+
+.ghq-planning-form__field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.ghq-planning-form__field span {
+  font-size: var(--fs-micro);
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+}
+
+.ghq-planning-form__input,
+.ghq-planning-form__select {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: var(--r-xs);
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--text);
+  font-size: var(--fs-small);
+  padding: 0.65rem 0.75rem;
+}
+
+.ghq-planning-form__warning {
+  margin: 0;
+  color: #e8b038;
+  font-size: var(--fs-small);
+}
+
+.ghq-planning-form__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
 }
 
 /* ── Health Badge ── */
@@ -1421,7 +1483,7 @@
 /* ── Graph Mode Layout ── */
 
 .ghq-plan--graph {
-  grid-template-columns: 1fr 380px;
+  grid-template-columns: 1fr;
 }
 
 .ghq-plan--graph-expanded {
@@ -1553,7 +1615,21 @@
   transform: translateY(0);
 }
 
+.ghq-graph__toolbar {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
 .ghq-graph__expand-btn {
+  background: rgba(17, 16, 13, 0.82);
+  border-color: rgba(255, 255, 255, 0.08);
+  box-shadow: var(--shadow-sm);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+.ghq-graph__toolbar-btn {
   background: rgba(17, 16, 13, 0.82);
   border-color: rgba(255, 255, 255, 0.08);
   box-shadow: var(--shadow-sm);
@@ -1569,7 +1645,7 @@
   border-radius: var(--r-sm);
   border: 1px solid var(--border);
   background: var(--panel-elevated);
-  cursor: pointer;
+  cursor: grab;
   transition: all var(--dur) var(--ease);
   display: flex;
   flex-direction: column;
@@ -1647,6 +1723,11 @@
   color: var(--text-tertiary);
 }
 
+.graph-goal-node__badge--drag {
+  color: var(--accent);
+  background: rgba(217, 153, 58, 0.08);
+}
+
 .graph-goal-node__bar {
   height: 3px;
   border-radius: 2px;
@@ -1675,19 +1756,42 @@
   border: 1px solid var(--border);
   background: var(--panel);
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 0.5rem;
   transition: all var(--dur) var(--ease);
+  cursor: pointer;
 }
 
 .graph-slot--empty {
   border-style: dashed;
-  opacity: 0.5;
+  opacity: 0.75;
 }
 
 .graph-slot--linked {
   border-color: var(--accent);
   background: linear-gradient(135deg, rgba(217, 153, 58, 0.05) 0%, var(--panel) 100%);
+}
+
+.graph-slot--selected {
+  border-color: rgba(217, 153, 58, 0.8);
+  box-shadow: 0 0 0 1px rgba(217, 153, 58, 0.18), 0 10px 24px rgba(0, 0, 0, 0.18);
+}
+
+.graph-slot--drag-over {
+  border-color: var(--accent);
+  background: rgba(217, 153, 58, 0.1);
+  transform: translateY(-2px);
+}
+
+.graph-slot--warning {
+  border-color: rgba(232, 176, 56, 0.5);
+}
+
+.graph-slot--draft,
+.graph-slot--replace {
+  cursor: default;
+  background: rgba(17, 16, 13, 0.96);
+  border-color: rgba(217, 153, 58, 0.28);
 }
 
 .graph-slot__badge {
@@ -1700,6 +1804,17 @@
   letter-spacing: 0.04em;
   text-transform: uppercase;
   flex-shrink: 0;
+  margin-top: 0.1rem;
+}
+
+.graph-slot__body,
+.graph-slot__draft,
+.graph-slot__replace {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  flex: 1;
+  min-width: 0;
 }
 
 .graph-slot__title {
@@ -1708,13 +1823,48 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  flex: 1;
   min-width: 0;
 }
 
 .graph-slot--empty .graph-slot__title {
   color: var(--text-tertiary);
   font-style: italic;
+}
+
+.graph-slot__meta {
+  font-size: var(--fs-micro);
+  color: var(--text-tertiary);
+}
+
+.graph-slot__input,
+.graph-slot__select {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: var(--r-xs);
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--text);
+  font-size: var(--fs-small);
+  padding: 0.55rem 0.65rem;
+}
+
+.graph-slot__warning {
+  margin: 0;
+  color: #e8b038;
+  font-size: var(--fs-micro);
+}
+
+.graph-slot__replace p {
+  margin: 0;
+  font-size: var(--fs-small);
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.graph-slot__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-top: 0.15rem;
 }
 
 /* ── Graph: Ghost Node ── */

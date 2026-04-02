@@ -6,12 +6,18 @@ import type {
   GoalHorizonItem,
   GoalOverviewItem,
   GoalDetailItem,
-  GoalHierarchySummary,
+  GoalsWorkspaceTodayAlignment,
   MonthPlanResponse,
   WeekPlanResponse,
 } from "../../shared/lib/api";
 import {
+  getMonthStartDate,
+  getTodayDate,
+  getWeekStartDate,
   useGoalDetailQuery,
+  useUpdateDayPrioritiesMutation,
+  useUpdateMonthFocusMutation,
+  useUpdateWeekPrioritiesMutation,
 } from "../../shared/lib/api";
 import { InlineErrorState } from "../../shared/ui/PageState";
 import { GoalInspectorMilestones } from "./GoalInspectorMilestones";
@@ -20,7 +26,20 @@ import {
   GoalFormDialog,
   type GoalFormData,
 } from "./GoalFormDialog";
+import { GoalsPlanPlanningEditor } from "./GoalsPlanPlanningEditor";
 import { GoalsPlanGraphView } from "./GoalsPlanGraphView";
+import {
+  buildDraftTitleForGoal,
+  getLaneDuplicateCount,
+  getPlanningItemAtSlot,
+  planningSlots,
+  type PlanningItem,
+  type PlanningDraft,
+  type PlanningLane,
+  type PlanningReplaceState,
+  type PlanningSelection,
+  type PlanningSlot,
+} from "./GoalsPlanTypes";
 
 /* ── Helpers ── */
 
@@ -43,6 +62,14 @@ const healthLabels: Record<string, string> = {
   stalled: "Stalled",
   achieved: "Achieved",
 };
+
+function findFirstOpenSlot(occupiedSlots: PlanningSlot[]) {
+  return planningSlots.find((slot) => !occupiedSlots.includes(slot)) ?? null;
+}
+
+function sortPlanningItemsBySlot<T extends { slot: PlanningSlot }>(items: T[]) {
+  return [...items].sort((left, right) => left.slot - right.slot);
+}
 
 type HierarchyNode = GoalOverviewItem & {
   childNodes: HierarchyNode[];
@@ -514,6 +541,7 @@ export function GoalsPlanWorkspace({
   horizons,
   weekPlan,
   monthPlan,
+  todayAlignment,
   selectedGoalId,
   onSelectGoal,
   onOpenCreateGoal,
@@ -531,6 +559,7 @@ export function GoalsPlanWorkspace({
   horizons: GoalHorizonItem[];
   weekPlan: WeekPlanResponse | null;
   monthPlan: MonthPlanResponse | null;
+  todayAlignment: GoalsWorkspaceTodayAlignment;
   selectedGoalId: string | null;
   onSelectGoal: (goalId: string) => void;
   onOpenCreateGoal: () => void;
@@ -545,15 +574,71 @@ export function GoalsPlanWorkspace({
 }) {
   const [planView, setPlanView] = useState<PlanSubview>("outline");
   const [isGraphExpanded, setIsGraphExpanded] = useState(false);
+  const [isGraphInspectorVisible, setIsGraphInspectorVisible] = useState(true);
+  const [showTodayLane, setShowTodayLane] = useState(true);
+  const [selectedPlanningSelection, setSelectedPlanningSelection] = useState<PlanningSelection | null>(null);
+  const [planningDraft, setPlanningDraft] = useState<PlanningDraft | null>(null);
+  const [planningReplaceState, setPlanningReplaceState] = useState<PlanningReplaceState | null>(null);
+  const [planningError, setPlanningError] = useState<string | null>(null);
 
   const activeGoals = goals.filter((g) => g.status === "active");
   const tree = useMemo(() => buildHierarchyTree(activeGoals), [activeGoals]);
+  const selectedGoal = selectedGoalId
+    ? goals.find((goal) => goal.id === selectedGoalId) ?? null
+    : null;
+  const todayDate = todayAlignment.date || getTodayDate();
+  const weekStart = weekPlan?.startDate ?? getWeekStartDate(todayDate);
+  const monthStart = monthPlan?.startDate ?? getMonthStartDate(todayDate);
+
+  const updateDayMutation = useUpdateDayPrioritiesMutation(todayDate);
+  const updateWeekMutation = useUpdateWeekPrioritiesMutation(weekStart);
+  const updateMonthMutation = useUpdateMonthFocusMutation(monthStart);
+
+  const clearPlanningUi = useCallback(() => {
+    setSelectedPlanningSelection(null);
+    setPlanningDraft(null);
+    setPlanningReplaceState(null);
+    setPlanningError(null);
+  }, []);
+
+  const selectedPlanningItem = selectedPlanningSelection
+    ? getPlanningItemAtSlot(
+        selectedPlanningSelection.lane,
+        selectedPlanningSelection.slot,
+        weekPlan,
+        monthPlan,
+        todayAlignment,
+      )
+    : null;
 
   useEffect(() => {
     if (planView !== "graph") {
       setIsGraphExpanded(false);
+      setIsGraphInspectorVisible(true);
     }
   }, [planView]);
+
+  useEffect(() => {
+    clearPlanningUi();
+  }, [selectedGoalId, clearPlanningUi]);
+
+  useEffect(() => {
+    if (!selectedGoalId && !selectedPlanningSelection && !showChildForm) {
+      setIsGraphInspectorVisible(true);
+    }
+  }, [selectedGoalId, selectedPlanningSelection, showChildForm]);
+
+  useEffect(() => {
+    if (selectedPlanningSelection || showChildForm) {
+      setIsGraphInspectorVisible(true);
+    }
+  }, [selectedPlanningSelection, showChildForm]);
+
+  useEffect(() => {
+    if (selectedPlanningSelection && !selectedPlanningItem) {
+      setSelectedPlanningSelection(null);
+    }
+  }, [selectedPlanningItem, selectedPlanningSelection]);
 
   useEffect(() => {
     if (!isGraphExpanded) return undefined;
@@ -573,22 +658,433 @@ export function GoalsPlanWorkspace({
     };
   }, [isGraphExpanded]);
 
-  // Graph: trigger child creation for the selected goal
+  const getLanePending = useCallback(
+    (lane: PlanningLane) => {
+      if (lane === "month") return updateMonthMutation.isPending;
+      if (lane === "week") return updateWeekMutation.isPending;
+      return updateDayMutation.isPending;
+    },
+    [updateDayMutation.isPending, updateMonthMutation.isPending, updateWeekMutation.isPending],
+  );
+
+  const getLaneErrorMessage = useCallback(
+    (lane: PlanningLane) => {
+      const error =
+        lane === "month"
+          ? updateMonthMutation.error
+          : lane === "week"
+            ? updateWeekMutation.error
+            : updateDayMutation.error;
+
+      return error instanceof Error ? error.message : null;
+    },
+    [updateDayMutation.error, updateMonthMutation.error, updateWeekMutation.error],
+  );
+
+  const commitLaneItems = useCallback(
+    async (
+      lane: PlanningLane,
+      items: Array<{
+        id?: string;
+        slot: PlanningSlot;
+        title: string;
+        goalId: string | null;
+      }>,
+    ) => {
+      setPlanningError(null);
+
+      if (lane === "month") {
+        await updateMonthMutation.mutateAsync({
+          theme: monthPlan?.theme ?? null,
+          topOutcomes: sortPlanningItemsBySlot(items).map((item) => ({
+            id: item.id,
+            slot: item.slot,
+            title: item.title.trim(),
+            goalId: item.goalId,
+          })),
+        });
+        return;
+      }
+
+      if (lane === "week") {
+        await updateWeekMutation.mutateAsync({
+          priorities: sortPlanningItemsBySlot(items).map((item) => ({
+            id: item.id,
+            slot: item.slot,
+            title: item.title.trim(),
+            goalId: item.goalId,
+          })),
+        });
+        return;
+      }
+
+      await updateDayMutation.mutateAsync({
+        priorities: sortPlanningItemsBySlot(items).map((item) => ({
+          id: item.id,
+          slot: item.slot,
+          title: item.title.trim(),
+          goalId: item.goalId,
+        })),
+      });
+    },
+    [monthPlan?.theme, updateDayMutation, updateMonthMutation, updateWeekMutation],
+  );
+
+  const handleGraphSelectGoal = useCallback(
+    (goalId: string) => {
+      clearPlanningUi();
+      setIsGraphInspectorVisible(true);
+      onSelectGoal(goalId);
+    },
+    [clearPlanningUi, onSelectGoal],
+  );
+
+  const handleGraphSelectPlanningSlot = useCallback(
+    (lane: PlanningLane, slot: PlanningSlot) => {
+      setPlanningError(null);
+      setPlanningReplaceState(null);
+
+      const existingItem = getPlanningItemAtSlot(
+        lane,
+        slot,
+        weekPlan,
+        monthPlan,
+        todayAlignment,
+      );
+
+      if (existingItem) {
+        setPlanningDraft(null);
+        setIsGraphInspectorVisible(true);
+        setSelectedPlanningSelection({ lane, slot });
+        return;
+      }
+
+      if (!selectedGoal) {
+        return;
+      }
+
+      setSelectedPlanningSelection(null);
+      setIsGraphInspectorVisible(true);
+      setPlanningDraft({
+        lane,
+        slot,
+        title: buildDraftTitleForGoal(lane, selectedGoal),
+        goalId: selectedGoal.id,
+      });
+    },
+    [monthPlan, selectedGoal, todayAlignment, weekPlan],
+  );
+
+  const handleGraphDropGoalOnSlot = useCallback(
+    (lane: PlanningLane, slot: PlanningSlot, goalId: string) => {
+      const goal = activeGoals.find((item) => item.id === goalId);
+      if (!goal) {
+        return;
+      }
+
+      setPlanningError(null);
+      setSelectedPlanningSelection(null);
+
+      const existingItem = getPlanningItemAtSlot(
+        lane,
+        slot,
+        weekPlan,
+        monthPlan,
+        todayAlignment,
+      );
+
+      if (existingItem) {
+        setPlanningDraft(null);
+        setPlanningReplaceState({ lane, slot, goalId });
+        return;
+      }
+
+      setPlanningReplaceState(null);
+      setIsGraphInspectorVisible(true);
+      setPlanningDraft({
+        lane,
+        slot,
+        title: buildDraftTitleForGoal(lane, goal),
+        goalId,
+      });
+    },
+    [activeGoals, monthPlan, todayAlignment, weekPlan],
+  );
+
+  const handlePlanningDraftChange = useCallback((updates: Partial<PlanningDraft>) => {
+    setPlanningDraft((current) => (current ? { ...current, ...updates } : current));
+  }, []);
+
+  const handlePlanningDraftSave = useCallback(async () => {
+    if (!planningDraft || !planningDraft.title.trim()) {
+      return;
+    }
+
+    const currentItems: PlanningItem[] =
+      planningDraft.lane === "month"
+        ? monthPlan?.topOutcomes ?? []
+        : planningDraft.lane === "week"
+          ? weekPlan?.priorities ?? []
+          : todayAlignment.priorities;
+
+    try {
+      await commitLaneItems(planningDraft.lane, [
+        ...currentItems.map((item) => ({
+          id: item.id,
+          slot: item.slot,
+          title: item.title,
+          goalId: item.goalId,
+        })),
+        {
+          slot: planningDraft.slot,
+          title: planningDraft.title.trim(),
+          goalId: planningDraft.goalId || null,
+        },
+      ]);
+
+      setSelectedPlanningSelection({
+        lane: planningDraft.lane,
+        slot: planningDraft.slot,
+      });
+      setPlanningDraft(null);
+    } catch (error) {
+      setPlanningError(error instanceof Error ? error.message : "Planning item could not be saved.");
+    }
+  }, [commitLaneItems, monthPlan?.topOutcomes, planningDraft, todayAlignment.priorities, weekPlan?.priorities]);
+
+  const handlePlanningDraftCancel = useCallback(() => {
+    setPlanningDraft(null);
+    setPlanningError(null);
+  }, []);
+
+  const handlePlanningReplaceCancel = useCallback(() => {
+    setPlanningReplaceState(null);
+    setPlanningError(null);
+  }, []);
+
+  const handlePlanningReplaceAction = useCallback(
+    async (action: "replace" | "move") => {
+      if (!planningReplaceState) {
+        return;
+      }
+
+      const goal = activeGoals.find((item) => item.id === planningReplaceState.goalId);
+      if (!goal) {
+        return;
+      }
+
+      const currentItems: PlanningItem[] =
+        planningReplaceState.lane === "month"
+          ? monthPlan?.topOutcomes ?? []
+          : planningReplaceState.lane === "week"
+            ? weekPlan?.priorities ?? []
+            : todayAlignment.priorities;
+      const targetItem = currentItems.find((item) => item.slot === planningReplaceState.slot) ?? null;
+      const openSlot = findFirstOpenSlot(currentItems.map((item) => item.slot as PlanningSlot));
+      const replacementTitle = buildDraftTitleForGoal(planningReplaceState.lane, goal);
+
+      if (!targetItem) {
+        setPlanningReplaceState(null);
+        return;
+      }
+
+      try {
+        if (action === "move" && openSlot) {
+          await commitLaneItems(
+            planningReplaceState.lane,
+            sortPlanningItemsBySlot([
+              ...currentItems
+                .filter((item) => item.slot !== planningReplaceState.slot)
+                .map((item) => ({
+                  id: item.id,
+                  slot: item.slot,
+                  title: item.title,
+                  goalId: item.goalId,
+                })),
+              {
+                id: targetItem.id,
+                slot: openSlot,
+                title: targetItem.title,
+                goalId: targetItem.goalId,
+              },
+              {
+                slot: planningReplaceState.slot,
+                title: replacementTitle,
+                goalId: planningReplaceState.goalId,
+              },
+            ]),
+          );
+        } else {
+          await commitLaneItems(
+            planningReplaceState.lane,
+            currentItems.map((item) => ({
+              id: item.id,
+              slot: item.slot,
+              title: item.slot === planningReplaceState.slot ? replacementTitle : item.title,
+              goalId: item.slot === planningReplaceState.slot ? planningReplaceState.goalId : item.goalId,
+            })),
+          );
+        }
+
+        setSelectedPlanningSelection({
+          lane: planningReplaceState.lane,
+          slot: planningReplaceState.slot,
+        });
+        setPlanningReplaceState(null);
+      } catch (error) {
+        setPlanningError(error instanceof Error ? error.message : "Planning item could not be replaced.");
+      }
+    },
+    [activeGoals, commitLaneItems, monthPlan?.topOutcomes, planningReplaceState, todayAlignment.priorities, weekPlan?.priorities],
+  );
+
   const handleGraphAddChild = useCallback(() => {
+    clearPlanningUi();
+    setIsGraphInspectorVisible(true);
     const goal = goals.find((g) => g.id === selectedGoalId);
     if (goal) onStartCreateChild(goal);
-  }, [goals, selectedGoalId, onStartCreateChild]);
+  }, [clearPlanningUi, goals, onStartCreateChild, selectedGoalId]);
+
+  const handlePlanningItemSave = useCallback(
+    async (updates: { title: string; goalId: string | null; slot: PlanningSlot }) => {
+      if (!selectedPlanningSelection || !selectedPlanningItem || !updates.title.trim()) {
+        return;
+      }
+
+      const currentItems: PlanningItem[] =
+        selectedPlanningSelection.lane === "month"
+          ? monthPlan?.topOutcomes ?? []
+          : selectedPlanningSelection.lane === "week"
+            ? weekPlan?.priorities ?? []
+            : todayAlignment.priorities;
+
+      try {
+        await commitLaneItems(
+          selectedPlanningSelection.lane,
+          sortPlanningItemsBySlot([
+            ...currentItems
+              .filter((item) => item.slot !== selectedPlanningItem.slot)
+              .map((item) => ({
+                id: item.id,
+                slot: item.slot,
+                title: item.title,
+                goalId: item.goalId,
+              })),
+            {
+              id: selectedPlanningItem.id,
+              slot: updates.slot,
+              title: updates.title.trim(),
+              goalId: updates.goalId,
+            },
+          ]),
+        );
+
+        setSelectedPlanningSelection({
+          lane: selectedPlanningSelection.lane,
+          slot: updates.slot,
+        });
+      } catch (error) {
+        setPlanningError(error instanceof Error ? error.message : "Planning item could not be updated.");
+      }
+    },
+    [commitLaneItems, monthPlan?.topOutcomes, selectedPlanningItem, selectedPlanningSelection, todayAlignment.priorities, weekPlan?.priorities],
+  );
+
+  const handlePlanningItemRemove = useCallback(async () => {
+    if (!selectedPlanningSelection || !selectedPlanningItem) {
+      return;
+    }
+
+    const currentItems: PlanningItem[] =
+      selectedPlanningSelection.lane === "month"
+        ? monthPlan?.topOutcomes ?? []
+        : selectedPlanningSelection.lane === "week"
+          ? weekPlan?.priorities ?? []
+          : todayAlignment.priorities;
+
+    try {
+      await commitLaneItems(
+        selectedPlanningSelection.lane,
+        currentItems
+          .filter((item) => item.slot !== selectedPlanningItem.slot)
+          .map((item) => ({
+            id: item.id,
+            slot: item.slot,
+            title: item.title,
+            goalId: item.goalId,
+          })),
+      );
+      setSelectedPlanningSelection(null);
+    } catch (error) {
+      setPlanningError(error instanceof Error ? error.message : "Planning item could not be removed.");
+    }
+  }, [commitLaneItems, monthPlan?.topOutcomes, selectedPlanningItem, selectedPlanningSelection, todayAlignment.priorities, weekPlan?.priorities]);
+
+  const handleJumpToLinkedGoal = useCallback(
+    (goalId: string) => {
+      setSelectedPlanningSelection(null);
+      setPlanningDraft(null);
+      setPlanningReplaceState(null);
+      setPlanningError(null);
+
+      if (selectedGoalId !== goalId) {
+        onSelectGoal(goalId);
+      }
+    },
+    [onSelectGoal, selectedGoalId],
+  );
 
   const handleDismissExpandedInspector = useCallback(() => {
     if (showChildForm) {
       onCancelChildForm();
+      setIsGraphInspectorVisible(false);
       return;
+    }
+
+    if (selectedPlanningSelection) {
+      setSelectedPlanningSelection(null);
+      setIsGraphInspectorVisible(false);
+      return;
+    }
+
+    if (planningReplaceState) {
+      setPlanningReplaceState(null);
+      return;
+    }
+
+    if (planningDraft) {
+      setPlanningDraft(null);
+      return;
+    }
+
+    setIsGraphInspectorVisible(false);
+  }, [onCancelChildForm, planningDraft, planningReplaceState, selectedPlanningSelection, showChildForm]);
+
+  const handleShowInspector = useCallback(() => {
+    setIsGraphInspectorVisible(true);
+  }, []);
+
+  const handleClearGraphFocus = useCallback(() => {
+    clearPlanningUi();
+    setIsGraphInspectorVisible(true);
+
+    if (showChildForm) {
+      onCancelChildForm();
     }
 
     if (selectedGoalId) {
       onSelectGoal(selectedGoalId);
     }
-  }, [onCancelChildForm, onSelectGoal, selectedGoalId, showChildForm]);
+  }, [clearPlanningUi, onCancelChildForm, onSelectGoal, selectedGoalId, showChildForm]);
+
+  const handleGraphPaneClear = useCallback(() => {
+    clearPlanningUi();
+    setIsGraphInspectorVisible(false);
+
+    if (showChildForm) {
+      onCancelChildForm();
+    }
+  }, [clearPlanningUi, onCancelChildForm, showChildForm]);
 
   // Shared inspector content
   const inspectorContent = showChildForm && childFormParent ? (
@@ -610,6 +1106,37 @@ export function GoalsPlanWorkspace({
         />
       </div>
     </div>
+  ) : selectedPlanningSelection && selectedPlanningItem ? (
+    <GoalsPlanPlanningEditor
+      lane={selectedPlanningSelection.lane}
+      item={selectedPlanningItem}
+      activeGoals={activeGoals}
+      getDuplicateCount={(goalId) =>
+        getLaneDuplicateCount(
+          selectedPlanningSelection.lane,
+          goalId,
+          weekPlan,
+          monthPlan,
+          todayAlignment,
+          selectedPlanningItem.slot,
+        )
+      }
+      availableSlots={planningSlots.filter((slot) => {
+        const itemAtSlot = getPlanningItemAtSlot(
+          selectedPlanningSelection.lane,
+          slot,
+          weekPlan,
+          monthPlan,
+          todayAlignment,
+        );
+        return !itemAtSlot || itemAtSlot.id === selectedPlanningItem.id;
+      })}
+      isPending={getLanePending(selectedPlanningSelection.lane)}
+      errorMessage={planningError ?? getLaneErrorMessage(selectedPlanningSelection.lane)}
+      onSave={handlePlanningItemSave}
+      onRemove={handlePlanningItemRemove}
+      onJumpToGoal={handleJumpToLinkedGoal}
+    />
   ) : selectedGoalId ? (
     <PlanInspector
       goalId={selectedGoalId}
@@ -712,14 +1239,32 @@ export function GoalsPlanWorkspace({
               horizons={horizons}
               weekPlan={weekPlan}
               monthPlan={monthPlan}
+              todayAlignment={todayAlignment}
               selectedGoalId={selectedGoalId}
-              onSelectGoal={onSelectGoal}
+              selectedPlanningSelection={selectedPlanningSelection}
+              planningDraft={planningDraft}
+              planningReplaceState={planningReplaceState}
+              showTodayLane={showTodayLane}
+              onSelectGoal={handleGraphSelectGoal}
+              onSelectPlanningSlot={handleGraphSelectPlanningSlot}
+              onDropGoalOnSlot={handleGraphDropGoalOnSlot}
+              onPlanningDraftChange={handlePlanningDraftChange}
+              onSavePlanningDraft={handlePlanningDraftSave}
+              onCancelPlanningDraft={handlePlanningDraftCancel}
+              onPlanningReplaceAction={handlePlanningReplaceAction}
+              onCancelPlanningReplace={handlePlanningReplaceCancel}
+              onClearActiveSelection={handleGraphPaneClear}
               onAddChild={handleGraphAddChild}
               isExpanded={isGraphExpanded}
+              isInspectorVisible={isGraphInspectorVisible}
+              onShowInspector={handleShowInspector}
+              onHideInspector={() => setIsGraphInspectorVisible(false)}
+              onClearGoalFocus={handleClearGraphFocus}
+              onToggleTodayLane={() => setShowTodayLane((current) => !current)}
               onToggleExpanded={() => setIsGraphExpanded((current) => !current)}
             />
 
-            {isGraphExpanded && (showChildForm || selectedGoalId) && (
+            {isGraphInspectorVisible && (showChildForm || selectedGoalId || selectedPlanningSelection) && (
               <aside className="ghq-plan__floating-inspector" aria-label="Goal details">
                 <button
                   className="button button--ghost button--small ghq-plan__floating-close"
@@ -736,7 +1281,7 @@ export function GoalsPlanWorkspace({
         )}
 
         {/* Right: inspector (shared between outline and graph) */}
-        {!isGraphExpanded && (
+        {!isGraphExpanded && planView !== "graph" && (
           <div className="ghq-plan__inspector">
             {inspectorContent}
           </div>

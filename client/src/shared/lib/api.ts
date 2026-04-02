@@ -189,6 +189,7 @@ export type {
   GoalMomentumTrend,
   GoalOverviewItem,
   GoalStatus,
+  GoalsWorkspaceTodayAlignment,
   LinkedGoal,
   MonthPlanResponse,
   WeekPlanResponse,
