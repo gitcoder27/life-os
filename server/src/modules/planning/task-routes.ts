@@ -9,7 +9,7 @@ import type {
   TasksResponse,
   UpdateTaskRequest,
 } from "@life-os/contracts";
-import type { Task } from "@prisma/client";
+import type { Prisma, Task } from "@prisma/client";
 
 import { requireAuthenticatedUser } from "../../lib/auth/require-auth.js";
 import { AppError } from "../../lib/errors/app-error.js";
@@ -49,9 +49,14 @@ import {
   TASK_LIST_DEFAULT_LIMIT,
 } from "./task-list-pagination.js";
 
+type PlanningTaskRecord = Prisma.TaskGetPayload<{
+  include: typeof planningTaskInclude;
+}>;
+
 function buildBulkTaskUpdateData(
   task: Pick<Task, "kind">,
   action: BulkUpdateTasksRequest["action"],
+  now: Date,
   timezone?: string | null,
 ) {
   if (action.type === "schedule") {
@@ -60,6 +65,18 @@ function buildBulkTaskUpdateData(
       dueAt: null,
       reminderAt: task.kind === "REMINDER" ? toTaskReminderAt(action.scheduledForDate, timezone) : undefined,
       reminderTriggeredAt: task.kind === "REMINDER" ? null : undefined,
+    };
+  }
+
+  if (action.type === "status") {
+    return {
+      status: toPrismaTaskStatus(action.status),
+      completedAt:
+        action.status === "completed"
+          ? now
+          : action.status === "pending" || action.status === "dropped"
+            ? null
+            : undefined,
     };
   }
 
@@ -73,6 +90,87 @@ function buildBulkTaskUpdateData(
     status: toPrismaTaskStatus("dropped"),
     completedAt: null,
   };
+}
+
+function shouldTrackInboxZeroForBulkAction(action: BulkUpdateTasksRequest["action"]) {
+  return action.type !== "link_goal";
+}
+
+function getBulkInboxZeroMutationSource(action: BulkUpdateTasksRequest["action"]) {
+  switch (action.type) {
+    case "schedule":
+      return "task_bulk_schedule" as const;
+    case "status":
+      return "task_bulk_status" as const;
+    case "carry_forward":
+      return "task_bulk_carry_forward" as const;
+    case "archive":
+      return "task_bulk_archive" as const;
+    case "link_goal":
+      return null;
+  }
+}
+
+async function carryForwardTask(
+  tx: Prisma.TransactionClient,
+  input: {
+    userId: string;
+    task: PlanningTaskRecord;
+    targetDate: CarryForwardTaskRequest["targetDate"];
+    timezone?: string | null;
+    hasPlannerAssignment: boolean;
+  },
+) {
+  const { hasPlannerAssignment, targetDate, task, timezone, userId } = input;
+
+  if (task.recurrenceRuleId) {
+    const recurringTask = await applyRecurringTaskCarryForward(tx, userId, task, targetDate);
+    if (recurringTask) {
+      if (hasPlannerAssignment) {
+        await removePlannerAssignmentForTask(tx, task.id);
+        return tx.task.update({
+          where: {
+            id: recurringTask.id,
+          },
+          data: {
+            dueAt: null,
+          },
+          include: planningTaskInclude,
+        });
+      }
+
+      return recurringTask;
+    }
+  }
+
+  await tx.task.update({
+    where: {
+      id: task.id,
+    },
+    data: {
+      status: "DROPPED",
+    },
+  });
+
+  return tx.task.create({
+    data: {
+      userId,
+      title: task.title,
+      notes: task.notes,
+      kind: task.kind,
+      reminderAt:
+        task.kind === "REMINDER"
+          ? toTaskReminderAt(targetDate, timezone) ?? null
+          : task.reminderAt,
+      reminderTriggeredAt: null,
+      scheduledForDate: parseIsoDate(targetDate),
+      dueAt: hasPlannerAssignment ? null : task.dueAt,
+      goalId: task.goalId,
+      originType: "CARRY_FORWARD",
+      carriedFromTaskId: task.id,
+    },
+    include: planningTaskInclude,
+  });
 }
 
 export const registerPlanningTaskRoutes: FastifyPluginAsync = async (app) => {
@@ -228,10 +326,7 @@ export const registerPlanningTaskRoutes: FastifyPluginAsync = async (app) => {
         },
         userId: user.id,
       },
-      select: {
-        id: true,
-        kind: true,
-      },
+      include: planningTaskInclude,
     });
 
     if (existingTasks.length !== payload.taskIds.length) {
@@ -243,7 +338,24 @@ export const registerPlanningTaskRoutes: FastifyPluginAsync = async (app) => {
     }
 
     const taskById = new Map(existingTasks.map((task) => [task.id, task]));
-    const shouldTrackInboxZero = payload.action.type === "schedule" || payload.action.type === "archive";
+    const shouldTrackInboxZero = shouldTrackInboxZeroForBulkAction(payload.action);
+    const plannerAssignmentTaskIds =
+      payload.action.type === "carry_forward"
+        ? new Set(
+            (
+              await app.prisma.dayPlannerBlockTask.findMany({
+                where: {
+                  taskId: {
+                    in: payload.taskIds,
+                  },
+                },
+                select: {
+                  taskId: true,
+                },
+              })
+            ).map((assignment) => assignment.taskId),
+          )
+        : new Set<string>();
 
     const tasks = await app.prisma.$transaction(async (tx) => {
       const staleCountBefore = shouldTrackInboxZero
@@ -253,27 +365,52 @@ export const registerPlanningTaskRoutes: FastifyPluginAsync = async (app) => {
             timezone,
           })
         : 0;
+      const affectedTaskIds = new Set<string>();
+      const carriedForwardTasks: PlanningTaskRecord[] = [];
 
-      await Promise.all(
-        payload.taskIds.map((taskId) => {
-          const task = taskById.get(taskId);
+      for (const taskId of payload.taskIds) {
+        const task = taskById.get(taskId);
 
-          if (!task) {
-            throw new AppError({
-              statusCode: 404,
-              code: "NOT_FOUND",
-              message: "Task not found",
-            });
-          }
-
-          return tx.task.update({
-            where: {
-              id: taskId,
-            },
-            data: buildBulkTaskUpdateData(task, payload.action, timezone),
+        if (!task) {
+          throw new AppError({
+            statusCode: 404,
+            code: "NOT_FOUND",
+            message: "Task not found",
           });
-        }),
-      );
+        }
+
+        if (payload.action.type === "carry_forward") {
+          const nextTask = await carryForwardTask(tx, {
+            userId: user.id,
+            task,
+            targetDate: payload.action.targetDate,
+            timezone,
+            hasPlannerAssignment: plannerAssignmentTaskIds.has(taskId),
+          });
+
+          carriedForwardTasks.push(nextTask);
+          affectedTaskIds.add(task.id);
+          affectedTaskIds.add(nextTask.id);
+          continue;
+        }
+
+        await tx.task.update({
+          where: {
+            id: taskId,
+          },
+          data: buildBulkTaskUpdateData(task, payload.action, now, timezone),
+        });
+        affectedTaskIds.add(taskId);
+
+        if (payload.action.type === "status" && payload.action.status === "completed" && task.recurrenceRuleId && task.scheduledForDate) {
+          await materializeNextRecurringTaskOccurrence(
+            tx,
+            user.id,
+            task.recurrenceRuleId,
+            toIsoDateString(task.scheduledForDate),
+          );
+        }
+      }
 
       if (payload.action.type === "schedule") {
         for (const taskId of payload.taskIds) {
@@ -281,15 +418,21 @@ export const registerPlanningTaskRoutes: FastifyPluginAsync = async (app) => {
         }
       }
 
-      if (shouldTrackInboxZero) {
+      const mutationSource = getBulkInboxZeroMutationSource(payload.action);
+
+      if (shouldTrackInboxZero && mutationSource) {
         await recordInboxZeroIfEarned(tx, {
           userId: user.id,
           targetDate: now,
           timezone,
           staleCountBefore,
-          mutationSource: payload.action.type === "schedule" ? "task_bulk_schedule" : "task_bulk_archive",
-          affectedTaskIds: payload.taskIds,
+          mutationSource,
+          affectedTaskIds: [...affectedTaskIds],
         });
+      }
+
+      if (payload.action.type === "carry_forward") {
+        return carriedForwardTasks;
       }
 
       return tx.task.findMany({
@@ -304,9 +447,12 @@ export const registerPlanningTaskRoutes: FastifyPluginAsync = async (app) => {
 
     const serializedTasksById = new Map(tasks.map((task) => [task.id, serializeTask(task)]));
     const response: BulkTaskMutationResponse = withGeneratedAt({
-      tasks: payload.taskIds
-        .map((taskId) => serializedTasksById.get(taskId))
-        .filter((task): task is PlanningTaskItem => Boolean(task)),
+      tasks:
+        payload.action.type === "carry_forward"
+          ? tasks.map(serializeTask)
+          : payload.taskIds
+              .map((taskId) => serializedTasksById.get(taskId))
+              .filter((task): task is PlanningTaskItem => Boolean(task)),
     });
 
     return reply.send(response);
@@ -479,53 +625,12 @@ export const registerPlanningTaskRoutes: FastifyPluginAsync = async (app) => {
         targetDate: now,
         timezone,
       });
-
-      if (existingTask.recurrenceRuleId) {
-        const recurringTask = await applyRecurringTaskCarryForward(tx, user.id, existingTask, payload.targetDate);
-        if (recurringTask) {
-          if (existingPlannerAssignment) {
-            await removePlannerAssignmentForTask(tx, existingTask.id);
-            return tx.task.update({
-              where: {
-                id: recurringTask.id,
-              },
-              data: {
-                dueAt: null,
-              },
-              include: planningTaskInclude,
-            });
-          }
-          return recurringTask;
-        }
-      }
-
-      await tx.task.update({
-        where: {
-          id: existingTask.id,
-        },
-        data: {
-          status: "DROPPED",
-        },
-      });
-
-      const nextTask = await tx.task.create({
-        data: {
-          userId: user.id,
-          title: existingTask.title,
-          notes: existingTask.notes,
-          kind: existingTask.kind,
-          reminderAt:
-            existingTask.kind === "REMINDER"
-              ? toTaskReminderAt(payload.targetDate, timezone) ?? null
-              : existingTask.reminderAt,
-          reminderTriggeredAt: null,
-          scheduledForDate: parseIsoDate(payload.targetDate),
-          dueAt: existingPlannerAssignment ? null : existingTask.dueAt,
-          goalId: existingTask.goalId,
-          originType: "CARRY_FORWARD",
-          carriedFromTaskId: existingTask.id,
-        },
-        include: planningTaskInclude,
+      const nextTask = await carryForwardTask(tx, {
+        userId: user.id,
+        task: existingTask,
+        targetDate: payload.targetDate,
+        timezone,
+        hasPlannerAssignment: Boolean(existingPlannerAssignment),
       });
 
       await recordInboxZeroIfEarned(tx, {

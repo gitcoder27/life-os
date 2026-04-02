@@ -188,8 +188,16 @@ export type BulkUpdateTaskAction =
       scheduledForDate: IsoDateString;
     }
   | {
+      type: "carry_forward";
+      targetDate: IsoDateString;
+    }
+  | {
       type: "link_goal";
       goalId: EntityId | null;
+    }
+  | {
+      type: "status";
+      status: TaskStatus;
     }
   | {
       type: "archive";

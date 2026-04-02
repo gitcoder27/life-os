@@ -11,8 +11,10 @@ type InboxZeroClient = PrismaClient | Prisma.TransactionClient;
 export type InboxZeroMutationSource =
   | "task_update"
   | "task_bulk_schedule"
+  | "task_bulk_status"
   | "task_bulk_archive"
-  | "task_carry_forward";
+  | "task_carry_forward"
+  | "task_bulk_carry_forward";
 
 export async function countStaleInboxTasks(
   prisma: InboxZeroClient,

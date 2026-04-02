@@ -3089,6 +3089,179 @@ describe("module route smoke tests", () => {
     expect(JSON.parse(response.body).tasks).toHaveLength(2);
   });
 
+  it("applies bulk carry-forward in a single request", async () => {
+    const firstTaskId = "11111111-1111-4111-8111-111111111111";
+    const secondTaskId = "22222222-2222-4222-8222-222222222222";
+    const findMany = vi.fn().mockResolvedValue([
+      buildTaskRecord({
+        id: firstTaskId,
+        scheduledForDate: new Date("2026-03-14T00:00:00.000Z"),
+        originType: "MANUAL",
+      }),
+      buildTaskRecord({
+        id: secondTaskId,
+        title: "Call the bank",
+        kind: "REMINDER",
+        scheduledForDate: new Date("2026-03-14T00:00:00.000Z"),
+        reminderAt: new Date("2026-03-14T00:00:00.000Z"),
+        originType: "MANUAL",
+      }),
+    ]);
+    const update = vi.fn().mockResolvedValue({});
+    const create = vi
+      .fn()
+      .mockResolvedValueOnce(
+        buildTaskRecord({
+          id: "33333333-3333-4333-8333-333333333333",
+          scheduledForDate: new Date("2026-03-16T00:00:00.000Z"),
+          originType: "CARRY_FORWARD",
+          carriedFromTaskId: firstTaskId,
+        }),
+      )
+      .mockResolvedValueOnce(
+        buildTaskRecord({
+          id: "44444444-4444-4444-8444-444444444444",
+          title: "Call the bank",
+          kind: "REMINDER",
+          scheduledForDate: new Date("2026-03-16T00:00:00.000Z"),
+          reminderAt: new Date("2026-03-16T00:00:00.000Z"),
+          originType: "CARRY_FORWARD",
+          carriedFromTaskId: secondTaskId,
+        }),
+      );
+    const count = vi.fn().mockResolvedValue(0);
+
+    prisma.task = {
+      findMany,
+      count,
+      update,
+      create,
+    } as any;
+    prisma.dayPlannerBlockTask = {
+      findMany: vi.fn().mockResolvedValue([]),
+    } as any;
+
+    const response = await app!.inject({
+      method: "PATCH",
+      url: "/api/tasks/bulk",
+      payload: {
+        taskIds: [firstTaskId, secondTaskId],
+        action: {
+          type: "carry_forward",
+          targetDate: "2026-03-16",
+        },
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(update).toHaveBeenCalledTimes(2);
+    expect(create).toHaveBeenCalledTimes(2);
+    expect(create).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        data: expect.objectContaining({
+          carriedFromTaskId: firstTaskId,
+          originType: "CARRY_FORWARD",
+          scheduledForDate: new Date("2026-03-16T00:00:00.000Z"),
+        }),
+      }),
+    );
+    expect(create).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        data: expect.objectContaining({
+          carriedFromTaskId: secondTaskId,
+          originType: "CARRY_FORWARD",
+          scheduledForDate: new Date("2026-03-16T00:00:00.000Z"),
+          reminderAt: new Date("2026-03-16T00:00:00.000Z"),
+        }),
+      }),
+    );
+    expect(JSON.parse(response.body).tasks.map((task: { id: string }) => task.id)).toEqual([
+      "33333333-3333-4333-8333-333333333333",
+      "44444444-4444-4444-8444-444444444444",
+    ]);
+  });
+
+  it("applies bulk status updates in a single request", async () => {
+    const firstTaskId = "11111111-1111-4111-8111-111111111111";
+    const secondTaskId = "22222222-2222-4222-8222-222222222222";
+    const findMany = vi
+      .fn()
+      .mockResolvedValueOnce([
+        buildTaskRecord({
+          id: firstTaskId,
+          scheduledForDate: new Date("2026-03-14T00:00:00.000Z"),
+          originType: "MANUAL",
+        }),
+        buildTaskRecord({
+          id: secondTaskId,
+          scheduledForDate: new Date("2026-03-15T00:00:00.000Z"),
+          originType: "MANUAL",
+        }),
+      ])
+      .mockResolvedValueOnce([
+        buildTaskRecord({
+          id: firstTaskId,
+          status: "COMPLETED",
+          completedAt: new Date("2026-03-14T10:00:00.000Z"),
+          scheduledForDate: new Date("2026-03-14T00:00:00.000Z"),
+          originType: "MANUAL",
+        }),
+        buildTaskRecord({
+          id: secondTaskId,
+          status: "COMPLETED",
+          completedAt: new Date("2026-03-14T10:00:00.000Z"),
+          scheduledForDate: new Date("2026-03-15T00:00:00.000Z"),
+          originType: "MANUAL",
+        }),
+      ]);
+    const update = vi.fn().mockResolvedValue({});
+    const count = vi.fn().mockResolvedValue(0);
+
+    prisma.task = {
+      findMany,
+      count,
+      update,
+    } as any;
+
+    const response = await app!.inject({
+      method: "PATCH",
+      url: "/api/tasks/bulk",
+      payload: {
+        taskIds: [firstTaskId, secondTaskId],
+        action: {
+          type: "status",
+          status: "completed",
+        },
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(update).toHaveBeenCalledTimes(2);
+    expect(update).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        where: { id: firstTaskId },
+        data: expect.objectContaining({
+          status: "COMPLETED",
+          completedAt: expect.any(Date),
+        }),
+      }),
+    );
+    expect(update).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        where: { id: secondTaskId },
+        data: expect.objectContaining({
+          status: "COMPLETED",
+          completedAt: expect.any(Date),
+        }),
+      }),
+    );
+    expect(JSON.parse(response.body).tasks).toHaveLength(2);
+  });
+
   it("records Inbox Zero when bulk scheduling clears the last stale capture", async () => {
     const taskId = "11111111-1111-4111-8111-111111111111";
     const findMany = vi

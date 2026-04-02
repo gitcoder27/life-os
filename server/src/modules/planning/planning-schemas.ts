@@ -219,8 +219,16 @@ const bulkTaskActionSchema = z.discriminatedUnion("type", [
     scheduledForDate: isoDateSchema,
   }),
   z.object({
+    type: z.literal("carry_forward"),
+    targetDate: isoDateSchema,
+  }),
+  z.object({
     type: z.literal("link_goal"),
     goalId: z.string().uuid().nullable(),
+  }),
+  z.object({
+    type: z.literal("status"),
+    status: taskStatusSchema,
   }),
   z.object({
     type: z.literal("archive"),

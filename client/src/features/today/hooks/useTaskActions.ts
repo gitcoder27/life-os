@@ -1,17 +1,24 @@
 import { useState } from "react";
+import { useAppFeedback } from "../../../app/providers";
 import {
+  useBulkUpdateTasksMutation,
   useCarryForwardTaskMutation,
   useTaskStatusMutation,
 } from "../../../shared/lib/api";
 import { getTomorrowDate } from "../helpers/date-helpers";
 
 export function useTaskActions(today: string) {
+  const { pushFeedback } = useAppFeedback();
   const tomorrow = getTomorrowDate(today);
   const updateTaskMutation = useTaskStatusMutation(today);
   const carryForwardMutation = useCarryForwardTaskMutation(today);
+  const bulkUpdateTasksMutation = useBulkUpdateTasksMutation(today);
   const [rescheduleDates, setRescheduleDates] = useState<Record<string, string>>({});
 
-  const isPending = updateTaskMutation.isPending || carryForwardMutation.isPending;
+  const isPending =
+    updateTaskMutation.isPending ||
+    carryForwardMutation.isPending ||
+    bulkUpdateTasksMutation.isPending;
 
   function getRescheduleDate(taskId: string) {
     return rescheduleDates[taskId] ?? tomorrow;
@@ -30,9 +37,17 @@ export function useTaskActions(today: string) {
   }
 
   async function carryForwardTasks(taskIds: string[], targetDate: string) {
-    for (const taskId of taskIds) {
-      await carryForwardMutation.mutateAsync({ taskId, targetDate });
+    if (taskIds.length === 0) {
+      return;
     }
+
+    await bulkUpdateTasksMutation.mutateAsync({
+      taskIds,
+      action: {
+        type: "carry_forward",
+        targetDate,
+      },
+    });
   }
 
   function moveToToday(taskId: string, onSuccess?: () => void) {
@@ -43,8 +58,36 @@ export function useTaskActions(today: string) {
     carryForwardMutation.mutate({ taskId, targetDate: tomorrow }, { onSuccess });
   }
 
+  async function moveTasksToToday(taskIds: string[]) {
+    await carryForwardTasks(taskIds, today);
+    pushFeedback(`Moved ${taskIds.length} task${taskIds.length === 1 ? "" : "s"} to today.`, "success");
+  }
+
   async function moveTasksToTomorrow(taskIds: string[]) {
     await carryForwardTasks(taskIds, tomorrow);
+    pushFeedback(`Moved ${taskIds.length} task${taskIds.length === 1 ? "" : "s"} to tomorrow.`, "success");
+  }
+
+  async function changeStatuses(taskIds: string[], status: "pending" | "completed" | "dropped") {
+    if (taskIds.length === 0) {
+      return;
+    }
+
+    await bulkUpdateTasksMutation.mutateAsync({
+      taskIds,
+      action: {
+        type: "status",
+        status,
+      },
+    });
+
+    const verb =
+      status === "completed"
+        ? "Completed"
+        : status === "dropped"
+          ? "Dropped"
+          : "Updated";
+    pushFeedback(`${verb} ${taskIds.length} task${taskIds.length === 1 ? "" : "s"}.`, "success");
   }
 
   function reschedule(taskId: string, onSuccess?: () => void) {
@@ -57,6 +100,8 @@ export function useTaskActions(today: string) {
       ? updateTaskMutation.error.message
       : carryForwardMutation.error instanceof Error
         ? carryForwardMutation.error.message
+        : bulkUpdateTasksMutation.error instanceof Error
+          ? bulkUpdateTasksMutation.error.message
         : null;
 
   return {
@@ -65,9 +110,11 @@ export function useTaskActions(today: string) {
     getRescheduleDate,
     setRescheduleDate,
     changeStatus,
+    changeStatuses,
     carryForward,
     carryForwardTasks,
     moveToToday,
+    moveTasksToToday,
     moveToTomorrow,
     moveTasksToTomorrow,
     reschedule,

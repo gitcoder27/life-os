@@ -20,6 +20,7 @@ export function RecoveryTray({
   const deepLinkKey = searchParams.toString();
   const [expanded, setExpanded] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [pendingBatchAction, setPendingBatchAction] = useState<null | "today" | "tomorrow" | "complete" | "drop">(null);
   const trayRef = useRef<HTMLElement>(null);
   const handledDeepLinkRef = useRef<string | null>(null);
 
@@ -102,29 +103,36 @@ export function RecoveryTray({
     });
   }
 
-  function handleBatchAction(action: "today" | "tomorrow" | "complete" | "drop") {
+  async function handleBatchAction(action: "today" | "tomorrow" | "complete" | "drop") {
     const ids = selectedIds;
-    if (ids.length === 0) return;
+    if (ids.length === 0 || taskActions.isPending) return;
 
-    switch (action) {
-      case "today":
-        for (const id of ids) taskActions.moveToToday(id);
-        break;
-      case "tomorrow":
-        void taskActions.moveTasksToTomorrow(ids);
-        break;
-      case "complete":
-        for (const id of ids) taskActions.changeStatus(id, "completed");
-        break;
-      case "drop":
-        for (const id of ids) taskActions.changeStatus(id, "dropped");
-        break;
+    setPendingBatchAction(action);
+
+    try {
+      switch (action) {
+        case "today":
+          await taskActions.moveTasksToToday(ids);
+          break;
+        case "tomorrow":
+          await taskActions.moveTasksToTomorrow(ids);
+          break;
+        case "complete":
+          await taskActions.changeStatuses(ids, "completed");
+          break;
+        case "drop":
+          await taskActions.changeStatuses(ids, "dropped");
+          break;
+      }
+
+      setSelected(new Set());
+    } finally {
+      setPendingBatchAction(null);
     }
-    setSelected(new Set());
   }
 
   return (
-    <section className="recovery-tray" ref={trayRef}>
+    <section className="recovery-tray" ref={trayRef} aria-busy={taskActions.isPending}>
       <button
         className="recovery-tray__header"
         type="button"
@@ -148,6 +156,7 @@ export function RecoveryTray({
               <input
                 type="checkbox"
                 checked={allSelected}
+                disabled={taskActions.isPending}
                 onChange={toggleAll}
               />
               <span>{allSelected ? "Deselect all" : "Select all"}</span>
@@ -155,39 +164,41 @@ export function RecoveryTray({
             {someSelected ? (
               <div className="recovery-tray__batch-actions">
                 <span className="recovery-tray__batch-count">
-                  {selected.size} selected
+                  {pendingBatchAction
+                    ? `Applying action to ${selected.size} task${selected.size === 1 ? "" : "s"}...`
+                    : `${selected.size} selected`}
                 </span>
                 <button
                   className="button button--primary button--small"
                   type="button"
                   disabled={taskActions.isPending}
-                  onClick={() => handleBatchAction("today")}
+                  onClick={() => void handleBatchAction("today")}
                 >
-                  Pull to today
+                  {pendingBatchAction === "today" ? "Moving..." : "Pull to today"}
                 </button>
                 <button
                   className="button button--ghost button--small"
                   type="button"
                   disabled={taskActions.isPending}
-                  onClick={() => handleBatchAction("tomorrow")}
+                  onClick={() => void handleBatchAction("tomorrow")}
                 >
-                  Tomorrow
+                  {pendingBatchAction === "tomorrow" ? "Moving..." : "Tomorrow"}
                 </button>
                 <button
                   className="button button--ghost button--small"
                   type="button"
                   disabled={taskActions.isPending}
-                  onClick={() => handleBatchAction("complete")}
+                  onClick={() => void handleBatchAction("complete")}
                 >
-                  Complete
+                  {pendingBatchAction === "complete" ? "Completing..." : "Complete"}
                 </button>
                 <button
                   className="button button--ghost button--small"
                   type="button"
                   disabled={taskActions.isPending}
-                  onClick={() => handleBatchAction("drop")}
+                  onClick={() => void handleBatchAction("drop")}
                 >
-                  Drop
+                  {pendingBatchAction === "drop" ? "Dropping..." : "Drop"}
                 </button>
               </div>
             ) : null}
@@ -231,6 +242,7 @@ function RecoveryRow({
         type="checkbox"
         className="recovery-row__checkbox"
         checked={isSelected}
+        disabled={taskActions.isPending}
         onChange={onToggle}
       />
       <div className="recovery-row__content">

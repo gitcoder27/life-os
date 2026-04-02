@@ -191,8 +191,22 @@ export type BulkUpdateTasksInput =
   | {
       taskIds: string[];
       action: {
+        type: "carry_forward";
+        targetDate: string;
+      };
+    }
+  | {
+      taskIds: string[];
+      action: {
         type: "link_goal";
         goalId: string | null;
+      };
+    }
+  | {
+      taskIds: string[];
+      action: {
+        type: "status";
+        status: TaskItem["status"];
       };
     }
   | {
