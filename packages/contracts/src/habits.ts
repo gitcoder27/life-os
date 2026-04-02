@@ -127,6 +127,7 @@ export interface HabitCheckinRequest {
 }
 
 export interface RoutineItemInput {
+  id?: EntityId;
   title: string;
   sortOrder: number;
   isRequired?: boolean;

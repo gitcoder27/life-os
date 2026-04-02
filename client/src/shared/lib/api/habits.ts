@@ -293,7 +293,7 @@ export const useUpdateRoutineMutation = () => {
       name?: string;
       sortOrder?: number;
       status?: "active" | "archived";
-      items?: Array<{ title: string; sortOrder: number; isRequired?: boolean }>;
+      items?: Array<{ id?: string; title: string; sortOrder: number; isRequired?: boolean }>;
     }) =>
       apiRequest<RoutineMutationResponse>(`/api/routines/${routineId}`, {
         method: "PATCH",

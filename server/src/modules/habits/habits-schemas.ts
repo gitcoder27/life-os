@@ -59,6 +59,7 @@ const recurrenceInputSchema = z.object({
 }) as z.ZodType<RecurrenceInput>;
 
 const routineItemInputSchema = z.object({
+  id: z.string().uuid().optional(),
   title: z.string().min(1).max(200),
   sortOrder: z.number().int().min(0),
   isRequired: z.boolean().optional(),

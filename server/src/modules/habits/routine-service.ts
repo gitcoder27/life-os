@@ -130,24 +130,46 @@ export const updateRoutine = async (
       return;
     }
 
-    await tx.routineItem.deleteMany({
-      where: {
-        routineId,
-      },
+    const existingItems = await tx.routineItem.findMany({
+      where: { routineId },
+      select: { id: true },
     });
+    const existingIds = new Set(existingItems.map((i) => i.id));
 
-    if (payload.items.length === 0) {
-      return;
+    const incomingIds = new Set(
+      payload.items.filter((i) => i.id).map((i) => i.id!),
+    );
+
+    // Delete items that are no longer present
+    const toDelete = [...existingIds].filter((id) => !incomingIds.has(id));
+    if (toDelete.length > 0) {
+      await tx.routineItem.deleteMany({
+        where: { id: { in: toDelete }, routineId },
+      });
     }
 
-    await tx.routineItem.createMany({
-      data: payload.items.map((item) => ({
-        routineId,
-        title: item.title,
-        sortOrder: item.sortOrder,
-        isRequired: item.isRequired ?? true,
-      })),
-    });
+    // Upsert each item: update existing, create new
+    for (const item of payload.items) {
+      if (item.id && existingIds.has(item.id)) {
+        await tx.routineItem.update({
+          where: { id: item.id },
+          data: {
+            title: item.title,
+            sortOrder: item.sortOrder,
+            isRequired: item.isRequired ?? true,
+          },
+        });
+      } else {
+        await tx.routineItem.create({
+          data: {
+            routineId,
+            title: item.title,
+            sortOrder: item.sortOrder,
+            isRequired: item.isRequired ?? true,
+          },
+        });
+      }
+    }
   });
 
   const { targetIsoDate } = await getTodayContext(app, userId);

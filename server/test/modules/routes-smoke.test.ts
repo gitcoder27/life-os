@@ -1638,8 +1638,11 @@ describe("module route smoke tests", () => {
         sortOrder: 1,
         isRequired: true,
       }),
+      findMany: vi.fn().mockResolvedValue([]),
       deleteMany: vi.fn().mockResolvedValue({}),
       createMany: vi.fn().mockResolvedValue({}),
+      create: vi.fn().mockResolvedValue({}),
+      update: vi.fn().mockResolvedValue({}),
     } as any;
     prisma.routineItemCheckin = {
       findMany: vi.fn().mockResolvedValue([]),

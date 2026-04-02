@@ -1,6 +1,12 @@
 import { type FormEvent, useState } from "react";
 
 import {
+  type RoutineItemEntry,
+  RoutineItemEditor,
+  createEmptyItem,
+  makeItemKey,
+} from "./RoutineItemEditor";
+import {
   getTodayDate,
   useCreateHabitPauseWindowMutation,
   useCreateHabitMutation,
@@ -174,24 +180,15 @@ function HabitForm({
 
 type RoutineFormValues = {
   name: string;
-  itemsText: string;
+  items: RoutineItemEntry[];
 };
 
-const emptyRoutineForm: RoutineFormValues = { name: "", itemsText: "" };
+const emptyRoutineForm: RoutineFormValues = { name: "", items: [createEmptyItem()] };
 
-function buildRoutineItemsInput(itemsText: string) {
-  return itemsText
-    .split("\n")
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .map((title, index) => ({ title, sortOrder: index }));
-}
-
-function buildRoutineItemsText(items: Array<{ title: string; sortOrder: number }>) {
+function buildRoutineFormItems(items: Array<{ id: string; title: string; sortOrder: number; isRequired: boolean }>): RoutineItemEntry[] {
   return [...items]
-    .sort((left, right) => left.sortOrder - right.sortOrder)
-    .map((item) => item.title)
-    .join("\n");
+    .sort((a, b) => a.sortOrder - b.sortOrder)
+    .map((item) => ({ key: item.id, id: item.id, title: item.title, isRequired: item.isRequired }));
 }
 
 function RoutineForm({
@@ -212,7 +209,9 @@ function RoutineForm({
   function handleSubmit(event: FormEvent) {
     event.preventDefault();
     if (!values.name.trim()) return;
-    onSubmit(values);
+    const nonEmptyItems = values.items.filter((i) => i.title.trim());
+    if (nonEmptyItems.length === 0) return;
+    onSubmit({ ...values, items: nonEmptyItems });
   }
 
   return (
@@ -228,18 +227,13 @@ function RoutineForm({
             autoFocus
           />
         </label>
-        <label className="field">
-          <span>Items (one per line)</span>
-          <textarea
-            rows={4}
-            placeholder={"Stretch\nReview priorities\nPrep for tomorrow"}
-            value={values.itemsText}
-            onChange={(e) => setValues((v) => ({ ...v, itemsText: e.target.value }))}
-          />
-        </label>
+        <RoutineItemEditor
+          items={values.items}
+          onChange={(items) => setValues((v) => ({ ...v, items }))}
+        />
       </div>
       <div className="button-row button-row--tight">
-        <button className="button button--primary button--small" type="submit" disabled={isPending || !values.name.trim()}>
+        <button className="button button--primary button--small" type="submit" disabled={isPending || !values.name.trim() || !values.items.some((i) => i.title.trim())}>
           {isPending ? "Saving..." : submitLabel}
         </button>
         <button className="button button--ghost button--small" type="button" onClick={onCancel}>
@@ -324,7 +318,7 @@ function CollapsibleSection({
           {subtitle ? <p className="habits-collapsible__subtitle">{subtitle}</p> : null}
         </div>
         <div className="habits-collapsible__right">
-          {trailing && isOpen ? trailing : null}
+          {trailing ?? null}
           <span className={`habits-collapsible__chevron${isOpen ? " habits-collapsible__chevron--open" : ""}`}>
             &#x25B8;
           </span>
@@ -361,13 +355,19 @@ export function HabitsPage() {
   });
   const [showAddRoutine, setShowAddRoutine] = useState(false);
   const [editingRoutineId, setEditingRoutineId] = useState<string | null>(null);
+  const [confirmArchiveHabitId, setConfirmArchiveHabitId] = useState<string | null>(null);
+  const [confirmArchiveRoutineId, setConfirmArchiveRoutineId] = useState<string | null>(null);
 
   /* Derived data */
   const dueHabits = habitsQuery.data?.dueHabits ?? [];
   const allHabits = habitsQuery.data?.habits ?? [];
+  const nonArchivedHabits = allHabits.filter((h) => h.status !== "archived");
+  const archivedHabits = allHabits.filter((h) => h.status === "archived");
   const weeklyChallenge = habitsQuery.data?.weeklyChallenge ?? null;
   const routines = [...(habitsQuery.data?.routines ?? [])].sort((left, right) => left.sortOrder - right.sortOrder);
   const activeRoutines = routines.filter((r) => r.status === "active");
+  const nonArchivedRoutines = routines.filter((r) => r.status !== "archived");
+  const archivedRoutines = routines.filter((r) => r.status === "archived");
   const consistencyBars = weeklyMomentumQuery.data?.dailyScores ?? [];
 
   const dueCompleted = dueHabits.filter((h) => h.completedToday).length;
@@ -465,10 +465,13 @@ export function HabitsPage() {
 
   function handleArchiveHabit(habitId: string) {
     handlePermanentHabitStatusChange(habitId, "archived");
+    setConfirmArchiveHabitId(null);
   }
 
   function handleCreateRoutine(values: RoutineFormValues) {
-    const items = buildRoutineItemsInput(values.itemsText);
+    const items = values.items
+      .filter((i) => i.title.trim())
+      .map((item, index) => ({ title: item.title.trim(), sortOrder: index, isRequired: item.isRequired }));
     if (!items.length) return;
     createRoutineMutation.mutate(
       { name: values.name.trim(), items },
@@ -481,7 +484,9 @@ export function HabitsPage() {
   }
 
   function handleUpdateRoutine(routineId: string, values: RoutineFormValues) {
-    const items = buildRoutineItemsInput(values.itemsText);
+    const items = values.items
+      .filter((i) => i.title.trim())
+      .map((item, index) => ({ id: item.id, title: item.title.trim(), sortOrder: index, isRequired: item.isRequired }));
     updateRoutineMutation.mutate(
       { routineId, name: values.name.trim(), items: items.length ? items : undefined },
       { onSuccess: () => setEditingRoutineId(null) },
@@ -494,6 +499,7 @@ export function HabitsPage() {
 
   function handleArchiveRoutine(routineId: string) {
     updateRoutineMutation.mutate({ routineId, status: "archived" });
+    setConfirmArchiveRoutineId(null);
   }
 
   /* ── Renderers ── */
@@ -752,9 +758,9 @@ export function HabitsPage() {
           </div>
         ) : null}
 
-        {allHabits.length > 0 ? (
+        {nonArchivedHabits.length > 0 ? (
           <div className="manage-list">
-            {allHabits.map((habit) => (
+            {nonArchivedHabits.map((habit) => (
               <div key={habit.id} className="manage-list__item">
                 {editingHabitId === habit.id ? (
                   <HabitForm
@@ -775,17 +781,18 @@ export function HabitsPage() {
                     <div className="manage-list__row">
                       <div className="manage-list__info">
                         <div className="manage-list__name">
+                          <span className={`status-dot status-dot--${habit.status}`} />
                           {habit.title}
-                          <span className="tag tag--neutral" style={{ marginLeft: "0.4rem" }}>{habit.status}</span>
                           {habit.pauseWindows.some((w) => w.isActiveToday) ? (
                             <span className="tag tag--warning" style={{ marginLeft: "0.3rem" }}>paused today</span>
                           ) : null}
                         </div>
                         <div className="manage-list__meta">
-                          {habit.category ?? "General"} \u00b7 {habit.streakCount} streak
-                          {habit.goal ? ` \u00b7 ${habit.goal.title}` : ""}
+                          {habit.category || "Uncategorized"}
+                          {habit.streakCount > 0 ? ` · ${habit.streakCount} streak` : ""}
+                          {habit.goal ? ` · ${habit.goal.title}` : ""}
                           {isRecurring(habit.recurrence) && (
-                            <span className="manage-list__recurrence"> \u00b7 \u21BB {formatFullRecurrenceSummary(habit.recurrence!.rule)}</span>
+                            <span className="manage-list__recurrence">{" · ↻ "}{formatFullRecurrenceSummary(habit.recurrence!.rule)}</span>
                           )}
                         </div>
                         {habit.pauseWindows.length > 0 ? (
@@ -856,15 +863,37 @@ export function HabitsPage() {
                           </button>
                         ) : null}
                         {habit.status !== "archived" ? (
-                          <button
-                            className="button button--ghost button--small"
-                            type="button"
-                            style={{ color: "var(--negative)" }}
-                            onClick={() => handleArchiveHabit(habit.id)}
-                            disabled={updateHabitMutation.isPending}
-                          >
-                            Archive
-                          </button>
+                          confirmArchiveHabitId === habit.id ? (
+                            <span className="confirm-archive">
+                              <span className="confirm-archive__label">Archive?</span>
+                              <button
+                                className="button button--ghost button--small"
+                                type="button"
+                                style={{ color: "var(--negative)" }}
+                                onClick={() => handleArchiveHabit(habit.id)}
+                                disabled={updateHabitMutation.isPending}
+                              >
+                                Yes
+                              </button>
+                              <button
+                                className="button button--ghost button--small"
+                                type="button"
+                                onClick={() => setConfirmArchiveHabitId(null)}
+                              >
+                                No
+                              </button>
+                            </span>
+                          ) : (
+                            <button
+                              className="button button--ghost button--small"
+                              type="button"
+                              style={{ color: "var(--negative)" }}
+                              onClick={() => setConfirmArchiveHabitId(habit.id)}
+                              disabled={updateHabitMutation.isPending}
+                            >
+                              Archive
+                            </button>
+                          )
                         ) : null}
                       </div>
                     </div>
@@ -943,6 +972,39 @@ export function HabitsPage() {
           </div>
         ) : null}
 
+        {archivedHabits.length > 0 ? (
+          <CollapsibleSection title="Archived habits" subtitle={`${archivedHabits.length} archived`}>
+            <div className="manage-list manage-list--archived">
+              {archivedHabits.map((habit) => (
+                <div key={habit.id} className="manage-list__item">
+                  <div className="manage-list__row">
+                    <div className="manage-list__info">
+                      <div className="manage-list__name">
+                        <span className="status-dot status-dot--archived" />
+                        {habit.title}
+                      </div>
+                      <div className="manage-list__meta">
+                        {habit.category || "Uncategorized"}
+                        {habit.streakCount > 0 ? ` \u00b7 ${habit.streakCount} streak` : ""}
+                      </div>
+                    </div>
+                    <div className="habits-manage-actions">
+                      <button
+                        className="button button--ghost button--small"
+                        type="button"
+                        onClick={() => handlePermanentHabitStatusChange(habit.id, "active")}
+                        disabled={updateHabitMutation.isPending}
+                      >
+                        Restore
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CollapsibleSection>
+        ) : null}
+
         {updateHabitMutation.error ? (
           <div className="inline-state inline-state--error" style={{ marginTop: "0.5rem" }}>
             {updateHabitMutation.error instanceof Error ? updateHabitMutation.error.message : "Could not update habit."}
@@ -1000,15 +1062,15 @@ export function HabitsPage() {
           </div>
         ) : null}
 
-        {routines.length > 0 ? (
+        {nonArchivedRoutines.length > 0 ? (
           <div className="manage-list">
-            {routines.map((routine) => (
+            {nonArchivedRoutines.map((routine) => (
               <div key={routine.id} className="manage-list__item">
                 {editingRoutineId === routine.id ? (
                   <RoutineForm
                     initial={{
                       name: routine.name,
-                      itemsText: buildRoutineItemsText(routine.items),
+                      items: buildRoutineFormItems(routine.items),
                     }}
                     submitLabel="Save changes"
                     isPending={updateRoutineMutation.isPending}
@@ -1019,11 +1081,11 @@ export function HabitsPage() {
                   <div className="manage-list__row">
                     <div className="manage-list__info">
                       <div className="manage-list__name">
+                        <span className={`status-dot status-dot--${routine.status}`} />
                         {routine.name}
-                        <span className="tag tag--neutral" style={{ marginLeft: "0.4rem" }}>{routine.status}</span>
                       </div>
                       <div className="manage-list__meta">
-                        {routine.items.length} item{routine.items.length !== 1 ? "s" : ""} \u00b7 {routine.completedItems}/{routine.totalItems} today
+                        {routine.items.length} item{routine.items.length !== 1 ? "s" : ""}{" · "}{routine.completedItems}/{routine.totalItems} today
                       </div>
                     </div>
                     <div className="habits-manage-actions">
@@ -1051,15 +1113,37 @@ export function HabitsPage() {
                         Move down
                       </button>
                       {routine.status !== "archived" ? (
-                        <button
-                          className="button button--ghost button--small"
-                          type="button"
-                          style={{ color: "var(--negative)" }}
-                          onClick={() => handleArchiveRoutine(routine.id)}
-                          disabled={updateRoutineMutation.isPending}
-                        >
-                          Archive
-                        </button>
+                        confirmArchiveRoutineId === routine.id ? (
+                          <span className="confirm-archive">
+                            <span className="confirm-archive__label">Archive?</span>
+                            <button
+                              className="button button--ghost button--small"
+                              type="button"
+                              style={{ color: "var(--negative)" }}
+                              onClick={() => handleArchiveRoutine(routine.id)}
+                              disabled={updateRoutineMutation.isPending}
+                            >
+                              Yes
+                            </button>
+                            <button
+                              className="button button--ghost button--small"
+                              type="button"
+                              onClick={() => setConfirmArchiveRoutineId(null)}
+                            >
+                              No
+                            </button>
+                          </span>
+                        ) : (
+                          <button
+                            className="button button--ghost button--small"
+                            type="button"
+                            style={{ color: "var(--negative)" }}
+                            onClick={() => setConfirmArchiveRoutineId(routine.id)}
+                            disabled={updateRoutineMutation.isPending}
+                          >
+                            Archive
+                          </button>
+                        )
                       ) : null}
                     </div>
                   </div>
@@ -1078,6 +1162,38 @@ export function HabitsPage() {
               + Add your first routine
             </button>
           </div>
+        ) : null}
+
+        {archivedRoutines.length > 0 ? (
+          <CollapsibleSection title="Archived routines" subtitle={`${archivedRoutines.length} archived`}>
+            <div className="manage-list manage-list--archived">
+              {archivedRoutines.map((routine) => (
+                <div key={routine.id} className="manage-list__item">
+                  <div className="manage-list__row">
+                    <div className="manage-list__info">
+                      <div className="manage-list__name">
+                        <span className="status-dot status-dot--archived" />
+                        {routine.name}
+                      </div>
+                      <div className="manage-list__meta">
+                        {routine.items.length} item{routine.items.length !== 1 ? "s" : ""}
+                      </div>
+                    </div>
+                    <div className="habits-manage-actions">
+                      <button
+                        className="button button--ghost button--small"
+                        type="button"
+                        onClick={() => updateRoutineMutation.mutate({ routineId: routine.id, status: "active" })}
+                        disabled={updateRoutineMutation.isPending}
+                      >
+                        Restore
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CollapsibleSection>
         ) : null}
 
         {updateRoutineMutation.error ? (
