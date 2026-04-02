@@ -6,10 +6,13 @@ import type {
   ExpenseCategoryMutationResponse,
   ExpensesResponse,
   FinanceCategoriesResponse,
+  FinanceMonthPlanMutationResponse,
+  FinanceMonthPlanResponse,
   IsoDateString,
   IsoMonthString,
   RecurrenceInput,
   RecurringExpenseMutationResponse,
+  UpdateFinanceMonthPlanRequest,
   UpdateExpenseCategoryRequest,
   UpdateRecurringExpenseRequest,
 } from "@life-os/contracts";
@@ -30,6 +33,7 @@ import { formatLegacyFinanceRecurrenceRule, parseLegacyFinanceRecurrenceRule } f
 import { serializeRecurrenceDefinition, upsertRecurrenceRuleRecord } from "../../lib/recurrence/store.js";
 import { parseIsoDate } from "../../lib/time/cycle.js";
 import { toIsoDateString } from "../../lib/time/date.js";
+import { getUserLocalDate } from "../../lib/time/user-time.js";
 import { parseOrThrow } from "../../lib/validation/parse.js";
 
 type ExpenseSource = "manual" | "quick_capture" | "template";
@@ -231,6 +235,20 @@ const expenseRangeQuerySchema = z.object({
   to: isoDateSchema,
 });
 
+const financeMonthPlanWatchSchema = z.object({
+  expenseCategoryId: z.string().uuid(),
+  watchLimitMinor: z.number().int().positive(),
+});
+
+const updateFinanceMonthPlanSchema = z.object({
+  plannedSpendMinor: z.number().int().positive().nullable().optional(),
+  fixedObligationsMinor: z.number().int().nonnegative().nullable().optional(),
+  flexibleSpendTargetMinor: z.number().int().nonnegative().nullable().optional(),
+  plannedIncomeMinor: z.number().int().nonnegative().nullable().optional(),
+  expectedLargeExpensesMinor: z.number().int().nonnegative().nullable().optional(),
+  categoryWatches: z.array(financeMonthPlanWatchSchema).max(8).optional(),
+}).refine((value) => Object.keys(value).length > 0, "At least one field must be updated");
+
 function getMonthBounds(month: IsoMonthString) {
   const [year, monthNumber] = month.split("-").map(Number);
   const monthStart = new Date(Date.UTC(year, monthNumber - 1, 1));
@@ -240,6 +258,28 @@ function getMonthBounds(month: IsoMonthString) {
     monthStart,
     nextMonthStart,
   };
+}
+
+function getIsoMonthString(date: Date): IsoMonthString {
+  return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}` as IsoMonthString;
+}
+
+function diffInDays(from: Date, to: Date) {
+  return Math.round((to.getTime() - from.getTime()) / (24 * 60 * 60 * 1000));
+}
+
+function formatPlanCurrency(amountMinor: number, currencyCode: string) {
+  const value = amountMinor / 100;
+  try {
+    return new Intl.NumberFormat(undefined, {
+      style: "currency",
+      currency: currencyCode,
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
+    }).format(value);
+  } catch {
+    return `${currencyCode} ${value.toFixed(0)}`;
+  }
 }
 
 function toPrismaExpenseSource(source: ExpenseSource): PrismaExpenseSource {
@@ -298,7 +338,7 @@ function fromPrismaRecurringExpenseStatus(
   throw new Error(`Unsupported recurring expense status: ${status satisfies never}`);
 }
 
-function fromPrismaAdminItemStatus(status: PrismaAdminItemStatus) {
+function fromPrismaAdminItemStatus(status: PrismaAdminItemStatus): AdminItemStatus {
   switch (status) {
     case "PENDING":
       return "pending";
@@ -401,6 +441,26 @@ async function getUserCurrencyCode(
   });
 
   return preferences?.currencyCode ?? "USD";
+}
+
+async function getUserFinanceContext(
+  app: Parameters<FastifyPluginAsync>[0],
+  userId: string,
+) {
+  const preferences = await app.prisma.userPreference.findUnique({
+    where: {
+      userId,
+    },
+    select: {
+      currencyCode: true,
+      timezone: true,
+    },
+  });
+
+  return {
+    currencyCode: preferences?.currencyCode ?? "USD",
+    timezone: preferences?.timezone ?? "UTC",
+  };
 }
 
 async function assertOwnedExpenseCategory(
@@ -523,7 +583,281 @@ async function findOwnedExpense(
   return expense;
 }
 
+async function buildFinanceMonthPlan(
+  app: Parameters<FastifyPluginAsync>[0],
+  userId: string,
+  month: IsoMonthString,
+): Promise<FinanceMonthPlanResponse["monthPlan"]> {
+  const { monthStart, nextMonthStart } = getMonthBounds(month);
+  const { currencyCode, timezone } = await getUserFinanceContext(app, userId);
+  const todayIsoDate = getUserLocalDate(new Date(), timezone);
+  const today = parseIsoDate(todayIsoDate);
+  const currentMonth = getIsoMonthString(parseIsoDate(`${todayIsoDate}`));
+  const isCurrentMonth = month === currentMonth;
+  const monthProgress = (() => {
+    if (!isCurrentMonth) {
+      return 1;
+    }
+
+    const dayOfMonth = today.getUTCDate();
+    const daysInMonth = new Date(Date.UTC(monthStart.getUTCFullYear(), monthStart.getUTCMonth() + 1, 0)).getUTCDate();
+    return dayOfMonth / daysInMonth;
+  })();
+
+  const [monthPlan, expenses, upcomingBills, overdueBills] = await Promise.all([
+    app.prisma.financeMonthPlan.findUnique({
+      where: {
+        userId_monthStart: {
+          userId,
+          monthStart,
+        },
+      },
+      include: {
+        categoryWatches: {
+          include: {
+            expenseCategory: true,
+          },
+          orderBy: {
+            createdAt: "asc",
+          },
+        },
+      },
+    }),
+    app.prisma.expense.findMany({
+      where: {
+        userId,
+        spentOn: {
+          gte: monthStart,
+          lt: nextMonthStart,
+        },
+      },
+    }),
+    app.prisma.adminItem.findMany({
+      where: {
+        userId,
+        dueOn: {
+          gte: monthStart,
+          lt: nextMonthStart,
+        },
+        status: "PENDING",
+      },
+      orderBy: {
+        dueOn: "asc",
+      },
+    }),
+    app.prisma.adminItem.findMany({
+      where: {
+        userId,
+        dueOn: {
+          lt: monthStart,
+        },
+        status: "PENDING",
+      },
+      orderBy: {
+        dueOn: "asc",
+      },
+    }),
+  ]);
+
+  const spentByCategory = new Map<string, number>();
+  let totalSpentMinor = 0;
+  for (const expense of expenses) {
+    totalSpentMinor += expense.amountMinor;
+    if (!expense.expenseCategoryId) {
+      continue;
+    }
+
+    spentByCategory.set(
+      expense.expenseCategoryId,
+      (spentByCategory.get(expense.expenseCategoryId) ?? 0) + expense.amountMinor,
+    );
+  }
+
+  const watchedCategories = monthPlan?.categoryWatches.map((watch) => {
+    const actualSpentMinor = spentByCategory.get(watch.expenseCategoryId) ?? 0;
+    const ratio = actualSpentMinor / watch.watchLimitMinor;
+    const status: FinanceMonthPlanResponse["monthPlan"]["categoryWatches"][number]["status"] =
+      ratio > 1
+        ? "over_limit"
+        : ratio >= 0.85
+          ? "near_limit"
+          : "within_limit";
+
+    return {
+      expenseCategoryId: watch.expenseCategoryId,
+      name: watch.expenseCategory.name,
+      color: watch.expenseCategory.color,
+      watchLimitMinor: watch.watchLimitMinor,
+      actualSpentMinor,
+      status,
+    };
+  }) ?? [];
+
+  const allPendingBills = [...overdueBills, ...upcomingBills].sort((left, right) =>
+    left.dueOn.getTime() - right.dueOn.getTime(),
+  );
+
+  const billTimeline: FinanceMonthPlanResponse["monthPlan"]["billTimeline"] = {
+    today: [],
+    thisWeek: [],
+    laterThisMonth: [],
+  };
+
+  for (const bill of allPendingBills) {
+    const dueOnIso = toIsoDateString(bill.dueOn);
+    const timelineBill: FinanceMonthPlanResponse["monthPlan"]["billTimeline"]["today"][number] = {
+      id: bill.id,
+      title: bill.title,
+      dueOn: dueOnIso,
+      amountMinor: bill.amountMinor,
+      status: fromPrismaAdminItemStatus(bill.status),
+      recurringExpenseTemplateId: bill.recurringExpenseTemplateId,
+    };
+    const dayDiff = diffInDays(today, bill.dueOn);
+
+    if (dayDiff <= 0) {
+      billTimeline.today.push(timelineBill);
+      continue;
+    }
+
+    if (dayDiff <= 7) {
+      billTimeline.thisWeek.push(timelineBill);
+      continue;
+    }
+
+    billTimeline.laterThisMonth.push(timelineBill);
+  }
+
+  const plannedSpendMinor = monthPlan?.plannedSpendMinor ?? null;
+  const expectedSpendToDateMinor =
+    plannedSpendMinor != null ? Math.round(plannedSpendMinor * monthProgress) : null;
+  const remainingPlannedSpendMinor =
+    plannedSpendMinor != null ? plannedSpendMinor - totalSpentMinor : null;
+  const remainingFlexibleSpendMinor =
+    monthPlan?.flexibleSpendTargetMinor != null
+      ? monthPlan.flexibleSpendTargetMinor - Math.max(totalSpentMinor - (monthPlan.fixedObligationsMinor ?? 0), 0)
+      : null;
+
+  const paceStatus: FinanceMonthPlanResponse["monthPlan"]["paceStatus"] =
+    plannedSpendMinor == null || expectedSpendToDateMinor == null || expectedSpendToDateMinor <= 0
+      ? "no_plan"
+      : totalSpentMinor <= expectedSpendToDateMinor * 1.05
+        ? "on_pace"
+        : totalSpentMinor <= expectedSpendToDateMinor * 1.15
+          ? "slightly_heavy"
+          : "off_track";
+
+  const paceSummary =
+    paceStatus === "no_plan"
+      ? "Add a monthly plan to compare actual spending with a target."
+      : paceStatus === "on_pace"
+        ? `Spent ${formatPlanCurrency(totalSpentMinor, currencyCode)} against an expected ${formatPlanCurrency(expectedSpendToDateMinor!, currencyCode)} by now. Pace looks healthy.`
+        : paceStatus === "slightly_heavy"
+          ? `Spent ${formatPlanCurrency(totalSpentMinor, currencyCode)} against an expected ${formatPlanCurrency(expectedSpendToDateMinor!, currencyCode)} by now. Spending is a little heavy.`
+          : `Spent ${formatPlanCurrency(totalSpentMinor, currencyCode)} against an expected ${formatPlanCurrency(expectedSpendToDateMinor!, currencyCode)} by now. The month is off track and needs adjustment.`;
+
+  return {
+    id: monthPlan?.id ?? null,
+    month,
+    plannedSpendMinor,
+    fixedObligationsMinor: monthPlan?.fixedObligationsMinor ?? null,
+    flexibleSpendTargetMinor: monthPlan?.flexibleSpendTargetMinor ?? null,
+    plannedIncomeMinor: monthPlan?.plannedIncomeMinor ?? null,
+    expectedLargeExpensesMinor: monthPlan?.expectedLargeExpensesMinor ?? null,
+    categoryWatches: watchedCategories,
+    billTimeline,
+    paceStatus,
+    paceSummary,
+    expectedSpendToDateMinor,
+    remainingPlannedSpendMinor,
+    remainingFlexibleSpendMinor,
+  };
+}
+
 export const registerFinanceRoutes: FastifyPluginAsync = async (app) => {
+  app.get("/month-plan", async (request, reply) => {
+    const user = requireAuthenticatedUser(request);
+    const query = parseOrThrow(
+      z.object({
+        month: isoMonthSchema,
+      }),
+      request.query,
+    );
+
+    const response: FinanceMonthPlanResponse = withGeneratedAt({
+      monthPlan: await buildFinanceMonthPlan(app, user.id, query.month),
+    });
+
+    return reply.send(response);
+  });
+
+  app.put("/month-plan", async (request, reply) => {
+    const user = requireAuthenticatedUser(request);
+    const query = parseOrThrow(
+      z.object({
+        month: isoMonthSchema,
+      }),
+      request.query,
+    );
+    const payload = parseOrThrow(updateFinanceMonthPlanSchema, request.body as UpdateFinanceMonthPlanRequest);
+    const { monthStart } = getMonthBounds(query.month);
+
+    for (const watch of payload.categoryWatches ?? []) {
+      await assertOwnedExpenseCategory(app, user.id, watch.expenseCategoryId);
+    }
+
+    await app.prisma.$transaction(async (tx) => {
+      const monthPlan = await tx.financeMonthPlan.upsert({
+        where: {
+          userId_monthStart: {
+            userId: user.id,
+            monthStart,
+          },
+        },
+        update: {
+          plannedSpendMinor: payload.plannedSpendMinor,
+          fixedObligationsMinor: payload.fixedObligationsMinor,
+          flexibleSpendTargetMinor: payload.flexibleSpendTargetMinor,
+          plannedIncomeMinor: payload.plannedIncomeMinor,
+          expectedLargeExpensesMinor: payload.expectedLargeExpensesMinor,
+        },
+        create: {
+          userId: user.id,
+          monthStart,
+          plannedSpendMinor: payload.plannedSpendMinor ?? null,
+          fixedObligationsMinor: payload.fixedObligationsMinor ?? null,
+          flexibleSpendTargetMinor: payload.flexibleSpendTargetMinor ?? null,
+          plannedIncomeMinor: payload.plannedIncomeMinor ?? null,
+          expectedLargeExpensesMinor: payload.expectedLargeExpensesMinor ?? null,
+        },
+      });
+
+      if (payload.categoryWatches) {
+        await tx.financeMonthPlanCategoryWatch.deleteMany({
+          where: {
+            financeMonthPlanId: monthPlan.id,
+          },
+        });
+
+        if (payload.categoryWatches.length > 0) {
+          await tx.financeMonthPlanCategoryWatch.createMany({
+            data: payload.categoryWatches.map((watch) => ({
+              financeMonthPlanId: monthPlan.id,
+              expenseCategoryId: watch.expenseCategoryId,
+              watchLimitMinor: watch.watchLimitMinor,
+            })),
+          });
+        }
+      }
+    });
+
+    const response: FinanceMonthPlanMutationResponse = withGeneratedAt({
+      monthPlan: await buildFinanceMonthPlan(app, user.id, query.month),
+    });
+
+    return reply.send(response);
+  });
+
   app.get("/categories", async (request, reply) => {
     const user = requireAuthenticatedUser(request);
     const categories = await app.prisma.expenseCategory.findMany({

@@ -18,6 +18,7 @@ import {
   useUpdateAdminItemMutation,
   useUpdateCategoryMutation,
   useUpdateExpenseMutation,
+  useUpdateFinanceMonthPlanMutation,
   useUpdateRecurringExpenseMutation,
 } from "../../shared/lib/api";
 import {
@@ -37,6 +38,7 @@ import {
 } from "../../shared/ui/PageState";
 import { RecurrenceEditor, buildRecurrenceInput } from "../../shared/ui/RecurrenceEditor";
 import { SectionCard } from "../../shared/ui/SectionCard";
+import { FinancePlanPanel } from "./FinancePlanPanel";
 
 type CategoryForm = { name: string; color: string };
 type RecurringForm = {
@@ -96,6 +98,7 @@ export function FinancePage() {
   const updateExpenseMutation = useUpdateExpenseMutation(today);
   const deleteExpenseMutation = useDeleteExpenseMutation(today);
   const updateAdminItemMutation = useUpdateAdminItemMutation(today);
+  const updateFinanceMonthPlanMutation = useUpdateFinanceMonthPlanMutation(selectedMonth);
   const createCategoryMutation = useCreateCategoryMutation();
   const updateCategoryMutation = useUpdateCategoryMutation();
   const createRecurringMutation = useCreateRecurringExpenseMutation();
@@ -142,6 +145,7 @@ export function FinancePage() {
   const expenses = financeData?.expenses?.expenses ?? [];
   const recurringExpenses = financeData?.recurringExpenses?.recurringExpenses ?? [];
   const categories = financeData?.categories?.categories ?? [];
+  const monthPlan = financeData?.monthPlan?.monthPlan ?? null;
   const activeCategories = categories.filter((c) => !c.archivedAt);
   const categoryMap = new Map(categories.map((c) => [c.id, c]));
   const currency = summary?.currencyCode ?? "USD";
@@ -168,13 +172,7 @@ export function FinancePage() {
   // Month pace: what day of month, how far through
   const dayOfMonth = new Date(`${today}T12:00:00`).getDate();
   const daysInMonth = new Date(Number(selectedMonth.split("-")[0]), Number(selectedMonth.split("-")[1]), 0).getDate();
-  const monthProgress = isCurrentMonth ? dayOfMonth / daysInMonth : 1;
-
-  // Previous month comparison
   const prevTotal = summary?.previousMonthTotalSpentMinor ?? 0;
-  const monthDelta = prevTotal > 0
-    ? Math.round(((summary?.totalSpentMinor ?? 0) - prevTotal) / prevTotal * 100)
-    : 0;
 
   // Expenses grouped by day (sorted newest first)
   const sortedExpenses = useMemo(() => {
@@ -426,15 +424,9 @@ export function FinancePage() {
     return `Due ${formatShortDate(bill.dueOn)}`;
   }
 
-  const pacePercent = Math.min(monthProgress * 100, 100);
-  const spendPercent = summary && prevTotal > 0
-    ? Math.min(((summary.totalSpentMinor ?? 0) / prevTotal) * 100, 120)
-    : pacePercent;
-  const paceClass = spendPercent > pacePercent * 1.15
-    ? "rail-card__pace-fill--over"
-    : spendPercent > pacePercent * 0.9
-      ? "rail-card__pace-fill--warn"
-      : "rail-card__pace-fill--ok";
+  async function handleMonthPlanSave(payload: Parameters<typeof updateFinanceMonthPlanMutation.mutateAsync>[0]) {
+    await updateFinanceMonthPlanMutation.mutateAsync(payload);
+  }
 
   // ── Render ──
 
@@ -514,11 +506,23 @@ export function FinancePage() {
 
         <div className="money-now__cell money-now__cell--accent">
           <span className="money-now__label">Month pace</span>
-          <span className="money-now__value">
-            {formatMinorCurrency(summary?.totalSpentMinor ?? 0, currency)}
+          <span className={`money-now__value${monthPlan?.paceStatus === "off_track" ? " money-now__value--negative" : monthPlan?.paceStatus === "on_pace" ? " money-now__value--positive" : ""}`}>
+            {monthPlan?.paceStatus === "no_plan"
+              ? "Set a plan"
+              : monthPlan?.paceStatus === "on_pace"
+                ? "On pace"
+                : monthPlan?.paceStatus === "slightly_heavy"
+                  ? "Slightly heavy"
+                  : monthPlan?.paceStatus === "off_track"
+                    ? "Off track"
+                    : formatMinorCurrency(summary?.totalSpentMinor ?? 0, currency)}
           </span>
           <span className="money-now__detail">
-            {isCurrentMonth ? `Day ${dayOfMonth} of ${daysInMonth}` : formatMonthLabel(selectedMonth)}
+            {monthPlan?.expectedSpendToDateMinor != null
+              ? `${formatMinorCurrency(summary?.totalSpentMinor ?? 0, currency)} spent against ${formatMinorCurrency(monthPlan.expectedSpendToDateMinor, currency)}`
+              : isCurrentMonth
+                ? `Day ${dayOfMonth} of ${daysInMonth}`
+                : formatMonthLabel(selectedMonth)}
           </span>
         </div>
 
@@ -808,26 +812,18 @@ export function FinancePage() {
 
         {/* ── Side Rail: Month Insight ── */}
         <div className="finance__rail">
-          {/* Month total */}
-          <div className="rail-card">
-            <span className="rail-card__title">Month total</span>
-            <span className="rail-card__hero">
-              {formatMinorCurrency(summary?.totalSpentMinor ?? 0, currency)}
-            </span>
-            {prevTotal > 0 && (
-              <span className={`rail-card__detail${monthDelta > 0 ? " rail-card__detail--negative" : " rail-card__detail--positive"}`}>
-                {monthDelta > 0 ? "+" : ""}{monthDelta}% vs last month
-              </span>
-            )}
-            {isCurrentMonth && (
-              <div className="rail-card__pace-track">
-                <div
-                  className={`rail-card__pace-fill ${paceClass}`}
-                  style={{ width: `${Math.min(spendPercent, 100)}%` }}
-                />
-              </div>
-            )}
-          </div>
+          <FinancePlanPanel
+            monthPlan={monthPlan}
+            monthTotalSpentMinor={summary?.totalSpentMinor ?? 0}
+            previousMonthTotalSpentMinor={prevTotal}
+            currencyCode={currency}
+            categories={activeCategories}
+            isCurrentMonth={isCurrentMonth}
+            errorMessage={financeQuery.data.sectionErrors.monthPlan?.message ?? null}
+            isSaving={updateFinanceMonthPlanMutation.isPending}
+            onRetry={() => void financeQuery.refetch()}
+            onSave={handleMonthPlanSave}
+          />
 
           {/* Top categories */}
           {summary && summary.categoryTotals.length > 0 && (

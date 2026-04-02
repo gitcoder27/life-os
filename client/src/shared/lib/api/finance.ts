@@ -43,6 +43,56 @@ type FinanceSummaryResponse = {
   }>;
 };
 
+export type FinancePaceStatus = "no_plan" | "on_pace" | "slightly_heavy" | "off_track";
+export type FinanceWatchStatus = "within_limit" | "near_limit" | "over_limit";
+
+export type FinanceMonthPlanItem = {
+  id: string | null;
+  month: string;
+  plannedSpendMinor: number | null;
+  fixedObligationsMinor: number | null;
+  flexibleSpendTargetMinor: number | null;
+  plannedIncomeMinor: number | null;
+  expectedLargeExpensesMinor: number | null;
+  categoryWatches: Array<{
+    expenseCategoryId: string;
+    name: string;
+    color: string | null;
+    watchLimitMinor: number;
+    actualSpentMinor: number;
+    status: FinanceWatchStatus;
+  }>;
+  billTimeline: {
+    today: FinanceSummaryResponse["upcomingBills"];
+    thisWeek: FinanceSummaryResponse["upcomingBills"];
+    laterThisMonth: FinanceSummaryResponse["upcomingBills"];
+  };
+  paceStatus: FinancePaceStatus;
+  paceSummary: string;
+  expectedSpendToDateMinor: number | null;
+  remainingPlannedSpendMinor: number | null;
+  remainingFlexibleSpendMinor: number | null;
+};
+
+export type FinanceMonthPlanResponse = {
+  generatedAt: string;
+  monthPlan: FinanceMonthPlanItem;
+};
+
+export type UpdateFinanceMonthPlanRequest = {
+  plannedSpendMinor?: number | null;
+  fixedObligationsMinor?: number | null;
+  flexibleSpendTargetMinor?: number | null;
+  plannedIncomeMinor?: number | null;
+  expectedLargeExpensesMinor?: number | null;
+  categoryWatches?: Array<{
+    expenseCategoryId: string;
+    watchLimitMinor: number;
+  }>;
+};
+
+type FinanceMonthPlanMutationResponse = FinanceMonthPlanResponse;
+
 type ExpensesResponse = {
   generatedAt: string;
   from: string;
@@ -147,7 +197,13 @@ export const useFinanceDataQuery = (month: string) => {
   return useQuery({
     queryKey: queryKeys.finance(month),
     queryFn: async () => {
-      const [summaryResult, expensesResult, recurringExpensesResult, categoriesResult] =
+      const [
+        summaryResult,
+        expensesResult,
+        recurringExpensesResult,
+        categoriesResult,
+        monthPlanResult,
+      ] =
         await Promise.allSettled([
           apiRequest<FinanceSummaryResponse>("/api/finance/summary", {
             query: { month },
@@ -157,6 +213,9 @@ export const useFinanceDataQuery = (month: string) => {
           }),
           apiRequest<RecurringExpensesResponse>("/api/finance/recurring-expenses"),
           apiRequest<FinanceCategoriesResponse>("/api/finance/categories"),
+          apiRequest<FinanceMonthPlanResponse>("/api/finance/month-plan", {
+            query: { month },
+          }),
         ]);
 
       return {
@@ -167,6 +226,10 @@ export const useFinanceDataQuery = (month: string) => {
             ? recurringExpensesResult.value
             : null,
         categories: categoriesResult.status === "fulfilled" ? categoriesResult.value : null,
+        monthPlan:
+          monthPlanResult.status === "fulfilled"
+            ? monthPlanResult.value
+            : null,
         sectionErrors: {
           expenses:
             expensesResult.status === "rejected"
@@ -179,6 +242,10 @@ export const useFinanceDataQuery = (month: string) => {
           categories:
             categoriesResult.status === "rejected"
               ? toSectionError(categoriesResult.reason, "Categories could not load.")
+              : null,
+          monthPlan:
+            monthPlanResult.status === "rejected"
+              ? toSectionError(monthPlanResult.reason, "Monthly plan could not load.")
               : null,
         },
       };
@@ -377,5 +444,26 @@ export const useUpdateRecurringExpenseMutation = () => {
       errorMessage: "Recurring expense update failed.",
     },
     onSuccess: () => invalidateFinanceCollections(queryClient),
+  });
+};
+
+export const useUpdateFinanceMonthPlanMutation = (month: string) => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (payload: UpdateFinanceMonthPlanRequest) =>
+      apiRequest<FinanceMonthPlanMutationResponse>("/api/finance/month-plan", {
+        method: "PUT",
+        query: { month },
+        body: payload,
+      }),
+    meta: {
+      successMessage: "Monthly plan updated.",
+      errorMessage: "Monthly plan update failed.",
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.finance(month) });
+      void queryClient.invalidateQueries({ queryKey: ["finance"] });
+    },
   });
 };
