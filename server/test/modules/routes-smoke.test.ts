@@ -1900,6 +1900,7 @@ describe("module route smoke tests", () => {
     prisma.routineItemCheckin = {
       findMany: vi.fn().mockResolvedValue([]),
       upsert: vi.fn().mockResolvedValue({}),
+      deleteMany: vi.fn().mockResolvedValue({ count: 1 }),
     } as any;
     prisma.cyclePriority = {
       findMany: vi.fn().mockResolvedValue([
@@ -1978,6 +1979,11 @@ describe("module route smoke tests", () => {
       url: "/api/routine-items/routine-item-1/checkins",
       payload: {},
     });
+    const routineItemCheckinDelete = await app!.inject({
+      method: "DELETE",
+      url: "/api/routine-items/routine-item-1/checkins",
+      query: { date: "2026-03-21" },
+    });
 
     expect(habitsList.statusCode).toBe(200);
     expect(habitsCreate.statusCode).toBe(201);
@@ -1987,6 +1993,7 @@ describe("module route smoke tests", () => {
     expect(routinesCreate.statusCode).toBe(201);
     expect(routinesPatch.statusCode).toBe(200);
     expect(routineItemCheckin.statusCode).toBe(200);
+    expect(routineItemCheckinDelete.statusCode).toBe(200);
   });
 
   it("supports temporary habit pause windows", async () => {

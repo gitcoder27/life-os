@@ -209,3 +209,24 @@ export const createRoutineItemCheckin = async (
     routine: serializeRoutine(await loadRoutineById(app.prisma, item.routineId, targetDate)),
   });
 };
+
+export const deleteRoutineItemCheckin = async (
+  app: HabitsApp,
+  userId: string,
+  itemId: string,
+  payload: RoutineItemCheckinRequest,
+): Promise<RoutineMutationResponse> => {
+  const item = await findOwnedRoutineItem(app.prisma, userId, itemId);
+  const targetDate = parseIsoDate(payload.date ?? (await getTodayContext(app, userId)).targetIsoDate);
+
+  await app.prisma.routineItemCheckin.deleteMany({
+    where: {
+      routineItemId: item.id,
+      occurredOn: targetDate,
+    },
+  });
+
+  return withGeneratedAt({
+    routine: serializeRoutine(await loadRoutineById(app.prisma, item.routineId, targetDate)),
+  });
+};

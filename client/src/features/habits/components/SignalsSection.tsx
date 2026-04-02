@@ -1,0 +1,89 @@
+import { InlineErrorState } from "../../../shared/ui/PageState";
+
+import type { WeeklyChallenge } from "../types";
+import { ChallengeProgressRing } from "./ChallengeProgressRing";
+
+type SignalsSectionProps = {
+  weeklyChallenge: WeeklyChallenge;
+  isMomentumError: boolean;
+  momentumErrorMessage?: string;
+  onRetry: () => void;
+};
+
+export function SignalsSection({
+  weeklyChallenge,
+  isMomentumError,
+  momentumErrorMessage,
+  onRetry,
+}: SignalsSectionProps) {
+  return (
+    <div className="habits-signals">
+      {weeklyChallenge ? (
+        <WeeklyChallengeCard weeklyChallenge={weeklyChallenge} />
+      ) : null}
+
+      {isMomentumError ? (
+        <InlineErrorState
+          message={momentumErrorMessage ?? "Consistency data could not load."}
+          onRetry={onRetry}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+function WeeklyChallengeCard({
+  weeklyChallenge,
+}: {
+  weeklyChallenge: NonNullable<WeeklyChallenge>;
+}) {
+  const isDueAndIncomplete =
+    weeklyChallenge.status === "due_today" && !weeklyChallenge.completedToday;
+
+  return (
+    <div
+      className={`challenge-card${weeklyChallenge.status === "behind" ? " challenge-card--behind" : ""}`}
+      style={{ cursor: "default" }}
+    >
+      <ChallengeProgressRing
+        completions={weeklyChallenge.weekCompletions}
+        target={weeklyChallenge.weekTarget}
+      />
+      <div className="challenge-card__body">
+        <div className="challenge-card__label">This week's commitment</div>
+        <div className="challenge-card__title">{weeklyChallenge.title}</div>
+        <div className="challenge-card__meta">
+          {weeklyChallenge.weekCompletions}/{weeklyChallenge.weekTarget} this week
+          {weeklyChallenge.streakCount > 0
+            ? ` \u00b7 ${weeklyChallenge.streakCount} day streak`
+            : ""}
+          {isDueAndIncomplete ? " \u00b7 due today" : ""}
+        </div>
+        {weeklyChallenge.message ? (
+          <div
+            className="challenge-card__meta"
+            style={{ marginTop: "0.15rem", fontStyle: "italic" }}
+          >
+            {weeklyChallenge.message}
+          </div>
+        ) : null}
+        <div className="challenge-card__hint">Set during your weekly review</div>
+      </div>
+      <span className="challenge-card__status">
+        {weeklyChallenge.completedToday ? (
+          <span className="tag tag--positive">done today</span>
+        ) : (
+          <span
+            className={`tag ${weeklyChallenge.status === "on_track" ? "tag--positive" : weeklyChallenge.status === "due_today" ? "tag--warning" : "tag--negative"}`}
+          >
+            {weeklyChallenge.status === "on_track"
+              ? "on track"
+              : weeklyChallenge.status === "due_today"
+                ? "due today"
+                : "behind"}
+          </span>
+        )}
+      </span>
+    </div>
+  );
+}

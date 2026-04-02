@@ -1,436 +1,20 @@
-import { type CSSProperties, type FormEvent, useState } from "react";
-
-import {
-  type RoutineItemEntry,
-  RoutineItemEditor,
-  createEmptyItem,
-  makeItemKey,
-} from "./RoutineItemEditor";
-import {
-  getTodayDate,
-  useCreateHabitPauseWindowMutation,
-  useCreateHabitMutation,
-  useCreateRoutineMutation,
-  useDailyScoreQuery,
-  useDeleteHabitPauseWindowMutation,
-  useGoalsListQuery,
-  useHabitCheckinMutation,
-  useHabitsQuery,
-  useRoutineCheckinMutation,
-  useUpdateHabitMutation,
-  useUpdateRoutineMutation,
-  useWeeklyMomentumQuery,
-} from "../../shared/lib/api";
-import {
-  type RecurrenceRuleInput,
-  formatFullRecurrenceSummary,
-  isRecurring,
-} from "../../shared/lib/recurrence";
 import { PageHeader } from "../../shared/ui/PageHeader";
 import {
-  InlineErrorState,
   PageErrorState,
   PageLoadingState,
 } from "../../shared/ui/PageState";
-import { RecurrenceEditor, buildRecurrenceInput } from "../../shared/ui/RecurrenceEditor";
 
-/* ── Progress Ring (weekly challenge) ── */
-
-function ChallengeProgressRing({ completions, target }: { completions: number; target: number }) {
-  const radius = 16;
-  const circumference = 2 * Math.PI * radius;
-  const progress = target > 0 ? Math.min(completions / target, 1) : 0;
-  const offset = circumference * (1 - progress);
-
-  return (
-    <svg className="challenge-card__progress-ring" viewBox="0 0 40 40">
-      <circle className="ring-bg" cx="20" cy="20" r={radius} />
-      <circle
-        className="ring-fill"
-        cx="20"
-        cy="20"
-        r={radius}
-        strokeDasharray={circumference}
-        strokeDashoffset={offset}
-        transform="rotate(-90 20 20)"
-      />
-    </svg>
-  );
-}
-
-function getScoreColor(value: number) {
-  if (value >= 85) return "var(--positive)";
-  if (value >= 70) return "var(--accent-bright)";
-  if (value >= 50) return "var(--accent)";
-  return "var(--negative)";
-}
-
-function HabitScoreRing({ value, color }: { value: number; color: string }) {
-  const size = 50;
-  const strokeWidth = 4;
-  const radius = (size - strokeWidth * 2) / 2;
-  const circumference = 2 * Math.PI * radius;
-  const offset = circumference - (value / 100) * circumference;
-
-  return (
-    <div className="habits-score-strip__ring" style={{ width: size, height: size }}>
-      <svg viewBox={`0 0 ${size} ${size}`} width={size} height={size}>
-        <circle
-          cx={size / 2}
-          cy={size / 2}
-          r={radius}
-          fill="none"
-          stroke="rgba(255,255,255,0.06)"
-          strokeWidth={strokeWidth}
-        />
-        <circle
-          cx={size / 2}
-          cy={size / 2}
-          r={radius}
-          fill="none"
-          stroke={color}
-          strokeWidth={strokeWidth}
-          strokeLinecap="round"
-          strokeDasharray={circumference}
-          strokeDashoffset={offset}
-          transform={`rotate(-90 ${size / 2} ${size / 2})`}
-          className="habits-score-strip__ring-progress"
-        />
-      </svg>
-      <span className="habits-score-strip__ring-value">{value}</span>
-    </div>
-  );
-}
-
-/* ── Habit Form ── */
-
-type HabitFormValues = {
-  title: string;
-  category: string;
-  targetPerDay: string;
-  recurrenceRule: RecurrenceRuleInput | null;
-  goalId: string;
-};
-
-const emptyHabitForm: HabitFormValues = { title: "", category: "", targetPerDay: "1", recurrenceRule: null, goalId: "" };
-
-function HabitForm({
-  initial = emptyHabitForm,
-  submitLabel,
-  isPending,
-  onSubmit,
-  onCancel,
-}: {
-  initial?: HabitFormValues;
-  submitLabel: string;
-  isPending: boolean;
-  onSubmit: (values: HabitFormValues) => void;
-  onCancel: () => void;
-}) {
-  const today = getTodayDate();
-  const [values, setValues] = useState<HabitFormValues>(initial);
-  const [showAdvanced, setShowAdvanced] = useState(
-    Boolean(initial.category || initial.goalId || Number(initial.targetPerDay) > 1)
-  );
-  const goalsQuery = useGoalsListQuery();
-  const activeGoals = (goalsQuery.data?.goals ?? []).filter((g) => g.status === "active");
-
-  function handleSubmit(event: FormEvent) {
-    event.preventDefault();
-    if (!values.title.trim()) return;
-    onSubmit(values);
-  }
-
-  return (
-    <form className="manage-form" onSubmit={handleSubmit}>
-      <div className="manage-form__fields">
-        <label className="field">
-          <span>Title</span>
-          <input
-            type="text"
-            placeholder="e.g. Morning workout"
-            value={values.title}
-            onChange={(e) => setValues((v) => ({ ...v, title: e.target.value }))}
-            autoFocus
-          />
-        </label>
-        <div className="manage-form__section">
-          <span className="manage-form__section-label">Schedule</span>
-          <RecurrenceEditor
-            value={values.recurrenceRule}
-            onChange={(rule) => setValues((v) => ({ ...v, recurrenceRule: rule }))}
-            context="habit"
-            startsOn={values.recurrenceRule?.startsOn ?? today}
-          />
-        </div>
-        {!showAdvanced ? (
-          <button
-            className="habits-advanced-toggle"
-            type="button"
-            onClick={() => setShowAdvanced(true)}
-          >
-            More options
-          </button>
-        ) : (
-          <>
-            <div className="manage-form__row">
-              <label className="field" style={{ flex: 1 }}>
-                <span>Category</span>
-                <input
-                  type="text"
-                  placeholder="General"
-                  value={values.category}
-                  onChange={(e) => setValues((v) => ({ ...v, category: e.target.value }))}
-                />
-              </label>
-              <label className="field" style={{ width: "6rem" }}>
-                <span>Target / day</span>
-                <input
-                  type="number"
-                  min="1"
-                  max="10"
-                  value={values.targetPerDay}
-                  onChange={(e) => setValues((v) => ({ ...v, targetPerDay: e.target.value }))}
-                />
-              </label>
-            </div>
-            <label className="field">
-              <span>Linked goal (optional)</span>
-              <select
-                value={values.goalId}
-                onChange={(e) => setValues((v) => ({ ...v, goalId: e.target.value }))}
-              >
-                <option value="">None</option>
-                {activeGoals.map((g) => (
-                  <option key={g.id} value={g.id}>{g.title}</option>
-                ))}
-              </select>
-            </label>
-          </>
-        )}
-      </div>
-      <div className="button-row button-row--tight">
-        <button className="button button--primary button--small" type="submit" disabled={isPending || !values.title.trim()}>
-          {isPending ? "Saving..." : submitLabel}
-        </button>
-        <button className="button button--ghost button--small" type="button" onClick={onCancel}>
-          Cancel
-        </button>
-      </div>
-    </form>
-  );
-}
-
-/* ── Routine Form ── */
-
-type RoutineFormValues = {
-  name: string;
-  items: RoutineItemEntry[];
-};
-
-const emptyRoutineForm: RoutineFormValues = { name: "", items: [createEmptyItem()] };
-
-function buildRoutineFormItems(items: Array<{ id: string; title: string; sortOrder: number; isRequired: boolean }>): RoutineItemEntry[] {
-  return [...items]
-    .sort((a, b) => a.sortOrder - b.sortOrder)
-    .map((item) => ({ key: item.id, id: item.id, title: item.title, isRequired: item.isRequired }));
-}
-
-function RoutineForm({
-  initial = emptyRoutineForm,
-  submitLabel,
-  isPending,
-  onSubmit,
-  onCancel,
-}: {
-  initial?: RoutineFormValues;
-  submitLabel: string;
-  isPending: boolean;
-  onSubmit: (values: RoutineFormValues) => void;
-  onCancel: () => void;
-}) {
-  const [values, setValues] = useState<RoutineFormValues>(initial);
-
-  function handleSubmit(event: FormEvent) {
-    event.preventDefault();
-    if (!values.name.trim()) return;
-    const nonEmptyItems = values.items.filter((i) => i.title.trim());
-    if (nonEmptyItems.length === 0) return;
-    onSubmit({ ...values, items: nonEmptyItems });
-  }
-
-  return (
-    <form className="manage-form" onSubmit={handleSubmit}>
-      <div className="manage-form__fields">
-        <label className="field">
-          <span>Name</span>
-          <input
-            type="text"
-            placeholder="e.g. Night routine"
-            value={values.name}
-            onChange={(e) => setValues((v) => ({ ...v, name: e.target.value }))}
-            autoFocus
-          />
-        </label>
-        <RoutineItemEditor
-          items={values.items}
-          onChange={(items) => setValues((v) => ({ ...v, items }))}
-        />
-      </div>
-      <div className="button-row button-row--tight">
-        <button className="button button--primary button--small" type="submit" disabled={isPending || !values.name.trim() || !values.items.some((i) => i.title.trim())}>
-          {isPending ? "Saving..." : submitLabel}
-        </button>
-        <button className="button button--ghost button--small" type="button" onClick={onCancel}>
-          Cancel
-        </button>
-      </div>
-    </form>
-  );
-}
-
-/* ── Pause Window Helpers ── */
-
-type HabitPauseFormValues = {
-  startsOn: string;
-  endsOn: string;
-  note: string;
-};
-
-function formatPauseDate(isoDate: string) {
-  try {
-    return new Date(`${isoDate}T12:00:00`).toLocaleDateString(undefined, {
-      month: "short",
-      day: "numeric",
-    });
-  } catch {
-    return isoDate;
-  }
-}
-
-function formatPauseWindowLabel(window: {
-  kind: "rest_day" | "vacation";
-  startsOn: string;
-  endsOn: string;
-  isActiveToday: boolean;
-}) {
-  const kindLabel = window.kind === "rest_day" ? "Rest day" : "Vacation";
-  const dateLabel =
-    window.startsOn === window.endsOn
-      ? formatPauseDate(window.startsOn)
-      : `${formatPauseDate(window.startsOn)} to ${formatPauseDate(window.endsOn)}`;
-
-  return `${kindLabel}${window.isActiveToday ? " now" : ""} \u00b7 ${dateLabel}`;
-}
-
-function getPauseWindowActionLabel(window: {
-  kind: "rest_day" | "vacation";
-  isActiveToday: boolean;
-}) {
-  if (window.kind === "vacation") {
-    return window.isActiveToday ? "End vacation" : "Remove vacation";
-  }
-
-  return window.isActiveToday ? "End rest day" : "Remove rest day";
-}
-
-/* ── Collapsible Section ── */
-
-function CollapsibleSection({
-  title,
-  subtitle,
-  defaultOpen = false,
-  trailing,
-  children,
-}: {
-  title: string;
-  subtitle?: string;
-  defaultOpen?: boolean;
-  trailing?: React.ReactNode;
-  children: React.ReactNode;
-}) {
-  const [isOpen, setIsOpen] = useState(defaultOpen);
-
-  return (
-    <div className="habits-collapsible">
-      <button
-        type="button"
-        className="habits-collapsible__toggle"
-        onClick={() => setIsOpen((v) => !v)}
-      >
-        <div>
-          <h2 className="habits-collapsible__title">{title}</h2>
-          {subtitle ? <p className="habits-collapsible__subtitle">{subtitle}</p> : null}
-        </div>
-        <div className="habits-collapsible__right">
-          {trailing ?? null}
-          <span className={`habits-collapsible__chevron${isOpen ? " habits-collapsible__chevron--open" : ""}`}>
-            &#x25B8;
-          </span>
-        </div>
-      </button>
-      {isOpen ? <div className="habits-collapsible__body">{children}</div> : null}
-    </div>
-  );
-}
-
-/* ── Main Page ── */
+import { DailyFocusSection } from "./components/DailyFocusSection";
+import { HabitsScoreStrip } from "./components/HabitsScoreStrip";
+import { ManageHabitsSection } from "./components/ManageHabitsSection";
+import { ManageRoutinesSection } from "./components/ManageRoutinesSection";
+import { SignalsSection } from "./components/SignalsSection";
+import { useHabitsPageController } from "./useHabitsPageController";
 
 export function HabitsPage() {
-  const today = getTodayDate();
-  const habitsQuery = useHabitsQuery();
-  const scoreQuery = useDailyScoreQuery(today);
-  const weeklyMomentumQuery = useWeeklyMomentumQuery(today);
-  const habitCheckinMutation = useHabitCheckinMutation(today);
-  const routineCheckinMutation = useRoutineCheckinMutation(today);
-  const createHabitMutation = useCreateHabitMutation();
-  const updateHabitMutation = useUpdateHabitMutation();
-  const createHabitPauseWindowMutation = useCreateHabitPauseWindowMutation();
-  const deleteHabitPauseWindowMutation = useDeleteHabitPauseWindowMutation();
-  const createRoutineMutation = useCreateRoutineMutation();
-  const updateRoutineMutation = useUpdateRoutineMutation();
+  const controller = useHabitsPageController();
 
-  /* UI state */
-  const [showAddHabit, setShowAddHabit] = useState(false);
-  const [editingHabitId, setEditingHabitId] = useState<string | null>(null);
-  const [vacationHabitId, setVacationHabitId] = useState<string | null>(null);
-  const [vacationForm, setVacationForm] = useState<HabitPauseFormValues>({
-    startsOn: today,
-    endsOn: today,
-    note: "",
-  });
-  const [showAddRoutine, setShowAddRoutine] = useState(false);
-  const [editingRoutineId, setEditingRoutineId] = useState<string | null>(null);
-  const [confirmArchiveHabitId, setConfirmArchiveHabitId] = useState<string | null>(null);
-  const [confirmArchiveRoutineId, setConfirmArchiveRoutineId] = useState<string | null>(null);
-
-  /* Derived data */
-  const dueHabits = habitsQuery.data?.dueHabits ?? [];
-  const allHabits = habitsQuery.data?.habits ?? [];
-  const nonArchivedHabits = allHabits.filter((h) => h.status !== "archived");
-  const archivedHabits = allHabits.filter((h) => h.status === "archived");
-  const weeklyChallenge = habitsQuery.data?.weeklyChallenge ?? null;
-  const routines = [...(habitsQuery.data?.routines ?? [])].sort((left, right) => left.sortOrder - right.sortOrder);
-  const activeRoutines = routines.filter((r) => r.status === "active");
-  const nonArchivedRoutines = routines.filter((r) => r.status !== "archived");
-  const archivedRoutines = routines.filter((r) => r.status === "archived");
-  const consistencyBars = weeklyMomentumQuery.data?.dailyScores ?? [];
-  const score = scoreQuery.data;
-  const scorePercent = score
-    ? Math.round((score.earnedPoints / Math.max(score.possiblePoints, 1)) * 100)
-    : 0;
-  const dueCompletedUnits = dueHabits.reduce(
-    (sum, habit) => sum + Math.min(habit.completedCountToday, habit.targetPerDay),
-    0,
-  );
-  const dueTargetUnits = dueHabits.reduce((sum, habit) => sum + habit.targetPerDay, 0);
-  const routineCompleted = activeRoutines.reduce((sum, routine) => sum + routine.completedItems, 0);
-  const routineTotal = activeRoutines.reduce((sum, routine) => sum + routine.totalItems, 0);
-  const strongDayStreak = weeklyMomentumQuery.data?.strongDayStreak ?? 0;
-  const statsCount = strongDayStreak > 0 ? 4 : 3;
-
-  /* Loading & error */
-  if (habitsQuery.isLoading && !habitsQuery.data) {
+  if (controller.habitsQuery.isLoading && !controller.habitsQuery.data) {
     return (
       <PageLoadingState
         title="Loading habits"
@@ -439,249 +23,17 @@ export function HabitsPage() {
     );
   }
 
-  if (habitsQuery.isError || !habitsQuery.data) {
+  if (controller.habitsQuery.isError || !controller.habitsQuery.data) {
     return (
       <PageErrorState
         title="Habits could not load"
-        message={habitsQuery.error instanceof Error ? habitsQuery.error.message : undefined}
-        onRetry={() => void habitsQuery.refetch()}
+        message={
+          controller.habitsQuery.error instanceof Error
+            ? controller.habitsQuery.error.message
+            : undefined
+        }
+        onRetry={() => void controller.habitsQuery.refetch()}
       />
-    );
-  }
-
-  /* ── Handlers ── */
-
-  function handleCreateHabit(values: HabitFormValues) {
-    createHabitMutation.mutate(
-      {
-        title: values.title.trim(),
-        category: values.category.trim() || null,
-        targetPerDay: Math.max(1, Number.parseInt(values.targetPerDay, 10) || 1),
-        recurrence: values.recurrenceRule ? buildRecurrenceInput(values.recurrenceRule) : undefined,
-        goalId: values.goalId || null,
-      },
-      { onSuccess: () => setShowAddHabit(false) },
-    );
-  }
-
-  function handleUpdateHabit(habitId: string, values: HabitFormValues) {
-    updateHabitMutation.mutate(
-      {
-        habitId,
-        title: values.title.trim(),
-        category: values.category.trim() || null,
-        targetPerDay: Math.max(1, Number.parseInt(values.targetPerDay, 10) || 1),
-        recurrence: values.recurrenceRule ? buildRecurrenceInput(values.recurrenceRule) : undefined,
-        goalId: values.goalId || null,
-      },
-      { onSuccess: () => setEditingHabitId(null) },
-    );
-  }
-
-  function handlePermanentHabitStatusChange(habitId: string, status: "active" | "paused" | "archived") {
-    updateHabitMutation.mutate({ habitId, status });
-  }
-
-  function handleRestDay(habitId: string) {
-    createHabitPauseWindowMutation.mutate({
-      habitId,
-      kind: "rest_day",
-      startsOn: today,
-      endsOn: today,
-    });
-  }
-
-  function handleOpenVacation(habitId: string) {
-    setVacationHabitId(habitId);
-    setVacationForm({ startsOn: today, endsOn: today, note: "" });
-    setEditingHabitId(null);
-    setShowAddHabit(false);
-  }
-
-  function handleSaveVacation(habitId: string) {
-    createHabitPauseWindowMutation.mutate(
-      {
-        habitId,
-        kind: "vacation",
-        startsOn: vacationForm.startsOn,
-        endsOn: vacationForm.endsOn,
-        note: vacationForm.note.trim() || null,
-      },
-      {
-        onSuccess: () => {
-          setVacationHabitId(null);
-          setVacationForm({ startsOn: today, endsOn: today, note: "" });
-        },
-      },
-    );
-  }
-
-  function handleDeletePauseWindow(habitId: string, pauseWindowId: string) {
-    deleteHabitPauseWindowMutation.mutate({ habitId, pauseWindowId });
-  }
-
-  function handleArchiveHabit(habitId: string) {
-    handlePermanentHabitStatusChange(habitId, "archived");
-    setConfirmArchiveHabitId(null);
-  }
-
-  function handleCreateRoutine(values: RoutineFormValues) {
-    const items = values.items
-      .filter((i) => i.title.trim())
-      .map((item, index) => ({ title: item.title.trim(), sortOrder: index, isRequired: item.isRequired }));
-    if (!items.length) return;
-    createRoutineMutation.mutate(
-      { name: values.name.trim(), items },
-      {
-        onSuccess: () => {
-          setShowAddRoutine(false);
-        },
-      },
-    );
-  }
-
-  function handleUpdateRoutine(routineId: string, values: RoutineFormValues) {
-    const items = values.items
-      .filter((i) => i.title.trim())
-      .map((item, index) => ({ id: item.id, title: item.title.trim(), sortOrder: index, isRequired: item.isRequired }));
-    updateRoutineMutation.mutate(
-      { routineId, name: values.name.trim(), items: items.length ? items : undefined },
-      { onSuccess: () => setEditingRoutineId(null) },
-    );
-  }
-
-  function handleMoveRoutine(routineId: string, sortOrder: number) {
-    updateRoutineMutation.mutate({ routineId, sortOrder });
-  }
-
-  function handleArchiveRoutine(routineId: string) {
-    updateRoutineMutation.mutate({ routineId, status: "archived" });
-    setConfirmArchiveRoutineId(null);
-  }
-
-  /* ── Renderers ── */
-
-  function renderRoutineGroup(routine: (typeof activeRoutines)[number]) {
-    const items = [...routine.items].sort((a, b) => a.sortOrder - b.sortOrder);
-    const allDone = routine.completedItems === items.length && items.length > 0;
-
-    return (
-      <div className="habits-group">
-        <div className="habits-group__header">
-          <span className="habits-group__label">{routine.name}</span>
-          <span className={`habits-group__count${allDone ? " habits-group__count--done" : ""}`}>
-            {routine.completedItems}/{items.length}
-          </span>
-        </div>
-        <div className="habits-group__items">
-          {items
-            .sort((a, b) => a.sortOrder - b.sortOrder)
-            .map((item) => (
-              <button
-                key={item.id}
-                type="button"
-                className={`habits-check-row${item.completedToday ? " habits-check-row--done" : ""}`}
-                onClick={() => { if (!item.completedToday) routineCheckinMutation.mutate(item.id); }}
-                disabled={item.completedToday || routineCheckinMutation.isPending}
-              >
-                <span className={`habits-check-row__box${item.completedToday ? " habits-check-row__box--done" : ""}`}>
-                  {item.completedToday ? "\u2713" : ""}
-                </span>
-                <span className="habits-check-row__title">{item.title}</span>
-              </button>
-            ))}
-        </div>
-      </div>
-    );
-  }
-
-  function renderDueHabitsGroup() {
-    return (
-      <div className="habits-group">
-        <div className="habits-group__header">
-          <span className="habits-group__label">Due today</span>
-          {dueHabits.length > 0 ? (
-            <span className={`habits-group__count${dueCompletedUnits === dueTargetUnits && dueTargetUnits > 0 ? " habits-group__count--done" : ""}`}>
-              {dueCompletedUnits}/{dueTargetUnits}
-            </span>
-          ) : null}
-        </div>
-        {dueHabits.length > 0 ? (
-          <div className="habits-group__items">
-            {dueHabits.map((habit) => {
-              const riskLevel = habit.risk?.level ?? "none";
-              return (
-                <div
-                  key={habit.id}
-                  className={`habits-check-row habits-check-row--habit${riskLevel === "at_risk" ? " habits-check-row--at-risk" : riskLevel === "drifting" ? " habits-check-row--drifting" : ""}`}
-                >
-                  <button
-                    className={`habits-check-row__box${habit.completedToday ? " habits-check-row__box--done" : ""}`}
-                    type="button"
-                    onClick={() => { if (!habit.completedToday) habitCheckinMutation.mutate(habit.id); }}
-                    disabled={habit.completedToday || habitCheckinMutation.isPending}
-                    aria-label={`Log progress for ${habit.title}`}
-                  >
-                    {habit.completedToday ? "\u2713" : ""}
-                  </button>
-                  <div className="habits-check-row__body">
-                    <div className="habits-check-row__title">
-                      {habit.title}
-                      {riskLevel !== "none" ? (
-                        <span className={`risk-badge risk-badge--${riskLevel === "at_risk" ? "at-risk" : "drifting"}`}>
-                          {riskLevel === "at_risk" ? "at risk" : "drifting"}
-                        </span>
-                      ) : null}
-                    </div>
-                    {(habit.risk?.message || habit.risk?.dueCount7d) ? (
-                      <div className="habits-check-row__meta">
-                        <span>{Math.min(habit.completedCountToday, habit.targetPerDay)}/{habit.targetPerDay} today</span>
-                        {habit.risk && habit.risk.dueCount7d > 0 ? (
-                          <span>{habit.risk.completedCount7d}/{habit.risk.dueCount7d} last 7 days</span>
-                        ) : null}
-                        {habit.risk?.message ? <span>{habit.risk.message}</span> : null}
-                      </div>
-                    ) : null}
-                  </div>
-                  <div className="habits-check-row__actions">
-                    {!habit.completedToday ? (
-                      <button
-                        className="habits-rest-btn"
-                        type="button"
-                        onClick={() => handleRestDay(habit.id)}
-                        disabled={createHabitPauseWindowMutation.isPending}
-                        title="Take a rest day"
-                      >
-                        rest
-                      </button>
-                    ) : null}
-                    {habit.streakCount > 0 ? (
-                      <span className="streak-badge">{habit.streakCount} streak</span>
-                    ) : null}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        ) : (
-          <div className="habits-group__empty">
-            <span className="habits-group__empty-text">
-              {allHabits.length === 0
-                ? "No habits configured yet."
-                : "All done or nothing due today."}
-            </span>
-            {allHabits.length === 0 ? (
-              <button
-                className="button button--ghost button--small"
-                type="button"
-                onClick={() => setShowAddHabit(true)}
-              >
-                + Create your first habit
-              </button>
-            ) : null}
-          </div>
-        )}
-      </div>
     );
   }
 
@@ -693,640 +45,112 @@ export function HabitsPage() {
         description="Check in on what matters today, track your streaks, and keep the system working."
       />
 
-      <section className="habits-score-strip" aria-label="Habit score summary">
-        <div className="habits-score-strip__primary">
-          {scoreQuery.isError ? (
-            <>
-              <div className="habits-score-strip__ring-placeholder" />
-              <div className="habits-score-strip__primary-body">
-                <span className="habits-score-strip__eyebrow">Overall score</span>
-                <span className="habits-score-strip__label">Score unavailable</span>
-              </div>
-            </>
-          ) : score ? (
-            <>
-              <HabitScoreRing value={score.value} color={getScoreColor(score.value)} />
-              <div className="habits-score-strip__primary-body">
-                <span className="habits-score-strip__eyebrow">Overall score</span>
-                <div className="habits-score-strip__headline">
-                  <span className="habits-score-strip__label">{score.label}</span>
-                  <span className="habits-score-strip__value">{score.value}</span>
-                </div>
-                <span className="habits-score-strip__pts">
-                  {score.earnedPoints}/{score.possiblePoints} pts ({scorePercent}%)
-                </span>
-              </div>
-            </>
-          ) : (
-            <>
-              <div className="habits-score-strip__ring-placeholder" />
-              <div className="habits-score-strip__primary-body">
-                <span className="habits-score-strip__eyebrow">Overall score</span>
-                <span className="habits-score-strip__label">Loading score...</span>
-              </div>
-            </>
-          )}
-        </div>
+      <HabitsScoreStrip
+        score={controller.score}
+        scoreError={controller.scoreQuery.isError}
+        scorePercent={controller.scorePercent}
+        consistencyBars={controller.consistencyBars}
+        trendError={controller.weeklyMomentumQuery.isError}
+        statsCount={controller.statsCount}
+        dueCompletedUnits={controller.dueCompletedUnits}
+        dueTargetUnits={controller.dueTargetUnits}
+        routineCompleted={controller.routineCompleted}
+        routineTotal={controller.routineTotal}
+        momentumValue={controller.weeklyMomentumQuery.data?.value}
+        strongDayStreak={controller.strongDayStreak}
+      />
 
-        <div className="habits-score-strip__trend">
-          <div className="habits-score-strip__trend-header">
-            <span className="habits-score-strip__trend-label">Daily score trend</span>
-            <span className="habits-score-strip__trend-period">Last 7 days</span>
-          </div>
-          {weeklyMomentumQuery.isError ? (
-            <span className="habits-score-strip__trend-empty">Trend unavailable right now.</span>
-          ) : consistencyBars.length > 0 ? (
-            <div className="habits-score-strip__bars" aria-label="Daily score trend">
-              {consistencyBars.map((day, index) => (
-                <div
-                  key={day.date}
-                  className={`habits-score-strip__bar${index === consistencyBars.length - 1 ? " habits-score-strip__bar--current" : ""}`}
-                  style={{
-                    height: `${Math.max(day.value, 8)}%`,
-                    background: day.value >= 70
-                      ? "linear-gradient(180deg, var(--accent-bright), rgba(217,153,58,0.28))"
-                      : "rgba(255,255,255,0.08)",
-                  }}
-                  title={`${day.date}: ${day.value} (${day.label})`}
-                />
-              ))}
-            </div>
-          ) : (
-            <span className="habits-score-strip__trend-empty">Trend will appear after a few scored days.</span>
-          )}
-        </div>
-
-        <div
-          className="habits-score-strip__stats"
-          style={{ "--stats-count": statsCount } as CSSProperties}
-        >
-          <div className="habits-score-strip__stat">
-            <span className="habits-score-strip__stat-label">Habit progress</span>
-            <span className="habits-score-strip__stat-value">
-              {dueTargetUnits > 0 ? `${dueCompletedUnits}/${dueTargetUnits}` : "None"}
-            </span>
-          </div>
-          <div className="habits-score-strip__stat">
-            <span className="habits-score-strip__stat-label">Routine steps</span>
-            <span className="habits-score-strip__stat-value">
-              {routineTotal > 0 ? `${routineCompleted}/${routineTotal}` : "None"}
-            </span>
-          </div>
-          <div className="habits-score-strip__stat">
-            <span className="habits-score-strip__stat-label">Momentum</span>
-            <span className="habits-score-strip__stat-value">{weeklyMomentumQuery.data?.value ?? "—"}</span>
-          </div>
-          {strongDayStreak > 0 ? (
-            <div className="habits-score-strip__stat">
-              <span className="habits-score-strip__stat-label">Strong days</span>
-              <span className="habits-score-strip__stat-value">{strongDayStreak}</span>
-            </div>
-          ) : null}
-        </div>
-      </section>
-
-      {/* ═══ Daily Focus ═══ */}
-      <div className="habits-daily">
-        {renderDueHabitsGroup()}
-        {activeRoutines.length > 0 ? (
-          activeRoutines.map((routine) => renderRoutineGroup(routine))
-        ) : (
-          <div className="habits-group">
-            <div className="habits-group__header">
-              <span className="habits-group__label">Routines</span>
-            </div>
-            <div className="habits-group__empty">
-              <span className="habits-group__empty-text">No routines set up yet.</span>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* ═══ Signals ═══ */}
-      <div className="habits-signals">
-        {weeklyChallenge ? (() => {
-          const wc = weeklyChallenge;
-          const isDueAndIncomplete = wc.status === "due_today" && !wc.completedToday;
-          return (
-            <div className={`challenge-card${wc.status === "behind" ? " challenge-card--behind" : ""}`} style={{ cursor: "default" }}>
-              <ChallengeProgressRing completions={wc.weekCompletions} target={wc.weekTarget} />
-              <div className="challenge-card__body">
-                <div className="challenge-card__label">This week's commitment</div>
-                <div className="challenge-card__title">{wc.title}</div>
-                <div className="challenge-card__meta">
-                  {wc.weekCompletions}/{wc.weekTarget} this week
-                  {wc.streakCount > 0 ? ` \u00b7 ${wc.streakCount} day streak` : ""}
-                  {isDueAndIncomplete ? " \u00b7 due today" : ""}
-                </div>
-                {wc.message ? (
-                  <div className="challenge-card__meta" style={{ marginTop: "0.15rem", fontStyle: "italic" }}>
-                    {wc.message}
-                  </div>
-                ) : null}
-                <div className="challenge-card__hint">Set during your weekly review</div>
-              </div>
-              <span className="challenge-card__status">
-                {wc.completedToday ? (
-                  <span className="tag tag--positive">done today</span>
-                ) : (
-                  <span className={`tag ${wc.status === "on_track" ? "tag--positive" : wc.status === "due_today" ? "tag--warning" : "tag--negative"}`}>
-                    {wc.status === "on_track" ? "on track" : wc.status === "due_today" ? "due today" : "behind"}
-                  </span>
-                )}
-              </span>
-            </div>
-          );
-        })() : null}
-
-        {weeklyMomentumQuery.isError ? (
-          <InlineErrorState
-            message={weeklyMomentumQuery.error instanceof Error ? weeklyMomentumQuery.error.message : "Consistency data could not load."}
-            onRetry={() => void weeklyMomentumQuery.refetch()}
-          />
-        ) : null}
-      </div>
-
-      {/* ═══ Manage Habits ═══ */}
-      <CollapsibleSection
-        title="Manage habits"
-        subtitle={`${allHabits.filter((h) => h.status === "active").length} active`}
-        defaultOpen={allHabits.length === 0}
-        trailing={
-          !showAddHabit ? (
-            <button
-              className="button button--ghost button--small"
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                setShowAddHabit(true);
-                setEditingHabitId(null);
-                setVacationHabitId(null);
-              }}
-            >
-              + Add habit
-            </button>
-          ) : null
+      <DailyFocusSection
+        allHabits={controller.allHabits}
+        dueHabits={controller.dueHabits}
+        activeRoutines={controller.activeRoutines}
+        dueCompletedUnits={controller.dueCompletedUnits}
+        dueTargetUnits={controller.dueTargetUnits}
+        isHabitCheckinPending={controller.habitCheckinMutation.isPending}
+        isRoutineCheckinPending={
+          controller.routineCheckinMutation.isPending ||
+          controller.deleteRoutineCheckinMutation.isPending
         }
-      >
-        {showAddHabit ? (
-          <HabitForm
-            submitLabel="Create habit"
-            isPending={createHabitMutation.isPending}
-            onSubmit={handleCreateHabit}
-            onCancel={() => setShowAddHabit(false)}
-          />
-        ) : null}
+        isPausePending={controller.createHabitPauseWindowMutation.isPending}
+        onCreateFirstHabit={controller.handleOpenAddHabit}
+        onHabitCheckin={(habitId) => controller.habitCheckinMutation.mutate(habitId)}
+        onRoutineItemCheckin={(itemId) => controller.routineCheckinMutation.mutate(itemId)}
+        onRoutineItemUndo={(itemId) => controller.deleteRoutineCheckinMutation.mutate(itemId)}
+        onRestDay={controller.handleRestDay}
+      />
 
-        {createHabitMutation.error ? (
-          <div className="inline-state inline-state--error" style={{ marginTop: "0.5rem" }}>
-            {createHabitMutation.error instanceof Error ? createHabitMutation.error.message : "Could not create habit."}
-          </div>
-        ) : null}
-
-        {nonArchivedHabits.length > 0 ? (
-          <div className="manage-list">
-            {nonArchivedHabits.map((habit) => (
-              <div key={habit.id} className="manage-list__item">
-                {editingHabitId === habit.id ? (
-                  <HabitForm
-                    initial={{
-                      title: habit.title,
-                      category: habit.category ?? "",
-                      targetPerDay: String(habit.targetPerDay),
-                      recurrenceRule: habit.recurrence?.rule ?? null,
-                      goalId: habit.goalId ?? "",
-                    }}
-                    submitLabel="Save changes"
-                    isPending={updateHabitMutation.isPending}
-                    onSubmit={(values) => handleUpdateHabit(habit.id, values)}
-                    onCancel={() => setEditingHabitId(null)}
-                  />
-                ) : (
-                  <div>
-                    <div className="manage-list__row">
-                      <div className="manage-list__info">
-                        <div className="manage-list__name">
-                          <span className={`status-dot status-dot--${habit.status}`} />
-                          {habit.title}
-                          {habit.pauseWindows.some((w) => w.isActiveToday) ? (
-                            <span className="tag tag--warning" style={{ marginLeft: "0.3rem" }}>paused today</span>
-                          ) : null}
-                        </div>
-                        <div className="manage-list__meta">
-                          {habit.category || "Uncategorized"}
-                          {habit.streakCount > 0 ? ` · ${habit.streakCount} streak` : ""}
-                          {habit.goal ? ` · ${habit.goal.title}` : ""}
-                          {isRecurring(habit.recurrence) && (
-                            <span className="manage-list__recurrence">{" · ↻ "}{formatFullRecurrenceSummary(habit.recurrence!.rule)}</span>
-                          )}
-                        </div>
-                        {habit.pauseWindows.length > 0 ? (
-                          <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem", marginTop: "0.7rem" }}>
-                            {habit.pauseWindows.map((window) => (
-                              <div key={window.id} className="habits-pause-pill">
-                                <span
-                                  className={`habits-pause-pill__label${window.isActiveToday ? " habits-pause-pill__label--active" : ""}`}
-                                  title={window.note ?? undefined}
-                                >
-                                  {formatPauseWindowLabel(window)}
-                                </span>
-                                <button
-                                  className="habits-pause-pill__remove"
-                                  type="button"
-                                  onClick={() => handleDeletePauseWindow(habit.id, window.id)}
-                                  disabled={deleteHabitPauseWindowMutation.isPending}
-                                >
-                                  {getPauseWindowActionLabel(window)}
-                                </button>
-                              </div>
-                            ))}
-                          </div>
-                        ) : null}
-                      </div>
-                      <div className="habits-manage-actions">
-                        <button
-                          className="button button--ghost button--small"
-                          type="button"
-                          onClick={() => { setEditingHabitId(habit.id); setShowAddHabit(false); setVacationHabitId(null); }}
-                        >
-                          Edit
-                        </button>
-                        {habit.status === "active" ? (
-                          <>
-                            <button
-                              className="button button--ghost button--small"
-                              type="button"
-                              onClick={() => handleRestDay(habit.id)}
-                              disabled={createHabitPauseWindowMutation.isPending}
-                            >
-                              Rest day
-                            </button>
-                            <button
-                              className="button button--ghost button--small"
-                              type="button"
-                              onClick={() => handleOpenVacation(habit.id)}
-                            >
-                              Vacation
-                            </button>
-                            <button
-                              className="button button--ghost button--small"
-                              type="button"
-                              onClick={() => handlePermanentHabitStatusChange(habit.id, "paused")}
-                              disabled={updateHabitMutation.isPending}
-                            >
-                              Pause
-                            </button>
-                          </>
-                        ) : habit.status === "paused" ? (
-                          <button
-                            className="button button--ghost button--small"
-                            type="button"
-                            onClick={() => handlePermanentHabitStatusChange(habit.id, "active")}
-                            disabled={updateHabitMutation.isPending}
-                          >
-                            Resume
-                          </button>
-                        ) : null}
-                        {habit.status !== "archived" ? (
-                          confirmArchiveHabitId === habit.id ? (
-                            <span className="confirm-archive">
-                              <span className="confirm-archive__label">Archive?</span>
-                              <button
-                                className="button button--ghost button--small"
-                                type="button"
-                                style={{ color: "var(--negative)" }}
-                                onClick={() => handleArchiveHabit(habit.id)}
-                                disabled={updateHabitMutation.isPending}
-                              >
-                                Yes
-                              </button>
-                              <button
-                                className="button button--ghost button--small"
-                                type="button"
-                                onClick={() => setConfirmArchiveHabitId(null)}
-                              >
-                                No
-                              </button>
-                            </span>
-                          ) : (
-                            <button
-                              className="button button--ghost button--small"
-                              type="button"
-                              style={{ color: "var(--negative)" }}
-                              onClick={() => setConfirmArchiveHabitId(habit.id)}
-                              disabled={updateHabitMutation.isPending}
-                            >
-                              Archive
-                            </button>
-                          )
-                        ) : null}
-                      </div>
-                    </div>
-                    {vacationHabitId === habit.id ? (
-                      <form
-                        className="manage-form"
-                        style={{ marginTop: "0.85rem" }}
-                        onSubmit={(event) => {
-                          event.preventDefault();
-                          handleSaveVacation(habit.id);
-                        }}
-                      >
-                        <div className="manage-form__row">
-                          <label className="field" style={{ flex: 1 }}>
-                            <span>Start date</span>
-                            <input
-                              type="date"
-                              value={vacationForm.startsOn}
-                              onChange={(e) => setVacationForm((current) => {
-                                const startsOn = e.target.value;
-                                const endsOn = current.endsOn < startsOn ? startsOn : current.endsOn;
-                                return { ...current, startsOn, endsOn };
-                              })}
-                              required
-                            />
-                          </label>
-                          <label className="field" style={{ flex: 1 }}>
-                            <span>End date</span>
-                            <input
-                              type="date"
-                              value={vacationForm.endsOn}
-                              min={vacationForm.startsOn}
-                              onChange={(e) => setVacationForm((current) => ({ ...current, endsOn: e.target.value }))}
-                              required
-                            />
-                          </label>
-                        </div>
-                        <label className="field">
-                          <span>Note (optional)</span>
-                          <input
-                            type="text"
-                            value={vacationForm.note}
-                            placeholder="Out of town, sick day, recovery week..."
-                            onChange={(e) => setVacationForm((current) => ({ ...current, note: e.target.value }))}
-                          />
-                        </label>
-                        <div className="button-row button-row--tight">
-                          <button className="button button--primary button--small" type="submit" disabled={createHabitPauseWindowMutation.isPending}>
-                            {createHabitPauseWindowMutation.isPending ? "Saving..." : "Save vacation"}
-                          </button>
-                          <button
-                            className="button button--ghost button--small"
-                            type="button"
-                            onClick={() => setVacationHabitId(null)}
-                          >
-                            Cancel
-                          </button>
-                        </div>
-                      </form>
-                    ) : null}
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-        ) : !showAddHabit ? (
-          <div className="habits-group__empty">
-            <span className="habits-group__empty-text">No habits yet. Add your first habit to start tracking consistency.</span>
-            <button
-              className="button button--ghost button--small"
-              type="button"
-              onClick={() => { setShowAddHabit(true); setVacationHabitId(null); }}
-            >
-              + Add your first habit
-            </button>
-          </div>
-        ) : null}
-
-        {archivedHabits.length > 0 ? (
-          <CollapsibleSection title="Archived habits" subtitle={`${archivedHabits.length} archived`}>
-            <div className="manage-list manage-list--archived">
-              {archivedHabits.map((habit) => (
-                <div key={habit.id} className="manage-list__item">
-                  <div className="manage-list__row">
-                    <div className="manage-list__info">
-                      <div className="manage-list__name">
-                        <span className="status-dot status-dot--archived" />
-                        {habit.title}
-                      </div>
-                      <div className="manage-list__meta">
-                        {habit.category || "Uncategorized"}
-                        {habit.streakCount > 0 ? ` \u00b7 ${habit.streakCount} streak` : ""}
-                      </div>
-                    </div>
-                    <div className="habits-manage-actions">
-                      <button
-                        className="button button--ghost button--small"
-                        type="button"
-                        onClick={() => handlePermanentHabitStatusChange(habit.id, "active")}
-                        disabled={updateHabitMutation.isPending}
-                      >
-                        Restore
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </CollapsibleSection>
-        ) : null}
-
-        {updateHabitMutation.error ? (
-          <div className="inline-state inline-state--error" style={{ marginTop: "0.5rem" }}>
-            {updateHabitMutation.error instanceof Error ? updateHabitMutation.error.message : "Could not update habit."}
-          </div>
-        ) : null}
-        {createHabitPauseWindowMutation.error ? (
-          <div className="inline-state inline-state--error" style={{ marginTop: "0.5rem" }}>
-            {createHabitPauseWindowMutation.error instanceof Error
-              ? createHabitPauseWindowMutation.error.message
-              : "Could not save the temporary pause."}
-          </div>
-        ) : null}
-        {deleteHabitPauseWindowMutation.error ? (
-          <div className="inline-state inline-state--error" style={{ marginTop: "0.5rem" }}>
-            {deleteHabitPauseWindowMutation.error instanceof Error
-              ? deleteHabitPauseWindowMutation.error.message
-              : "Could not remove the temporary pause."}
-          </div>
-        ) : null}
-      </CollapsibleSection>
-
-      {/* ═══ Manage Routines ═══ */}
-      <CollapsibleSection
-        title="Manage routines"
-        subtitle={`${activeRoutines.length} active`}
-        defaultOpen={routines.length === 0}
-        trailing={
-          !showAddRoutine ? (
-            <button
-              className="button button--ghost button--small"
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                setShowAddRoutine(true);
-                setEditingRoutineId(null);
-              }}
-            >
-              + Add routine
-            </button>
-          ) : null
+      <SignalsSection
+        weeklyChallenge={controller.weeklyChallenge}
+        isMomentumError={controller.weeklyMomentumQuery.isError}
+        momentumErrorMessage={
+          controller.weeklyMomentumQuery.error instanceof Error
+            ? controller.weeklyMomentumQuery.error.message
+            : undefined
         }
-      >
-        {showAddRoutine ? (
-          <RoutineForm
-            submitLabel="Create routine"
-            isPending={createRoutineMutation.isPending}
-            onSubmit={handleCreateRoutine}
-            onCancel={() => setShowAddRoutine(false)}
-          />
-        ) : null}
+        onRetry={() => void controller.weeklyMomentumQuery.refetch()}
+      />
 
-        {createRoutineMutation.error ? (
-          <div className="inline-state inline-state--error" style={{ marginTop: "0.5rem" }}>
-            {createRoutineMutation.error instanceof Error ? createRoutineMutation.error.message : "Could not create routine."}
-          </div>
-        ) : null}
+      <ManageHabitsSection
+        allHabits={controller.allHabits}
+        nonArchivedHabits={controller.nonArchivedHabits}
+        archivedHabits={controller.archivedHabits}
+        showAddHabit={controller.showAddHabit}
+        editingHabitId={controller.editingHabitId}
+        vacationHabitId={controller.vacationHabitId}
+        vacationForm={controller.vacationForm}
+        confirmArchiveHabitId={controller.confirmArchiveHabitId}
+        createPending={controller.createHabitMutation.isPending}
+        updatePending={controller.updateHabitMutation.isPending}
+        pausePending={controller.createHabitPauseWindowMutation.isPending}
+        deletePausePending={controller.deleteHabitPauseWindowMutation.isPending}
+        createError={controller.createHabitMutation.error}
+        updateError={controller.updateHabitMutation.error}
+        pauseError={controller.createHabitPauseWindowMutation.error}
+        deletePauseError={controller.deleteHabitPauseWindowMutation.error}
+        onOpenAddHabit={controller.handleOpenAddHabit}
+        onCloseAddHabit={() => controller.setShowAddHabit(false)}
+        onEditHabit={controller.handleEditHabit}
+        onCancelEditHabit={() => controller.setEditingHabitId(null)}
+        onCreateHabit={controller.handleCreateHabit}
+        onUpdateHabit={controller.handleUpdateHabit}
+        onRestDay={controller.handleRestDay}
+        onOpenVacation={controller.handleOpenVacation}
+        onCloseVacation={() => controller.setVacationHabitId(null)}
+        onVacationFormChange={controller.setVacationForm}
+        onSaveVacation={controller.handleSaveVacation}
+        onDeletePauseWindow={controller.handleDeletePauseWindow}
+        onChangeHabitStatus={controller.handlePermanentHabitStatusChange}
+        onRequestArchiveHabit={controller.setConfirmArchiveHabitId}
+        onCancelArchiveHabit={() => controller.setConfirmArchiveHabitId(null)}
+        onConfirmArchiveHabit={controller.handleArchiveHabit}
+      />
 
-        {nonArchivedRoutines.length > 0 ? (
-          <div className="manage-list">
-            {nonArchivedRoutines.map((routine) => (
-              <div key={routine.id} className="manage-list__item">
-                {editingRoutineId === routine.id ? (
-                  <RoutineForm
-                    initial={{
-                      name: routine.name,
-                      items: buildRoutineFormItems(routine.items),
-                    }}
-                    submitLabel="Save changes"
-                    isPending={updateRoutineMutation.isPending}
-                    onSubmit={(values) => handleUpdateRoutine(routine.id, values)}
-                    onCancel={() => setEditingRoutineId(null)}
-                  />
-                ) : (
-                  <div className="manage-list__row">
-                    <div className="manage-list__info">
-                      <div className="manage-list__name">
-                        <span className={`status-dot status-dot--${routine.status}`} />
-                        {routine.name}
-                      </div>
-                      <div className="manage-list__meta">
-                        {routine.items.length} step{routine.items.length !== 1 ? "s" : ""}{" · "}{routine.completedItems}/{routine.totalItems} today
-                      </div>
-                    </div>
-                    <div className="habits-manage-actions">
-                      <button
-                        className="button button--ghost button--small"
-                        type="button"
-                        onClick={() => { setEditingRoutineId(routine.id); setShowAddRoutine(false); }}
-                      >
-                        Edit
-                      </button>
-                      <button
-                        className="button button--ghost button--small"
-                        type="button"
-                        onClick={() => handleMoveRoutine(routine.id, Math.max(0, routine.sortOrder - 1))}
-                        disabled={updateRoutineMutation.isPending || routine.sortOrder === 0}
-                      >
-                        Move up
-                      </button>
-                      <button
-                        className="button button--ghost button--small"
-                        type="button"
-                        onClick={() => handleMoveRoutine(routine.id, Math.min(routines.length - 1, routine.sortOrder + 1))}
-                        disabled={updateRoutineMutation.isPending || routine.sortOrder === routines.length - 1}
-                      >
-                        Move down
-                      </button>
-                      {routine.status !== "archived" ? (
-                        confirmArchiveRoutineId === routine.id ? (
-                          <span className="confirm-archive">
-                            <span className="confirm-archive__label">Archive?</span>
-                            <button
-                              className="button button--ghost button--small"
-                              type="button"
-                              style={{ color: "var(--negative)" }}
-                              onClick={() => handleArchiveRoutine(routine.id)}
-                              disabled={updateRoutineMutation.isPending}
-                            >
-                              Yes
-                            </button>
-                            <button
-                              className="button button--ghost button--small"
-                              type="button"
-                              onClick={() => setConfirmArchiveRoutineId(null)}
-                            >
-                              No
-                            </button>
-                          </span>
-                        ) : (
-                          <button
-                            className="button button--ghost button--small"
-                            type="button"
-                            style={{ color: "var(--negative)" }}
-                            onClick={() => setConfirmArchiveRoutineId(routine.id)}
-                            disabled={updateRoutineMutation.isPending}
-                          >
-                            Archive
-                          </button>
-                        )
-                      ) : null}
-                    </div>
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-        ) : !showAddRoutine ? (
-          <div className="habits-group__empty">
-            <span className="habits-group__empty-text">No routines yet. Add your first routine to build structure.</span>
-            <button
-              className="button button--ghost button--small"
-              type="button"
-              onClick={() => setShowAddRoutine(true)}
-            >
-              + Add your first routine
-            </button>
-          </div>
-        ) : null}
-
-        {archivedRoutines.length > 0 ? (
-          <CollapsibleSection title="Archived routines" subtitle={`${archivedRoutines.length} archived`}>
-            <div className="manage-list manage-list--archived">
-              {archivedRoutines.map((routine) => (
-                <div key={routine.id} className="manage-list__item">
-                  <div className="manage-list__row">
-                    <div className="manage-list__info">
-                      <div className="manage-list__name">
-                        <span className="status-dot status-dot--archived" />
-                        {routine.name}
-                      </div>
-                      <div className="manage-list__meta">
-                        {routine.items.length} step{routine.items.length !== 1 ? "s" : ""}
-                      </div>
-                    </div>
-                    <div className="habits-manage-actions">
-                      <button
-                        className="button button--ghost button--small"
-                        type="button"
-                        onClick={() => updateRoutineMutation.mutate({ routineId: routine.id, status: "active" })}
-                        disabled={updateRoutineMutation.isPending}
-                      >
-                        Restore
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </CollapsibleSection>
-        ) : null}
-
-        {updateRoutineMutation.error ? (
-          <div className="inline-state inline-state--error" style={{ marginTop: "0.5rem" }}>
-            {updateRoutineMutation.error instanceof Error ? updateRoutineMutation.error.message : "Could not update routine."}
-          </div>
-        ) : null}
-      </CollapsibleSection>
+      <ManageRoutinesSection
+        routines={controller.routines}
+        activeRoutineCount={controller.activeRoutines.length}
+        nonArchivedRoutines={controller.nonArchivedRoutines}
+        archivedRoutines={controller.archivedRoutines}
+        showAddRoutine={controller.showAddRoutine}
+        editingRoutineId={controller.editingRoutineId}
+        confirmArchiveRoutineId={controller.confirmArchiveRoutineId}
+        createPending={controller.createRoutineMutation.isPending}
+        updatePending={controller.updateRoutineMutation.isPending}
+        createError={controller.createRoutineMutation.error}
+        updateError={controller.updateRoutineMutation.error}
+        onOpenAddRoutine={controller.handleOpenAddRoutine}
+        onCloseAddRoutine={() => controller.setShowAddRoutine(false)}
+        onEditRoutine={controller.handleEditRoutine}
+        onCancelEditRoutine={() => controller.setEditingRoutineId(null)}
+        onCreateRoutine={controller.handleCreateRoutine}
+        onUpdateRoutine={controller.handleUpdateRoutine}
+        onMoveRoutine={controller.handleMoveRoutine}
+        onRequestArchiveRoutine={controller.setConfirmArchiveRoutineId}
+        onCancelArchiveRoutine={() => controller.setConfirmArchiveRoutineId(null)}
+        onConfirmArchiveRoutine={controller.handleArchiveRoutine}
+        onRestoreRoutine={(routineId) =>
+          controller.updateRoutineMutation.mutate({ routineId, status: "active" })
+        }
+      />
     </div>
   );
 }

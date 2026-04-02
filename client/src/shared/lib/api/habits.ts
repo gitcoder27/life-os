@@ -168,6 +168,23 @@ export const useRoutineCheckinMutation = (date: string) => {
   });
 };
 
+export const useDeleteRoutineCheckinMutation = (date: string) => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (itemId: string) =>
+      apiRequest<RoutineMutationResponse>(`/api/routine-items/${itemId}/checkins`, {
+        method: "DELETE",
+        query: { date },
+      }),
+    meta: {
+      successMessage: "Routine item reopened.",
+      errorMessage: "Routine update failed.",
+    },
+    onSuccess: () => invalidateCoreData(queryClient, date),
+  });
+};
+
 export const useCreateHabitMutation = () => {
   const queryClient = useQueryClient();
 

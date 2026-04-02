@@ -15,6 +15,7 @@ import {
 import {
   createRoutine,
   createRoutineItemCheckin,
+  deleteRoutineItemCheckin,
   listRoutines,
   updateRoutine,
 } from "./routine-service.js";
@@ -50,5 +51,16 @@ export const registerRoutineRoutes: FastifyPluginAsync = async (app) => {
     );
 
     return reply.send(await createRoutineItemCheckin(app, user.id, itemId, payload));
+  });
+
+  app.delete("/routine-items/:itemId/checkins", async (request, reply) => {
+    const user = requireAuthenticatedUser(request);
+    const { itemId } = request.params as { itemId: string };
+    const payload = parseOrThrow(
+      routineItemCheckinSchema,
+      request.query as RoutineItemCheckinRequest,
+    );
+
+    return reply.send(await deleteRoutineItemCheckin(app, user.id, itemId, payload));
   });
 };
