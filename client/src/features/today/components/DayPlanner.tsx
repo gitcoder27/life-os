@@ -69,7 +69,6 @@ export function DayPlanner({
   onSelectDate,
   onStepDate,
   sidebarStyle,
-  laneStyle,
 }: {
   date: string;
   todayDate: string;
@@ -84,7 +83,6 @@ export function DayPlanner({
   onSelectDate: (isoDate: string) => void;
   onStepDate: (direction: -1 | 1) => void;
   sidebarStyle?: CSSProperties;
-  laneStyle?: CSSProperties;
 }) {
   const [formDraft, setFormDraft] = useState<PlannerFormDraft | null>(null);
   const [showHoursEditor, setShowHoursEditor] = useState(false);
@@ -661,7 +659,6 @@ export function DayPlanner({
               isPending={actions.isPending}
               draggedTaskId={draggedTaskId}
               suppressedTaskId={suppressedTaskId}
-              laneStyle={laneStyle}
               onQuickAssign={(taskId, block) => actions.assignTaskToBlock(block, taskId)}
               onBulkAssign={(taskIds, block) => actions.assignTasksToBlock(block, taskIds)}
             />

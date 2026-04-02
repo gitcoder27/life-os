@@ -1581,10 +1581,7 @@ body.planner-dragging-cursor * {
   border: 1px solid rgba(255,255,255,0.05);
   background: rgba(255,255,255,0.02);
   backdrop-filter: blur(8px);
-  max-height: var(
-    --planner-lane-max-height,
-    calc(100vh - var(--today-sticky-offset) - 1.5rem)
-  );
+  max-height: calc(100vh - var(--today-sticky-offset) - 1.5rem);
   overflow-y: auto;
 }
 

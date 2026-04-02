@@ -34,7 +34,6 @@ export function TodayPage() {
   const [todayTaskCaptureOpen, setTodayTaskCaptureOpen] = useState(false);
   const [topRailHeight, setTopRailHeight] = useState(0);
   const [stickyTop, setStickyTop] = useState(0);
-  const [stickyMaxHeight, setStickyMaxHeight] = useState(0);
   const topRailRef = useRef<HTMLDivElement>(null);
   const rawPlannerDate = searchParams.get("planDate");
   const plannerDate = rawPlannerDate && ISO_DATE_PATTERN.test(rawPlannerDate)
@@ -124,14 +123,9 @@ export function TodayPage() {
         getComputedStyle(document.documentElement).fontSize || "16",
       ) || 16;
       const nextStickyTop = Math.max(shellHeaderHeight + nextTopRailHeight + rootFontSize, 0);
-      const nextStickyMaxHeight = Math.max(
-        window.innerHeight - nextStickyTop - rootFontSize * 1.5,
-        240,
-      );
 
       setTopRailHeight(nextTopRailHeight);
       setStickyTop(nextStickyTop);
-      setStickyMaxHeight(nextStickyMaxHeight);
     };
 
     const scheduleStickyLayoutUpdate = () => {
@@ -262,13 +256,10 @@ export function TodayPage() {
   } as CSSProperties;
   const todaySidebarStyle = {
     top: `${stickyTop}px`,
-    maxHeight: `${stickyMaxHeight}px`,
+    maxHeight: `calc(100vh - ${stickyTop}px - 1.5rem)`,
   } as CSSProperties;
   const plannerSidebarStyle = {
     top: `${stickyTop}px`,
-  } as CSSProperties;
-  const plannerLaneStyle = {
-    "--planner-lane-max-height": `${stickyMaxHeight}px`,
   } as CSSProperties;
 
   return (
@@ -342,7 +333,6 @@ export function TodayPage() {
           onSelectDate={setPlannerDate}
           onStepDate={stepPlannerDate}
           sidebarStyle={plannerSidebarStyle}
-          laneStyle={plannerLaneStyle}
         />
       )}
 
