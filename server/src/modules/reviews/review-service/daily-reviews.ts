@@ -1,7 +1,7 @@
 import type { PrismaClient } from "@prisma/client";
 
 import { AppError } from "../../../lib/errors/app-error.js";
-import { filterDueHabits } from "../../../lib/habits/schedule.js";
+import { filterDueHabits, getHabitCompletionCountForIsoDate } from "../../../lib/habits/schedule.js";
 import {
   applyRecurringTaskCarryForward,
   applyRecurringTaskSkip,
@@ -141,10 +141,13 @@ async function getDailySummary(prisma: PrismaClient, userId: string, date: Date)
         },
       }),
     ]);
-  const dueHabits = new Set(filterDueHabits(habits, targetIsoDate).map((habit) => habit.id));
+  const dueHabitRecords = filterDueHabits(habits, targetIsoDate);
+  const requiredRoutineItemIds = new Set(
+    routines.flatMap((routine) => routine.items.filter((item) => item.isRequired).map((item) => item.id)),
+  );
 
-  const routinesTotal = routines.reduce((sum, routine) => sum + routine.items.length, 0);
-  const routinesCompleted = routineCheckins.length;
+  const routinesTotal = requiredRoutineItemIds.size;
+  const routinesCompleted = routineCheckins.filter((checkin) => requiredRoutineItemIds.has(checkin.routineItemId)).length;
   const workoutStatus: DailyReviewSummary["workoutStatus"] =
     workoutDay?.actualStatus === "COMPLETED"
       ? "completed"
@@ -165,10 +168,19 @@ async function getDailySummary(prisma: PrismaClient, userId: string, date: Date)
       tasksScheduled: tasks.length,
       routinesCompleted,
       routinesTotal,
-      habitsCompleted: habitCheckins.filter(
-        (checkin) => checkin.status === "COMPLETED" && dueHabits.has(checkin.habitId),
-      ).length,
-      habitsDue: dueHabits.size,
+      habitsCompleted: dueHabitRecords.reduce(
+        (sum, habit) =>
+          sum +
+          Math.min(
+            getHabitCompletionCountForIsoDate(
+              habitCheckins.filter((checkin) => checkin.habitId === habit.id),
+              targetIsoDate,
+            ),
+            habit.targetPerDay,
+          ),
+        0,
+      ),
+      habitsDue: dueHabitRecords.reduce((sum, habit) => sum + habit.targetPerDay, 0),
       waterMl: waterLogs.reduce((sum, log) => sum + log.amountMl, 0),
       waterTargetMl: preferences?.dailyWaterTargetMl ?? 2500,
       mealsLogged: mealLogs.length,

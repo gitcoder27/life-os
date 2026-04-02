@@ -7,20 +7,18 @@ import type {
 } from "@life-os/contracts";
 
 import { addIsoDays } from "../time/cycle.js";
-import { toIsoDateString } from "../time/date.js";
-import { calculateHabitStreak, isHabitDueOnIsoDate, type HabitPauseWindowLike } from "./schedule.js";
+import {
+  calculateHabitStreak,
+  getHabitCompletionCountForIsoDate,
+  isHabitCompletedOnIsoDate,
+  isHabitDueOnIsoDate,
+  type HabitPauseWindowLike,
+} from "./schedule.js";
 
 interface HabitCheckinLike {
   occurredOn: Date;
   status: "COMPLETED" | "SKIPPED";
-}
-
-function getCompletedDates(checkins: HabitCheckinLike[]) {
-  return new Set(
-    checkins
-      .filter((checkin) => checkin.status === "COMPLETED")
-      .map((checkin) => toIsoDateString(checkin.occurredOn)),
-  );
+  completionCount?: number | null;
 }
 
 function getDueDatesInRange(
@@ -43,8 +41,15 @@ function getDueDatesInRange(
   return dueDates;
 }
 
-function countCompletedDueDates(dueDates: IsoDateString[], completedDates: Set<IsoDateString>) {
-  return dueDates.filter((isoDate) => completedDates.has(isoDate)).length;
+function countCompletedDueUnits(
+  checkins: HabitCheckinLike[],
+  dueDates: IsoDateString[],
+  targetPerDay: number,
+) {
+  return dueDates.reduce(
+    (sum, isoDate) => sum + Math.min(getHabitCompletionCountForIsoDate(checkins, isoDate), targetPerDay),
+    0,
+  );
 }
 
 export function calculateHabitActiveStreak(
@@ -52,9 +57,10 @@ export function calculateHabitActiveStreak(
   scheduleInput: HabitScheduleRule | RecurrenceDefinition,
   targetIsoDate: IsoDateString,
   pauseWindows: HabitPauseWindowLike[] = [],
+  targetPerDay = 1,
 ) {
   const dueToday = isHabitDueOnIsoDate(scheduleInput, targetIsoDate, pauseWindows);
-  const completedToday = getCompletedDates(checkins).has(targetIsoDate);
+  const completedToday = isHabitCompletedOnIsoDate(checkins, targetIsoDate, targetPerDay);
 
   return calculateHabitStreak(
     checkins,
@@ -62,6 +68,7 @@ export function calculateHabitActiveStreak(
     targetIsoDate,
     dueToday && !completedToday ? 1 : 0,
     pauseWindows,
+    targetPerDay,
   );
 }
 
@@ -70,16 +77,22 @@ export function calculateHabitRisk(
   scheduleInput: HabitScheduleRule | RecurrenceDefinition,
   targetIsoDate: IsoDateString,
   pauseWindows: HabitPauseWindowLike[] = [],
+  targetPerDay = 1,
 ): HabitRiskState {
-  const completedDates = getCompletedDates(checkins);
   const dueToday = isHabitDueOnIsoDate(scheduleInput, targetIsoDate, pauseWindows);
-  const completedToday = completedDates.has(targetIsoDate);
+  const completedToday = isHabitCompletedOnIsoDate(checkins, targetIsoDate, targetPerDay);
   const dueDates7d = getDueDatesInRange(scheduleInput, addIsoDays(targetIsoDate, -6), targetIsoDate, pauseWindows);
-  const completedCount7d = countCompletedDueDates(dueDates7d, completedDates);
-  const dueCount7d = dueDates7d.length;
+  const completedCount7d = countCompletedDueUnits(checkins, dueDates7d, targetPerDay);
+  const dueCount7d = dueDates7d.length * Math.max(1, targetPerDay);
   const completionRate7d = dueCount7d > 0 ? Math.round((completedCount7d / dueCount7d) * 100) : 100;
   const missedDueCount7d = dueCount7d - completedCount7d;
-  const activeStreak = calculateHabitActiveStreak(checkins, scheduleInput, targetIsoDate, pauseWindows);
+  const activeStreak = calculateHabitActiveStreak(
+    checkins,
+    scheduleInput,
+    targetIsoDate,
+    pauseWindows,
+    targetPerDay,
+  );
 
   if (dueToday && !completedToday && activeStreak >= 2) {
     return {
@@ -134,10 +147,11 @@ export function calculateWeeklyHabitChallenge(input: {
   weekStartIsoDate: IsoDateString;
   targetIsoDate: IsoDateString;
   pauseWindows?: HabitPauseWindowLike[];
+  targetPerDay?: number;
 }): WeeklyHabitChallenge {
-  const completedDates = getCompletedDates(input.checkins);
   const weekEndIsoDate = addIsoDays(input.weekStartIsoDate, 6);
   const pauseWindows = input.pauseWindows ?? [];
+  const targetPerDay = Math.max(1, input.targetPerDay ?? 1);
   const dueDatesThisWeek = getDueDatesInRange(
     input.scheduleInput,
     input.weekStartIsoDate,
@@ -150,11 +164,17 @@ export function calculateWeeklyHabitChallenge(input: {
     input.targetIsoDate,
     pauseWindows,
   );
-  const weekCompletions = countCompletedDueDates(dueDatesByToday, completedDates);
-  const completedToday = completedDates.has(input.targetIsoDate);
+  const weekCompletions = countCompletedDueUnits(input.checkins, dueDatesByToday, targetPerDay);
+  const completedToday = isHabitCompletedOnIsoDate(input.checkins, input.targetIsoDate, targetPerDay);
   const dueToday = isHabitDueOnIsoDate(input.scheduleInput, input.targetIsoDate, pauseWindows);
-  const expectedByNow = dueDatesByToday.length;
-  const streakCount = calculateHabitActiveStreak(input.checkins, input.scheduleInput, input.targetIsoDate, pauseWindows);
+  const expectedByNow = dueDatesByToday.length * targetPerDay;
+  const streakCount = calculateHabitActiveStreak(
+    input.checkins,
+    input.scheduleInput,
+    input.targetIsoDate,
+    pauseWindows,
+    targetPerDay,
+  );
 
   const status =
     dueToday && !completedToday ? "due_today" : weekCompletions < expectedByNow ? "behind" : "on_track";
@@ -174,7 +194,7 @@ export function calculateWeeklyHabitChallenge(input: {
     streakCount,
     completedToday,
     weekCompletions,
-    weekTarget: dueDatesThisWeek.length,
+    weekTarget: dueDatesThisWeek.length * targetPerDay,
     status,
     message,
   };

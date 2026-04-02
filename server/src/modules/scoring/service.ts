@@ -1,6 +1,6 @@
 import type { Prisma, PrismaClient } from "@prisma/client";
 
-import { filterDueHabits } from "../../lib/habits/schedule.js";
+import { filterDueHabits, getHabitCompletionCountForIsoDate } from "../../lib/habits/schedule.js";
 import {
   addDays,
   getMonthEndDate,
@@ -252,9 +252,14 @@ async function getDayContext(prisma: PrismaClient, userId: string, date: Date) {
         userId,
         scheduledForDate: targetDate,
       },
-      orderBy: {
-        createdAt: "asc",
+      include: {
+        plannerBlockTask: {
+          include: {
+            block: true,
+          },
+        },
       },
+      orderBy: [{ dueAt: "asc" }, { createdAt: "asc" }],
     }),
     prisma.habit.findMany({
       where: {
@@ -378,7 +383,14 @@ function getRoutineCompletion(
   routines: Awaited<ReturnType<typeof getDayContext>>["activeRoutines"],
   routineCheckins: Awaited<ReturnType<typeof getDayContext>>["routineCheckins"],
 ) {
-  if (routines.length === 0) {
+  const scorableRoutines = routines
+    .map((routine) => ({
+      ...routine,
+      requiredItems: routine.items.filter((item) => item.isRequired),
+    }))
+    .filter((routine) => routine.requiredItems.length > 0);
+
+  if (scorableRoutines.length === 0) {
     return {
       earned: 0,
       applicable: 0,
@@ -387,27 +399,23 @@ function getRoutineCompletion(
     };
   }
 
-  const routineShare = 10 / routines.length;
-  const earned = routines.reduce((sum, routine) => {
-    if (routine.items.length === 0) {
-      return sum;
-    }
-
-    const completed = routine.items.filter((item) =>
+  const routineShare = 10 / scorableRoutines.length;
+  const earned = scorableRoutines.reduce((sum, routine) => {
+    const completed = routine.requiredItems.filter((item) =>
       routineCheckins.some((checkin) => checkin.routineItemId === item.id),
     ).length;
 
-    return sum + routineShare * (completed / routine.items.length);
+    return sum + routineShare * (completed / routine.requiredItems.length);
   }, 0);
-  const completed = routines.reduce(
+  const completed = scorableRoutines.reduce(
     (sum, routine) =>
       sum +
-      routine.items.filter((item) =>
+      routine.requiredItems.filter((item) =>
         routineCheckins.some((checkin) => checkin.routineItemId === item.id),
       ).length,
     0,
   );
-  const total = routines.reduce((sum, routine) => sum + routine.items.length, 0);
+  const total = scorableRoutines.reduce((sum, routine) => sum + routine.requiredItems.length, 0);
 
   return {
     earned,
@@ -417,6 +425,41 @@ function getRoutineCompletion(
   };
 }
 
+function sortTasksForScore(
+  tasks: Awaited<ReturnType<typeof getDayContext>>["tasks"],
+) {
+  return tasks
+    .slice()
+    .sort((left, right) => {
+      const leftIsPlanned = Boolean(left.plannerBlockTask);
+      const rightIsPlanned = Boolean(right.plannerBlockTask);
+
+      if (leftIsPlanned !== rightIsPlanned) {
+        return leftIsPlanned ? -1 : 1;
+      }
+
+      if (left.plannerBlockTask && right.plannerBlockTask) {
+        const blockSortDelta = left.plannerBlockTask.block.sortOrder - right.plannerBlockTask.block.sortOrder;
+        if (blockSortDelta !== 0) {
+          return blockSortDelta;
+        }
+
+        const taskSortDelta = left.plannerBlockTask.sortOrder - right.plannerBlockTask.sortOrder;
+        if (taskSortDelta !== 0) {
+          return taskSortDelta;
+        }
+      }
+
+      const leftDueAt = left.dueAt?.getTime() ?? Number.MAX_SAFE_INTEGER;
+      const rightDueAt = right.dueAt?.getTime() ?? Number.MAX_SAFE_INTEGER;
+      if (leftDueAt !== rightDueAt) {
+        return leftDueAt - rightDueAt;
+      }
+
+      return left.createdAt.getTime() - right.createdAt.getTime();
+    });
+}
+
 export async function calculateDailyScore(
   prisma: PrismaClient,
   userId: string,
@@ -424,7 +467,7 @@ export async function calculateDailyScore(
 ): Promise<DailyScoreBreakdownResponse> {
   const context = await getDayContext(prisma, userId, date);
   const priorities = context.dayCycle.priorities;
-  const tasksForScore = context.tasks.slice(0, 5);
+  const tasksForScore = sortTasksForScore(context.tasks).slice(0, 5);
 
   const priorityEarned = priorities.reduce(
     (sum, priority) =>
@@ -432,42 +475,61 @@ export async function calculateDailyScore(
     0,
   );
   const priorityApplicable = priorities.reduce((sum, priority) => sum + (PRIORITY_POINTS[priority.slot] ?? 0), 0);
-  const taskApplicable = tasksForScore.length > 0 ? 6 : 0;
-  const taskEarned =
-    tasksForScore.length > 0
-      ? 6 * (tasksForScore.filter((task) => task.status === "COMPLETED").length / tasksForScore.length)
-      : 0;
+  const hasPlannedTasks = tasksForScore.some((task) => task.plannerBlockTask);
+  const taskWeights = tasksForScore.map((task) => (hasPlannedTasks && !task.plannerBlockTask ? 0.5 : 1));
+  const weightedTaskTotal = taskWeights.reduce((sum, weight) => sum + weight, 0);
+  const completedTaskWeight = tasksForScore.reduce(
+    (sum, task, index) => sum + (task.status === "COMPLETED" ? taskWeights[index] : 0),
+    0,
+  );
+  const taskApplicable = weightedTaskTotal > 0 ? 6 : 0;
+  const taskEarned = taskApplicable > 0 ? 6 * (completedTaskWeight / weightedTaskTotal) : 0;
   const planBucket = buildBucket(
     "plan_and_priorities",
     "Plan and Priorities",
     priorityEarned + taskEarned,
     priorityApplicable + taskApplicable,
-    "Top priorities and today tasks scheduled for the day.",
+    hasPlannedTasks
+      ? "Top priorities plus up to five focus tasks. Planned tasks count first, and unplanned work earns partial credit. Goals guide what you plan, but do not add separate bonus points."
+      : "Top priorities plus up to five focus tasks scheduled for the day. Goals guide what you plan, but do not add separate bonus points.",
   );
 
   const routines = getRoutineCompletion(context.activeRoutines, context.routineCheckins);
   const dueHabits = filterDueHabits(context.activeHabits, context.targetIsoDate);
-  const completedHabits = dueHabits.filter((habit) =>
-    context.habitCheckins.some(
-      (checkin) => checkin.habitId === habit.id && checkin.status === "COMPLETED",
-    ),
-  ).length;
+  const habitCompletedUnits = dueHabits.reduce(
+    (sum, habit) =>
+      sum +
+      Math.min(
+        getHabitCompletionCountForIsoDate(
+          context.habitCheckins.filter((checkin) => checkin.habitId === habit.id),
+          context.targetIsoDate,
+        ),
+        habit.targetPerDay,
+      ),
+    0,
+  );
+  const habitTargetUnits = dueHabits.reduce((sum, habit) => sum + habit.targetPerDay, 0);
   const habitApplicable = dueHabits.length > 0 ? 15 : 0;
-  const habitEarned = dueHabits.length > 0 ? 15 * (completedHabits / dueHabits.length) : 0;
+  const habitEarned = habitTargetUnits > 0 ? 15 * (habitCompletedUnits / habitTargetUnits) : 0;
   const routineHabitBucket = buildBucket(
     "routines_and_habits",
     "Routines and Habits",
     routines.earned + habitEarned,
     routines.applicable + habitApplicable,
-    "Your active routines and due habits for the day.",
+    "Required routine items plus due habit repetitions for the day.",
   );
 
   const waterTarget = context.preferences?.dailyWaterTargetMl ?? 2500;
   const waterMl = context.waterLogs.reduce((sum, log) => sum + log.amountMl, 0);
   const waterEarned = 8 * Math.min(1, waterTarget > 0 ? waterMl / waterTarget : 0);
-  const mealsLogged = context.mealLogs.length;
-  const meaningfulMeals = context.mealLogs.filter((meal) => meal.loggingQuality !== "PARTIAL").length;
-  const mealEarned = mealsLogged === 0 ? 0 : meaningfulMeals === 0 ? 4 : 7;
+  const mealCredits = context.mealLogs.reduce((sum, meal) => {
+    if (meal.loggingQuality === "PARTIAL") {
+      return sum + 0.5;
+    }
+
+    return sum + 1;
+  }, 0);
+  const mealEarned = 7 * Math.min(1, mealCredits / 2);
   const workoutApplicable = context.workoutDay && context.workoutDay.planType !== "NONE" ? 10 : 0;
   const workoutEarned =
     workoutApplicable === 0
@@ -487,7 +549,7 @@ export async function calculateDailyScore(
   );
 
   const expenseApplicable = context.expenses.length > 0 ? 5 : 0;
-  const expenseEarned = context.expenses.length > 0 ? 5 : 0;
+  const expenseEarned = context.expenses.length > 0 ? 5 * Math.min(1, context.expenses.length / 2) : 0;
   const dueAdminApplicable = context.dueAdminItems.length > 0 ? 5 : 0;
   const dueAdminEarned =
     context.dueAdminItems.length > 0
@@ -674,7 +736,7 @@ export async function getWeeklyMomentum(
 
   let strongDayStreak = 0;
   for (const score of allRecentScores) {
-    if (score.scoreValue >= 70) {
+    if (score.scoreValue >= 85) {
       strongDayStreak += 1;
       continue;
     }

@@ -41,7 +41,9 @@ type Routine = {
 type DueHabit = {
   id: string;
   title: string;
+  targetPerDay: number;
   completedToday: boolean;
+  completedCountToday: number;
   streakCount: number;
   risk: { level: "none" | "at_risk" | "drifting"; message: string | null };
 };
@@ -117,13 +119,16 @@ function RoutinesRow({
 
   const totalRoutineItems = routines.reduce((sum, r) => sum + r.totalItems, 0);
   const completedRoutineItems = routines.reduce((sum, r) => sum + r.completedItems, 0);
-  const completedHabits = dueHabits.filter((h) => h.completedToday).length;
-  const totalHabits = dueHabits.length;
+  const completedHabitUnits = dueHabits.reduce(
+    (sum, habit) => sum + Math.min(habit.completedCountToday, habit.targetPerDay),
+    0,
+  );
+  const totalHabitUnits = dueHabits.reduce((sum, habit) => sum + habit.targetPerDay, 0);
 
   const allDone =
     completedRoutineItems === totalRoutineItems &&
-    completedHabits === totalHabits &&
-    totalRoutineItems + totalHabits > 0;
+    completedHabitUnits === totalHabitUnits &&
+    totalRoutineItems + totalHabitUnits > 0;
   const atRiskHabits = dueHabits.filter((h) => h.risk.level !== "none" && !h.completedToday);
 
   let summary: string;
@@ -132,7 +137,7 @@ function RoutinesRow({
   } else {
     const parts: string[] = [];
     if (totalRoutineItems > 0) parts.push(`${completedRoutineItems}/${totalRoutineItems} routine`);
-    if (totalHabits > 0) parts.push(`${completedHabits}/${totalHabits} habits`);
+    if (totalHabitUnits > 0) parts.push(`${completedHabitUnits}/${totalHabitUnits} habits`);
     summary = parts.join(", ");
   }
 
@@ -179,7 +184,7 @@ function RoutinesRow({
             <div className="de-routine">
               <div className="de-routine__header">
                 <span>Habits</span>
-                <span className="de-routine__count">{completedHabits}/{totalHabits}</span>
+                <span className="de-routine__count">{completedHabitUnits}/{totalHabitUnits}</span>
               </div>
               <div className="de-routine__items">
                 {dueHabits.map((habit) => (
@@ -193,7 +198,8 @@ function RoutinesRow({
                     <span className={`de-check-item__box${habit.completedToday ? " de-check-item__box--done" : ""}`}>
                       {habit.completedToday ? <CheckIcon /> : null}
                     </span>
-                    <span className="de-check-item__title">{habit.title}</span>
+                      <span className="de-check-item__title">{habit.title}</span>
+                      <span>{Math.min(habit.completedCountToday, habit.targetPerDay)}/{habit.targetPerDay}</span>
                     {habit.streakCount > 0 ? (
                       <span className="de-check-item__streak">🔥{habit.streakCount}</span>
                     ) : null}

@@ -27,7 +27,9 @@ type Routine = {
 type DueHabit = {
   id: string;
   title: string;
+  targetPerDay: number;
   completedToday: boolean;
+  completedCountToday: number;
   streakCount: number;
   risk: {
     level: "none" | "at_risk" | "drifting";
@@ -63,6 +65,11 @@ export function RoutinesHabits() {
     .filter((r: Routine) => r.status === "active")
     .sort((left: Routine, right: Routine) => left.sortOrder - right.sortOrder);
   const dueHabits = data.dueHabits as DueHabit[];
+  const completedHabitUnits = dueHabits.reduce(
+    (sum, habit) => sum + Math.min(habit.completedCountToday, habit.targetPerDay),
+    0,
+  );
+  const totalHabitUnits = dueHabits.reduce((sum, habit) => sum + habit.targetPerDay, 0);
   const hasContent = routines.length > 0 || dueHabits.length > 0;
 
   if (!hasContent) {
@@ -92,7 +99,7 @@ export function RoutinesHabits() {
           <div className="today-rh__group-header">
             <span className="today-rh__group-label">Habits</span>
             <span className="today-rh__group-count">
-              {dueHabits.filter((h) => h.completedToday).length}/{dueHabits.length}
+              {completedHabitUnits}/{totalHabitUnits}
             </span>
           </div>
           <div className="today-rh__items">
@@ -175,6 +182,7 @@ function HabitRow({
       </span>
       <span className="today-rh__item-title">{habit.title}</span>
       <span className="today-rh__item-meta">
+        <span>{Math.min(habit.completedCountToday, habit.targetPerDay)}/{habit.targetPerDay}</span>
         {habit.streakCount > 0 ? (
           <span className="today-rh__streak">🔥 {habit.streakCount}</span>
         ) : null}

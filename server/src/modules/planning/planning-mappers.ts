@@ -40,7 +40,13 @@ import type {
 import { z } from "zod";
 
 import { calculateHabitActiveStreak, calculateHabitRisk } from "../../lib/habits/guidance.js";
-import { isHabitDueOnIsoDate, isHabitPermanentlyInactive, resolveHabitRecurrence } from "../../lib/habits/schedule.js";
+import {
+  getHabitCompletionCountForIsoDate,
+  isHabitCompletedOnIsoDate,
+  isHabitDueOnIsoDate,
+  isHabitPermanentlyInactive,
+  resolveHabitRecurrence,
+} from "../../lib/habits/schedule.js";
 import { serializeRecurrenceDefinition } from "../../lib/recurrence/store.js";
 import { toIsoDateString } from "../../lib/time/date.js";
 import { taskTemplateTaskSchema } from "./planning-schemas.js";
@@ -567,9 +573,7 @@ export function serializeGoalLinkedHabit(
   const dueToday = isHabitPermanentlyInactive(habit)
     ? false
     : isHabitDueOnIsoDate(recurrence, targetIsoDate, habit.pauseWindows);
-  const completedToday = habit.checkins.some(
-    (checkin) => toIsoDateString(checkin.occurredOn) === targetIsoDate && checkin.status === "COMPLETED",
-  );
+  const completedToday = isHabitCompletedOnIsoDate(habit.checkins, targetIsoDate, habit.targetPerDay);
   const risk: {
     level: GoalLinkedHabitItem["riskLevel"];
     message: string | null;
@@ -580,7 +584,7 @@ export function serializeGoalLinkedHabit(
         message: null,
         completionRate7d: 100,
       }
-    : calculateHabitRisk(habit.checkins, recurrence, targetIsoDate, habit.pauseWindows);
+    : calculateHabitRisk(habit.checkins, recurrence, targetIsoDate, habit.pauseWindows, habit.targetPerDay);
 
   return {
     id: habit.id,
@@ -590,7 +594,8 @@ export function serializeGoalLinkedHabit(
     targetPerDay: habit.targetPerDay,
     dueToday,
     completedToday,
-    streakCount: calculateHabitActiveStreak(habit.checkins, recurrence, targetIsoDate, habit.pauseWindows),
+    completedCountToday: getHabitCompletionCountForIsoDate(habit.checkins, targetIsoDate),
+    streakCount: calculateHabitActiveStreak(habit.checkins, recurrence, targetIsoDate, habit.pauseWindows, habit.targetPerDay),
     completionRate7d: risk.completionRate7d,
     riskLevel: risk.level,
     riskMessage: risk.message,

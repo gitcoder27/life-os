@@ -3,6 +3,7 @@ import type { NotificationCategory, NotificationSeverity } from "@life-os/contra
 
 import {
   calculateHabitStreak,
+  isHabitCompletedOnIsoDate,
   isHabitDueOnIsoDate,
   resolveHabitRecurrence,
 } from "../../lib/habits/schedule.js";
@@ -377,16 +378,13 @@ export async function generateRuleNotifications(
         .map((habit) => {
           const habitCheckins = recentHabitCheckins.filter((checkin) => checkin.habitId === habit.id);
           const scheduleRule = resolveHabitRecurrence(habit, todayIso);
-          const completedToday = habitCheckins.some(
-            (checkin) =>
-              toIsoDateString(checkin.occurredOn) === todayIso && checkin.status === "COMPLETED",
-          );
+          const completedToday = isHabitCompletedOnIsoDate(habitCheckins, todayIso, habit.targetPerDay);
 
           return {
             habit,
             completedToday,
             dueToday: isHabitDueOnIsoDate(scheduleRule, todayIso, habit.pauseWindows),
-            streak: calculateHabitStreak(habitCheckins, scheduleRule, todayIso, 1, habit.pauseWindows),
+            streak: calculateHabitStreak(habitCheckins, scheduleRule, todayIso, 1, habit.pauseWindows, habit.targetPerDay),
           };
         })
         .filter((item) => item.dueToday && !item.completedToday && item.streak >= 2)

@@ -1,6 +1,6 @@
 import type { PrismaClient } from "@prisma/client";
 
-import { isHabitDueOnIsoDate, resolveHabitRecurrence } from "../../../lib/habits/schedule.js";
+import { getHabitCompletionCountForIsoDate, isHabitDueOnIsoDate, resolveHabitRecurrence } from "../../../lib/habits/schedule.js";
 import { countWaterTargetHits } from "../../../lib/health/water.js";
 import { getMonthEndDate } from "../../../lib/time/cycle.js";
 import { toIsoDateString } from "../../../lib/time/date.js";
@@ -179,15 +179,19 @@ export async function getMonthlyReviewModel(
   const topHabits = habits
     .map((habit) => {
       const scheduleRule = resolveHabitRecurrence(habit, startIsoDate);
-      const completedDates = new Set<string>(
-        habit.checkins
-          .filter((checkin) => checkin.status === "COMPLETED")
-          .map((checkin) => toIsoDateString(checkin.occurredOn)),
+      const dueCount = scopedIsoDates.reduce(
+        (sum, isoDate) =>
+          sum + (isHabitDueOnIsoDate(scheduleRule, isoDate, habit.pauseWindows) ? habit.targetPerDay : 0),
+        0,
       );
-      const dueCount = scopedIsoDates.filter((isoDate) =>
-        isHabitDueOnIsoDate(scheduleRule, isoDate, habit.pauseWindows),
-      ).length;
-      const completedCount = scopedIsoDates.filter((isoDate) => completedDates.has(isoDate)).length;
+      const completedCount = scopedIsoDates.reduce(
+        (sum, isoDate) =>
+          sum +
+          (isHabitDueOnIsoDate(scheduleRule, isoDate, habit.pauseWindows)
+            ? Math.min(getHabitCompletionCountForIsoDate(habit.checkins, isoDate), habit.targetPerDay)
+            : 0),
+        0,
+      );
 
       return {
         habitId: habit.id,

@@ -41,6 +41,7 @@ type HabitsResponse = {
     status: "active" | "paused" | "archived";
     dueToday: boolean;
     completedToday: boolean;
+    completedCountToday: number;
     streakCount: number;
     risk: {
       level: "none" | "at_risk" | "drifting";
@@ -71,6 +72,7 @@ type HabitsResponse = {
     status: "active" | "paused" | "archived";
     dueToday: boolean;
     completedToday: boolean;
+    completedCountToday: number;
     streakCount: number;
     risk: {
       level: "none" | "at_risk" | "drifting";
@@ -193,20 +195,22 @@ export const useCreateHabitMutation = () => {
 export const useUpdateHabitMutation = () => {
   const queryClient = useQueryClient();
 
-  return useMutation({
+  type UpdateHabitVariables = {
+    habitId: string;
+    title?: string;
+    category?: string | null;
+    scheduleRule?: { daysOfWeek?: number[] };
+    recurrence?: RecurrenceInput;
+    targetPerDay?: number;
+    status?: "active" | "paused" | "archived";
+    goalId?: string | null;
+  };
+
+  return useMutation<HabitMutationResponse, Error, UpdateHabitVariables>({
     mutationFn: ({
       habitId,
       ...payload
-    }: {
-      habitId: string;
-      title?: string;
-      category?: string | null;
-      scheduleRule?: { daysOfWeek?: number[] };
-      recurrence?: RecurrenceInput;
-      targetPerDay?: number;
-      status?: "active" | "paused" | "archived";
-      goalId?: string | null;
-    }) =>
+    }: UpdateHabitVariables) =>
       apiRequest<HabitMutationResponse>(`/api/habits/${habitId}`, {
         method: "PATCH",
         body: payload,

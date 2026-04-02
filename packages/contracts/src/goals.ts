@@ -180,6 +180,7 @@ export interface GoalLinkedHabitItem {
   targetPerDay: number;
   dueToday: boolean;
   completedToday: boolean;
+  completedCountToday: number;
   streakCount: number;
   completionRate7d: number;
   riskLevel: "none" | "at_risk" | "drifting";

@@ -510,6 +510,7 @@ model HabitCheckin {
   occurredOn   DateTime
   status       CheckinStatus      @default(COMPLETED)
   source       HabitCheckinSource @default(TAP)
+  completionCount Int             @default(1)
   completedAt  DateTime?
   note         String?
   habit        Habit              @relation(fields: [habitId], references: [id], onDelete: Cascade)

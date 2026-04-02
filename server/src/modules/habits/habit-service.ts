@@ -56,6 +56,7 @@ const buildWeeklyChallenge = (
     weekStartIsoDate: getWeekStartIsoDate(targetIsoDate, weekStartsOn),
     targetIsoDate,
     pauseWindows,
+    targetPerDay: focusHabit.targetPerDay,
   });
 
   return challenge.weekTarget > 0 ? challenge : null;
@@ -310,6 +311,7 @@ export const createHabitCheckin = async (
     update: {
       status: toPrismaCheckinStatus(status),
       source: "TAP",
+      completionCount: status === "skipped" ? 0 : { increment: 1 },
       completedAt: status === "skipped" ? null : new Date(),
       note: payload.note ?? null,
     },
@@ -318,6 +320,7 @@ export const createHabitCheckin = async (
       occurredOn: targetDate,
       status: toPrismaCheckinStatus(status),
       source: "TAP",
+      completionCount: status === "skipped" ? 0 : 1,
       completedAt: status === "skipped" ? null : new Date(),
       note: payload.note ?? null,
     },

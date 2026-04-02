@@ -43,7 +43,7 @@ export function ScoreCard({
           </div>
           <p className="score-hero-card__copy">
             {topReasonLabel ??
-              "Live score reflects your planning, habits, and health data."}
+              "Live score reflects execution, habits, health, finance, and reviews. Goals guide the work, but they do not add separate bonus points."}
           </p>
           <p className="score-hero-card__detail">
             {Math.round(earnedPoints)} of {possiblePoints} available points

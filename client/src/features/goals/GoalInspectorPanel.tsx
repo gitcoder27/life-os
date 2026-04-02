@@ -79,6 +79,9 @@ function InspectorHabits({ habits }: { habits: GoalLinkedHabitItem[] }) {
           {h.streakCount > 0 && (
             <span className="ap-inspector-habit__streak">{h.streakCount}d</span>
           )}
+          {!h.completedToday && h.dueToday && h.completedCountToday > 0 && (
+            <span className="ap-inspector-habit__badge">{Math.min(h.completedCountToday, h.targetPerDay)}/{h.targetPerDay}</span>
+          )}
           {h.completedToday && (
             <span className="ap-inspector-habit__badge ap-inspector-habit__badge--done">✓</span>
           )}

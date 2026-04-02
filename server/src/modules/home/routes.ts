@@ -27,6 +27,7 @@ import {
 } from "../../lib/habits/guidance.js";
 import { buildStaleInboxTaskWhere } from "../../lib/inbox/stale.js";
 import {
+  isHabitCompletedOnIsoDate,
   isHabitDueOnIsoDate,
   isHabitPermanentlyInactive,
   resolveHabitRecurrence,
@@ -370,18 +371,17 @@ async function buildHomeOverview(
     isHabitDueOnIsoDate(resolveHabitRecurrence(habit, targetIsoDate), targetIsoDate, habit.pauseWindows),
   );
   const completedHabits = dueHabits.filter((habit) =>
-    recentHabitCheckins.some(
-      (checkin) => checkin.habitId === habit.id && checkin.status === "COMPLETED",
+    isHabitCompletedOnIsoDate(
+      recentHabitCheckins.filter((checkin) => checkin.habitId === habit.id),
+      targetIsoDate,
+      habit.targetPerDay,
     ),
   );
   const habitItems = habits.map((habit) => {
     const habitCheckins = recentHabitCheckins.filter((checkin) => checkin.habitId === habit.id);
     const recurrence = resolveHabitRecurrence(habit, targetIsoDate);
-    const risk = calculateHabitRisk(habitCheckins, recurrence, targetIsoDate, habit.pauseWindows);
-    const completedToday = habitCheckins.some(
-      (checkin) =>
-        toIsoDateString(checkin.occurredOn) === targetIsoDate && checkin.status === "COMPLETED",
-    );
+    const risk = calculateHabitRisk(habitCheckins, recurrence, targetIsoDate, habit.pauseWindows, habit.targetPerDay);
+    const completedToday = isHabitCompletedOnIsoDate(habitCheckins, targetIsoDate, habit.targetPerDay);
 
     return {
       id: habit.id,
@@ -390,7 +390,7 @@ async function buildHomeOverview(
         !isHabitPermanentlyInactive(habit) &&
         isHabitDueOnIsoDate(recurrence, targetIsoDate, habit.pauseWindows),
       completedToday,
-      streakCount: calculateHabitActiveStreak(habitCheckins, recurrence, targetIsoDate, habit.pauseWindows),
+      streakCount: calculateHabitActiveStreak(habitCheckins, recurrence, targetIsoDate, habit.pauseWindows, habit.targetPerDay),
       risk,
       scheduleRule: habit.scheduleRuleJson,
       pauseWindows: habit.pauseWindows,
@@ -577,6 +577,7 @@ async function buildHomeOverview(
           weekStartIsoDate,
           targetIsoDate,
           pauseWindows: weeklyChallengeHabit.pauseWindows,
+          targetPerDay: weeklyChallengeHabit.targetPerDay,
           });
 
           return challenge.weekTarget > 0 ? challenge : null;
