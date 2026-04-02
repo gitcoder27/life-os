@@ -6,6 +6,10 @@ Current docs:
 
 - `production-deployment.md`: the full production deployment guide
 - `production-deployment-quick-reference.md`: the short deployment checklist
+- `postgres-backup-strategy.md`: backup recommendation and recovery baseline for the PostgreSQL database
 - `user-account-management.md`: user lifecycle and account admin tasks
+- `goals-hq-redesign-master-plan-2026-04-02.md`: the master product and implementation handoff for the goals HQ redesign
+- `goals-hq-redesign-frontend-agent-2026-04-02.md`: the frontend implementation brief and agent prompt for the redesign
+- `goals-hq-redesign-backend-agent-2026-04-02.md`: the backend implementation brief and agent prompt for the redesign
 
 Historical implementation plans, checklists, and one-off reviews were moved to [`../archive/implementation/`](../archive/implementation/).
