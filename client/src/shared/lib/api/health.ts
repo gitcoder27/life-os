@@ -11,6 +11,69 @@ import {
   toSectionError,
   unwrapRequiredResult,
 } from "./core";
+import { toIsoDate } from "../date";
+
+type HealthWaterSignal = {
+  status: "on_track" | "behind" | "complete";
+  progressPct: number;
+  remainingMl: number;
+  paceTargetMl: number;
+};
+
+type HealthMealSignal = {
+  status: "on_track" | "behind" | "complete";
+  progressPct: number;
+  targetCount: number;
+  nextSuggestedSlot: "breakfast" | "lunch" | "dinner" | "snack" | null;
+};
+
+type HealthWorkoutSignal = {
+  status: "complete" | "pending" | "recovery" | "missed";
+  label: string;
+};
+
+type HealthScoreSnapshot = {
+  value: number;
+  label: "strong" | "steady" | "needs_attention";
+  earnedPoints: number;
+  possiblePoints: number;
+};
+
+export type HealthTimelineItem = {
+  id: string;
+  kind: "water" | "meal" | "workout" | "weight";
+  occurredAt: string;
+  title: string;
+  detail: string;
+};
+
+export type HealthGuidanceIntent =
+  | "log_water"
+  | "log_meal"
+  | "update_workout"
+  | "log_weight"
+  | "review_patterns";
+
+export type HealthGuidanceItem = {
+  id: string;
+  kind: string;
+  tone: "positive" | "neutral" | "warning";
+  title: string;
+  detail: string;
+  actionLabel: string;
+  route: string;
+  intent: HealthGuidanceIntent;
+};
+
+type HealthRangeInsights = {
+  waterDaysOnTarget: number;
+  mealLoggingDays: number;
+  meaningfulMealDays: number;
+  workoutsMissed: number;
+  workoutCompletionRate: number | null;
+  weightChange: number | null;
+  weightUnit: string | null;
+};
 
 type HealthSummaryResponse = {
   generatedAt: string;
@@ -18,6 +81,7 @@ type HealthSummaryResponse = {
   to: string;
   currentDay: {
     date: string;
+    phase: "morning" | "midday" | "evening";
     waterMl: number;
     waterTargetMl: number;
     mealCount: number;
@@ -39,12 +103,24 @@ type HealthSummaryResponse = {
       note: string | null;
       createdAt: string;
     } | null;
+    signals: {
+      water: HealthWaterSignal;
+      meals: HealthMealSignal;
+      workout: HealthWorkoutSignal;
+    };
+    score: HealthScoreSnapshot;
+    timeline: HealthTimelineItem[];
   };
   range: {
     totalWaterMl: number;
     totalMealsLogged: number;
     workoutsCompleted: number;
     workoutsPlanned: number;
+    insights: HealthRangeInsights;
+  };
+  guidance: {
+    focus: HealthGuidanceItem;
+    recommendations: HealthGuidanceItem[];
   };
   mealLogs: Array<{
     id: string;
@@ -150,10 +226,15 @@ export const useHealthDataQuery = (date: string) =>
   useQuery({
     queryKey: queryKeys.health(date),
     queryFn: async () => {
+      const rangeStartDate = (() => {
+        const start = new Date(`${date}T12:00:00`);
+        start.setDate(start.getDate() - 6);
+        return toIsoDate(start);
+      })();
       const [summaryResult, waterLogsResult, mealTemplatesResult, mealLogsResult] =
         await Promise.allSettled([
           apiRequest<HealthSummaryResponse>("/api/health/summary", {
-            query: { from: date, to: date },
+            query: { from: rangeStartDate, to: date },
           }),
           apiRequest<WaterLogsResponse>("/api/health/water-logs", {
             query: { date },

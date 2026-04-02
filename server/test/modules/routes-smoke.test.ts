@@ -318,7 +318,10 @@ describe("module route smoke tests", () => {
     prisma.userPreference = { findUnique: vi.fn().mockResolvedValue({ dailyWaterTargetMl: 2500 }) } as any;
     prisma.waterLog = { findMany: vi.fn().mockResolvedValue([]) } as any;
     prisma.mealLog = { findMany: vi.fn().mockResolvedValue([]) } as any;
-    prisma.weightLog = { findMany: vi.fn().mockResolvedValue([]) } as any;
+    prisma.weightLog = {
+      findMany: vi.fn().mockResolvedValue([]),
+      findFirst: vi.fn().mockResolvedValue(null),
+    } as any;
     prisma.workoutDay = {
       findMany: vi.fn().mockResolvedValue([]),
       findUnique: vi.fn().mockResolvedValue(null),
@@ -330,6 +333,23 @@ describe("module route smoke tests", () => {
     });
 
     expect(response.statusCode).toBe(200);
+    expect(JSON.parse(response.body)).toEqual(
+      expect.objectContaining({
+        currentDay: expect.objectContaining({
+          phase: expect.any(String),
+          signals: expect.any(Object),
+          score: expect.any(Object),
+          timeline: expect.any(Array),
+        }),
+        range: expect.objectContaining({
+          insights: expect.any(Object),
+        }),
+        guidance: expect.objectContaining({
+          focus: expect.any(Object),
+          recommendations: expect.any(Array),
+        }),
+      }),
+    );
   });
 
   it("serves habits list", async () => {

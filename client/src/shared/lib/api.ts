@@ -101,6 +101,11 @@ export {
   useUpdateWeightLogMutation,
   useWorkoutMutation,
 } from "./api/health";
+export type {
+  HealthGuidanceIntent,
+  HealthGuidanceItem,
+  HealthTimelineItem,
+} from "./api/health";
 export {
   useCreateCategoryMutation,
   useCreateExpenseMutation,

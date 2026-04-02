@@ -20,14 +20,17 @@ import {
   useUpdateWeightLogMutation,
   useWorkoutMutation,
 } from "../../shared/lib/api";
-import { PageHeader } from "../../shared/ui/PageHeader";
+import type {
+  HealthGuidanceIntent,
+  HealthGuidanceItem,
+  HealthTimelineItem,
+} from "../../shared/lib/api";
 import {
   EmptyState,
   InlineErrorState,
   PageErrorState,
   PageLoadingState,
 } from "../../shared/ui/PageState";
-import { SectionCard } from "../../shared/ui/SectionCard";
 
 type MealSlot = "breakfast" | "lunch" | "dinner" | "snack";
 
@@ -38,6 +41,181 @@ const mealSlotOptions: { value: MealSlot; label: string }[] = [
   { value: "snack", label: "Snack" },
 ];
 
+const PHASE_LABEL: Record<string, string> = {
+  morning: "Morning",
+  midday: "Afternoon",
+  evening: "Evening",
+};
+
+const SCORE_LABEL: Record<string, string> = {
+  strong: "Strong",
+  steady: "Steady",
+  needs_attention: "Needs work",
+};
+
+/* ── Score Ring (small SVG) ── */
+function ScoreRing({ value, label }: { value: number; label: string }) {
+  const size = 76;
+  const stroke = 4;
+  const radius = (size - stroke) / 2;
+  const circumference = 2 * Math.PI * radius;
+  const offset = circumference - (value / 100) * circumference;
+
+  return (
+    <div className="health-score-ring" style={{ width: size, height: size }}>
+      <svg width={size} height={size}>
+        <circle className="health-score-ring__track" cx={size / 2} cy={size / 2} r={radius} />
+        <circle
+          className={`health-score-ring__fill health-score-ring__fill--${label}`}
+          cx={size / 2}
+          cy={size / 2}
+          r={radius}
+          strokeDasharray={circumference}
+          strokeDashoffset={offset}
+        />
+      </svg>
+      <div className="health-score-ring__inner">
+        <span className="health-score-ring__value">{value}</span>
+        <span className={`health-score-ring__label health-score-ring__label--${label}`}>
+          {SCORE_LABEL[label] ?? label}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+/* ── Meal Log Form ── */
+function MealLogForm({
+  templates,
+  onSave,
+  onCancel,
+  isPending,
+}: {
+  templates: Array<{ id: string; name: string; mealSlot: MealSlot | null; description: string | null }>;
+  onSave: (payload: { description: string; mealSlot?: MealSlot; mealTemplateId?: string; loggingQuality: "partial" | "meaningful" | "full" }) => void;
+  onCancel: () => void;
+  isPending: boolean;
+}) {
+  const [mode, setMode] = useState<"template" | "freeform">(templates.length > 0 ? "template" : "freeform");
+  const [selectedTemplateId, setSelectedTemplateId] = useState(templates[0]?.id ?? "");
+  const [freeDesc, setFreeDesc] = useState("");
+  const [freeSlot, setFreeSlot] = useState<MealSlot>("breakfast");
+
+  function handleSubmit() {
+    if (mode === "template") {
+      const t = templates.find((tpl) => tpl.id === selectedTemplateId);
+      if (!t) return;
+      onSave({ description: t.name, mealSlot: t.mealSlot ?? undefined, mealTemplateId: t.id, loggingQuality: "meaningful" });
+    } else {
+      if (!freeDesc.trim()) return;
+      onSave({ description: freeDesc.trim(), mealSlot: freeSlot, loggingQuality: "partial" });
+    }
+  }
+
+  return (
+    <div className="health-form-area">
+      <div className="inline-editor">
+        <div className="stack-form">
+          {templates.length > 0 && (
+            <div className="meal-mode-toggle">
+              <button type="button" className={`meal-mode-toggle__btn${mode === "template" ? " meal-mode-toggle__btn--active" : ""}`} onClick={() => setMode("template")}>From template</button>
+              <button type="button" className={`meal-mode-toggle__btn${mode === "freeform" ? " meal-mode-toggle__btn--active" : ""}`} onClick={() => setMode("freeform")}>Freeform</button>
+            </div>
+          )}
+          {mode === "template" && templates.length > 0 ? (
+            <label className="field">
+              <span>Template</span>
+              <select value={selectedTemplateId} onChange={(e) => setSelectedTemplateId(e.target.value)}>
+                {templates.map((t) => (
+                  <option key={t.id} value={t.id}>{t.name} — {formatMealSlotLabel(t.mealSlot)}</option>
+                ))}
+              </select>
+            </label>
+          ) : (
+            <>
+              <label className="field">
+                <span>Description</span>
+                <input type="text" value={freeDesc} placeholder="What did you eat?" autoFocus onChange={(e) => setFreeDesc(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") handleSubmit(); if (e.key === "Escape") onCancel(); }} />
+              </label>
+              <label className="field">
+                <span>Meal slot</span>
+                <select value={freeSlot} onChange={(e) => setFreeSlot(e.target.value as MealSlot)}>
+                  {mealSlotOptions.map((opt) => (<option key={opt.value} value={opt.value}>{opt.label}</option>))}
+                </select>
+              </label>
+            </>
+          )}
+          <div className="button-row button-row--tight">
+            <button className="button button--primary button--small" type="button" disabled={isPending} onClick={handleSubmit}>
+              {isPending ? "Saving..." : "Log meal"}
+            </button>
+            <button className="button button--ghost button--small" type="button" onClick={onCancel}>Cancel</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ── Weight Entry Form ── */
+function WeightEntryForm({
+  defaultUnit,
+  onSave,
+  onCancel,
+  isPending,
+}: {
+  defaultUnit: string;
+  onSave: (value: number, unit: string) => void;
+  onCancel: () => void;
+  isPending: boolean;
+}) {
+  const [value, setValue] = useState("");
+  const [unit, setUnit] = useState(defaultUnit);
+
+  function handleSubmit() {
+    const parsed = parseNumberValue(value);
+    if (parsed) onSave(parsed, unit);
+  }
+
+  return (
+    <div className="health-form-area">
+      <div className="inline-editor">
+        <div className="stack-form">
+          <div style={{ display: "flex", gap: "0.5rem", alignItems: "flex-end" }}>
+            <label className="field" style={{ flex: 1 }}>
+              <span>Weight</span>
+              <input
+                type="number"
+                step="0.1"
+                min="0"
+                placeholder="0.0"
+                value={value}
+                autoFocus
+                onChange={(e) => setValue(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") handleSubmit(); if (e.key === "Escape") onCancel(); }}
+              />
+            </label>
+            <label className="field" style={{ width: "5rem" }}>
+              <span>Unit</span>
+              <select value={unit} onChange={(e) => setUnit(e.target.value)}>
+                <option value="kg">kg</option>
+                <option value="lb">lb</option>
+              </select>
+            </label>
+          </div>
+          <div className="button-row button-row--tight">
+            <button className="button button--primary button--small" type="button" disabled={!value.trim() || isPending} onClick={handleSubmit}>
+              {isPending ? "Saving..." : "Log weight"}
+            </button>
+            <button className="button button--ghost button--small" type="button" onClick={onCancel}>Cancel</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ── Meal Template Manager (secondary) ── */
 type TemplateFormState = {
   name: string;
   mealSlot: MealSlot;
@@ -122,10 +300,7 @@ function MealTemplateManager() {
   }
 
   return (
-    <SectionCard
-      title="Meal templates"
-      subtitle={`${templates.length} active template${templates.length !== 1 ? "s" : ""}`}
-    >
+    <div className="health-templates-body">
       {showForm && (
         <div className="stack-form" style={{ marginBottom: "0.75rem" }}>
           <label className="field">
@@ -170,7 +345,7 @@ function MealTemplateManager() {
               disabled={!form.name.trim() || isSaving}
               onClick={() => void handleSubmit()}
             >
-              {isSaving ? "Saving…" : editingId ? "Update" : "Create"}
+              {isSaving ? "Saving..." : editingId ? "Update" : "Create"}
             </button>
             <button
               className="button button--ghost button--small"
@@ -231,136 +406,52 @@ function MealTemplateManager() {
           + New template
         </button>
       )}
-    </SectionCard>
+    </div>
   );
 }
 
-/* ── Inline weight entry form ── */
-function WeightEntryForm({
-  defaultUnit,
-  onSave,
-  onCancel,
-  isPending,
+/* ── Timeline Row ── */
+function TimelineRow({
+  item,
+  onEdit,
+  onDelete,
+  canDelete = true,
 }: {
-  defaultUnit: string;
-  onSave: (value: number, unit: string) => void;
-  onCancel: () => void;
-  isPending: boolean;
+  item: HealthTimelineItem;
+  onEdit: () => void;
+  onDelete: () => void;
+  canDelete?: boolean;
 }) {
-  const [value, setValue] = useState("");
-  const [unit, setUnit] = useState(defaultUnit);
-
-  function handleSubmit() {
-    const parsed = parseNumberValue(value);
-    if (parsed) onSave(parsed, unit);
-  }
+  const time = new Date(item.occurredAt).toLocaleTimeString(undefined, {
+    hour: "numeric",
+    minute: "2-digit",
+  });
 
   return (
-    <div className="inline-editor">
-      <div className="stack-form">
-        <div style={{ display: "flex", gap: "0.5rem", alignItems: "flex-end" }}>
-          <label className="field" style={{ flex: 1 }}>
-            <span>Weight</span>
-            <input
-              type="number"
-              step="0.1"
-              min="0"
-              placeholder="0.0"
-              value={value}
-              autoFocus
-              onChange={(e) => setValue(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter") handleSubmit(); if (e.key === "Escape") onCancel(); }}
-            />
-          </label>
-          <label className="field" style={{ width: "5rem" }}>
-            <span>Unit</span>
-            <select value={unit} onChange={(e) => setUnit(e.target.value)}>
-              <option value="kg">kg</option>
-              <option value="lb">lb</option>
-            </select>
-          </label>
+    <div className="health-timeline__item">
+      <div className="health-timeline__dot-col">
+        <div className={`health-timeline__dot health-timeline__dot--${item.kind}`} />
+      </div>
+      <div className="health-timeline__content">
+        <div className="health-timeline__title">{item.title}</div>
+        <div className="health-timeline__meta">
+          <span className="health-timeline__time">{time}</span>
+          <span>{item.detail}</span>
         </div>
-        <div className="button-row button-row--tight">
-          <button className="button button--primary button--small" type="button" disabled={!value.trim() || isPending} onClick={handleSubmit}>
-            {isPending ? "Saving…" : "Log weight"}
-          </button>
-          <button className="button button--ghost button--small" type="button" onClick={onCancel}>Cancel</button>
-        </div>
+      </div>
+      <div className="health-timeline__actions">
+        <button className="button button--ghost button--small" type="button" onClick={onEdit} aria-label="Edit">Edit</button>
+        {canDelete ? (
+          <button className="button button--ghost button--small" type="button" onClick={onDelete} aria-label="Delete">Delete</button>
+        ) : null}
       </div>
     </div>
   );
 }
 
-/* ── Inline meal-log form (template or freeform) ── */
-function MealLogForm({
-  templates,
-  onSave,
-  onCancel,
-  isPending,
-}: {
-  templates: Array<{ id: string; name: string; mealSlot: MealSlot | null; description: string | null }>;
-  onSave: (payload: { description: string; mealSlot?: MealSlot; mealTemplateId?: string; loggingQuality: "partial" | "meaningful" | "full" }) => void;
-  onCancel: () => void;
-  isPending: boolean;
-}) {
-  const [mode, setMode] = useState<"template" | "freeform">(templates.length > 0 ? "template" : "freeform");
-  const [selectedTemplateId, setSelectedTemplateId] = useState(templates[0]?.id ?? "");
-  const [freeDesc, setFreeDesc] = useState("");
-  const [freeSlot, setFreeSlot] = useState<MealSlot>("breakfast");
-
-  function handleSubmit() {
-    if (mode === "template") {
-      const t = templates.find((tpl) => tpl.id === selectedTemplateId);
-      if (!t) return;
-      onSave({ description: t.name, mealSlot: t.mealSlot ?? undefined, mealTemplateId: t.id, loggingQuality: "meaningful" });
-    } else {
-      if (!freeDesc.trim()) return;
-      onSave({ description: freeDesc.trim(), mealSlot: freeSlot, loggingQuality: "partial" });
-    }
-  }
-
-  return (
-    <div className="inline-editor">
-      <div className="stack-form">
-        {templates.length > 0 && (
-          <div className="meal-mode-toggle">
-            <button type="button" className={`meal-mode-toggle__btn${mode === "template" ? " meal-mode-toggle__btn--active" : ""}`} onClick={() => setMode("template")}>From template</button>
-            <button type="button" className={`meal-mode-toggle__btn${mode === "freeform" ? " meal-mode-toggle__btn--active" : ""}`} onClick={() => setMode("freeform")}>Freeform</button>
-          </div>
-        )}
-        {mode === "template" && templates.length > 0 ? (
-          <label className="field">
-            <span>Template</span>
-            <select value={selectedTemplateId} onChange={(e) => setSelectedTemplateId(e.target.value)}>
-              {templates.map((t) => (
-                <option key={t.id} value={t.id}>{t.name} — {formatMealSlotLabel(t.mealSlot)}</option>
-              ))}
-            </select>
-          </label>
-        ) : (
-          <>
-            <label className="field">
-              <span>Description</span>
-              <input type="text" value={freeDesc} placeholder="What did you eat?" autoFocus onChange={(e) => setFreeDesc(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") handleSubmit(); if (e.key === "Escape") onCancel(); }} />
-            </label>
-            <label className="field">
-              <span>Meal slot</span>
-              <select value={freeSlot} onChange={(e) => setFreeSlot(e.target.value as MealSlot)}>
-                {mealSlotOptions.map((opt) => (<option key={opt.value} value={opt.value}>{opt.label}</option>))}
-              </select>
-            </label>
-          </>
-        )}
-        <div className="button-row button-row--tight">
-          <button className="button button--primary button--small" type="button" disabled={isPending} onClick={handleSubmit}>
-            {isPending ? "Saving…" : "Log meal"}
-          </button>
-          <button className="button button--ghost button--small" type="button" onClick={onCancel}>Cancel</button>
-        </div>
-      </div>
-    </div>
-  );
-}
+/* ═══════════════════════════════════════════════
+   Health Page — Main Component
+   ═══════════════════════════════════════════════ */
 
 export function HealthPage() {
   const today = getTodayDate();
@@ -377,8 +468,10 @@ export function HealthPage() {
   const deleteWeightMutation = useDeleteWeightLogMutation(today);
 
   // UI state
-  const [showWeightForm, setShowWeightForm] = useState(false);
-  const [showMealForm, setShowMealForm] = useState(false);
+  const [activeForm, setActiveForm] = useState<"meal" | "weight" | "workout" | null>(null);
+  const [showTemplates, setShowTemplates] = useState(false);
+
+  // Inline editing state
   const [editingWaterId, setEditingWaterId] = useState<string | null>(null);
   const [editWaterMl, setEditWaterMl] = useState("");
   const [deletingWaterId, setDeletingWaterId] = useState<string | null>(null);
@@ -410,309 +503,412 @@ export function HealthPage() {
     );
   }
 
-  const currentDay = healthQuery.data.summary.currentDay;
-  const waterMl = currentDay?.waterMl ?? 0;
-  const waterTargetMl = currentDay?.waterTargetMl ?? 1;
-  const pct = Math.min(100, (waterMl / waterTargetMl) * 100);
+  const { summary } = healthQuery.data;
+  const { currentDay, guidance, range } = summary;
+  const { signals, score, timeline, phase } = currentDay;
+  const insights = range.insights;
   const templates = healthQuery.data.mealTemplates?.mealTemplates ?? [];
   const mealLogs = healthQuery.data.mealLogs?.mealLogs ?? [];
   const waterLogs = healthQuery.data.waterLogs?.waterLogs ?? [];
-  const weightLogs = healthQuery.data.summary.weightHistory ?? [];
+  const weightLogs = summary.weightHistory ?? [];
 
-  // Trends
-  const rangeSummary = healthQuery.data.summary.range;
-  const waterDaysHit = waterTargetMl > 0 ? Math.min(7, Math.round((rangeSummary.totalWaterMl / waterTargetMl / 7) * 7)) : 0;
-  const workoutRate = rangeSummary.workoutsPlanned > 0
-    ? Math.round((rangeSummary.workoutsCompleted / rangeSummary.workoutsPlanned) * 100)
-    : null;
-  const weightTrend = weightLogs.length >= 2
-    ? weightLogs[0].weightValue - weightLogs[weightLogs.length - 1].weightValue
-    : null;
+  const waterMl = currentDay.waterMl ?? 0;
+  const waterTargetMl = currentDay.waterTargetMl ?? 1;
+  const waterPaceShortfallMl = Math.max(0, signals.water.paceTargetMl - waterMl);
+
+  function handleIntent(intent: HealthGuidanceIntent) {
+    switch (intent) {
+      case "log_water":
+        addWaterMutation.mutate(500);
+        break;
+      case "log_meal":
+        setActiveForm("meal");
+        break;
+      case "update_workout":
+        setActiveForm("workout");
+        break;
+      case "log_weight":
+        setActiveForm("weight");
+        break;
+      case "review_patterns":
+        document.getElementById("health-patterns")?.scrollIntoView({ behavior: "smooth" });
+        break;
+    }
+  }
+
+  function handleTimelineEdit(item: HealthTimelineItem) {
+    const realId = item.id.split(":").slice(1).join(":");
+    switch (item.kind) {
+      case "water": {
+        const log = waterLogs.find((l) => l.id === realId);
+        if (log) {
+          setEditingWaterId(log.id);
+          setEditWaterMl(String(log.amountMl));
+        }
+        break;
+      }
+      case "meal": {
+        const log = mealLogs.find((l) => l.id === realId);
+        if (log) {
+          setEditingMealId(log.id);
+          setEditMealDesc(log.description);
+          setEditMealSlot((log.mealSlot as MealSlot) || "breakfast");
+        }
+        break;
+      }
+      case "weight": {
+        const log = weightLogs.find((l) => l.id === realId);
+        if (log) {
+          setEditingWeightId(log.id);
+          setEditWeightVal(String(log.weightValue));
+          setEditWeightUnit(log.unit);
+        }
+        break;
+      }
+      case "workout":
+        setActiveForm("workout");
+        break;
+    }
+  }
+
+  function handleTimelineDelete(item: HealthTimelineItem) {
+    const realId = item.id.split(":").slice(1).join(":");
+    switch (item.kind) {
+      case "water":
+        setDeletingWaterId(realId);
+        break;
+      case "meal":
+        setDeletingMealId(realId);
+        break;
+      case "weight":
+        setDeletingWeightId(realId);
+        break;
+    }
+  }
+
+  const filteredRecommendations = guidance.recommendations.filter(
+    (rec) => rec.id !== guidance.focus.id,
+  );
 
   return (
-    <div className="page">
-      <PageHeader
-        eyebrow="Health basics"
-        title="Water, meals, training, body weight"
-        description="High-signal tracking with very low friction. Log fast, review at a glance."
-      />
-
-      {/* ── Trends bar ── */}
-      <SectionCard title="7-day snapshot" subtitle="Recent consistency">
-        <div style={{ display: "flex", flexWrap: "wrap", gap: "1rem" }}>
-          <div className="trend-row">
-            <span className="trend-row__icon">💧</span>
-            <span className="trend-row__label">Water days on target</span>
-            <span className="trend-row__value">{waterDaysHit}/7</span>
-          </div>
-          {workoutRate !== null && (
-            <div className="trend-row">
-              <span className="trend-row__icon">🏋️</span>
-              <span className="trend-row__label">Workout completion</span>
-              <span className="trend-row__value">{workoutRate}%</span>
-            </div>
-          )}
-          {weightTrend !== null && (
-            <div className="trend-row">
-              <span className="trend-row__icon">{weightTrend < 0 ? "↓" : weightTrend > 0 ? "↑" : "→"}</span>
-              <span className="trend-row__label">Weight change</span>
-              <span className="trend-row__value">
-                {weightTrend > 0 ? "+" : ""}{weightTrend.toFixed(1)} {weightLogs[0]?.unit ?? "kg"}
-              </span>
-            </div>
-          )}
+    <div className="health-page">
+      {/* ═══ Health Pulse Hero ═══ */}
+      <section className="health-pulse">
+        <div className="health-pulse__eyebrow">
+          <span>Health basics</span>
+          <span className="health-pulse__phase">{PHASE_LABEL[phase] ?? phase}</span>
         </div>
-      </SectionCard>
 
-      <div className="dashboard-grid stagger">
-        {/* ── Water ── */}
-        <SectionCard
-          title="Water"
-          subtitle={`${Math.round(pct)}% of daily target`}
-        >
-          <div className="water-tracker">
-            {healthQuery.data.sectionErrors.waterLogs ? (
-              <InlineErrorState
-                message={healthQuery.data.sectionErrors.waterLogs.message}
-                onRetry={() => void healthQuery.refetch()}
-              />
-            ) : null}
-            <div className="water-tracker__header">
-              <span className="water-tracker__current">{(waterMl / 1000).toFixed(1)}L</span>
-              <span className="water-tracker__target">/ {(waterTargetMl / 1000).toFixed(1)}L</span>
-            </div>
-            <div className="progress-bar">
-              <div className="progress-bar__fill" style={{ width: `${pct}%` }} />
-            </div>
-            <div className="button-row">
-              <button className="button button--ghost button--small" type="button" onClick={() => addWaterMutation.mutate(250)}>+250ml</button>
-              <button className="button button--ghost button--small" type="button" onClick={() => addWaterMutation.mutate(500)}>+500ml</button>
-            </div>
+        <div className="health-pulse__body">
+          <div className="health-pulse__coaching">
+            <h1 className="health-pulse__focus">{guidance.focus.title}</h1>
+            <p className="health-pulse__detail">{guidance.focus.detail}</p>
+            {guidance.focus.intent !== "review_patterns" && (
+              <button
+                className="health-pulse__cta"
+                type="button"
+                onClick={() => handleIntent(guidance.focus.intent)}
+              >
+                {guidance.focus.actionLabel}
+              </button>
+            )}
           </div>
 
-          {/* Water log list with correction */}
-          {waterLogs.length > 0 && (
-            <div style={{ marginTop: "0.75rem", borderTop: "1px solid var(--border)", paddingTop: "0.5rem" }}>
-              <div style={{ fontSize: "var(--fs-micro)", color: "var(--text-tertiary)", marginBottom: "0.25rem", textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600 }}>Today&apos;s logs</div>
-              {waterLogs.map((log) => (
-                <div key={log.id}>
-                  <div className="log-row">
-                    <div className="log-row__info">
-                      <span className="log-row__primary">{log.amountMl}ml</span>
-                      <span className="log-row__secondary">
-                        {" · "}{new Date(log.occurredAt).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}
-                      </span>
-                    </div>
-                    <div className="log-row__actions">
-                      <button className="button button--ghost button--small" type="button" onClick={() => { setEditingWaterId(log.id); setEditWaterMl(String(log.amountMl)); setDeletingWaterId(null); }} aria-label="Edit water log">Edit</button>
-                      <button className="button button--ghost button--small" type="button" onClick={() => { setDeletingWaterId(log.id); setEditingWaterId(null); }} aria-label="Delete water log">Delete</button>
-                    </div>
-                  </div>
-                  {editingWaterId === log.id && (
-                    <div className="inline-editor">
+          <div className="health-pulse__score">
+            <ScoreRing value={score.value} label={score.label} />
+          </div>
+        </div>
+
+        {/* Signal indicators */}
+        <div className="health-pulse__signals">
+          {/* Water signal */}
+          <div className="health-signal">
+            <div className="health-signal__header">
+              <div className={`health-signal__dot health-signal__dot--${signals.water.status === "behind" ? "behind" : "water"}`} />
+              <span className="health-signal__label">Water</span>
+            </div>
+            <div className="health-signal__value">
+              {(waterMl / 1000).toFixed(1)}L / {(waterTargetMl / 1000).toFixed(1)}L
+            </div>
+            <div className="health-signal__bar">
+              <div
+                className={`health-signal__bar-fill health-signal__bar-fill--${signals.water.status === "complete" ? "complete" : "water"}`}
+                style={{ width: `${signals.water.progressPct}%` }}
+              />
+            </div>
+            <span className={`health-signal__status health-signal__status--${signals.water.status}`}>
+              {signals.water.status === "complete"
+                ? "Target hit"
+                : signals.water.status === "on_track"
+                  ? "On pace"
+                  : `${waterPaceShortfallMl}ml behind pace`}
+            </span>
+          </div>
+
+          {/* Meals signal */}
+          <div className="health-signal">
+            <div className="health-signal__header">
+              <div className={`health-signal__dot health-signal__dot--${signals.meals.status === "behind" ? "behind" : "meals"}`} />
+              <span className="health-signal__label">Meals</span>
+            </div>
+            <div className="health-signal__value">
+              {currentDay.mealCount} / {signals.meals.targetCount || 3} logged
+            </div>
+            <div className="health-signal__bar">
+              <div
+                className={`health-signal__bar-fill health-signal__bar-fill--${signals.meals.status === "complete" ? "complete" : "meals"}`}
+                style={{ width: `${signals.meals.progressPct}%` }}
+              />
+            </div>
+            <span className={`health-signal__status health-signal__status--${signals.meals.status}`}>
+              {signals.meals.status === "complete"
+                ? "All logged"
+                : signals.meals.nextSuggestedSlot
+                  ? `Next: ${formatMealSlotLabel(signals.meals.nextSuggestedSlot)}`
+                  : signals.meals.status === "on_track"
+                    ? "On track"
+                    : "Behind"}
+            </span>
+          </div>
+
+          {/* Workout signal */}
+          <div className="health-signal">
+            <div className="health-signal__header">
+              <div className={`health-signal__dot health-signal__dot--${signals.workout.status}`} />
+              <span className="health-signal__label">Workout</span>
+            </div>
+            <div className="health-signal__value">
+              {signals.workout.label}
+            </div>
+            <span className={`health-signal__status health-signal__status--${signals.workout.status}`}>
+              {signals.workout.status === "complete" ? "Done" : signals.workout.status === "recovery" ? "Recovery" : signals.workout.status === "missed" ? "Missed" : "Open"}
+            </span>
+          </div>
+        </div>
+      </section>
+
+      {/* ═══ Quick Action Rail ═══ */}
+      <div className="health-action-rail">
+        <button
+          className="health-action-rail__btn health-action-rail__btn--water"
+          type="button"
+          onClick={() => addWaterMutation.mutate(250)}
+        >
+          +250ml
+        </button>
+        <button
+          className="health-action-rail__btn health-action-rail__btn--water"
+          type="button"
+          onClick={() => addWaterMutation.mutate(500)}
+        >
+          +500ml
+        </button>
+        <button
+          className={`health-action-rail__btn${activeForm === "meal" ? " health-action-rail__btn--active" : ""}`}
+          type="button"
+          onClick={() => setActiveForm(activeForm === "meal" ? null : "meal")}
+        >
+          Log meal
+        </button>
+        <button
+          className={`health-action-rail__btn${activeForm === "workout" ? " health-action-rail__btn--active" : ""}`}
+          type="button"
+          onClick={() => setActiveForm(activeForm === "workout" ? null : "workout")}
+        >
+          Workout
+        </button>
+        <button
+          className={`health-action-rail__btn${activeForm === "weight" ? " health-action-rail__btn--active" : ""}`}
+          type="button"
+          onClick={() => setActiveForm(activeForm === "weight" ? null : "weight")}
+        >
+          Log weight
+        </button>
+      </div>
+
+      {/* ═══ Inline Forms ═══ */}
+      {activeForm === "meal" && (
+        <MealLogForm
+          templates={templates}
+          isPending={addMealMutation.isPending}
+          onSave={(p) => { void addMealMutation.mutateAsync(p).then(() => setActiveForm(null)); }}
+          onCancel={() => setActiveForm(null)}
+        />
+      )}
+
+      {activeForm === "weight" && (
+        <WeightEntryForm
+          defaultUnit={currentDay.latestWeight?.unit ?? "kg"}
+          isPending={addWeightMutation.isPending}
+          onSave={(v, u) => { void addWeightMutation.mutateAsync({ weightValue: v, unit: u, measuredOn: today }).then(() => setActiveForm(null)); }}
+          onCancel={() => setActiveForm(null)}
+        />
+      )}
+
+      {activeForm === "workout" && (
+        <div className="health-workout-toggle">
+          <span className="health-workout-toggle__label">Update workout status</span>
+          <div className="health-workout-toggle__current">
+            <span className="health-workout-toggle__plan">
+              {currentDay.workoutDay?.plannedLabel ?? "Today"}
+            </span>
+            <span className="tag tag--neutral">{formatWorkoutStatus(currentDay.workoutDay?.actualStatus)}</span>
+          </div>
+          <div className="segmented-control">
+            <button
+              className={`segmented-control__option${currentDay.workoutDay?.actualStatus === "completed" ? " segmented-control__option--active" : ""}`}
+              type="button"
+              onClick={() => { updateWorkoutMutation.mutate({ planType: "workout", actualStatus: "completed", plannedLabel: currentDay.workoutDay?.plannedLabel ?? "Workout" }); setActiveForm(null); }}
+            >
+              Completed
+            </button>
+            <button
+              className={`segmented-control__option${currentDay.workoutDay?.actualStatus === "recovery_respected" ? " segmented-control__option--active" : ""}`}
+              type="button"
+              onClick={() => { updateWorkoutMutation.mutate({ planType: "recovery", actualStatus: "recovery_respected", plannedLabel: "Recovery" }); setActiveForm(null); }}
+            >
+              Rest day
+            </button>
+            <button
+              className={`segmented-control__option${currentDay.workoutDay?.actualStatus === "missed" ? " segmented-control__option--active" : ""}`}
+              type="button"
+              onClick={() => { updateWorkoutMutation.mutate({ planType: "workout", actualStatus: "missed", plannedLabel: currentDay.workoutDay?.plannedLabel ?? "Workout" }); setActiveForm(null); }}
+            >
+              Missed
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ═══ Section errors ═══ */}
+      {healthQuery.data.sectionErrors.waterLogs && (
+        <InlineErrorState
+          message={healthQuery.data.sectionErrors.waterLogs.message}
+          onRetry={() => void healthQuery.refetch()}
+        />
+      )}
+      {(healthQuery.data.sectionErrors.mealTemplates || healthQuery.data.sectionErrors.mealLogs) && (
+        <InlineErrorState
+          message={healthQuery.data.sectionErrors.mealTemplates?.message ?? healthQuery.data.sectionErrors.mealLogs?.message ?? "Meal data could not load."}
+          onRetry={() => void healthQuery.refetch()}
+        />
+      )}
+
+      {/* ═══ Recommendations ═══ */}
+      {filteredRecommendations.length > 0 && (
+        <div className="health-recs">
+          <div className="health-recs__title">Recovery actions</div>
+          {filteredRecommendations.map((rec: HealthGuidanceItem) => (
+            <div className="health-rec" key={rec.id}>
+              <div className={`health-rec__indicator health-rec__indicator--${rec.tone}`} />
+              <div className="health-rec__content">
+                <div className="health-rec__title">{rec.title}</div>
+                <div className="health-rec__detail">{rec.detail}</div>
+              </div>
+              <button
+                className="health-rec__action"
+                type="button"
+                onClick={() => handleIntent(rec.intent)}
+              >
+                {rec.actionLabel}
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* ═══ Daily Timeline ═══ */}
+      <section className="health-timeline-section">
+        <div className="health-section-label">Today&apos;s activity</div>
+        {timeline.length > 0 ? (
+          <div className="health-timeline">
+            {timeline.map((item) => {
+              const realId = item.id.split(":").slice(1).join(":");
+
+              return (
+                <div key={item.id}>
+                  <TimelineRow
+                    item={item}
+                    onEdit={() => handleTimelineEdit(item)}
+                    onDelete={() => handleTimelineDelete(item)}
+                    canDelete={item.kind !== "workout"}
+                  />
+
+                  {/* Inline edit forms for water */}
+                  {item.kind === "water" && editingWaterId === realId && (
+                    <div className="inline-editor" style={{ marginLeft: "1.75rem" }}>
                       <div className="stack-form">
                         <label className="field">
                           <span>Amount (ml)</span>
                           <input type="number" min="0" value={editWaterMl} autoFocus onChange={(e) => setEditWaterMl(e.target.value)} onKeyDown={(e) => {
-                            if (e.key === "Enter") { const v = parseInt(editWaterMl, 10); if (v > 0) { void updateWaterMutation.mutateAsync({ waterLogId: log.id, amountMl: v }).then(() => setEditingWaterId(null)); } }
+                            if (e.key === "Enter") { const v = parseInt(editWaterMl, 10); if (v > 0) { void updateWaterMutation.mutateAsync({ waterLogId: realId, amountMl: v }).then(() => setEditingWaterId(null)); } }
                             if (e.key === "Escape") setEditingWaterId(null);
                           }} />
                         </label>
                         <div className="button-row button-row--tight">
-                          <button className="button button--primary button--small" type="button" disabled={updateWaterMutation.isPending} onClick={() => { const v = parseInt(editWaterMl, 10); if (v > 0) void updateWaterMutation.mutateAsync({ waterLogId: log.id, amountMl: v }).then(() => setEditingWaterId(null)); }}>
-                            {updateWaterMutation.isPending ? "Saving…" : "Save"}
+                          <button className="button button--primary button--small" type="button" disabled={updateWaterMutation.isPending} onClick={() => { const v = parseInt(editWaterMl, 10); if (v > 0) void updateWaterMutation.mutateAsync({ waterLogId: realId, amountMl: v }).then(() => setEditingWaterId(null)); }}>
+                            {updateWaterMutation.isPending ? "Saving..." : "Save"}
                           </button>
                           <button className="button button--ghost button--small" type="button" onClick={() => setEditingWaterId(null)}>Cancel</button>
                         </div>
                       </div>
                     </div>
                   )}
-                  {deletingWaterId === log.id && (
-                    <div className="confirm-bar">
-                      <span className="confirm-bar__text">Delete this {log.amountMl}ml log?</span>
-                      <button className="button button--ghost button--small" type="button" disabled={deleteWaterMutation.isPending} onClick={() => void deleteWaterMutation.mutateAsync(log.id).then(() => setDeletingWaterId(null))}>
-                        {deleteWaterMutation.isPending ? "Deleting…" : "Confirm"}
+                  {item.kind === "water" && deletingWaterId === realId && (
+                    <div className="confirm-bar" style={{ marginLeft: "1.75rem" }}>
+                      <span className="confirm-bar__text">Delete this water log?</span>
+                      <button className="button button--ghost button--small" type="button" disabled={deleteWaterMutation.isPending} onClick={() => void deleteWaterMutation.mutateAsync(realId).then(() => setDeletingWaterId(null))}>
+                        {deleteWaterMutation.isPending ? "Deleting..." : "Confirm"}
                       </button>
                       <button className="button button--ghost button--small" type="button" onClick={() => setDeletingWaterId(null)}>Cancel</button>
                     </div>
                   )}
-                </div>
-              ))}
-            </div>
-          )}
-        </SectionCard>
 
-        {/* ── Meals ── */}
-        <SectionCard
-          title="Meals"
-          subtitle={`${mealLogs.length} logged today`}
-        >
-          {healthQuery.data.sectionErrors.mealTemplates || healthQuery.data.sectionErrors.mealLogs ? (
-            <InlineErrorState
-              message={
-                healthQuery.data.sectionErrors.mealTemplates?.message ??
-                healthQuery.data.sectionErrors.mealLogs?.message ??
-                "Meal data could not load."
-              }
-              onRetry={() => void healthQuery.refetch()}
-            />
-          ) : (
-            <>
-              {/* Meal log form (template or freeform) */}
-              {showMealForm ? (
-                <MealLogForm
-                  templates={templates}
-                  isPending={addMealMutation.isPending}
-                  onSave={(p) => { void addMealMutation.mutateAsync(p).then(() => setShowMealForm(false)); }}
-                  onCancel={() => setShowMealForm(false)}
-                />
-              ) : (
-                <button className="button button--ghost button--small" type="button" onClick={() => setShowMealForm(true)} style={{ marginBottom: "0.5rem" }}>+ Log meal</button>
-              )}
-
-              {/* Existing meal logs with correction */}
-              {mealLogs.length > 0 ? (
-                <div>
-                  {mealLogs.map((log) => (
-                    <div key={log.id}>
-                      <div className="log-row">
-                        <div className="log-row__info">
-                          <span className="log-row__primary">{log.description}</span>
-                          <span className="log-row__secondary">
-                            {formatMealSlotLabel(log.mealSlot)}
-                            {" · "}{new Date(log.occurredAt).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}
-                          </span>
-                        </div>
-                        <div className="log-row__actions">
-                          <button className="button button--ghost button--small" type="button" onClick={() => { setEditingMealId(log.id); setEditMealDesc(log.description); setEditMealSlot((log.mealSlot as MealSlot) || "breakfast"); setDeletingMealId(null); }} aria-label="Edit meal log">Edit</button>
-                          <button className="button button--ghost button--small" type="button" onClick={() => { setDeletingMealId(log.id); setEditingMealId(null); }} aria-label="Delete meal log">Delete</button>
+                  {/* Inline edit forms for meals */}
+                  {item.kind === "meal" && editingMealId === realId && (
+                    <div className="inline-editor" style={{ marginLeft: "1.75rem" }}>
+                      <div className="stack-form">
+                        <label className="field">
+                          <span>Description</span>
+                          <input type="text" value={editMealDesc} autoFocus onChange={(e) => setEditMealDesc(e.target.value)} onKeyDown={(e) => {
+                            if (e.key === "Enter" && editMealDesc.trim()) void updateMealMutation.mutateAsync({ mealLogId: realId, description: editMealDesc.trim(), mealSlot: editMealSlot }).then(() => setEditingMealId(null));
+                            if (e.key === "Escape") setEditingMealId(null);
+                          }} />
+                        </label>
+                        <label className="field">
+                          <span>Meal slot</span>
+                          <select value={editMealSlot} onChange={(e) => setEditMealSlot(e.target.value as MealSlot)}>
+                            {mealSlotOptions.map((opt) => (<option key={opt.value} value={opt.value}>{opt.label}</option>))}
+                          </select>
+                        </label>
+                        <div className="button-row button-row--tight">
+                          <button className="button button--primary button--small" type="button" disabled={updateMealMutation.isPending} onClick={() => { if (editMealDesc.trim()) void updateMealMutation.mutateAsync({ mealLogId: realId, description: editMealDesc.trim(), mealSlot: editMealSlot }).then(() => setEditingMealId(null)); }}>
+                            {updateMealMutation.isPending ? "Saving..." : "Save"}
+                          </button>
+                          <button className="button button--ghost button--small" type="button" onClick={() => setEditingMealId(null)}>Cancel</button>
                         </div>
                       </div>
-                      {editingMealId === log.id && (
-                        <div className="inline-editor">
-                          <div className="stack-form">
-                            <label className="field">
-                              <span>Description</span>
-                              <input type="text" value={editMealDesc} autoFocus onChange={(e) => setEditMealDesc(e.target.value)} onKeyDown={(e) => {
-                                if (e.key === "Enter" && editMealDesc.trim()) void updateMealMutation.mutateAsync({ mealLogId: log.id, description: editMealDesc.trim(), mealSlot: editMealSlot }).then(() => setEditingMealId(null));
-                                if (e.key === "Escape") setEditingMealId(null);
-                              }} />
-                            </label>
-                            <label className="field">
-                              <span>Meal slot</span>
-                              <select value={editMealSlot} onChange={(e) => setEditMealSlot(e.target.value as MealSlot)}>
-                                {mealSlotOptions.map((opt) => (<option key={opt.value} value={opt.value}>{opt.label}</option>))}
-                              </select>
-                            </label>
-                            <div className="button-row button-row--tight">
-                              <button className="button button--primary button--small" type="button" disabled={updateMealMutation.isPending} onClick={() => { if (editMealDesc.trim()) void updateMealMutation.mutateAsync({ mealLogId: log.id, description: editMealDesc.trim(), mealSlot: editMealSlot }).then(() => setEditingMealId(null)); }}>
-                                {updateMealMutation.isPending ? "Saving…" : "Save"}
-                              </button>
-                              <button className="button button--ghost button--small" type="button" onClick={() => setEditingMealId(null)}>Cancel</button>
-                            </div>
-                          </div>
-                        </div>
-                      )}
-                      {deletingMealId === log.id && (
-                        <div className="confirm-bar">
-                          <span className="confirm-bar__text">Delete &ldquo;{log.description}&rdquo;?</span>
-                          <button className="button button--ghost button--small" type="button" disabled={deleteMealMutation.isPending} onClick={() => void deleteMealMutation.mutateAsync(log.id).then(() => setDeletingMealId(null))}>
-                            {deleteMealMutation.isPending ? "Deleting…" : "Confirm"}
-                          </button>
-                          <button className="button button--ghost button--small" type="button" onClick={() => setDeletingMealId(null)}>Cancel</button>
-                        </div>
-                      )}
                     </div>
-                  ))}
-                </div>
-              ) : (
-                <EmptyState
-                  title="No meals logged yet"
-                  description="Use the button above or Quick Capture to log your first meal."
-                />
-              )}
-            </>
-          )}
-        </SectionCard>
-
-        {/* ── Workout ── */}
-        <SectionCard
-          title="Workout"
-          subtitle={currentDay?.workoutDay?.plannedLabel ?? "Today"}
-        >
-          <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
-            <div style={{ display: "flex", alignItems: "baseline", gap: "0.75rem" }}>
-              <span style={{ fontFamily: "var(--font-display)", fontSize: "1.5rem" }}>
-                {currentDay?.workoutDay?.plannedLabel ?? "No workout logged"}
-              </span>
-              <span className="tag tag--positive">{formatWorkoutStatus(currentDay?.workoutDay?.actualStatus)}</span>
-            </div>
-            <div className="segmented-control">
-              <button
-                className={`segmented-control__option${currentDay?.workoutDay?.actualStatus === "completed" ? " segmented-control__option--active" : ""}`}
-                type="button"
-                onClick={() => updateWorkoutMutation.mutate({ planType: "workout", actualStatus: "completed", plannedLabel: currentDay?.workoutDay?.plannedLabel ?? "Workout" })}
-              >
-                Completed
-              </button>
-              <button
-                className={`segmented-control__option${currentDay?.workoutDay?.actualStatus === "recovery_respected" ? " segmented-control__option--active" : ""}`}
-                type="button"
-                onClick={() => updateWorkoutMutation.mutate({ planType: "recovery", actualStatus: "recovery_respected", plannedLabel: "Recovery" })}
-              >
-                Rest day
-              </button>
-              <button
-                className={`segmented-control__option${currentDay?.workoutDay?.actualStatus === "missed" ? " segmented-control__option--active" : ""}`}
-                type="button"
-                onClick={() => updateWorkoutMutation.mutate({ planType: "workout", actualStatus: "missed", plannedLabel: currentDay?.workoutDay?.plannedLabel ?? "Workout" })}
-              >
-                Missed
-              </button>
-            </div>
-          </div>
-        </SectionCard>
-
-        {/* ── Body weight ── */}
-        <SectionCard
-          title="Body weight"
-          subtitle={weightLogs.length > 0 ? `Latest: ${weightLogs[0].weightValue} ${weightLogs[0].unit}` : "No entries yet"}
-        >
-          {/* Inline weight entry form */}
-          {showWeightForm ? (
-            <WeightEntryForm
-              defaultUnit={currentDay?.latestWeight?.unit ?? "kg"}
-              isPending={addWeightMutation.isPending}
-              onSave={(v, u) => { void addWeightMutation.mutateAsync({ weightValue: v, unit: u, measuredOn: today }).then(() => setShowWeightForm(false)); }}
-              onCancel={() => setShowWeightForm(false)}
-            />
-          ) : (
-            <button className="button button--ghost button--small" type="button" onClick={() => setShowWeightForm(true)} style={{ marginBottom: "0.5rem" }}>+ Add entry</button>
-          )}
-
-          {/* Weight log list with correction */}
-          {weightLogs.length > 0 ? (
-            <div>
-              {weightLogs.map((entry) => (
-                <div key={entry.id}>
-                  <div className="log-row">
-                    <div className="log-row__info">
-                      <span className="log-row__primary">{entry.weightValue} {entry.unit}</span>
-                      <span className="log-row__secondary">{entry.measuredOn}</span>
+                  )}
+                  {item.kind === "meal" && deletingMealId === realId && (
+                    <div className="confirm-bar" style={{ marginLeft: "1.75rem" }}>
+                      <span className="confirm-bar__text">Delete this meal log?</span>
+                      <button className="button button--ghost button--small" type="button" disabled={deleteMealMutation.isPending} onClick={() => void deleteMealMutation.mutateAsync(realId).then(() => setDeletingMealId(null))}>
+                        {deleteMealMutation.isPending ? "Deleting..." : "Confirm"}
+                      </button>
+                      <button className="button button--ghost button--small" type="button" onClick={() => setDeletingMealId(null)}>Cancel</button>
                     </div>
-                    <div className="log-row__actions">
-                      <button className="button button--ghost button--small" type="button" onClick={() => { setEditingWeightId(entry.id); setEditWeightVal(String(entry.weightValue)); setEditWeightUnit(entry.unit); setDeletingWeightId(null); }} aria-label="Edit weight log">Edit</button>
-                      <button className="button button--ghost button--small" type="button" onClick={() => { setDeletingWeightId(entry.id); setEditingWeightId(null); }} aria-label="Delete weight log">Delete</button>
-                    </div>
-                  </div>
-                  {editingWeightId === entry.id && (
-                    <div className="inline-editor">
+                  )}
+
+                  {/* Inline edit forms for weight */}
+                  {item.kind === "weight" && editingWeightId === realId && (
+                    <div className="inline-editor" style={{ marginLeft: "1.75rem" }}>
                       <div className="stack-form">
                         <div style={{ display: "flex", gap: "0.5rem", alignItems: "flex-end" }}>
                           <label className="field" style={{ flex: 1 }}>
                             <span>Weight</span>
                             <input type="number" step="0.1" min="0" value={editWeightVal} autoFocus onChange={(e) => setEditWeightVal(e.target.value)} onKeyDown={(e) => {
-                              if (e.key === "Enter") { const v = parseNumberValue(editWeightVal); if (v) void updateWeightMutation.mutateAsync({ weightLogId: entry.id, weightValue: v, unit: editWeightUnit }).then(() => setEditingWeightId(null)); }
+                              if (e.key === "Enter") { const v = parseNumberValue(editWeightVal); if (v) void updateWeightMutation.mutateAsync({ weightLogId: realId, weightValue: v, unit: editWeightUnit }).then(() => setEditingWeightId(null)); }
                               if (e.key === "Escape") setEditingWeightId(null);
                             }} />
                           </label>
@@ -725,36 +921,111 @@ export function HealthPage() {
                           </label>
                         </div>
                         <div className="button-row button-row--tight">
-                          <button className="button button--primary button--small" type="button" disabled={updateWeightMutation.isPending} onClick={() => { const v = parseNumberValue(editWeightVal); if (v) void updateWeightMutation.mutateAsync({ weightLogId: entry.id, weightValue: v, unit: editWeightUnit }).then(() => setEditingWeightId(null)); }}>
-                            {updateWeightMutation.isPending ? "Saving…" : "Save"}
+                          <button className="button button--primary button--small" type="button" disabled={updateWeightMutation.isPending} onClick={() => { const v = parseNumberValue(editWeightVal); if (v) void updateWeightMutation.mutateAsync({ weightLogId: realId, weightValue: v, unit: editWeightUnit }).then(() => setEditingWeightId(null)); }}>
+                            {updateWeightMutation.isPending ? "Saving..." : "Save"}
                           </button>
                           <button className="button button--ghost button--small" type="button" onClick={() => setEditingWeightId(null)}>Cancel</button>
                         </div>
                       </div>
                     </div>
                   )}
-                  {deletingWeightId === entry.id && (
-                    <div className="confirm-bar">
-                      <span className="confirm-bar__text">Delete {entry.weightValue} {entry.unit} entry?</span>
-                      <button className="button button--ghost button--small" type="button" disabled={deleteWeightMutation.isPending} onClick={() => void deleteWeightMutation.mutateAsync(entry.id).then(() => setDeletingWeightId(null))}>
-                        {deleteWeightMutation.isPending ? "Deleting…" : "Confirm"}
+                  {item.kind === "weight" && deletingWeightId === realId && (
+                    <div className="confirm-bar" style={{ marginLeft: "1.75rem" }}>
+                      <span className="confirm-bar__text">Delete this weight entry?</span>
+                      <button className="button button--ghost button--small" type="button" disabled={deleteWeightMutation.isPending} onClick={() => void deleteWeightMutation.mutateAsync(realId).then(() => setDeletingWeightId(null))}>
+                        {deleteWeightMutation.isPending ? "Deleting..." : "Confirm"}
                       </button>
                       <button className="button button--ghost button--small" type="button" onClick={() => setDeletingWeightId(null)}>Cancel</button>
                     </div>
                   )}
                 </div>
-              ))}
-            </div>
-          ) : (
-            <EmptyState
-              title="No weight entries"
-              description="Body-weight history starts after the first manual log."
-            />
-          )}
-        </SectionCard>
-      </div>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="health-timeline__empty">
+            No activity logged yet today. Use the quick actions above to get started.
+          </div>
+        )}
+      </section>
 
-      <MealTemplateManager />
+      {/* ═══ Weekly Patterns ═══ */}
+      <section className="health-patterns-section" id="health-patterns">
+        <div className="health-section-label">7-day patterns</div>
+        <div className="health-patterns">
+          <div className="health-pattern">
+            <span className="health-pattern__label">Hydration</span>
+            <span className="health-pattern__value">{insights.waterDaysOnTarget}/7</span>
+            <span className="health-pattern__context">days on target</span>
+            <div className="health-pattern__bar">
+              <div
+                className="health-pattern__bar-fill health-pattern__bar-fill--water"
+                style={{ width: `${(insights.waterDaysOnTarget / 7) * 100}%` }}
+              />
+            </div>
+          </div>
+          <div className="health-pattern">
+            <span className="health-pattern__label">Meals</span>
+            <span className="health-pattern__value">{insights.mealLoggingDays}/7</span>
+            <span className="health-pattern__context">
+              {insights.meaningfulMealDays > 0 ? `${insights.meaningfulMealDays} meaningful` : "days logged"}
+            </span>
+            <div className="health-pattern__bar">
+              <div
+                className="health-pattern__bar-fill health-pattern__bar-fill--meals"
+                style={{ width: `${(insights.mealLoggingDays / 7) * 100}%` }}
+              />
+            </div>
+          </div>
+          <div className="health-pattern">
+            <span className="health-pattern__label">Workouts</span>
+            <span className="health-pattern__value">
+              {insights.workoutCompletionRate !== null ? `${insights.workoutCompletionRate}%` : "—"}
+            </span>
+            <span className="health-pattern__context">
+              {insights.workoutsMissed > 0 ? `${insights.workoutsMissed} missed` : "completion rate"}
+            </span>
+            {insights.workoutCompletionRate !== null && (
+              <div className="health-pattern__bar">
+                <div
+                  className="health-pattern__bar-fill health-pattern__bar-fill--workout"
+                  style={{ width: `${insights.workoutCompletionRate}%` }}
+                />
+              </div>
+            )}
+          </div>
+          <div className="health-pattern">
+            <span className="health-pattern__label">Weight</span>
+            <span className="health-pattern__value">
+              {insights.weightChange !== null
+                ? `${insights.weightChange > 0 ? "+" : ""}${insights.weightChange.toFixed(1)} ${insights.weightUnit ?? "kg"}`
+                : "—"}
+            </span>
+            <span className="health-pattern__context">
+              {insights.weightChange !== null
+                ? insights.weightChange < 0 ? "trending down" : insights.weightChange > 0 ? "trending up" : "stable"
+                : "not enough data"}
+            </span>
+          </div>
+        </div>
+      </section>
+
+      {/* ═══ Meal Templates (collapsible secondary) ═══ */}
+      <section className="health-templates-section">
+        <button
+          className="health-templates-toggle"
+          type="button"
+          onClick={() => setShowTemplates(!showTemplates)}
+        >
+          <span className="health-section-label" style={{ margin: 0 }}>
+            Meal templates
+          </span>
+          <span className={`health-templates-toggle__caret${showTemplates ? " health-templates-toggle__caret--open" : ""}`}>
+            &#9660;
+          </span>
+        </button>
+        {showTemplates && <MealTemplateManager />}
+      </section>
     </div>
   );
 }

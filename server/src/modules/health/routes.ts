@@ -55,8 +55,10 @@ import {
   getDateRangeWindowUtc,
   getDayWindowUtc,
   getUserLocalDate,
+  getUserLocalHour,
 } from "../../lib/time/user-time.js";
 import { parseOrThrow } from "../../lib/validation/parse.js";
+import { buildHealthSummaryEnhancements } from "./summary-builder.js";
 
 const isoDateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/) as unknown as z.ZodType<IsoDateString>;
 const isoDateTimeSchema = z.string().datetime({ offset: true });
@@ -643,118 +645,170 @@ export const registerHealthRoutes: FastifyPluginAsync = async (app) => {
   app.get("/summary", async (request, reply) => {
     const user = requireAuthenticatedUser(request);
     const query = parseOrThrow(healthSummaryQuerySchema, request.query);
-    const [preferences, currentTimezone] = await Promise.all([
-      app.prisma.userPreference.findUnique({
+    const preferences = await app.prisma.userPreference.findUnique({
+      where: {
+        userId: user.id,
+      },
+    });
+    const rangeWindow = getDateRangeWindowUtc(query.from, query.to, preferences?.timezone);
+    const now = new Date();
+    const todayIsoDate = getUserLocalDate(now, preferences?.timezone);
+    const currentHour = getUserLocalHour(now, preferences?.timezone);
+    const todayDate = parseIsoDate(todayIsoDate);
+    const todayWindow = getDayWindowUtc(todayIsoDate, preferences?.timezone);
+
+    const [
+      rangeWaterLogs,
+      rangeMealLogs,
+      workoutDays,
+      rangeWeightHistory,
+      currentWorkout,
+      currentDayWaterLogs,
+      currentDayMealLogs,
+      latestWeight,
+    ] = await Promise.all([
+      app.prisma.waterLog.findMany({
         where: {
           userId: user.id,
+          occurredAt: {
+            gte: rangeWindow.start,
+            lt: rangeWindow.end,
+          },
+        },
+        orderBy: {
+          occurredAt: "asc",
         },
       }),
-      app.prisma.userPreference.findUnique({
+      app.prisma.mealLog.findMany({
+        where: {
+          userId: user.id,
+          occurredAt: {
+            gte: rangeWindow.start,
+            lt: rangeWindow.end,
+          },
+        },
+        orderBy: {
+          occurredAt: "desc",
+        },
+      }),
+      app.prisma.workoutDay.findMany({
+        where: {
+          userId: user.id,
+          date: {
+            gte: parseIsoDate(query.from),
+            lte: parseIsoDate(query.to),
+          },
+        },
+        orderBy: {
+          date: "desc",
+        },
+      }),
+      app.prisma.weightLog.findMany({
+        where: {
+          userId: user.id,
+          measuredOn: {
+            gte: parseIsoDate(query.from),
+            lte: parseIsoDate(query.to),
+          },
+        },
+        orderBy: [{ measuredOn: "desc" }, { createdAt: "desc" }],
+      }),
+      app.prisma.workoutDay.findUnique({
+        where: {
+          userId_date: {
+            userId: user.id,
+            date: todayDate,
+          },
+        },
+      }),
+      app.prisma.waterLog.findMany({
+        where: {
+          userId: user.id,
+          occurredAt: {
+            gte: todayWindow.start,
+            lt: todayWindow.end,
+          },
+        },
+        orderBy: {
+          occurredAt: "asc",
+        },
+      }),
+      app.prisma.mealLog.findMany({
+        where: {
+          userId: user.id,
+          occurredAt: {
+            gte: todayWindow.start,
+            lt: todayWindow.end,
+          },
+        },
+        orderBy: {
+          occurredAt: "asc",
+        },
+      }),
+      app.prisma.weightLog.findFirst({
         where: {
           userId: user.id,
         },
-        select: {
-          timezone: true,
-        },
+        orderBy: [{ measuredOn: "desc" }, { createdAt: "desc" }],
       }),
     ]);
-    const rangeWindow = getDateRangeWindowUtc(query.from, query.to, currentTimezone?.timezone);
-    const todayIsoDate = getUserLocalDate(new Date(), currentTimezone?.timezone);
-    const todayDate = parseIsoDate(todayIsoDate);
-    const todayWindow = getDayWindowUtc(todayIsoDate, currentTimezone?.timezone);
 
-    const [rangeWaterLogs, mealLogs, workoutDays, weightHistory, currentWorkout] =
-      await Promise.all([
-        app.prisma.waterLog.findMany({
-          where: {
-            userId: user.id,
-            occurredAt: {
-              gte: rangeWindow.start,
-              lt: rangeWindow.end,
-            },
-          },
-          orderBy: {
-            occurredAt: "asc",
-          },
-        }),
-        app.prisma.mealLog.findMany({
-          where: {
-            userId: user.id,
-            occurredAt: {
-              gte: rangeWindow.start,
-              lt: rangeWindow.end,
-            },
-          },
-          orderBy: {
-            occurredAt: "desc",
-          },
-        }),
-        app.prisma.workoutDay.findMany({
-          where: {
-            userId: user.id,
-            date: {
-              gte: parseIsoDate(query.from),
-              lte: parseIsoDate(query.to),
-            },
-          },
-          orderBy: {
-            date: "desc",
-          },
-        }),
-        app.prisma.weightLog.findMany({
-          where: {
-            userId: user.id,
-            measuredOn: {
-              gte: parseIsoDate(query.from),
-              lte: parseIsoDate(query.to),
-            },
-          },
-          orderBy: {
-            measuredOn: "desc",
-          },
-        }),
-        app.prisma.workoutDay.findUnique({
-          where: {
-            userId_date: {
-              userId: user.id,
-              date: todayDate,
-            },
-          },
-        }),
-      ]);
-
-    const currentDayWaterMl = rangeWaterLogs
-      .filter((waterLog) => waterLog.occurredAt >= todayWindow.start && waterLog.occurredAt < todayWindow.end)
-      .reduce((total, waterLog) => total + waterLog.amountMl, 0);
-    const currentDayMeals = mealLogs.filter(
-      (mealLog) => mealLog.occurredAt >= todayWindow.start && mealLog.occurredAt < todayWindow.end,
+    const currentDayWaterMl = currentDayWaterLogs.reduce(
+      (total, waterLog) => total + waterLog.amountMl,
+      0,
     );
+    const serializedRangeWaterLogs = rangeWaterLogs.map(serializeWaterLog);
+    const serializedRangeMealLogs = rangeMealLogs.map(serializeMealLog);
+    const serializedWorkoutDays = workoutDays.map(serializeWorkoutDay);
+    const serializedRangeWeightHistory = rangeWeightHistory.map(serializeWeightLog);
+    const enhancements = buildHealthSummaryEnhancements({
+      currentIsoDate: todayIsoDate,
+      currentHour,
+      timezone: preferences?.timezone,
+      waterTargetMl: preferences?.dailyWaterTargetMl ?? 2500,
+      currentDayWaterMl,
+      currentDayWaterLogs: currentDayWaterLogs.map(serializeWaterLog),
+      currentDayMealLogs: currentDayMealLogs.map(serializeMealLog),
+      currentWorkout: currentWorkout ? serializeWorkoutDay(currentWorkout) : null,
+      latestWeight: latestWeight ? serializeWeightLog(latestWeight) : null,
+      rangeWaterLogs: serializedRangeWaterLogs,
+      rangeMealLogs: serializedRangeMealLogs,
+      rangeWorkoutDays: serializedWorkoutDays,
+      rangeWeightHistory: serializedRangeWeightHistory,
+    });
+
     const response: HealthSummaryResponse = withGeneratedAt({
       from: query.from,
       to: query.to,
       currentDay: {
         date: todayIsoDate,
+        phase: enhancements.currentDay.phase,
         waterMl: currentDayWaterMl,
         waterTargetMl: preferences?.dailyWaterTargetMl ?? 2500,
-        mealCount: currentDayMeals.length,
-        meaningfulMealCount: currentDayMeals.filter(
+        mealCount: currentDayMealLogs.length,
+        meaningfulMealCount: currentDayMealLogs.filter(
           (mealLog) => mealLog.loggingQuality === "MEANINGFUL" || mealLog.loggingQuality === "FULL",
         ).length,
         workoutDay: currentWorkout ? serializeWorkoutDay(currentWorkout) : null,
-        latestWeight: weightHistory.length > 0 ? serializeWeightLog(weightHistory[0]) : null,
+        latestWeight: latestWeight ? serializeWeightLog(latestWeight) : null,
+        signals: enhancements.currentDay.signals,
+        score: enhancements.currentDay.score,
+        timeline: enhancements.currentDay.timeline,
       },
       range: {
         totalWaterMl: rangeWaterLogs.reduce((total, waterLog) => total + waterLog.amountMl, 0),
-        totalMealsLogged: mealLogs.length,
+        totalMealsLogged: rangeMealLogs.length,
         workoutsCompleted: workoutDays.filter(
           (workoutDay) =>
             workoutDay.actualStatus === "COMPLETED" ||
             workoutDay.actualStatus === "RECOVERY_RESPECTED",
         ).length,
         workoutsPlanned: workoutDays.filter((workoutDay) => workoutDay.planType !== "NONE").length,
+        insights: enhancements.range.insights,
       },
-      mealLogs: mealLogs.map(serializeMealLog),
-      weightHistory: weightHistory.map(serializeWeightLog).reverse(),
+      guidance: enhancements.guidance,
+      mealLogs: serializedRangeMealLogs,
+      weightHistory: serializedRangeWeightHistory,
     });
 
     return reply.send(response);

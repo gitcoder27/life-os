@@ -5,6 +5,18 @@ export type MealSlot = "breakfast" | "lunch" | "dinner" | "snack";
 export type MealLoggingQuality = "partial" | "meaningful" | "full";
 export type WorkoutPlanType = "workout" | "recovery" | "none";
 export type WorkoutActualStatus = "completed" | "recovery_respected" | "fallback" | "missed" | "none";
+export type HealthPhase = "morning" | "midday" | "evening";
+export type HealthSignalStatus = "on_track" | "behind" | "complete" | "pending" | "recovery" | "missed";
+export type HealthScoreLabel = "strong" | "steady" | "needs_attention";
+export type HealthTimelineKind = "water" | "meal" | "workout" | "weight";
+export type HealthGuidanceKind = "water" | "meal" | "workout" | "weight" | "consistency";
+export type HealthGuidanceTone = "positive" | "neutral" | "warning";
+export type HealthGuidanceIntent =
+  | "log_water"
+  | "log_meal"
+  | "update_workout"
+  | "log_weight"
+  | "review_patterns";
 
 export interface WaterLogItem {
   id: EntityId;
@@ -43,23 +55,91 @@ export interface WeightLogItem {
   createdAt: string;
 }
 
+export interface HealthTimelineItem {
+  id: string;
+  kind: HealthTimelineKind;
+  occurredAt: string;
+  title: string;
+  detail: string;
+}
+
+export interface HealthGuidanceItem {
+  id: string;
+  kind: HealthGuidanceKind;
+  tone: HealthGuidanceTone;
+  title: string;
+  detail: string;
+  actionLabel: string;
+  route: "/health";
+  intent: HealthGuidanceIntent;
+}
+
+export interface HealthWaterSignal {
+  status: "on_track" | "behind" | "complete";
+  progressPct: number;
+  remainingMl: number;
+  paceTargetMl: number;
+}
+
+export interface HealthMealSignal {
+  status: "on_track" | "behind" | "complete";
+  progressPct: number;
+  targetCount: number;
+  nextSuggestedSlot: MealSlot | null;
+}
+
+export interface HealthWorkoutSignal {
+  status: Exclude<HealthSignalStatus, "on_track" | "behind">;
+  label: string;
+}
+
+export interface HealthScoreSnapshot {
+  value: number;
+  label: HealthScoreLabel;
+  earnedPoints: number;
+  possiblePoints: number;
+}
+
+export interface HealthRangeInsights {
+  waterDaysOnTarget: number;
+  mealLoggingDays: number;
+  meaningfulMealDays: number;
+  workoutsMissed: number;
+  workoutCompletionRate: number | null;
+  weightChange: number | null;
+  weightUnit: string | null;
+}
+
 export interface HealthSummaryResponse extends ApiMeta {
   from: IsoDateString;
   to: IsoDateString;
   currentDay: {
     date: IsoDateString;
+    phase: HealthPhase;
     waterMl: number;
     waterTargetMl: number;
     mealCount: number;
     meaningfulMealCount: number;
     workoutDay: WorkoutDayItem | null;
     latestWeight: WeightLogItem | null;
+    signals: {
+      water: HealthWaterSignal;
+      meals: HealthMealSignal;
+      workout: HealthWorkoutSignal;
+    };
+    score: HealthScoreSnapshot;
+    timeline: HealthTimelineItem[];
   };
   range: {
     totalWaterMl: number;
     totalMealsLogged: number;
     workoutsCompleted: number;
     workoutsPlanned: number;
+    insights: HealthRangeInsights;
+  };
+  guidance: {
+    focus: HealthGuidanceItem;
+    recommendations: HealthGuidanceItem[];
   };
   mealLogs: MealLogItem[];
   weightHistory: WeightLogItem[];
