@@ -2747,7 +2747,7 @@ describe("module route smoke tests", () => {
       url: "/api/goals",
       payload: {
         title: "Quarter focus",
-        domainId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+        domainId: "b4c80ea1b0c94e819cefb7f896f4718d",
         notes: null,
       },
     });

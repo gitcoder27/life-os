@@ -19,8 +19,6 @@ import { GoalInspectorMilestones } from "./GoalInspectorMilestones";
 import { useGoalTodayAction } from "./useGoalTodayAction";
 import {
   GoalFormDialog,
-  emptyGoalForm,
-  suggestChildHorizon,
   type GoalFormData,
 } from "./GoalFormDialog";
 
@@ -510,6 +508,7 @@ export function GoalsPlanWorkspace({
   selectedGoalId,
   onSelectGoal,
   onOpenCreateGoal,
+  onStartCreateChild,
   showChildForm,
   childFormParent,
   childForm,
@@ -526,6 +525,7 @@ export function GoalsPlanWorkspace({
   selectedGoalId: string | null;
   onSelectGoal: (goalId: string) => void;
   onOpenCreateGoal: () => void;
+  onStartCreateChild: (parentGoal: GoalDetailItem) => void;
   showChildForm: boolean;
   childFormParent: GoalOverviewItem | null;
   childForm: GoalFormData;
@@ -536,15 +536,6 @@ export function GoalsPlanWorkspace({
 }) {
   const activeGoals = goals.filter((g) => g.status === "active");
   const tree = useMemo(() => buildHierarchyTree(activeGoals), [activeGoals]);
-
-  const handleCreateChild = (parentGoal: GoalDetailItem) => {
-    const suggestedHorizon = suggestChildHorizon(parentGoal.horizonId, horizons);
-    onChangeChildForm(() => emptyGoalForm({
-      domainId: parentGoal.domainId,
-      horizonId: suggestedHorizon,
-      parentGoalId: parentGoal.id,
-    }));
-  };
 
   return (
     <div className="ghq-plan">
@@ -626,7 +617,7 @@ export function GoalsPlanWorkspace({
             weekPlan={weekPlan}
             monthPlan={monthPlan}
             onSelectGoal={onSelectGoal}
-            onCreateChild={handleCreateChild}
+            onCreateChild={onStartCreateChild}
           />
         ) : (
           <div className="ghq-inspector ghq-inspector--empty">

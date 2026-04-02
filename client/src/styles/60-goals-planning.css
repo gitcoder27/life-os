@@ -160,8 +160,9 @@
 
 .ghq-overview__body {
   display: flex;
-  gap: 0;
+  gap: 1rem;
   min-height: 0;
+  align-items: flex-start;
 }
 
 .ghq-overview__list {
@@ -1161,16 +1162,18 @@
 }
 
 .goals-workspace__detail {
-  width: 440px;
+  width: min(440px, 100%);
   flex-shrink: 0;
-  position: fixed;
-  top: 0;
-  right: 0;
-  bottom: 0;
-  z-index: 41;
+  align-self: flex-start;
+  position: sticky;
+  top: calc(var(--shell-header-height, 0px) + 1rem);
+  max-height: calc(100vh - var(--shell-header-height, 0px) - 2rem);
   overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--r);
   border-left: 1px solid var(--border);
   background: var(--panel);
+  box-shadow: var(--shadow-md);
   animation: slideInRight 0.3s var(--ease) both;
 }
 
@@ -1183,7 +1186,7 @@
   .detail-backdrop {
     display: block;
     position: fixed;
-    inset: 0;
+    inset: var(--shell-header-height, 0px) 0 0 0;
     background: rgba(0, 0, 0, 0.55);
     backdrop-filter: blur(4px);
     z-index: 39;
@@ -1191,7 +1194,15 @@
   }
 
   .goals-workspace__detail {
+    position: fixed;
+    top: var(--shell-header-height, 0px);
+    right: 0;
+    bottom: 0;
     width: 100%;
+    max-height: calc(100vh - var(--shell-header-height, 0px));
+    z-index: 41;
+    box-shadow: none;
+    border: none;
     border-left: none;
     border-radius: 0;
     animation: slideUp 0.35s var(--ease) both;

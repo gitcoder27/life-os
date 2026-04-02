@@ -1,5 +1,4 @@
 import { useMemo, useState } from "react";
-import { Link } from "react-router-dom";
 
 import type {
   GoalDomainItem,
@@ -21,12 +20,7 @@ import {
 } from "../../shared/ui/PageState";
 import { SectionCard } from "../../shared/ui/SectionCard";
 import { GoalCard } from "./GoalCard";
-import {
-  GoalFormDialog,
-  emptyGoalForm,
-  goalToFormData,
-  type GoalFormData,
-} from "./GoalFormDialog";
+import { GoalInspectorPanel } from "./GoalInspectorPanel";
 import {
   SortablePlanningEditor,
   type RankedPlanningDraft,
@@ -215,13 +209,7 @@ export function GoalsOverviewWorkspace({
   onSwitchToPlan,
   onOpenCreateGoal,
   showGoalForm,
-  goalForm,
-  editingGoalId,
-  onChangeGoalForm,
-  onSubmitGoalForm,
-  onCancelGoalForm,
-  createIsPending,
-  updateIsPending,
+  onCloseSelectedGoal,
   onRefetch,
   sectionErrors,
 }: {
@@ -238,13 +226,7 @@ export function GoalsOverviewWorkspace({
   onSwitchToPlan: (goalId?: string) => void;
   onOpenCreateGoal: () => void;
   showGoalForm: boolean;
-  goalForm: GoalFormData;
-  editingGoalId: string | null;
-  onChangeGoalForm: (updater: (prev: GoalFormData) => GoalFormData) => void;
-  onSubmitGoalForm: () => void;
-  onCancelGoalForm: () => void;
-  createIsPending: boolean;
-  updateIsPending: boolean;
+  onCloseSelectedGoal: () => void;
   onRefetch: () => void;
   sectionErrors: { weekPlan: { message: string } | null; monthPlan: { message: string } | null };
 }) {
@@ -360,20 +342,6 @@ export function GoalsOverviewWorkspace({
       {/* Main layout */}
       <div className="ghq-overview__body">
         <div className="ghq-overview__list">
-          {/* Goal form */}
-          {showGoalForm && (
-            <GoalFormDialog
-              form={goalForm}
-              editing={Boolean(editingGoalId)}
-              isPending={createIsPending || updateIsPending}
-              domains={domains}
-              horizons={horizons}
-              onChangeForm={onChangeGoalForm}
-              onSubmit={onSubmitGoalForm}
-              onCancel={onCancelGoalForm}
-            />
-          )}
-
           {/* Domain-grouped goals */}
           {domainGroups.length > 0 ? (
             <div className="ghq-domain-sections stagger">
@@ -611,7 +579,20 @@ export function GoalsOverviewWorkspace({
             </SectionCard>
           </div>
         </div>
+
+        {selectedGoalId && (
+          <div className="goals-workspace__detail">
+            <GoalInspectorPanel
+              goalId={selectedGoalId}
+              onClose={onCloseSelectedGoal}
+            />
+          </div>
+        )}
       </div>
+
+      {selectedGoalId && (
+        <div className="detail-backdrop" onClick={onCloseSelectedGoal} />
+      )}
     </div>
   );
 }

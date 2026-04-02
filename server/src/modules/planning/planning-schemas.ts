@@ -16,6 +16,7 @@ import { z } from "zod";
 export const isoDateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/) as unknown as z.ZodType<IsoDateString>;
 export const isoDateTimeSchema = z.string().datetime({ offset: true });
 const reminderAtSchema = z.union([isoDateSchema, isoDateTimeSchema]);
+const entityIdSchema = z.string().trim().min(1);
 
 export const goalStatusSchema = z.enum(["active", "paused", "completed", "archived"]) as z.ZodType<GoalStatus>;
 export const goalMilestoneStatusSchema = z.enum(["pending", "completed"]);
@@ -79,9 +80,9 @@ export const priorityInputSchema = z.object({
 
 export const createGoalSchema = z.object({
   title: z.string().trim().min(1).max(200),
-  domainId: z.string().uuid(),
-  horizonId: z.string().uuid().nullable().optional(),
-  parentGoalId: z.string().uuid().nullable().optional(),
+  domainId: entityIdSchema,
+  horizonId: entityIdSchema.nullable().optional(),
+  parentGoalId: entityIdSchema.nullable().optional(),
   why: z.string().max(2000).nullable().optional(),
   targetDate: isoDateSchema.nullable().optional(),
   notes: z.string().max(4000).nullable().optional(),
@@ -91,9 +92,9 @@ export const createGoalSchema = z.object({
 export const updateGoalSchema = z
   .object({
     title: z.string().trim().min(1).max(200).optional(),
-    domainId: z.string().uuid().optional(),
-    horizonId: z.string().uuid().nullable().optional(),
-    parentGoalId: z.string().uuid().nullable().optional(),
+    domainId: entityIdSchema.optional(),
+    horizonId: entityIdSchema.nullable().optional(),
+    parentGoalId: entityIdSchema.nullable().optional(),
     why: z.string().max(2000).nullable().optional(),
     status: goalStatusSchema.optional(),
     targetDate: isoDateSchema.nullable().optional(),
@@ -116,8 +117,8 @@ export const updateMonthFocusSchema = z.object({
 });
 
 export const goalsQuerySchema = z.object({
-  domainId: z.string().uuid().optional(),
-  horizonId: z.string().uuid().optional(),
+  domainId: entityIdSchema.optional(),
+  horizonId: entityIdSchema.optional(),
   status: goalStatusSchema.optional(),
   date: isoDateSchema.optional(),
 }) as z.ZodType<GoalsQuery>;
@@ -127,14 +128,14 @@ export const goalContextQuerySchema = z.object({
 });
 
 const goalDomainConfigInputSchema = z.object({
-  id: z.string().uuid().optional(),
+  id: entityIdSchema.optional(),
   systemKey: z.enum(["health", "money", "work_growth", "home_admin", "discipline", "other"]).nullable().optional(),
   name: z.string().trim().min(1).max(80),
   isArchived: z.boolean().optional(),
 });
 
 const goalHorizonConfigInputSchema = z.object({
-  id: z.string().uuid().optional(),
+  id: entityIdSchema.optional(),
   systemKey: z.enum(["life_vision", "five_year", "one_year", "quarter", "month"]).nullable().optional(),
   name: z.string().trim().min(1).max(80),
   spanMonths: z.number().int().positive().max(600).nullable().optional(),

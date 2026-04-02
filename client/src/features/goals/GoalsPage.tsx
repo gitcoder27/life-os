@@ -5,7 +5,6 @@ import {
   getTodayDate,
   getWeekStartDate,
   useCreateGoalMutation,
-  useGoalDetailQuery,
   useGoalsWorkspaceQuery,
   useUpdateGoalMutation,
   type GoalDetailItem,
@@ -22,7 +21,6 @@ import {
   suggestChildHorizon,
   type GoalFormData,
 } from "./GoalFormDialog";
-import { GoalInspectorPanel } from "./GoalInspectorPanel";
 import { GoalsModeToggle, type GoalsMode } from "./GoalsModeToggle";
 import { GoalsOverviewWorkspace } from "./GoalsOverviewWorkspace";
 import { GoalsPlanWorkspace } from "./GoalsPlanWorkspace";
@@ -79,6 +77,9 @@ export function GoalsPage() {
 
   function openCreateGoal() {
     const defaultDomain = domains.find((d) => !d.isArchived);
+    setShowChildForm(false);
+    setChildFormParent(null);
+    setChildForm(emptyGoalForm());
     setEditingGoalId(null);
     setGoalForm(emptyGoalForm({ domainId: defaultDomain?.id ?? "" }));
     setShowGoalForm(true);
@@ -193,16 +194,7 @@ export function GoalsPage() {
           onSwitchToPlan={handleSwitchToPlan}
           onOpenCreateGoal={openCreateGoal}
           showGoalForm={showGoalForm}
-          goalForm={goalForm}
-          editingGoalId={editingGoalId}
-          onChangeGoalForm={setGoalForm}
-          onSubmitGoalForm={() => void handleGoalSubmit()}
-          onCancelGoalForm={() => {
-            setShowGoalForm(false);
-            setEditingGoalId(null);
-          }}
-          createIsPending={createGoalMutation.isPending}
-          updateIsPending={updateGoalMutation.isPending}
+          onCloseSelectedGoal={() => setSelectedGoalId(null)}
           onRefetch={() => void workspaceQuery.refetch()}
           sectionErrors={sectionErrors}
         />
@@ -216,6 +208,7 @@ export function GoalsPage() {
           selectedGoalId={selectedGoalId}
           onSelectGoal={handleSelectGoal}
           onOpenCreateGoal={openCreateGoal}
+          onStartCreateChild={handleCreateChildFromPlan}
           showChildForm={showChildForm}
           childFormParent={childFormParent}
           childForm={childForm}
@@ -229,21 +222,8 @@ export function GoalsPage() {
         />
       )}
 
-      {/* Overview inspector overlay */}
-      {mode === "overview" && selectedGoalId && (
-        <>
-          <div className="detail-backdrop" onClick={() => setSelectedGoalId(null)} />
-          <div className="goals-workspace__detail">
-            <GoalInspectorPanel
-              goalId={selectedGoalId}
-              onClose={() => setSelectedGoalId(null)}
-            />
-          </div>
-        </>
-      )}
-
-      {/* Overview goal form overlay */}
-      {mode === "overview" && showGoalForm && (
+      {/* Shared goal form overlay */}
+      {showGoalForm && (
         <div className="ghq-form-overlay">
           <div className="ghq-form-overlay__backdrop" onClick={() => {
             setShowGoalForm(false);
