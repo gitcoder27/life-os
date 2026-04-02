@@ -2,6 +2,8 @@
 
 Use this for updating `https://personal.daycommand.online` after each release.
 
+If a release includes Prisma migration files, production also needs the database migration applied. Use `npx prisma migrate deploy --schema server/prisma/schema.prisma` on the production server. That command only applies checked-in pending migrations, so it is the right production command and is safe to include in the normal deploy flow.
+
 ## Checked-in service templates
 
 - Production template: `deploy/systemd/life-os.service`
@@ -33,18 +35,41 @@ git pull
 # 2) Reinstall deps if package-lock changed
 npm ci
 
-# 3) Build server/client contracts
+# 3) Apply pending production database migrations
+npx prisma migrate deploy --schema server/prisma/schema.prisma
+
+# 4) Build server/client/contracts
 npm run build
 
-# 4) Deploy frontend bundle to nginx doc root
+# 5) Deploy frontend bundle to nginx doc root
 sudo rsync -a --delete client/dist/ /var/www/personal.daycommand.online/
 
-# 5) Restart API service so updated server code is loaded
+# 6) Restart API service so updated server code is loaded
 sudo systemctl restart life-os.service
 ```
 
 The production client build now reads `client/.env.production` via `vite build --mode production`.
 Keep `server/.env.production` `CSRF_COOKIE_NAME` and `client/.env.production` `VITE_CSRF_COOKIE_NAME` set to the same production value before every deploy.
+
+## Safer schema-change deploy order
+
+If the release includes database schema changes, avoid leaving the API running while the migration is changing tables or constraints. Use this order instead:
+
+```bash
+cd /home/ubuntu/apps/life-os-prod
+
+grep '^CSRF_COOKIE_NAME=' server/.env.production
+cat client/.env.production
+git pull
+npm ci
+sudo systemctl stop life-os.service
+npx prisma migrate deploy --schema server/prisma/schema.prisma
+npm run build
+sudo rsync -a --delete client/dist/ /var/www/personal.daycommand.online/
+sudo systemctl start life-os.service
+```
+
+This is the safer path for releases like the Goals HQ backend change because the app and the database are changing together.
 
 ## Optional but recommended verification
 
@@ -80,6 +105,7 @@ If only server logic changed:
 
 ```bash
 cd /home/ubuntu/apps/life-os-prod
+npx prisma migrate deploy --schema server/prisma/schema.prisma
 npm run build:server
 sudo systemctl restart life-os.service
 ```
@@ -87,6 +113,7 @@ sudo systemctl restart life-os.service
 ## Notes
 
 - `npm run build` currently runs contracts + server + client build.
+- `npx prisma migrate deploy --schema server/prisma/schema.prisma` should be run in production whenever there are pending migrations.
 - `npm run build:client` uses `vite build --mode production`, so the shipped bundle reads `client/.env.production`.
 - Nginx only proxies `/api/*` to the backend; everything else is static frontend files.
 - Keep `server/.env.production` in place as it contains `PORT=3104` and production DB/secret values.

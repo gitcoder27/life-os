@@ -1,28 +1,93 @@
 import type { ApiMeta, EntityId, IsoDateString } from "./common.js";
-import type { TaskKind, TaskOriginType } from "./planning.js";
+import type {
+  MonthPlanResponse,
+  PlanningPriorityItem,
+  PlanningTaskItem,
+  TaskKind,
+  TaskOriginType,
+  WeekPlanResponse,
+} from "./planning.js";
 
-export type GoalDomain = "health" | "money" | "work_growth" | "home_admin" | "discipline" | "other";
+export type GoalDomain = string;
+export type GoalDomainSystemKey =
+  | "health"
+  | "money"
+  | "work_growth"
+  | "home_admin"
+  | "discipline"
+  | "other";
+export type GoalHorizonSystemKey = "life_vision" | "five_year" | "one_year" | "quarter" | "month";
 export type GoalStatus = "active" | "paused" | "completed" | "archived";
 export type GoalHealthState = "on_track" | "drifting" | "stalled" | "achieved";
 export type GoalMilestoneStatus = "pending" | "completed";
 export type GoalMomentumTrend = "up" | "down" | "steady";
 
+export interface GoalDomainItem {
+  id: EntityId;
+  systemKey: GoalDomainSystemKey | null;
+  name: string;
+  sortOrder: number;
+  isArchived: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface GoalDomainInput {
+  id?: EntityId;
+  systemKey?: GoalDomainSystemKey | null;
+  name: string;
+  isArchived?: boolean;
+}
+
+export interface GoalHorizonItem {
+  id: EntityId;
+  systemKey: GoalHorizonSystemKey | null;
+  name: string;
+  sortOrder: number;
+  spanMonths: number | null;
+  isArchived: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface GoalHorizonInput {
+  id?: EntityId;
+  systemKey?: GoalHorizonSystemKey | null;
+  name: string;
+  spanMonths?: number | null;
+  isArchived?: boolean;
+}
+
 export interface GoalSummary {
   id: EntityId;
   title: string;
+  domainId: EntityId;
   domain: GoalDomain;
+  domainSystemKey: GoalDomainSystemKey | null;
   status: GoalStatus;
 }
 
-export interface GoalItem {
-  id: EntityId;
-  title: string;
-  domain: GoalDomain;
-  status: GoalStatus;
+export interface GoalItem extends GoalSummary {
+  horizonId: EntityId | null;
+  horizonName: string | null;
+  horizonSystemKey: GoalHorizonSystemKey | null;
+  horizonSpanMonths: number | null;
+  parentGoalId: EntityId | null;
+  why: string | null;
   targetDate: IsoDateString | null;
   notes: string | null;
+  sortOrder: number;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface GoalHierarchySummary extends GoalSummary {
+  horizonId: EntityId | null;
+  horizonName: string | null;
+  horizonSystemKey: GoalHorizonSystemKey | null;
+  parentGoalId: EntityId | null;
+  sortOrder: number;
+  targetDate: IsoDateString | null;
 }
 
 export interface GoalMilestoneItem {
@@ -123,9 +188,21 @@ export interface GoalLinkedHabitItem {
 
 export interface GoalDetailItem extends GoalOverviewItem {
   milestones: GoalMilestoneItem[];
+  parent: GoalHierarchySummary | null;
+  children: GoalHierarchySummary[];
+  ancestors: GoalHierarchySummary[];
   linkedPriorities: GoalLinkedPriorityItem[];
+  currentWeekPriorities: GoalLinkedPriorityItem[];
+  currentMonthOutcomes: GoalLinkedPriorityItem[];
   linkedTasks: GoalLinkedTaskItem[];
   linkedHabits: GoalLinkedHabitItem[];
+}
+
+export interface GoalsWorkspaceTodayAlignment {
+  date: IsoDateString;
+  priorities: PlanningPriorityItem[];
+  tasks: PlanningTaskItem[];
+  representedGoalIds: EntityId[];
 }
 
 export interface GoalsResponse extends ApiMeta {
@@ -133,25 +210,57 @@ export interface GoalsResponse extends ApiMeta {
   goals: GoalOverviewItem[];
 }
 
+export interface GoalsConfigResponse extends ApiMeta {
+  domains: GoalDomainItem[];
+  horizons: GoalHorizonItem[];
+}
+
+export interface GoalsWorkspaceResponse extends ApiMeta {
+  contextDate: IsoDateString;
+  domains: GoalDomainItem[];
+  horizons: GoalHorizonItem[];
+  goals: GoalOverviewItem[];
+  weekPlan: WeekPlanResponse;
+  monthPlan: MonthPlanResponse;
+  todayAlignment: GoalsWorkspaceTodayAlignment;
+}
+
 export interface GoalsQuery {
-  domain?: GoalDomain;
+  domainId?: EntityId;
+  horizonId?: EntityId;
   status?: GoalStatus;
   date?: IsoDateString;
 }
 
 export interface CreateGoalRequest {
   title: string;
-  domain: GoalDomain;
+  domainId: EntityId;
+  horizonId?: EntityId | null;
+  parentGoalId?: EntityId | null;
+  why?: string | null;
   targetDate?: IsoDateString | null;
   notes?: string | null;
+  sortOrder?: number;
 }
 
 export interface UpdateGoalRequest {
   title?: string;
-  domain?: GoalDomain;
+  domainId?: EntityId;
+  horizonId?: EntityId | null;
+  parentGoalId?: EntityId | null;
+  why?: string | null;
   status?: GoalStatus;
   targetDate?: IsoDateString | null;
   notes?: string | null;
+  sortOrder?: number;
+}
+
+export interface UpdateGoalDomainsRequest {
+  domains: GoalDomainInput[];
+}
+
+export interface UpdateGoalHorizonsRequest {
+  horizons: GoalHorizonInput[];
 }
 
 export interface GoalDetailResponse extends ApiMeta {

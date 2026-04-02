@@ -58,6 +58,18 @@ function matchesWeeklyHistorySearch(review: WeeklyReviewHistoryRow, normalizedQu
 }
 
 function matchesMonthlyHistorySearch(review: MonthlyReviewHistoryRow, normalizedQuery: string) {
+  const outcomeTitles = Array.isArray(review.threeOutcomesJson)
+    ? review.threeOutcomesJson
+        .map((value) =>
+          typeof value === "string"
+            ? value
+            : value && typeof value === "object" && "title" in value && typeof value.title === "string"
+              ? value.title
+              : null,
+        )
+        .filter((value): value is string => Boolean(value))
+    : [];
+
   return (
     !normalizedQuery ||
     containsNormalized(review.monthVerdict, normalizedQuery) ||
@@ -66,7 +78,7 @@ function matchesMonthlyHistorySearch(review: MonthlyReviewHistoryRow, normalized
     containsNormalized(review.nextMonthTheme, normalizedQuery) ||
     containsNormalized(review.simplifyText, normalizedQuery) ||
     containsNormalized(review.notes, normalizedQuery) ||
-    (review.threeOutcomesJson as string[]).some((value) => containsNormalized(value, normalizedQuery)) ||
+    outcomeTitles.some((value) => containsNormalized(value, normalizedQuery)) ||
     (review.habitChangesJson as string[]).some((value) => containsNormalized(value, normalizedQuery))
   );
 }

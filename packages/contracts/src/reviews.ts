@@ -160,7 +160,7 @@ export interface ExistingMonthlyReview {
   biggestLeak: string;
   ratings: Record<string, number>;
   nextMonthTheme: string;
-  threeOutcomes: string[];
+  nextMonthOutcomes: PlanningPriorityItem[];
   habitChanges: string[];
   simplifyText: string;
   notes: string | null;
@@ -183,7 +183,7 @@ export interface SubmitMonthlyReviewRequest {
   biggestLeak: string;
   ratings: Record<string, number>;
   nextMonthTheme: string;
-  threeOutcomes: string[];
+  nextMonthOutcomes: PlanningPriorityInput[];
   habitChanges: string[];
   simplifyText: string;
   notes?: string | null;

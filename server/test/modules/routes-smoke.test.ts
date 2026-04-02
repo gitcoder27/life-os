@@ -611,16 +611,21 @@ describe("module route smoke tests", () => {
       findMany: vi.fn().mockResolvedValue([]),
     } as any;
 
-    const response = await app!.inject({ method: "GET", url: "/api/goals?domain=health&status=active" });
+    const response = await app!.inject({
+      method: "GET",
+      url: "/api/goals?domainId=aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa&status=active",
+    });
     expect(response.statusCode).toBe(200);
     expect(prisma.goal.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: expect.objectContaining({
           userId: "user-1",
-          domain: "HEALTH",
+          domainId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
           status: "ACTIVE",
         }),
         include: expect.objectContaining({
+          domain: true,
+          horizon: true,
           milestones: expect.any(Object),
         }),
       }),
@@ -637,13 +642,29 @@ describe("module route smoke tests", () => {
       findFirst: vi.fn().mockResolvedValue({
         id: goalId,
         userId: "user-1",
+        domainId: "domain-health",
+        parentGoalId: null,
         title: "Stay on track",
-        domain: "HEALTH",
+        why: null,
         status: "ACTIVE",
         targetDate: new Date("2026-03-31T00:00:00.000Z"),
         notes: "Goal notes",
+        sortOrder: 1,
         createdAt: new Date("2026-03-01T00:00:00.000Z"),
         updatedAt: new Date("2026-03-20T00:00:00.000Z"),
+        domain: {
+          id: "domain-health",
+          userId: "user-1",
+          systemKey: "HEALTH",
+          name: "Health",
+          sortOrder: 1,
+          isArchived: false,
+          createdAt: new Date("2026-03-01T00:00:00.000Z"),
+          updatedAt: new Date("2026-03-01T00:00:00.000Z"),
+        },
+        horizon: null,
+        parent: null,
+        children: [],
         milestones: [
           {
             id: milestoneId,
@@ -886,7 +907,12 @@ describe("module route smoke tests", () => {
             goal: {
               id: "goal-1",
               title: "Build lifting consistency",
-              domain: "HEALTH",
+              domainId: "domain-health",
+              domain: {
+                id: "domain-health",
+                name: "Health",
+                systemKey: "HEALTH",
+              },
               status: "ACTIVE",
             },
           },
@@ -910,7 +936,12 @@ describe("module route smoke tests", () => {
       goal: {
         id: "goal-1",
         title: "Build lifting consistency",
-        domain: "HEALTH",
+        domainId: "domain-health",
+        domain: {
+          id: "domain-health",
+          name: "Health",
+          systemKey: "HEALTH",
+        },
         status: "ACTIVE",
       },
       originType: "MANUAL",
@@ -1067,7 +1098,7 @@ describe("module route smoke tests", () => {
         goal: expect.objectContaining({
           id: "goal-1",
           title: "Build lifting consistency",
-          domain: "health",
+          domain: "Health",
           status: "active",
         }),
       }),
@@ -2132,6 +2163,26 @@ describe("module route smoke tests", () => {
       deleteMany: vi.fn().mockResolvedValue({}),
       createMany: vi.fn().mockResolvedValue({}),
     } as any;
+    prisma.goalDomainConfig = {
+      count: vi.fn().mockResolvedValue(1),
+      findMany: vi.fn().mockResolvedValue([
+        {
+          id: "domain-money",
+          userId: "user-1",
+          systemKey: "MONEY",
+          name: "Money",
+          sortOrder: 1,
+          isArchived: false,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      ]),
+      createMany: vi.fn().mockResolvedValue({}),
+    } as any;
+    prisma.goalHorizonConfig = {
+      count: vi.fn().mockResolvedValue(1),
+      createMany: vi.fn().mockResolvedValue({}),
+    } as any;
     prisma.habit = {
       deleteMany: vi.fn().mockResolvedValue({}),
       createMany: vi.fn().mockResolvedValue({}),
@@ -2214,7 +2265,12 @@ describe("module route smoke tests", () => {
           goal: {
             id: "goal-1",
             title: "Stay on track",
-            domain: "HEALTH",
+            domainId: "domain-health",
+            domain: {
+              id: "domain-health",
+              name: "Health",
+              systemKey: "HEALTH",
+            },
             status: "ACTIVE",
           },
           completedAt: null,
@@ -2229,11 +2285,20 @@ describe("module route smoke tests", () => {
         {
           id: "goal-1",
           userId: "user-1",
+          domainId: "domain-health",
+          parentGoalId: null,
           title: "Stay on track",
-          domain: "HEALTH",
+          why: null,
           status: "ACTIVE",
           targetDate: null,
           notes: null,
+          sortOrder: 1,
+          domain: {
+            id: "domain-health",
+            name: "Health",
+            systemKey: "HEALTH",
+          },
+          horizon: null,
           milestones: [],
           createdAt: new Date("2026-03-01T00:00:00.000Z"),
           updatedAt: new Date("2026-03-10T00:00:00.000Z"),
@@ -2241,11 +2306,20 @@ describe("module route smoke tests", () => {
         {
           id: "goal-2",
           userId: "user-1",
+          domainId: "domain-health",
+          parentGoalId: null,
           title: "Marathon prep",
-          domain: "HEALTH",
+          why: null,
           status: "ACTIVE",
           targetDate: new Date("2026-03-18T00:00:00.000Z"),
           notes: null,
+          sortOrder: 2,
+          domain: {
+            id: "domain-health",
+            name: "Health",
+            systemKey: "HEALTH",
+          },
+          horizon: null,
           milestones: [
             {
               id: "milestone-1",
@@ -2266,29 +2340,92 @@ describe("module route smoke tests", () => {
       findFirst: vi.fn().mockResolvedValue({
         id: "goal-1",
         userId: "user-1",
-      }),
-      create: vi.fn().mockResolvedValue({
-        id: "goal-1",
-        userId: "user-1",
+        domainId: "domain-health",
+        parentGoalId: null,
         title: "Stay on track",
-        domain: "HEALTH",
+        why: null,
         status: "ACTIVE",
         targetDate: null,
         notes: null,
+        sortOrder: 1,
         createdAt: new Date(),
         updatedAt: new Date(),
+        domain: {
+          id: "domain-health",
+          name: "Health",
+          systemKey: "HEALTH",
+        },
+        horizon: null,
+      }),
+      create: vi.fn().mockResolvedValue({
+        id: "goal-2",
+        userId: "user-1",
+        domainId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+        horizonId: null,
+        parentGoalId: null,
+        title: "Quarter focus",
+        why: null,
+        status: "ACTIVE",
+        targetDate: null,
+        notes: null,
+        sortOrder: 1,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        domain: {
+          id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          name: "Work & Growth",
+          systemKey: "WORK_GROWTH",
+        },
+        horizon: null,
       }),
       update: vi.fn().mockResolvedValue({
         id: "goal-1",
         userId: "user-1",
-        title: "Stay on track",
-        domain: "HEALTH",
+        domainId: "domain-health",
+        horizonId: null,
+        parentGoalId: null,
+        title: "Quarter focus updated",
+        why: null,
         status: "COMPLETED",
         targetDate: null,
         notes: null,
+        sortOrder: 1,
         createdAt: new Date(),
         updatedAt: new Date(),
+        domain: {
+          id: "domain-health",
+          name: "Health",
+          systemKey: "HEALTH",
+        },
+        horizon: null,
       }),
+      count: vi.fn().mockResolvedValue(0),
+    } as any;
+    prisma.goalDomainConfig = {
+      count: vi.fn().mockResolvedValue(1),
+      findFirst: vi.fn().mockImplementation(async ({ where }: any) =>
+        where?.id === "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
+          ? {
+              id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+              userId: "user-1",
+              systemKey: "WORK_GROWTH",
+              name: "Work & Growth",
+              sortOrder: 2,
+              isArchived: false,
+              createdAt: new Date(),
+              updatedAt: new Date(),
+            }
+          : {
+              id: "domain-health",
+              userId: "user-1",
+              systemKey: "HEALTH",
+              name: "Health",
+              sortOrder: 1,
+              isArchived: false,
+              createdAt: new Date(),
+              updatedAt: new Date(),
+            },
+      ),
     } as any;
     prisma.planningCycle = {
       upsert: vi.fn().mockResolvedValue(planningCyclePayload),
@@ -2330,7 +2467,12 @@ describe("module route smoke tests", () => {
             goal: {
               id: "goal-1",
               title: "Stay on track",
-              domain: "HEALTH",
+              domainId: "domain-health",
+              domain: {
+                id: "domain-health",
+                name: "Health",
+                systemKey: "HEALTH",
+              },
               status: "ACTIVE",
             },
             completedAt: null,
@@ -2347,7 +2489,12 @@ describe("module route smoke tests", () => {
         goal: {
           id: "goal-1",
           title: "Stay on track",
-          domain: "HEALTH",
+          domainId: "domain-health",
+          domain: {
+            id: "domain-health",
+            name: "Health",
+            systemKey: "HEALTH",
+          },
           status: "ACTIVE",
         },
         completedAt: null,
@@ -2370,7 +2517,12 @@ describe("module route smoke tests", () => {
         goal: {
           id: "goal-1",
           title: "Stay on track",
-          domain: "HEALTH",
+          domainId: "domain-health",
+          domain: {
+            id: "domain-health",
+            name: "Health",
+            systemKey: "HEALTH",
+          },
           status: "ACTIVE",
         },
         completedAt: new Date(),
@@ -2407,7 +2559,12 @@ describe("module route smoke tests", () => {
             goal: {
               id: "goal-1",
               title: "Stay on track",
-              domain: "HEALTH",
+              domainId: "domain-health",
+              domain: {
+                id: "domain-health",
+                name: "Health",
+                systemKey: "HEALTH",
+              },
               status: "ACTIVE",
             },
             originType: "MANUAL",
@@ -2432,7 +2589,12 @@ describe("module route smoke tests", () => {
         goal: {
           id: "goal-1",
           title: "Stay on track",
-          domain: "HEALTH",
+          domainId: "domain-health",
+          domain: {
+            id: "domain-health",
+            name: "Health",
+            systemKey: "HEALTH",
+          },
           status: "ACTIVE",
         },
         originType: "MANUAL",
@@ -2460,7 +2622,12 @@ describe("module route smoke tests", () => {
             : {
                 id: "goal-1",
                 title: "Stay on track",
-                domain: "HEALTH",
+                domainId: "domain-health",
+                domain: {
+                  id: "domain-health",
+                  name: "Health",
+                  systemKey: "HEALTH",
+                },
                 status: "ACTIVE",
               },
         originType: data.originType ?? "MANUAL",
@@ -2483,7 +2650,12 @@ describe("module route smoke tests", () => {
         goal: {
           id: "goal-1",
           title: "Stay on track",
-          domain: "HEALTH",
+          domainId: "domain-health",
+          domain: {
+            id: "domain-health",
+            name: "Health",
+            systemKey: "HEALTH",
+          },
           status: "ACTIVE",
         },
         originType: "MANUAL",
@@ -2575,7 +2747,7 @@ describe("module route smoke tests", () => {
       url: "/api/goals",
       payload: {
         title: "Quarter focus",
-        domain: "work_growth",
+        domainId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
         notes: null,
       },
     });
@@ -2692,7 +2864,7 @@ describe("module route smoke tests", () => {
         goal: expect.objectContaining({
           id: "goal-1",
           title: "Stay on track",
-          domain: "health",
+          domain: "Health",
           status: "active",
         }),
       }),

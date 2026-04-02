@@ -12,13 +12,21 @@ enum UserStatus {
   DISABLED
 }
 
-enum GoalDomain {
+enum GoalDomainSystemKey {
   HEALTH
   MONEY
   WORK_GROWTH
   HOME_ADMIN
   DISCIPLINE
   OTHER
+}
+
+enum GoalHorizonSystemKey {
+  LIFE_VISION
+  FIVE_YEAR
+  ONE_YEAR
+  QUARTER
+  MONTH
 }
 
 enum GoalStatus {
@@ -205,6 +213,8 @@ model User {
   auditEvents           AuditEvent[]
   preferences           UserPreference?
   goals                 Goal[]
+  goalDomainConfigs     GoalDomainConfig[]
+  goalHorizonConfigs    GoalHorizonConfig[]
   planningCycles        PlanningCycle[]
   tasks                 Task[]
   taskTemplates         TaskTemplate[]
@@ -266,20 +276,68 @@ model UserPreference {
 }
 
 model Goal {
-  id         String      @id @default(uuid())
+  id           String           @id @default(uuid())
+  userId       String
+  domainId     String
+  horizonId    String?
+  parentGoalId String?
+  title        String
+  why          String?
+  status       GoalStatus       @default(ACTIVE)
+  targetDate   DateTime?
+  notes        String?
+  sortOrder    Int              @default(0)
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+  user         User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  domain       GoalDomainConfig @relation(fields: [domainId], references: [id], onDelete: Restrict)
+  horizon      GoalHorizonConfig? @relation(fields: [horizonId], references: [id], onDelete: SetNull)
+  parent       Goal?            @relation("GoalHierarchy", fields: [parentGoalId], references: [id], onDelete: SetNull)
+  children     Goal[]           @relation("GoalHierarchy")
+  priorities   CyclePriority[]
+  milestones   GoalMilestone[]
+  tasks        Task[]
+  habits       Habit[]
+
+  @@index([userId, status, sortOrder])
+  @@index([userId, domainId, status])
+  @@index([userId, horizonId])
+  @@index([userId, parentGoalId, sortOrder])
+}
+
+model GoalDomainConfig {
+  id         String              @id @default(uuid())
   userId     String
-  title      String
-  domain     GoalDomain
-  status     GoalStatus  @default(ACTIVE)
-  targetDate DateTime?
-  notes      String?
-  createdAt  DateTime    @default(now())
-  updatedAt  DateTime    @updatedAt
-  user       User        @relation(fields: [userId], references: [id], onDelete: Cascade)
-  priorities CyclePriority[]
-  milestones GoalMilestone[]
-  tasks      Task[]
-  habits     Habit[]
+  systemKey  GoalDomainSystemKey?
+  name       String
+  sortOrder  Int
+  isArchived Boolean             @default(false)
+  createdAt  DateTime            @default(now())
+  updatedAt  DateTime            @updatedAt
+  user       User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  goals      Goal[]
+
+  @@unique([userId, systemKey])
+  @@unique([userId, sortOrder])
+  @@index([userId, isArchived, sortOrder])
+}
+
+model GoalHorizonConfig {
+  id         String               @id @default(uuid())
+  userId     String
+  systemKey  GoalHorizonSystemKey?
+  name       String
+  sortOrder  Int
+  spanMonths Int?
+  isArchived Boolean              @default(false)
+  createdAt  DateTime             @default(now())
+  updatedAt  DateTime             @updatedAt
+  user       User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  goals      Goal[]
+
+  @@unique([userId, systemKey])
+  @@unique([userId, sortOrder])
+  @@index([userId, isArchived, sortOrder])
 }
 
 model GoalMilestone {

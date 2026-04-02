@@ -1,6 +1,9 @@
 import type {
+  GoalSummary,
   IsoDateString,
   MonthlyReviewHistoryTrendPoint,
+  PlanningPriorityInput,
+  PlanningPriorityItem,
   RecurrenceDefinition,
   ReviewHistoryCadence,
   ReviewHistoryCadenceFilter,
@@ -65,7 +68,7 @@ export interface SubmitMonthlyReviewRequest {
   biggestLeak: string;
   ratings: Record<string, number>;
   nextMonthTheme: string;
-  threeOutcomes: string[];
+  nextMonthOutcomes: PlanningPriorityInput[];
   habitChanges: string[];
   simplifyText: string;
   notes?: string | null;
@@ -97,6 +100,7 @@ export interface PlanningTaskItem {
   scheduledForDate: string | null;
   dueAt: string | null;
   goalId: string | null;
+  goal: GoalSummary | null;
   originType: "manual" | "quick_capture" | "carry_forward" | "review_seed" | "recurring" | "template";
   carriedFromTaskId: string | null;
   recurrence: RecurrenceDefinition | null;
@@ -133,7 +137,7 @@ export interface ExistingMonthlyReview {
   biggestLeak: string;
   ratings: Record<string, number>;
   nextMonthTheme: string;
-  threeOutcomes: string[];
+  nextMonthOutcomes: PlanningPriorityItem[];
   habitChanges: string[];
   simplifyText: string;
   notes: string | null;
@@ -149,14 +153,7 @@ export interface DailyReviewResponse {
   isCompleted: boolean;
   canEditSubmittedReview: boolean;
   submissionWindow: ReviewSubmissionWindow;
-  seededTomorrowPriorities: Array<{
-    id: string;
-    slot: 1 | 2 | 3;
-    title: string;
-    status: "pending" | "completed" | "dropped";
-    goalId: string | null;
-    completedAt: string | null;
-  }>;
+  seededTomorrowPriorities: PlanningPriorityItem[];
   generatedAt: string;
 }
 
@@ -177,14 +174,7 @@ export interface WeeklyReviewResponse {
     topFrictionTags: Array<{ tag: ReviewFrictionTag; count: number }>;
   };
   existingReview: ExistingWeeklyReview | null;
-  seededNextWeekPriorities: Array<{
-    id: string;
-    slot: 1 | 2 | 3;
-    title: string;
-    status: "pending" | "completed" | "dropped";
-    goalId: string | null;
-    completedAt: string | null;
-  }>;
+  seededNextWeekPriorities: PlanningPriorityItem[];
   submissionWindow: ReviewSubmissionWindow;
   generatedAt: string;
 }
@@ -204,14 +194,7 @@ export interface MonthlyReviewResponse {
   };
   existingReview: ExistingMonthlyReview | null;
   seededNextMonthTheme: string | null;
-  seededNextMonthOutcomes: Array<{
-    id: string;
-    slot: 1 | 2 | 3;
-    title: string;
-    status: "pending" | "completed" | "dropped";
-    goalId: string | null;
-    completedAt: string | null;
-  }>;
+  seededNextMonthOutcomes: PlanningPriorityItem[];
   submissionWindow: ReviewSubmissionWindow;
   generatedAt: string;
 }

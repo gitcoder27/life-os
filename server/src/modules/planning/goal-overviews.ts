@@ -1,4 +1,4 @@
-import type { Goal, GoalMilestone } from "@prisma/client";
+import type { Goal, GoalDomainConfig, GoalHorizonConfig, GoalMilestone } from "@prisma/client";
 
 import { addDays } from "../../lib/time/cycle.js";
 import { buildGoalInsights } from "./goal-insights.js";
@@ -50,7 +50,13 @@ export function buildTodayLinkedGoalCounts(
 export async function buildGoalOverviews(
   app: PlanningApp,
   userId: string,
-  goals: Array<Goal & { milestones: GoalMilestone[] }>,
+  goals: Array<
+    Goal & {
+      domain: GoalDomainConfig;
+      horizon: GoalHorizonConfig | null;
+      milestones: GoalMilestone[];
+    }
+  >,
   context: GoalContext,
 ) {
   if (goals.length === 0) {

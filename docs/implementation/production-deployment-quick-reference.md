@@ -12,12 +12,29 @@ git pull
 grep '^CSRF_COOKIE_NAME=' server/.env.production
 cat client/.env.production
 npm ci
+npx prisma migrate deploy --schema server/prisma/schema.prisma
 npm run build
 sudo rsync -a --delete client/dist/ /var/www/personal.daycommand.online/
 sudo systemctl restart life-os.service
 ```
 
 `client/.env.production` is now the source of truth for the frontend CSRF cookie name during production builds. It must match `server/.env.production`.
+`npx prisma migrate deploy --schema server/prisma/schema.prisma` is the required production database step whenever a release includes checked-in Prisma migrations. It is safe to run on every deploy because it only applies pending migrations.
+
+If the release changes the database schema, use this safer order:
+
+```bash
+cd /home/ubuntu/apps/life-os-prod
+git pull
+grep '^CSRF_COOKIE_NAME=' server/.env.production
+cat client/.env.production
+npm ci
+sudo systemctl stop life-os.service
+npx prisma migrate deploy --schema server/prisma/schema.prisma
+npm run build
+sudo rsync -a --delete client/dist/ /var/www/personal.daycommand.online/
+sudo systemctl start life-os.service
+```
 
 ## Quick checks
 

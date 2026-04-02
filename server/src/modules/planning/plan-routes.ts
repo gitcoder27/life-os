@@ -124,7 +124,9 @@ export const registerPlanningPlanRoutes: FastifyPluginAsync = async (app) => {
           goal: {
             id: goal.id,
             title: goal.title,
+            domainId: goal.domainId,
             domain: goal.domain,
+            domainSystemKey: goal.domainSystemKey,
             status: goal.status,
           },
           health: goal.health,

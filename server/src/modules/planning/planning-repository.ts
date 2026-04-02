@@ -1,4 +1,6 @@
 import type {
+  GoalDomainInput,
+  GoalHorizonInput,
   GoalMilestoneInput,
   IsoDateString,
   PlanningPriorityInput,
@@ -12,12 +14,21 @@ import { upsertRecurrenceRuleRecord } from "../../lib/recurrence/store.js";
 import { parseIsoDate } from "../../lib/time/cycle.js";
 import { toIsoDateString } from "../../lib/time/date.js";
 import {
+  ensureGoalConfigSeeded,
+  normalizeGoalDomainInputs,
+  normalizeGoalHorizonInputs,
+} from "./goal-config.js";
+import {
   serializeDayPlannerBlock,
+  serializeGoalDomainConfig,
+  serializeGoalHorizonConfig,
   serializeGoalMilestone,
   serializePriority,
+  toPrismaGoalDomainSystemKey,
+  toPrismaGoalHorizonSystemKey,
   toPrismaGoalMilestoneStatus,
 } from "./planning-mappers.js";
-import { dayPlannerBlockWithTasksInclude } from "./planning-record-shapes.js";
+import { dayPlannerBlockWithTasksInclude, goalSummaryInclude } from "./planning-record-shapes.js";
 import type { PlanningApp } from "./planning-types.js";
 
 const dayPlannerBlockWithPlanningCycleInclude = {
@@ -170,7 +181,9 @@ export async function ensurePlanningCycle(
           slot: "asc",
         },
         include: {
-          goal: true,
+          goal: {
+            include: goalSummaryInclude,
+          },
         },
       },
     },
@@ -632,11 +645,94 @@ export async function replaceCyclePriorities(
       slot: "asc",
     },
     include: {
-      goal: true,
+      goal: {
+        include: goalSummaryInclude,
+      },
     },
   });
 
   return refreshed.map(serializePriority);
+}
+
+function assertUniqueIds(label: string, ids: Array<string | undefined>) {
+  const definedIds = ids.filter((value): value is string => Boolean(value));
+  if (new Set(definedIds).size !== definedIds.length) {
+    throw new AppError({
+      statusCode: 400,
+      code: "BAD_REQUEST",
+      message: `${label} IDs must be unique`,
+    });
+  }
+}
+
+function assertUniqueNullableKeys(label: string, values: Array<string | null | undefined>) {
+  const definedValues = values.filter((value): value is string => Boolean(value));
+  if (new Set(definedValues).size !== definedValues.length) {
+    throw new AppError({
+      statusCode: 400,
+      code: "BAD_REQUEST",
+      message: `${label} keys must be unique`,
+    });
+  }
+}
+
+export async function loadGoalConfig(app: PlanningApp, userId: string) {
+  await ensureGoalConfigSeeded(app.prisma, userId);
+  const [domains, horizons] = await Promise.all([
+    app.prisma.goalDomainConfig.findMany({
+      where: { userId },
+      orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
+    }),
+    app.prisma.goalHorizonConfig.findMany({
+      where: { userId },
+      orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
+    }),
+  ]);
+
+  return {
+    domains: domains.map(serializeGoalDomainConfig),
+    horizons: horizons.map(serializeGoalHorizonConfig),
+  };
+}
+
+export async function findOwnedGoalDomainConfig(app: PlanningApp, userId: string, domainId: string) {
+  await ensureGoalConfigSeeded(app.prisma, userId);
+  const domain = await app.prisma.goalDomainConfig.findFirst({
+    where: {
+      id: domainId,
+      userId,
+    },
+  });
+
+  if (!domain) {
+    throw new AppError({
+      statusCode: 404,
+      code: "NOT_FOUND",
+      message: "Goal domain not found",
+    });
+  }
+
+  return domain;
+}
+
+export async function findOwnedGoalHorizonConfig(app: PlanningApp, userId: string, horizonId: string) {
+  await ensureGoalConfigSeeded(app.prisma, userId);
+  const horizon = await app.prisma.goalHorizonConfig.findFirst({
+    where: {
+      id: horizonId,
+      userId,
+    },
+  });
+
+  if (!horizon) {
+    throw new AppError({
+      statusCode: 404,
+      code: "NOT_FOUND",
+      message: "Goal horizon not found",
+    });
+  }
+
+  return horizon;
 }
 
 export async function findOwnedGoal(app: PlanningApp, userId: string, goalId: string) {
@@ -658,6 +754,70 @@ export async function findOwnedGoal(app: PlanningApp, userId: string, goalId: st
   return goal;
 }
 
+export async function assertOwnedGoalDomainReference(
+  app: PlanningApp,
+  userId: string,
+  domainId: string,
+) {
+  await findOwnedGoalDomainConfig(app, userId, domainId);
+}
+
+export async function assertOwnedGoalHorizonReference(
+  app: PlanningApp,
+  userId: string,
+  horizonId: string | null | undefined,
+) {
+  if (!horizonId) {
+    return;
+  }
+
+  await findOwnedGoalHorizonConfig(app, userId, horizonId);
+}
+
+export async function assertValidGoalParentReference(
+  app: PlanningApp,
+  userId: string,
+  goalId: string | null,
+  parentGoalId: string | null | undefined,
+) {
+  if (!parentGoalId) {
+    return null;
+  }
+
+  if (goalId && goalId === parentGoalId) {
+    throw new AppError({
+      statusCode: 400,
+      code: "BAD_REQUEST",
+      message: "A goal cannot parent itself",
+    });
+  }
+
+  const parent = await findOwnedGoal(app, userId, parentGoalId);
+  let cursor = parent.parentGoalId;
+  while (cursor) {
+    if (cursor === goalId) {
+      throw new AppError({
+        statusCode: 400,
+        code: "BAD_REQUEST",
+        message: "A goal cannot be reparented beneath its own descendant",
+      });
+    }
+
+    const ancestor = await app.prisma.goal.findFirst({
+      where: {
+        id: cursor,
+        userId,
+      },
+      select: {
+        parentGoalId: true,
+      },
+    });
+    cursor = ancestor?.parentGoalId ?? null;
+  }
+
+  return parent;
+}
+
 export async function assertOwnedGoalReference(
   app: PlanningApp,
   userId: string,
@@ -668,6 +828,222 @@ export async function assertOwnedGoalReference(
   }
 
   await findOwnedGoal(app, userId, goalId);
+}
+
+export async function replaceGoalDomainConfigs(
+  app: PlanningApp,
+  userId: string,
+  domains: GoalDomainInput[],
+) {
+  const normalizedDomains = normalizeGoalDomainInputs(domains);
+  if (!normalizedDomains.some((domain) => !domain.isArchived)) {
+    throw new AppError({
+      statusCode: 400,
+      code: "BAD_REQUEST",
+      message: "At least one active goal domain is required",
+    });
+  }
+
+  await ensureGoalConfigSeeded(app.prisma, userId);
+  const existingDomains = await app.prisma.goalDomainConfig.findMany({
+    where: { userId },
+    orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
+  });
+  const existingById = new Map(existingDomains.map((domain) => [domain.id, domain]));
+  assertUniqueIds("Goal domain", normalizedDomains.map((domain) => domain.id));
+  assertUniqueNullableKeys("Goal domain", normalizedDomains.map((domain) => domain.systemKey));
+
+  for (const domain of normalizedDomains) {
+    if (domain.id && !existingById.has(domain.id)) {
+      throw new AppError({
+        statusCode: 404,
+        code: "NOT_FOUND",
+        message: "Goal domain not found",
+      });
+    }
+  }
+
+  await app.prisma.$transaction(async (tx) => {
+    let nextArchivedSortOrder = normalizedDomains.length + 1;
+    const requestedIds = new Set(normalizedDomains.flatMap((domain) => (domain.id ? [domain.id] : [])));
+
+    for (const existingDomain of existingDomains) {
+      if (requestedIds.has(existingDomain.id)) {
+        continue;
+      }
+
+      const usageCount = await tx.goal.count({
+        where: {
+          userId,
+          domainId: existingDomain.id,
+        },
+      });
+
+      if (usageCount > 0) {
+        await tx.goalDomainConfig.update({
+          where: { id: existingDomain.id },
+          data: {
+            isArchived: true,
+            sortOrder: nextArchivedSortOrder++,
+          },
+        });
+        continue;
+      }
+
+      await tx.goalDomainConfig.delete({
+        where: { id: existingDomain.id },
+      });
+    }
+
+    for (const [index, domain] of normalizedDomains.entries()) {
+      if (domain.id) {
+        const existing = existingById.get(domain.id)!;
+        if ((domain.systemKey ?? null) !== (existing.systemKey ? serializeGoalDomainConfig(existing).systemKey : null)) {
+          throw new AppError({
+            statusCode: 400,
+            code: "BAD_REQUEST",
+            message: "Goal domain system keys cannot be reassigned",
+          });
+        }
+
+        await tx.goalDomainConfig.update({
+          where: { id: domain.id },
+          data: {
+            name: domain.name,
+            isArchived: domain.isArchived,
+            sortOrder: index + 1,
+          },
+        });
+        continue;
+      }
+
+      await tx.goalDomainConfig.create({
+        data: {
+          userId,
+          systemKey: domain.systemKey ? toPrismaGoalDomainSystemKey(domain.systemKey) : null,
+          name: domain.name,
+          isArchived: domain.isArchived,
+          sortOrder: index + 1,
+        },
+      });
+    }
+  });
+
+  const refreshed = await app.prisma.goalDomainConfig.findMany({
+    where: { userId },
+    orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
+  });
+
+  return refreshed.map(serializeGoalDomainConfig);
+}
+
+export async function replaceGoalHorizonConfigs(
+  app: PlanningApp,
+  userId: string,
+  horizons: GoalHorizonInput[],
+) {
+  const normalizedHorizons = normalizeGoalHorizonInputs(horizons);
+  if (!normalizedHorizons.some((horizon) => !horizon.isArchived)) {
+    throw new AppError({
+      statusCode: 400,
+      code: "BAD_REQUEST",
+      message: "At least one active planning layer is required",
+    });
+  }
+
+  await ensureGoalConfigSeeded(app.prisma, userId);
+  const existingHorizons = await app.prisma.goalHorizonConfig.findMany({
+    where: { userId },
+    orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
+  });
+  const existingById = new Map(existingHorizons.map((horizon) => [horizon.id, horizon]));
+  assertUniqueIds("Goal horizon", normalizedHorizons.map((horizon) => horizon.id));
+  assertUniqueNullableKeys("Goal horizon", normalizedHorizons.map((horizon) => horizon.systemKey));
+
+  for (const horizon of normalizedHorizons) {
+    if (horizon.id && !existingById.has(horizon.id)) {
+      throw new AppError({
+        statusCode: 404,
+        code: "NOT_FOUND",
+        message: "Goal horizon not found",
+      });
+    }
+  }
+
+  await app.prisma.$transaction(async (tx) => {
+    let nextArchivedSortOrder = normalizedHorizons.length + 1;
+    const requestedIds = new Set(normalizedHorizons.flatMap((horizon) => (horizon.id ? [horizon.id] : [])));
+
+    for (const existingHorizon of existingHorizons) {
+      if (requestedIds.has(existingHorizon.id)) {
+        continue;
+      }
+
+      const usageCount = await tx.goal.count({
+        where: {
+          userId,
+          horizonId: existingHorizon.id,
+        },
+      });
+
+      if (usageCount > 0) {
+        await tx.goalHorizonConfig.update({
+          where: { id: existingHorizon.id },
+          data: {
+            isArchived: true,
+            sortOrder: nextArchivedSortOrder++,
+          },
+        });
+        continue;
+      }
+
+      await tx.goalHorizonConfig.delete({
+        where: { id: existingHorizon.id },
+      });
+    }
+
+    for (const [index, horizon] of normalizedHorizons.entries()) {
+      if (horizon.id) {
+        const existing = existingById.get(horizon.id)!;
+        if ((horizon.systemKey ?? null) !== (existing.systemKey ? serializeGoalHorizonConfig(existing).systemKey : null)) {
+          throw new AppError({
+            statusCode: 400,
+            code: "BAD_REQUEST",
+            message: "Goal horizon system keys cannot be reassigned",
+          });
+        }
+
+        await tx.goalHorizonConfig.update({
+          where: { id: horizon.id },
+          data: {
+            name: horizon.name,
+            spanMonths: horizon.spanMonths,
+            isArchived: horizon.isArchived,
+            sortOrder: index + 1,
+          },
+        });
+        continue;
+      }
+
+      await tx.goalHorizonConfig.create({
+        data: {
+          userId,
+          systemKey: horizon.systemKey ? toPrismaGoalHorizonSystemKey(horizon.systemKey) : null,
+          name: horizon.name,
+          spanMonths: horizon.spanMonths,
+          isArchived: horizon.isArchived,
+          sortOrder: index + 1,
+        },
+      });
+    }
+  });
+
+  const refreshed = await app.prisma.goalHorizonConfig.findMany({
+    where: { userId },
+    orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
+  });
+
+  return refreshed.map(serializeGoalHorizonConfig);
 }
 
 export async function findOwnedTaskTemplate(

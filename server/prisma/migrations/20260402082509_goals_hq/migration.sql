@@ -1,0 +1,2 @@
+-- RenameIndex
+ALTER INDEX "Task_userId_status_originType_scheduledForDate_kind_createdAt_i" RENAME TO "Task_userId_status_originType_scheduledForDate_kind_created_idx";

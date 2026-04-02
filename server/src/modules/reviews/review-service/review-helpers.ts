@@ -8,6 +8,8 @@ import type {
 
 import { AppError } from "../../../lib/errors/app-error.js";
 import { addIsoDays } from "../../../lib/time/cycle.js";
+import { serializePriority as serializePlanningPriority } from "../../planning/planning-mappers.js";
+import { goalSummaryInclude } from "../../planning/planning-record-shapes.js";
 
 import type {
   ReviewFrictionTag,
@@ -20,34 +22,34 @@ export function toJson(value: unknown): Prisma.InputJsonValue {
   return value as Prisma.InputJsonValue;
 }
 
-export function serializePriority(priority: {
-  id: string;
-  slot: number;
-  title: string;
-  status: "PENDING" | "COMPLETED" | "DROPPED";
-  goalId: string | null;
-  completedAt: Date | null;
-}): {
-  id: string;
-  slot: 1 | 2 | 3;
-  title: string;
-  status: "pending" | "completed" | "dropped";
-  goalId: string | null;
-  completedAt: string | null;
-} {
-  return {
-    id: priority.id,
-    slot: priority.slot as 1 | 2 | 3,
-    title: priority.title,
-    status:
-      priority.status === "COMPLETED"
-        ? "completed"
-        : priority.status === "DROPPED"
-          ? "dropped"
-          : "pending",
-    goalId: priority.goalId,
-    completedAt: priority.completedAt?.toISOString() ?? null,
-  };
+export const serializePriority = serializePlanningPriority;
+
+export async function assertOwnedPriorityGoalReferences(
+  prisma: PrismaClient | Prisma.TransactionClient,
+  userId: string,
+  priorities: ReviewPrioritySeed[],
+) {
+  const goalIds = [...new Set(priorities.flatMap((priority) => (priority.goalId ? [priority.goalId] : [])))];
+  if (goalIds.length === 0) {
+    return;
+  }
+
+  const count = await prisma.goal.count({
+    where: {
+      userId,
+      id: {
+        in: goalIds,
+      },
+    },
+  });
+
+  if (count !== goalIds.length) {
+    throw new AppError({
+      statusCode: 400,
+      code: "BAD_REQUEST",
+      message: "Planning priorities can only reference goals you own",
+    });
+  }
 }
 
 export async function getUserPreferences(prisma: PrismaClient, userId: string) {
@@ -279,6 +281,11 @@ export async function replacePriorities(
     },
     orderBy: {
       slot: "asc",
+    },
+    include: {
+      goal: {
+        include: goalSummaryInclude,
+      },
     },
   });
 

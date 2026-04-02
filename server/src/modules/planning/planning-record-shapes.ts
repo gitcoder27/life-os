@@ -1,5 +1,11 @@
+export const goalSummaryInclude = {
+  domain: true,
+} as const;
+
 export const planningTaskInclude = {
-  goal: true,
+  goal: {
+    include: goalSummaryInclude,
+  },
   recurrenceRule: {
     include: {
       exceptions: {
@@ -12,6 +18,8 @@ export const planningTaskInclude = {
 } as const;
 
 export const goalWithMilestonesInclude = {
+  domain: true,
+  horizon: true,
   milestones: {
     orderBy: {
       sortOrder: "asc",

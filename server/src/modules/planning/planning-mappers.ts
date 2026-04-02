@@ -1,5 +1,9 @@
 import type {
-  GoalDomain,
+  GoalDomainItem,
+  GoalDomainSystemKey,
+  GoalHierarchySummary,
+  GoalHorizonItem,
+  GoalHorizonSystemKey,
   GoalItem,
   GoalLinkedHabitItem,
   GoalLinkedPriorityItem,
@@ -16,7 +20,10 @@ import type {
 } from "@life-os/contracts";
 import type {
   Goal,
-  GoalDomain as PrismaGoalDomain,
+  GoalDomainConfig,
+  GoalDomainSystemKey as PrismaGoalDomainSystemKey,
+  GoalHorizonConfig,
+  GoalHorizonSystemKey as PrismaGoalHorizonSystemKey,
   GoalMilestone,
   GoalMilestoneStatus as PrismaGoalMilestoneStatus,
   GoalStatus as PrismaGoalStatus,
@@ -38,11 +45,31 @@ import { serializeRecurrenceDefinition } from "../../lib/recurrence/store.js";
 import { toIsoDateString } from "../../lib/time/date.js";
 import { taskTemplateTaskSchema } from "./planning-schemas.js";
 
-type GoalSummaryRecord = {
-  id: string;
-  title: string;
-  domain: PrismaGoalDomain;
-  status: PrismaGoalStatus;
+type GoalDomainRecord = Pick<
+  GoalDomainConfig,
+  "id" | "systemKey" | "name" | "sortOrder" | "isArchived" | "createdAt" | "updatedAt"
+>;
+
+type GoalHorizonRecord = Pick<
+  GoalHorizonConfig,
+  "id" | "systemKey" | "name" | "sortOrder" | "spanMonths" | "isArchived" | "createdAt" | "updatedAt"
+>;
+
+type GoalSummaryRecord = Pick<Goal, "id" | "title" | "status" | "domainId"> & {
+  domain: GoalDomainRecord;
+};
+
+type GoalHierarchyRecord = Pick<
+  Goal,
+  "id" | "title" | "status" | "domainId" | "horizonId" | "parentGoalId" | "sortOrder" | "targetDate"
+> & {
+  domain: GoalDomainRecord;
+  horizon?: GoalHorizonRecord | null;
+};
+
+type GoalRecord = Goal & {
+  domain: GoalDomainRecord;
+  horizon?: GoalHorizonRecord | null;
 };
 
 type SerializedRecurrenceRule = Parameters<typeof serializeRecurrenceDefinition>[0];
@@ -79,8 +106,10 @@ export type GoalLinkedHabitRecord = Habit & {
   checkins: Array<{ occurredOn: Date; status: "COMPLETED" | "SKIPPED" }>;
 };
 
-export function toPrismaGoalDomain(domain: GoalDomain): PrismaGoalDomain {
-  switch (domain) {
+export function toPrismaGoalDomainSystemKey(
+  systemKey: GoalDomainSystemKey,
+): PrismaGoalDomainSystemKey {
+  switch (systemKey) {
     case "health":
       return "HEALTH";
     case "money":
@@ -96,8 +125,10 @@ export function toPrismaGoalDomain(domain: GoalDomain): PrismaGoalDomain {
   }
 }
 
-export function fromPrismaGoalDomain(domain: PrismaGoalDomain): GoalDomain {
-  switch (domain) {
+export function fromPrismaGoalDomainSystemKey(
+  systemKey: PrismaGoalDomainSystemKey | null,
+): GoalDomainSystemKey | null {
+  switch (systemKey) {
     case "HEALTH":
       return "health";
     case "MONEY":
@@ -110,6 +141,44 @@ export function fromPrismaGoalDomain(domain: PrismaGoalDomain): GoalDomain {
       return "discipline";
     case "OTHER":
       return "other";
+    default:
+      return null;
+  }
+}
+
+export function toPrismaGoalHorizonSystemKey(
+  systemKey: GoalHorizonSystemKey,
+): PrismaGoalHorizonSystemKey {
+  switch (systemKey) {
+    case "life_vision":
+      return "LIFE_VISION";
+    case "five_year":
+      return "FIVE_YEAR";
+    case "one_year":
+      return "ONE_YEAR";
+    case "quarter":
+      return "QUARTER";
+    case "month":
+      return "MONTH";
+  }
+}
+
+export function fromPrismaGoalHorizonSystemKey(
+  systemKey: PrismaGoalHorizonSystemKey | null,
+): GoalHorizonSystemKey | null {
+  switch (systemKey) {
+    case "LIFE_VISION":
+      return "life_vision";
+    case "FIVE_YEAR":
+      return "five_year";
+    case "ONE_YEAR":
+      return "one_year";
+    case "QUARTER":
+      return "quarter";
+    case "MONTH":
+      return "month";
+    default:
+      return null;
   }
 }
 
@@ -270,14 +339,66 @@ export function fromPrismaTaskOriginType(originType: PrismaTaskOriginType): Plan
   }
 }
 
-export function serializeGoal(goal: Goal): GoalItem {
+export function serializeGoalDomainConfig(domain: GoalDomainRecord): GoalDomainItem {
+  return {
+    id: domain.id,
+    systemKey: fromPrismaGoalDomainSystemKey(domain.systemKey),
+    name: domain.name,
+    sortOrder: domain.sortOrder,
+    isArchived: domain.isArchived,
+    createdAt: domain.createdAt.toISOString(),
+    updatedAt: domain.updatedAt.toISOString(),
+  };
+}
+
+export function serializeGoalHorizonConfig(horizon: GoalHorizonRecord): GoalHorizonItem {
+  return {
+    id: horizon.id,
+    systemKey: fromPrismaGoalHorizonSystemKey(horizon.systemKey),
+    name: horizon.name,
+    sortOrder: horizon.sortOrder,
+    spanMonths: horizon.spanMonths,
+    isArchived: horizon.isArchived,
+    createdAt: horizon.createdAt.toISOString(),
+    updatedAt: horizon.updatedAt.toISOString(),
+  };
+}
+
+function serializeGoalSummary(goal: GoalSummaryRecord): GoalSummary {
   return {
     id: goal.id,
     title: goal.title,
-    domain: fromPrismaGoalDomain(goal.domain),
+    domainId: goal.domainId,
+    domain: goal.domain.name,
+    domainSystemKey: fromPrismaGoalDomainSystemKey(goal.domain.systemKey),
     status: fromPrismaGoalStatus(goal.status),
+  };
+}
+
+export function serializeGoalHierarchySummary(goal: GoalHierarchyRecord): GoalHierarchySummary {
+  return {
+    ...serializeGoalSummary(goal),
+    horizonId: goal.horizonId,
+    horizonName: goal.horizon?.name ?? null,
+    horizonSystemKey: fromPrismaGoalHorizonSystemKey(goal.horizon?.systemKey ?? null),
+    parentGoalId: goal.parentGoalId,
+    sortOrder: goal.sortOrder,
+    targetDate: goal.targetDate ? toIsoDateString(goal.targetDate) : null,
+  };
+}
+
+export function serializeGoal(goal: GoalRecord): GoalItem {
+  return {
+    ...serializeGoalSummary(goal),
+    horizonId: goal.horizonId,
+    horizonName: goal.horizon?.name ?? null,
+    horizonSystemKey: fromPrismaGoalHorizonSystemKey(goal.horizon?.systemKey ?? null),
+    horizonSpanMonths: goal.horizon?.spanMonths ?? null,
+    parentGoalId: goal.parentGoalId,
+    why: goal.why,
     targetDate: goal.targetDate ? toIsoDateString(goal.targetDate) : null,
     notes: goal.notes,
+    sortOrder: goal.sortOrder,
     createdAt: goal.createdAt.toISOString(),
     updatedAt: goal.updatedAt.toISOString(),
   };
@@ -322,15 +443,6 @@ export function serializeTaskTemplate(template: TaskTemplate): TaskTemplateItem 
     archivedAt: template.archivedAt?.toISOString() ?? null,
     createdAt: template.createdAt.toISOString(),
     updatedAt: template.updatedAt.toISOString(),
-  };
-}
-
-function serializeGoalSummary(goal: GoalSummaryRecord): GoalSummary {
-  return {
-    id: goal.id,
-    title: goal.title,
-    domain: fromPrismaGoalDomain(goal.domain),
-    status: fromPrismaGoalStatus(goal.status),
   };
 }
 

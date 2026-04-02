@@ -3,6 +3,7 @@ import type { Prisma, PrismaClient, RecurrenceException, RecurrenceRule, Task } 
 
 import { toIsoDateString } from "../time/date.js";
 import { getUtcDateForLocalTime } from "../time/user-time.js";
+import { goalSummaryInclude } from "../../modules/planning/planning-record-shapes.js";
 import { getNextRecurrenceDateAfter, listRecurrenceDatesInRange, normalizeRecurrenceRule } from "./rules.js";
 import { coerceExceptionItems, fromPrismaCarryPolicy, upsertRecurrenceException } from "./store.js";
 
@@ -58,7 +59,9 @@ async function createTaskOccurrence(
       recurrenceRuleId,
     },
     include: {
-      goal: true,
+      goal: {
+        include: goalSummaryInclude,
+      },
       recurrenceRule: {
         include: {
           exceptions: {
@@ -237,7 +240,9 @@ export async function applyRecurringTaskCarryForward(
         completedAt: null,
       },
       include: {
-        goal: true,
+        goal: {
+          include: goalSummaryInclude,
+        },
         recurrenceRule: {
           include: {
             exceptions: {
@@ -271,7 +276,9 @@ export async function applyRecurringTaskCarryForward(
         id: task.id,
       },
       include: {
-        goal: true,
+        goal: {
+          include: goalSummaryInclude,
+        },
         recurrenceRule: {
           include: {
             exceptions: {
@@ -292,7 +299,9 @@ export async function applyRecurringTaskCarryForward(
         scheduledForDate: new Date(`${targetDate}T00:00:00.000Z`),
       },
       include: {
-        goal: true,
+        goal: {
+          include: goalSummaryInclude,
+        },
         recurrenceRule: {
           include: {
             exceptions: {

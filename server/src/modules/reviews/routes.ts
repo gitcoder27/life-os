@@ -74,7 +74,7 @@ const monthlyReviewSchema = z.object({
   biggestLeak: z.string().min(1).max(500),
   ratings: z.record(z.string(), z.number().int().min(1).max(5)),
   nextMonthTheme: z.string().min(1).max(200),
-  threeOutcomes: z.array(z.string().min(1).max(200)).length(3),
+  nextMonthOutcomes: z.array(priorityInputSchema).length(3),
   habitChanges: z.array(z.string().min(1).max(200)).min(1),
   simplifyText: z.string().min(1).max(500),
   notes: z.string().max(4000).nullable().optional(),

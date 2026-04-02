@@ -10,7 +10,6 @@ import type {
 } from "@life-os/contracts";
 import type {
   CheckinStatus as PrismaCheckinStatus,
-  GoalDomain as PrismaGoalDomain,
   GoalStatus as PrismaGoalStatus,
   HabitPauseKind as PrismaHabitPauseKind,
   HabitStatus as PrismaHabitStatus,
@@ -28,24 +27,8 @@ import {
 import { buildLegacyHabitRecurrence, deriveHabitScheduleFromRecurrence } from "../../lib/recurrence/rules.js";
 import { serializeRecurrenceDefinition } from "../../lib/recurrence/store.js";
 import { toIsoDateString } from "../../lib/time/date.js";
+import { fromPrismaGoalDomainSystemKey } from "../planning/planning-mappers.js";
 import type { HabitDetailRecord } from "./habit-record-shapes.js";
-
-const fromPrismaGoalDomain = (domain: PrismaGoalDomain) => {
-  switch (domain) {
-    case "HEALTH":
-      return "health";
-    case "MONEY":
-      return "money";
-    case "WORK_GROWTH":
-      return "work_growth";
-    case "HOME_ADMIN":
-      return "home_admin";
-    case "DISCIPLINE":
-      return "discipline";
-    case "OTHER":
-      return "other";
-  }
-};
 
 const fromPrismaGoalStatus = (status: PrismaGoalStatus) => {
   switch (status) {
@@ -63,7 +46,9 @@ const fromPrismaGoalStatus = (status: PrismaGoalStatus) => {
 const serializeGoalSummary = (goal: NonNullable<HabitDetailRecord["goal"]>): HabitItem["goal"] => ({
   id: goal.id,
   title: goal.title,
-  domain: fromPrismaGoalDomain(goal.domain),
+  domainId: goal.domainId,
+  domain: goal.domain.name,
+  domainSystemKey: fromPrismaGoalDomainSystemKey(goal.domain.systemKey),
   status: fromPrismaGoalStatus(goal.status),
 });
 

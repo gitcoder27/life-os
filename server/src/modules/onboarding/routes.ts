@@ -1,6 +1,5 @@
 import type { FastifyPluginAsync } from "fastify";
 import type {
-  GoalDomain as PrismaGoalDomain,
   MealSlot as PrismaMealSlot,
   Prisma,
   RoutinePeriod as PrismaRoutinePeriod,
@@ -18,6 +17,8 @@ import { requireAuthenticatedUser } from "../../lib/auth/require-auth.js";
 import { withGeneratedAt, withWriteSuccess } from "../../lib/http/response.js";
 import { getMonthEndDate, getWeekEndDate, parseIsoDate } from "../../lib/time/cycle.js";
 import { parseOrThrow } from "../../lib/validation/parse.js";
+import { ensureGoalConfigSeeded } from "../planning/goal-config.js";
+import { toPrismaGoalDomainSystemKey } from "../planning/planning-mappers.js";
 
 const goalDomainSchema = z.enum([
   "health",
@@ -135,25 +136,6 @@ const onboardingCompletionSchema = z.object({
   firstWeekStartDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   firstMonthStartDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
 });
-
-function toGoalDomain(
-  domain: OnboardingCompleteRequest["goals"][number]["domain"],
-): PrismaGoalDomain {
-  switch (domain) {
-    case "health":
-      return "HEALTH";
-    case "money":
-      return "MONEY";
-    case "work_growth":
-      return "WORK_GROWTH";
-    case "home_admin":
-      return "HOME_ADMIN";
-    case "discipline":
-      return "DISCIPLINE";
-    case "other":
-      return "OTHER";
-  }
-}
 
 function toRoutinePeriod(period: "morning" | "evening"): PrismaRoutinePeriod {
   return period === "morning" ? "MORNING" : "EVENING";
@@ -302,18 +284,38 @@ export const registerOnboardingRoutes: FastifyPluginAsync = async (app) => {
         },
       });
       if (payload.goals.length > 0) {
-        await tx.goal.createMany({
-          data: payload.goals.map((goal) => ({
+        await ensureGoalConfigSeeded(tx, user.id);
+        const goalDomains = await tx.goalDomainConfig.findMany({
+          where: {
             userId: user.id,
-            title: goal.title,
-            domain: toGoalDomain(goal.domain),
-            targetDate: goal.targetDate ? parseIsoDate(goal.targetDate as IsoDateString) : null,
-            notes:
-              goal.notes ??
-              (payload.lifePriorities.length > 0
-                ? `Life priorities: ${payload.lifePriorities.join(", ")}`
-                : null),
-          })),
+          },
+        });
+        const goalDomainBySystemKey = new Map(
+          goalDomains
+            .filter((domain) => domain.systemKey)
+            .map((domain) => [domain.systemKey!, domain.id]),
+        );
+
+        await tx.goal.createMany({
+          data: payload.goals.map((goal, index) => {
+            const domainId = goalDomainBySystemKey.get(toPrismaGoalDomainSystemKey(goal.domain));
+            if (!domainId) {
+              throw new Error(`Missing goal domain seed for ${goal.domain}`);
+            }
+
+            return {
+              userId: user.id,
+              title: goal.title,
+              domainId,
+              targetDate: goal.targetDate ? parseIsoDate(goal.targetDate as IsoDateString) : null,
+              notes:
+                goal.notes ??
+                (payload.lifePriorities.length > 0
+                  ? `Life priorities: ${payload.lifePriorities.join(", ")}`
+                  : null),
+              sortOrder: index + 1,
+            };
+          }),
         });
       }
 

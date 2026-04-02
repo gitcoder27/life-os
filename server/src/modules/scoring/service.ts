@@ -11,6 +11,7 @@ import {
 } from "../../lib/time/cycle.js";
 import { toIsoDateString } from "../../lib/time/date.js";
 import { getDayWindowUtc, getTimeWindowUtc, getUserLocalDate, normalizeTimezone } from "../../lib/time/user-time.js";
+import { goalSummaryInclude } from "../planning/planning-record-shapes.js";
 
 type ScoreLabel = "Strong Day" | "Solid Day" | "Recovering Day" | "Off-Track Day";
 type ScoreBucketKey =
@@ -112,7 +113,9 @@ export async function ensureCycle(
           slot: "asc",
         },
         include: {
-          goal: true,
+          goal: {
+            include: goalSummaryInclude,
+          },
         },
       },
       dailyReview: true,

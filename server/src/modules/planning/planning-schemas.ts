@@ -1,6 +1,5 @@
 import type {
   BulkUpdateTasksRequest,
-  GoalDomain,
   GoalMilestoneInput,
   GoalStatus,
   GoalsQuery,
@@ -9,6 +8,8 @@ import type {
   RecurringTaskCarryPolicy,
   ReviewHistoryCadenceFilter,
   TaskKind,
+  UpdateGoalDomainsRequest,
+  UpdateGoalHorizonsRequest,
 } from "@life-os/contracts";
 import { z } from "zod";
 
@@ -16,14 +17,6 @@ export const isoDateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/) as unknown 
 export const isoDateTimeSchema = z.string().datetime({ offset: true });
 const reminderAtSchema = z.union([isoDateSchema, isoDateTimeSchema]);
 
-export const goalDomainSchema = z.enum([
-  "health",
-  "money",
-  "work_growth",
-  "home_admin",
-  "discipline",
-  "other",
-]) as z.ZodType<GoalDomain>;
 export const goalStatusSchema = z.enum(["active", "paused", "completed", "archived"]) as z.ZodType<GoalStatus>;
 export const goalMilestoneStatusSchema = z.enum(["pending", "completed"]);
 export const priorityStatusSchema = z.enum(["pending", "completed", "dropped"]);
@@ -80,24 +73,32 @@ export const recurrenceInputSchema = z.object({
 export const priorityInputSchema = z.object({
   id: z.string().uuid().optional(),
   slot: z.union([z.literal(1), z.literal(2), z.literal(3)]),
-  title: z.string().min(1).max(200),
+  title: z.string().trim().min(1).max(200),
   goalId: z.string().uuid().nullable().optional(),
 });
 
 export const createGoalSchema = z.object({
-  title: z.string().min(1).max(200),
-  domain: goalDomainSchema,
+  title: z.string().trim().min(1).max(200),
+  domainId: z.string().uuid(),
+  horizonId: z.string().uuid().nullable().optional(),
+  parentGoalId: z.string().uuid().nullable().optional(),
+  why: z.string().max(2000).nullable().optional(),
   targetDate: isoDateSchema.nullable().optional(),
   notes: z.string().max(4000).nullable().optional(),
+  sortOrder: z.number().int().min(0).optional(),
 });
 
 export const updateGoalSchema = z
   .object({
-    title: z.string().min(1).max(200).optional(),
-    domain: goalDomainSchema.optional(),
+    title: z.string().trim().min(1).max(200).optional(),
+    domainId: z.string().uuid().optional(),
+    horizonId: z.string().uuid().nullable().optional(),
+    parentGoalId: z.string().uuid().nullable().optional(),
+    why: z.string().max(2000).nullable().optional(),
     status: goalStatusSchema.optional(),
     targetDate: isoDateSchema.nullable().optional(),
     notes: z.string().max(4000).nullable().optional(),
+    sortOrder: z.number().int().min(0).optional(),
   })
   .refine((value) => Object.keys(value).length > 0, "At least one field must be updated");
 
@@ -115,7 +116,8 @@ export const updateMonthFocusSchema = z.object({
 });
 
 export const goalsQuerySchema = z.object({
-  domain: goalDomainSchema.optional(),
+  domainId: z.string().uuid().optional(),
+  horizonId: z.string().uuid().optional(),
   status: goalStatusSchema.optional(),
   date: isoDateSchema.optional(),
 }) as z.ZodType<GoalsQuery>;
@@ -123,6 +125,29 @@ export const goalsQuerySchema = z.object({
 export const goalContextQuerySchema = z.object({
   date: isoDateSchema.optional(),
 });
+
+const goalDomainConfigInputSchema = z.object({
+  id: z.string().uuid().optional(),
+  systemKey: z.enum(["health", "money", "work_growth", "home_admin", "discipline", "other"]).nullable().optional(),
+  name: z.string().trim().min(1).max(80),
+  isArchived: z.boolean().optional(),
+});
+
+const goalHorizonConfigInputSchema = z.object({
+  id: z.string().uuid().optional(),
+  systemKey: z.enum(["life_vision", "five_year", "one_year", "quarter", "month"]).nullable().optional(),
+  name: z.string().trim().min(1).max(80),
+  spanMonths: z.number().int().positive().max(600).nullable().optional(),
+  isArchived: z.boolean().optional(),
+});
+
+export const updateGoalDomainsSchema = z.object({
+  domains: z.array(goalDomainConfigInputSchema).max(20),
+}) as z.ZodType<UpdateGoalDomainsRequest>;
+
+export const updateGoalHorizonsSchema = z.object({
+  horizons: z.array(goalHorizonConfigInputSchema).max(10),
+}) as z.ZodType<UpdateGoalHorizonsRequest>;
 
 export const goalMilestoneInputSchema = z.object({
   id: z.string().uuid().optional(),

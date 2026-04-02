@@ -9,6 +9,7 @@ import { ensureCycle, getWeeklyMomentum } from "../../scoring/service.js";
 import { resolveMonthlyReviewSubmissionWindow } from "../submission-window.js";
 
 import {
+  assertOwnedPriorityGoalReferences,
   assertReviewSubmissionWindow,
   getUserPreferences,
   listIsoDates,
@@ -153,6 +154,13 @@ export async function getMonthlyReviewModel(
           orderBy: {
             slot: "asc",
           },
+          include: {
+            goal: {
+              include: {
+                domain: true,
+              },
+            },
+          },
         },
       },
     }),
@@ -190,6 +198,52 @@ export async function getMonthlyReviewModel(
     .sort((a, b) => b.completionRate - a.completionRate)
     .slice(0, 3);
 
+  const storedNextMonthOutcomes = Array.isArray(cycle.monthlyReview?.threeOutcomesJson)
+    ? cycle.monthlyReview!.threeOutcomesJson
+        .map((value, index) => {
+          if (typeof value === "string") {
+            return {
+              id: `legacy-outcome-${index + 1}`,
+              slot: (index + 1) as 1 | 2 | 3,
+              title: value,
+              status: "pending" as const,
+              goalId: null,
+              goal: null,
+              completedAt: null,
+            };
+          }
+
+          if (
+            value &&
+            typeof value === "object" &&
+            "slot" in value &&
+            "title" in value &&
+            typeof value.slot === "number" &&
+            typeof value.title === "string"
+          ) {
+            return {
+              id: "id" in value && typeof value.id === "string" ? value.id : `stored-outcome-${index + 1}`,
+              slot: value.slot as 1 | 2 | 3,
+              title: value.title,
+              status:
+                "status" in value && (value.status === "completed" || value.status === "dropped")
+                  ? value.status
+                  : "pending",
+              goalId: "goalId" in value && typeof value.goalId === "string" ? value.goalId : null,
+              goal:
+                "goal" in value && value.goal && typeof value.goal === "object"
+                  ? (value.goal as unknown as MonthlyReviewResponse["seededNextMonthOutcomes"][number]["goal"])
+                  : null,
+              completedAt:
+                "completedAt" in value && typeof value.completedAt === "string" ? value.completedAt : null,
+            };
+          }
+
+          return null;
+        })
+        .filter((value): value is MonthlyReviewResponse["seededNextMonthOutcomes"][number] => Boolean(value))
+    : [];
+
   const existingReview: ExistingMonthlyReview | null = cycle.monthlyReview
     ? {
         monthVerdict: cycle.monthlyReview.monthVerdict,
@@ -197,7 +251,7 @@ export async function getMonthlyReviewModel(
         biggestLeak: cycle.monthlyReview.biggestLeak,
         ratings: cycle.monthlyReview.ratingsJson as Record<string, number>,
         nextMonthTheme: cycle.monthlyReview.nextMonthTheme,
-        threeOutcomes: cycle.monthlyReview.threeOutcomesJson as string[],
+        nextMonthOutcomes: storedNextMonthOutcomes,
         habitChanges: cycle.monthlyReview.habitChangesJson as string[],
         simplifyText: cycle.monthlyReview.simplifyText,
         notes: cycle.monthlyReview.notes,
@@ -264,6 +318,7 @@ export async function submitMonthlyReview(
     cycleStartDate: nextMonthStart,
     cycleEndDate: getMonthEndDate(nextMonthStart),
   });
+  await assertOwnedPriorityGoalReferences(prisma, userId, payload.nextMonthOutcomes);
   const completedAt = new Date();
 
   await prisma.monthlyReview.create({
@@ -275,7 +330,7 @@ export async function submitMonthlyReview(
       biggestLeak: payload.biggestLeak,
       ratingsJson: toJson(payload.ratings),
       nextMonthTheme: payload.nextMonthTheme,
-      threeOutcomesJson: toJson(payload.threeOutcomes),
+      threeOutcomesJson: toJson(payload.nextMonthOutcomes),
       habitChangesJson: toJson(payload.habitChanges),
       simplifyText: payload.simplifyText,
       notes: payload.notes ?? null,
@@ -295,11 +350,7 @@ export async function submitMonthlyReview(
   const nextMonthOutcomes = await replacePriorities(
     prisma,
     nextMonthCycle.id,
-    payload.threeOutcomes.map((title, index) => ({
-      slot: (index + 1) as 1 | 2 | 3,
-      title,
-      goalId: null,
-    })),
+    payload.nextMonthOutcomes,
     "MONTHLY",
   );
 

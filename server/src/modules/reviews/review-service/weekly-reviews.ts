@@ -9,6 +9,7 @@ import { ensureCycle } from "../../scoring/service.js";
 import { resolveWeeklyReviewSubmissionWindow } from "../submission-window.js";
 
 import {
+  assertOwnedPriorityGoalReferences,
   assertReviewSubmissionWindow,
   getUserPreferences,
   listIsoDates,
@@ -178,14 +179,21 @@ export async function getWeeklyReviewModel(
             cycleStartDate: nextWeekStart,
           },
         },
-        include: {
-          priorities: {
-            orderBy: {
-              slot: "asc",
+      include: {
+        priorities: {
+          orderBy: {
+            slot: "asc",
+          },
+          include: {
+            goal: {
+              include: {
+                domain: true,
+              },
             },
           },
         },
-      }),
+      },
+    }),
     ]);
 
   const existingReview: ExistingWeeklyReview | null = cycle.weeklyReview
@@ -297,6 +305,7 @@ export async function submitWeeklyReview(
     cycleStartDate: nextWeekStart,
     cycleEndDate: getWeekEndDate(nextWeekStart),
   });
+  await assertOwnedPriorityGoalReferences(prisma, userId, payload.nextWeekPriorities);
   const completedAt = new Date();
 
   await prisma.weeklyReview.create({

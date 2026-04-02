@@ -14,7 +14,6 @@ import type {
   TaskOriginType,
 } from "@life-os/contracts";
 import type {
-  GoalDomain as PrismaGoalDomain,
   GoalStatus as PrismaGoalStatus,
   TaskOriginType as PrismaTaskOriginType,
 } from "@prisma/client";
@@ -51,6 +50,8 @@ import {
 import { parseOrThrow } from "../../lib/validation/parse.js";
 import { buildHomeGuidance } from "./guidance.js";
 import { createHomeQuoteService } from "./quote-service.js";
+import { fromPrismaGoalDomainSystemKey } from "../planning/planning-mappers.js";
+import { goalSummaryInclude } from "../planning/planning-record-shapes.js";
 import { getOpenDailyReviewRoute } from "../reviews/submission-window.js";
 import { calculateDailyScore, ensureCycle, getWeeklyMomentum } from "../scoring/service.js";
 
@@ -91,23 +92,6 @@ function currentRoutinePeriod(date: Date, timezone?: string | null): RoutineSumm
   }
 
   return "none";
-}
-
-function fromPrismaGoalDomain(domain: PrismaGoalDomain) {
-  switch (domain) {
-    case "HEALTH":
-      return "health";
-    case "MONEY":
-      return "money";
-    case "WORK_GROWTH":
-      return "work_growth";
-    case "HOME_ADMIN":
-      return "home_admin";
-    case "DISCIPLINE":
-      return "discipline";
-    case "OTHER":
-      return "other";
-  }
 }
 
 function fromPrismaGoalStatus(status: PrismaGoalStatus) {
@@ -154,13 +138,20 @@ function fromPrismaTaskKind(kind: "TASK" | "NOTE" | "REMINDER"): TaskKind {
 function serializeGoalSummary(goal: {
   id: string;
   title: string;
-  domain: PrismaGoalDomain;
+  domainId: string;
+  domain: {
+    id: string;
+    name: string;
+    systemKey: Parameters<typeof fromPrismaGoalDomainSystemKey>[0];
+  };
   status: PrismaGoalStatus;
 }): GoalSummary {
   return {
     id: goal.id,
     title: goal.title,
-    domain: fromPrismaGoalDomain(goal.domain),
+    domainId: goal.domainId,
+    domain: goal.domain.name,
+    domainSystemKey: fromPrismaGoalDomainSystemKey(goal.domain.systemKey),
     status: fromPrismaGoalStatus(goal.status),
   };
 }
@@ -227,7 +218,9 @@ async function buildHomeOverview(
         },
         orderBy: [{ createdAt: "asc" }],
         include: {
-          goal: true,
+          goal: {
+            include: goalSummaryInclude,
+          },
         },
       }),
       app.prisma.task.findMany({

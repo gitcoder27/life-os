@@ -12,9 +12,12 @@ import { addDays, parseIsoDate } from "../../../lib/time/cycle.js";
 import { toIsoDateString } from "../../../lib/time/date.js";
 import { getDayWindowUtc, getUserLocalDate } from "../../../lib/time/user-time.js";
 import { calculateDailyScore, ensureCycle, finalizeDailyScore } from "../../scoring/service.js";
+import { serializeTask } from "../../planning/planning-mappers.js";
+import { planningTaskInclude } from "../../planning/planning-record-shapes.js";
 import { resolveDailyReviewSubmissionWindow } from "../submission-window.js";
 
 import {
+  assertOwnedPriorityGoalReferences,
   assertReviewSubmissionWindow,
   getUserPreferences,
   replacePriorities,
@@ -50,17 +53,7 @@ async function getDailySummary(prisma: PrismaClient, userId: string, date: Date)
           userId,
           scheduledForDate: date,
         },
-        include: {
-          recurrenceRule: {
-            include: {
-              exceptions: {
-                orderBy: {
-                  occurrenceDate: "asc",
-                },
-              },
-            },
-          },
-        },
+        include: planningTaskInclude,
       }),
       prisma.routine.findMany({
         where: {
@@ -184,35 +177,7 @@ async function getDailySummary(prisma: PrismaClient, userId: string, date: Date)
     },
     incompleteTasks: tasks
       .filter((task) => task.status !== "COMPLETED")
-      .map((task): PlanningTaskItem => ({
-        id: task.id,
-        title: task.title,
-        notes: task.notes,
-        kind: task.kind === "NOTE" ? "note" : task.kind === "REMINDER" ? "reminder" : "task",
-        reminderAt: task.reminderAt?.toISOString() ?? null,
-        status:
-          task.status === "DROPPED" ? "dropped" : task.status === "COMPLETED" ? "completed" : "pending",
-        scheduledForDate: task.scheduledForDate ? toIsoDateString(task.scheduledForDate) : null,
-        dueAt: task.dueAt?.toISOString() ?? null,
-        goalId: task.goalId,
-        originType:
-          task.originType === "QUICK_CAPTURE"
-            ? "quick_capture"
-            : task.originType === "CARRY_FORWARD"
-              ? "carry_forward"
-              : task.originType === "REVIEW_SEED"
-                ? "review_seed"
-                : task.originType === "RECURRING"
-                  ? "recurring"
-                  : task.originType === "TEMPLATE"
-                    ? "template"
-                    : "manual",
-        carriedFromTaskId: task.carriedFromTaskId,
-        recurrence: serializeRecurrenceDefinition(task.recurrenceRule),
-        completedAt: task.completedAt?.toISOString() ?? null,
-        createdAt: task.createdAt.toISOString(),
-        updatedAt: task.updatedAt.toISOString(),
-      })),
+      .map((task): PlanningTaskItem => serializeTask(task)),
   };
 }
 
@@ -248,6 +213,13 @@ export async function getDailyReviewModel(
         priorities: {
           orderBy: {
             slot: "asc",
+          },
+          include: {
+            goal: {
+              include: {
+                domain: true,
+              },
+            },
           },
         },
       },
@@ -367,6 +339,7 @@ export async function submitDailyReview(
     cycleStartDate: date,
     cycleEndDate: date,
   });
+  await assertOwnedPriorityGoalReferences(prisma, userId, payload.tomorrowPriorities);
 
   if (
     cycle.dailyReview &&

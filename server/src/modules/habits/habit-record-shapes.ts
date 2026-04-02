@@ -2,9 +2,12 @@ import type { IsoDateString } from "@life-os/contracts";
 import type { HabitCheckin, Prisma, Routine, RoutineItem, RoutineItemCheckin } from "@prisma/client";
 
 import { addIsoDays, parseIsoDate } from "../../lib/time/cycle.js";
+import { goalSummaryInclude } from "../planning/planning-record-shapes.js";
 
 export const habitRelationsInclude = {
-  goal: true,
+  goal: {
+    include: goalSummaryInclude,
+  },
   pauseWindows: {
     orderBy: {
       startsOn: "asc",
