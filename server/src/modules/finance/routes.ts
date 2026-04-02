@@ -6,12 +6,15 @@ import type {
   ExpenseCategoryMutationResponse,
   ExpensesResponse,
   FinanceCategoriesResponse,
+  FinanceGoalMutationResponse,
+  FinanceInsightsResponse,
   FinanceMonthPlanMutationResponse,
   FinanceMonthPlanResponse,
   IsoDateString,
   IsoMonthString,
   RecurrenceInput,
   RecurringExpenseMutationResponse,
+  UpdateFinanceGoalRequest,
   UpdateFinanceMonthPlanRequest,
   UpdateExpenseCategoryRequest,
   UpdateRecurringExpenseRequest,
@@ -20,7 +23,9 @@ import type {
   ExpenseCategory,
   AdminItemStatus as PrismaAdminItemStatus,
   Expense,
+  FinanceGoalType as PrismaFinanceGoalType,
   ExpenseSource as PrismaExpenseSource,
+  GoalStatus as PrismaGoalStatus,
   RecurringExpenseStatus as PrismaRecurringExpenseStatus,
   RecurringExpenseTemplate,
 } from "@prisma/client";
@@ -31,10 +36,11 @@ import { AppError } from "../../lib/errors/app-error.js";
 import { withGeneratedAt } from "../../lib/http/response.js";
 import { formatLegacyFinanceRecurrenceRule, parseLegacyFinanceRecurrenceRule } from "../../lib/recurrence/rules.js";
 import { serializeRecurrenceDefinition, upsertRecurrenceRuleRecord } from "../../lib/recurrence/store.js";
-import { parseIsoDate } from "../../lib/time/cycle.js";
+import { getWeekStartIsoDate, parseIsoDate } from "../../lib/time/cycle.js";
 import { toIsoDateString } from "../../lib/time/date.js";
 import { getUserLocalDate } from "../../lib/time/user-time.js";
 import { parseOrThrow } from "../../lib/validation/parse.js";
+import { getMonthlyReviewModel, getWeeklyReviewModel } from "../reviews/service.js";
 
 type ExpenseSource = "manual" | "quick_capture" | "template";
 type RecurringExpenseStatus = "active" | "paused" | "archived";
@@ -240,6 +246,14 @@ const financeMonthPlanWatchSchema = z.object({
   watchLimitMinor: z.number().int().positive(),
 });
 
+const financeGoalTypeSchema = z.enum([
+  "emergency_fund",
+  "debt_payoff",
+  "travel",
+  "large_purchase",
+  "other",
+]);
+
 const updateFinanceMonthPlanSchema = z.object({
   plannedSpendMinor: z.number().int().positive().nullable().optional(),
   fixedObligationsMinor: z.number().int().nonnegative().nullable().optional(),
@@ -247,6 +261,13 @@ const updateFinanceMonthPlanSchema = z.object({
   plannedIncomeMinor: z.number().int().nonnegative().nullable().optional(),
   expectedLargeExpensesMinor: z.number().int().nonnegative().nullable().optional(),
   categoryWatches: z.array(financeMonthPlanWatchSchema).max(8).optional(),
+}).refine((value) => Object.keys(value).length > 0, "At least one field must be updated");
+
+const updateFinanceGoalSchema = z.object({
+  goalType: financeGoalTypeSchema.nullable().optional(),
+  targetAmountMinor: z.number().int().positive().nullable().optional(),
+  currentAmountMinor: z.number().int().nonnegative().nullable().optional(),
+  monthlyContributionTargetMinor: z.number().int().nonnegative().nullable().optional(),
 }).refine((value) => Object.keys(value).length > 0, "At least one field must be updated");
 
 function getMonthBounds(month: IsoMonthString) {
@@ -353,6 +374,61 @@ function fromPrismaAdminItemStatus(status: PrismaAdminItemStatus): AdminItemStat
   throw new Error(`Unsupported admin item status: ${status satisfies never}`);
 }
 
+function toPrismaFinanceGoalType(
+  goalType: NonNullable<UpdateFinanceGoalRequest["goalType"]>,
+): PrismaFinanceGoalType {
+  switch (goalType) {
+    case "emergency_fund":
+      return "EMERGENCY_FUND";
+    case "debt_payoff":
+      return "DEBT_PAYOFF";
+    case "travel":
+      return "TRAVEL";
+    case "large_purchase":
+      return "LARGE_PURCHASE";
+    case "other":
+      return "OTHER";
+  }
+
+  throw new Error(`Unsupported finance goal type: ${goalType satisfies never}`);
+}
+
+function fromPrismaFinanceGoalType(
+  goalType: PrismaFinanceGoalType,
+): NonNullable<UpdateFinanceGoalRequest["goalType"]> {
+  switch (goalType) {
+    case "EMERGENCY_FUND":
+      return "emergency_fund";
+    case "DEBT_PAYOFF":
+      return "debt_payoff";
+    case "TRAVEL":
+      return "travel";
+    case "LARGE_PURCHASE":
+      return "large_purchase";
+    case "OTHER":
+      return "other";
+  }
+
+  throw new Error(`Unsupported finance goal type: ${goalType satisfies never}`);
+}
+
+function fromPrismaGoalStatus(
+  status: PrismaGoalStatus,
+): FinanceInsightsResponse["insights"]["moneyGoals"][number]["status"] {
+  switch (status) {
+    case "ACTIVE":
+      return "active";
+    case "PAUSED":
+      return "paused";
+    case "COMPLETED":
+      return "completed";
+    case "ARCHIVED":
+      return "archived";
+  }
+
+  throw new Error(`Unsupported goal status: ${status satisfies never}`);
+}
+
 function serializeExpense(expense: Expense): ExpenseItem {
   return {
     id: expense.id,
@@ -454,12 +530,14 @@ async function getUserFinanceContext(
     select: {
       currencyCode: true,
       timezone: true,
+      weekStartsOn: true,
     },
   });
 
   return {
     currencyCode: preferences?.currencyCode ?? "USD",
     timezone: preferences?.timezone ?? "UTC",
+    weekStartsOn: preferences?.weekStartsOn ?? 1,
   };
 }
 
@@ -774,6 +852,234 @@ async function buildFinanceMonthPlan(
   };
 }
 
+function getGoalProgressPercent(
+  targetAmountMinor: number | null,
+  currentAmountMinor: number | null,
+  milestones: Array<{ status: "PENDING" | "COMPLETED" }>,
+) {
+  if (targetAmountMinor != null && targetAmountMinor > 0 && currentAmountMinor != null) {
+    return Math.min(Math.round((currentAmountMinor / targetAmountMinor) * 100), 100);
+  }
+
+  if (milestones.length === 0) {
+    return 0;
+  }
+
+  const completedCount = milestones.filter((milestone) => milestone.status === "COMPLETED").length;
+  return Math.round((completedCount / milestones.length) * 100);
+}
+
+function buildContributionSummary(
+  monthlyContributionTargetMinor: number | null,
+  remainingAmountMinor: number | null,
+  currencyCode: string,
+  remainingFlexibleSpendMinor: number | null,
+): {
+  contributionFit: FinanceInsightsResponse["insights"]["moneyGoals"][number]["contributionFit"];
+  contributionSummary: string;
+} {
+  if (monthlyContributionTargetMinor == null || monthlyContributionTargetMinor <= 0) {
+    return {
+      contributionFit: "needs_plan",
+      contributionSummary: "Set a monthly contribution target to connect this goal to your money plan.",
+    };
+  }
+
+  if (remainingFlexibleSpendMinor == null) {
+    return {
+      contributionFit: "needs_plan",
+      contributionSummary: `Plan to move ${formatPlanCurrency(monthlyContributionTargetMinor, currencyCode)} into this goal each month.`,
+    };
+  }
+
+  if (monthlyContributionTargetMinor <= remainingFlexibleSpendMinor) {
+    return {
+      contributionFit: "on_track",
+      contributionSummary: remainingAmountMinor != null && remainingAmountMinor > 0
+        ? `${formatPlanCurrency(monthlyContributionTargetMinor, currencyCode)} per month fits inside this month's flexible space. ${formatPlanCurrency(remainingAmountMinor, currencyCode)} still to go.`
+        : `${formatPlanCurrency(monthlyContributionTargetMinor, currencyCode)} per month fits inside this month's flexible space.`,
+    };
+  }
+
+  return {
+    contributionFit: "tight",
+    contributionSummary: `${formatPlanCurrency(monthlyContributionTargetMinor, currencyCode)} per month is higher than the flexible amount left in this month's plan.`,
+  };
+}
+
+async function findOwnedMoneyGoal(
+  app: Parameters<FastifyPluginAsync>[0],
+  userId: string,
+  goalId: string,
+) {
+  const goal = await app.prisma.goal.findFirst({
+    where: {
+      id: goalId,
+      userId,
+      domain: {
+        systemKey: "MONEY",
+      },
+    },
+    include: {
+      domain: true,
+      milestones: {
+        orderBy: [{ targetDate: "asc" }, { sortOrder: "asc" }, { createdAt: "asc" }],
+      },
+      financeGoal: true,
+    },
+  });
+
+  if (!goal) {
+    throw new AppError({
+      statusCode: 404,
+      code: "NOT_FOUND",
+      message: "Money goal not found",
+    });
+  }
+
+  return goal;
+}
+
+async function buildFinanceInsights(
+  app: Parameters<FastifyPluginAsync>[0],
+  userId: string,
+  month: IsoMonthString,
+): Promise<FinanceInsightsResponse["insights"]> {
+  const { monthStart, nextMonthStart } = getMonthBounds(month);
+  const { currencyCode, timezone, weekStartsOn } = await getUserFinanceContext(app, userId);
+  const todayIsoDate = getUserLocalDate(new Date(), timezone);
+  const currentMonth = getIsoMonthString(parseIsoDate(todayIsoDate));
+  const selectedMonthEnd = new Date(nextMonthStart.getTime() - 24 * 60 * 60 * 1000);
+  const weekAnchorIsoDate = month === currentMonth ? todayIsoDate : toIsoDateString(selectedMonthEnd);
+  const weekStartIsoDate = getWeekStartIsoDate(weekAnchorIsoDate, weekStartsOn);
+
+  const [monthPlan, moneyGoals, weeklyReview, monthlyReview] = await Promise.all([
+    buildFinanceMonthPlan(app, userId, month),
+    app.prisma.goal.findMany({
+      where: {
+        userId,
+        domain: {
+          systemKey: "MONEY",
+        },
+        status: {
+          not: "ARCHIVED",
+        },
+      },
+      include: {
+        domain: true,
+        horizon: true,
+        milestones: {
+          orderBy: [{ targetDate: "asc" }, { sortOrder: "asc" }, { createdAt: "asc" }],
+        },
+        financeGoal: true,
+      },
+      orderBy: [{ status: "asc" }, { sortOrder: "asc" }, { createdAt: "asc" }],
+    }),
+    getWeeklyReviewModel(app.prisma, userId, parseIsoDate(weekStartIsoDate)),
+    getMonthlyReviewModel(app.prisma, userId, monthStart),
+  ]);
+
+  const spendWatchCategoryId = weeklyReview.existingReview?.spendingWatchCategoryId ?? null;
+  const [spendWatchCategory, spendWatchTotals] = spendWatchCategoryId
+    ? await Promise.all([
+      app.prisma.expenseCategory.findFirst({
+        where: {
+          id: spendWatchCategoryId,
+          userId,
+        },
+      }),
+      app.prisma.expense.aggregate({
+        where: {
+          userId,
+          expenseCategoryId: spendWatchCategoryId,
+          spentOn: {
+            gte: monthStart,
+            lt: nextMonthStart,
+          },
+        },
+        _sum: {
+          amountMinor: true,
+        },
+      }),
+    ])
+    : [null, null];
+
+  const moneyGoalItems = moneyGoals.map((goal) => {
+    const targetAmountMinor = goal.financeGoal?.targetAmountMinor ?? null;
+    const currentAmountMinor = goal.financeGoal?.currentAmountMinor ?? null;
+    const remainingAmountMinor =
+      targetAmountMinor != null && currentAmountMinor != null
+        ? Math.max(targetAmountMinor - currentAmountMinor, 0)
+        : null;
+    const progressPercent = getGoalProgressPercent(targetAmountMinor, currentAmountMinor, goal.milestones);
+    const nextMilestone = goal.milestones.find((milestone) => milestone.status === "PENDING") ?? null;
+    const contribution = buildContributionSummary(
+      goal.financeGoal?.monthlyContributionTargetMinor ?? null,
+      remainingAmountMinor,
+      currencyCode,
+      monthPlan.remainingFlexibleSpendMinor,
+    );
+
+    return {
+      goalId: goal.id,
+      title: goal.title,
+      status: fromPrismaGoalStatus(goal.status),
+      route: "/goals",
+      goalType: goal.financeGoal ? fromPrismaFinanceGoalType(goal.financeGoal.goalType) : null,
+      targetDate: goal.targetDate ? toIsoDateString(goal.targetDate) : null,
+      targetAmountMinor,
+      currentAmountMinor,
+      progressPercent,
+      remainingAmountMinor,
+      monthlyContributionTargetMinor: goal.financeGoal?.monthlyContributionTargetMinor ?? null,
+      contributionFit: contribution.contributionFit,
+      contributionSummary: contribution.contributionSummary,
+      nextMilestoneTitle: nextMilestone?.title ?? null,
+      nextMilestoneDate: nextMilestone?.targetDate ? toIsoDateString(nextMilestone.targetDate) : null,
+    };
+  });
+
+  return {
+    month,
+    moneyGoals: moneyGoalItems,
+    currentFocus:
+      spendWatchCategory && weeklyReview.existingReview?.improveText
+        ? {
+            expenseCategoryId: spendWatchCategory.id,
+            name: spendWatchCategory.name,
+            color: spendWatchCategory.color,
+            monthSpentMinor: spendWatchTotals?._sum.amountMinor ?? 0,
+            guidance: weeklyReview.existingReview.improveText,
+            route: `/reviews/weekly?date=${weeklyReview.startDate}`,
+          }
+        : null,
+    weeklyReview: {
+      route: `/reviews/weekly?date=${weeklyReview.startDate}`,
+      startDate: weeklyReview.startDate as IsoDateString,
+      endDate: weeklyReview.endDate as IsoDateString,
+      spendingTotalMinor: weeklyReview.summary.spendingTotal,
+      topSpendCategory: weeklyReview.summary.topSpendCategory,
+      biggestWin: weeklyReview.existingReview?.biggestWin ?? null,
+      keepText: weeklyReview.existingReview?.keepText ?? null,
+      improveText: weeklyReview.existingReview?.improveText ?? null,
+      spendWatchCategoryName: spendWatchCategory?.name ?? null,
+    },
+    monthlyReview: {
+      route: `/reviews/monthly?date=${monthlyReview.startDate}`,
+      startDate: monthlyReview.startDate as IsoDateString,
+      endDate: monthlyReview.endDate as IsoDateString,
+      monthVerdict: monthlyReview.existingReview?.monthVerdict ?? null,
+      biggestWin: monthlyReview.existingReview?.biggestWin ?? null,
+      biggestLeak: monthlyReview.existingReview?.biggestLeak ?? null,
+      nextMonthTheme: monthlyReview.existingReview?.nextMonthTheme ?? null,
+      topSpendingCategories: monthlyReview.summary.spendingByCategory
+        .slice()
+        .sort((left, right) => right.amountMinor - left.amountMinor)
+        .slice(0, 3),
+    },
+  };
+}
+
 export const registerFinanceRoutes: FastifyPluginAsync = async (app) => {
   app.get("/month-plan", async (request, reply) => {
     const user = requireAuthenticatedUser(request);
@@ -853,6 +1159,55 @@ export const registerFinanceRoutes: FastifyPluginAsync = async (app) => {
 
     const response: FinanceMonthPlanMutationResponse = withGeneratedAt({
       monthPlan: await buildFinanceMonthPlan(app, user.id, query.month),
+    });
+
+    return reply.send(response);
+  });
+
+  app.get("/insights", async (request, reply) => {
+    const user = requireAuthenticatedUser(request);
+    const query = parseOrThrow(
+      z.object({
+        month: isoMonthSchema,
+      }),
+      request.query,
+    );
+
+    const response: FinanceInsightsResponse = withGeneratedAt({
+      insights: await buildFinanceInsights(app, user.id, query.month),
+    });
+
+    return reply.send(response);
+  });
+
+  app.put("/goals/:goalId", async (request, reply) => {
+    const user = requireAuthenticatedUser(request);
+    const { goalId } = request.params as { goalId: string };
+    const payload = parseOrThrow(updateFinanceGoalSchema, request.body as UpdateFinanceGoalRequest);
+
+    const goal = await findOwnedMoneyGoal(app, user.id, goalId);
+
+    await app.prisma.financeGoal.upsert({
+      where: {
+        goalId: goal.id,
+      },
+      update: {
+        goalType: payload.goalType ? toPrismaFinanceGoalType(payload.goalType) : undefined,
+        targetAmountMinor: payload.targetAmountMinor,
+        currentAmountMinor: payload.currentAmountMinor,
+        monthlyContributionTargetMinor: payload.monthlyContributionTargetMinor,
+      },
+      create: {
+        goalId: goal.id,
+        goalType: payload.goalType ? toPrismaFinanceGoalType(payload.goalType) : "OTHER",
+        targetAmountMinor: payload.targetAmountMinor ?? null,
+        currentAmountMinor: payload.currentAmountMinor ?? null,
+        monthlyContributionTargetMinor: payload.monthlyContributionTargetMinor ?? null,
+      },
+    });
+
+    const response: FinanceGoalMutationResponse = withGeneratedAt({
+      goalId: goal.id,
     });
 
     return reply.send(response);

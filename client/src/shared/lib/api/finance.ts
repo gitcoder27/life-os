@@ -45,6 +45,8 @@ type FinanceSummaryResponse = {
 
 export type FinancePaceStatus = "no_plan" | "on_pace" | "slightly_heavy" | "off_track";
 export type FinanceWatchStatus = "within_limit" | "near_limit" | "over_limit";
+export type FinanceGoalType = "emergency_fund" | "debt_payoff" | "travel" | "large_purchase" | "other";
+export type FinanceContributionFit = "on_track" | "tight" | "needs_plan";
 
 export type FinanceMonthPlanItem = {
   id: string | null;
@@ -79,6 +81,66 @@ export type FinanceMonthPlanResponse = {
   monthPlan: FinanceMonthPlanItem;
 };
 
+export type FinanceGoalInsightItem = {
+  goalId: string;
+  title: string;
+  status: "active" | "paused" | "completed" | "archived";
+  route: string;
+  goalType: FinanceGoalType | null;
+  targetDate: string | null;
+  targetAmountMinor: number | null;
+  currentAmountMinor: number | null;
+  progressPercent: number;
+  remainingAmountMinor: number | null;
+  monthlyContributionTargetMinor: number | null;
+  contributionFit: FinanceContributionFit;
+  contributionSummary: string;
+  nextMilestoneTitle: string | null;
+  nextMilestoneDate: string | null;
+};
+
+export type FinanceInsightsItem = {
+  month: string;
+  moneyGoals: FinanceGoalInsightItem[];
+  currentFocus: {
+    expenseCategoryId: string;
+    name: string;
+    color: string | null;
+    monthSpentMinor: number;
+    guidance: string;
+    route: string;
+  } | null;
+  weeklyReview: {
+    route: string;
+    startDate: string;
+    endDate: string;
+    spendingTotalMinor: number;
+    topSpendCategory: string | null;
+    biggestWin: string | null;
+    keepText: string | null;
+    improveText: string | null;
+    spendWatchCategoryName: string | null;
+  } | null;
+  monthlyReview: {
+    route: string;
+    startDate: string;
+    endDate: string;
+    monthVerdict: string | null;
+    biggestWin: string | null;
+    biggestLeak: string | null;
+    nextMonthTheme: string | null;
+    topSpendingCategories: Array<{
+      category: string;
+      amountMinor: number;
+    }>;
+  } | null;
+};
+
+export type FinanceInsightsResponse = {
+  generatedAt: string;
+  insights: FinanceInsightsItem;
+};
+
 export type UpdateFinanceMonthPlanRequest = {
   plannedSpendMinor?: number | null;
   fixedObligationsMinor?: number | null;
@@ -92,6 +154,17 @@ export type UpdateFinanceMonthPlanRequest = {
 };
 
 type FinanceMonthPlanMutationResponse = FinanceMonthPlanResponse;
+type FinanceGoalMutationResponse = {
+  generatedAt: string;
+  goalId: string;
+};
+
+export type UpdateFinanceGoalRequest = {
+  goalType?: FinanceGoalType | null;
+  targetAmountMinor?: number | null;
+  currentAmountMinor?: number | null;
+  monthlyContributionTargetMinor?: number | null;
+};
 
 type ExpensesResponse = {
   generatedAt: string;
@@ -203,6 +276,7 @@ export const useFinanceDataQuery = (month: string) => {
         recurringExpensesResult,
         categoriesResult,
         monthPlanResult,
+        insightsResult,
       ] =
         await Promise.allSettled([
           apiRequest<FinanceSummaryResponse>("/api/finance/summary", {
@@ -214,6 +288,9 @@ export const useFinanceDataQuery = (month: string) => {
           apiRequest<RecurringExpensesResponse>("/api/finance/recurring-expenses"),
           apiRequest<FinanceCategoriesResponse>("/api/finance/categories"),
           apiRequest<FinanceMonthPlanResponse>("/api/finance/month-plan", {
+            query: { month },
+          }),
+          apiRequest<FinanceInsightsResponse>("/api/finance/insights", {
             query: { month },
           }),
         ]);
@@ -229,6 +306,10 @@ export const useFinanceDataQuery = (month: string) => {
         monthPlan:
           monthPlanResult.status === "fulfilled"
             ? monthPlanResult.value
+            : null,
+        insights:
+          insightsResult.status === "fulfilled"
+            ? insightsResult.value
             : null,
         sectionErrors: {
           expenses:
@@ -246,6 +327,10 @@ export const useFinanceDataQuery = (month: string) => {
           monthPlan:
             monthPlanResult.status === "rejected"
               ? toSectionError(monthPlanResult.reason, "Monthly plan could not load.")
+              : null,
+          insights:
+            insightsResult.status === "rejected"
+              ? toSectionError(insightsResult.reason, "Goal and review insights could not load.")
               : null,
         },
       };
@@ -464,6 +549,30 @@ export const useUpdateFinanceMonthPlanMutation = (month: string) => {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.finance(month) });
       void queryClient.invalidateQueries({ queryKey: ["finance"] });
+    },
+  });
+};
+
+export const useUpdateFinanceGoalMutation = (month: string) => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      goalId,
+      ...payload
+    }: UpdateFinanceGoalRequest & { goalId: string }) =>
+      apiRequest<FinanceGoalMutationResponse>(`/api/finance/goals/${goalId}`, {
+        method: "PUT",
+        body: payload,
+      }),
+    meta: {
+      successMessage: "Money goal updated.",
+      errorMessage: "Money goal update failed.",
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.finance(month) });
+      void queryClient.invalidateQueries({ queryKey: ["finance"] });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.goalsAll });
     },
   });
 };

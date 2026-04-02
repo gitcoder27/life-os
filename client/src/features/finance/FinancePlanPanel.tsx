@@ -78,27 +78,37 @@ const buildDraft = (monthPlan: FinanceMonthPlanItem | null): PlanDraft => {
   };
 };
 
+const getPaceLabel = (paceStatus: FinanceMonthPlanItem["paceStatus"]) => {
+  switch (paceStatus) {
+    case "on_pace": return "On pace";
+    case "slightly_heavy": return "Slightly heavy";
+    case "off_track": return "Off track";
+    default: return "No plan";
+  }
+};
+
 const getPaceTone = (paceStatus: FinanceMonthPlanItem["paceStatus"]) => {
   switch (paceStatus) {
-    case "on_pace":
-      return "plan-panel__status--positive";
-    case "slightly_heavy":
-      return "plan-panel__status--warning";
-    case "off_track":
-      return "plan-panel__status--negative";
-    default:
-      return "";
+    case "on_pace": return "positive";
+    case "slightly_heavy": return "warning";
+    case "off_track": return "negative";
+    default: return "neutral";
   }
 };
 
 const getWatchTone = (status: FinanceMonthPlanItem["categoryWatches"][number]["status"]) => {
   switch (status) {
-    case "over_limit":
-      return "watch-row__status--negative";
-    case "near_limit":
-      return "watch-row__status--warning";
-    default:
-      return "watch-row__status--positive";
+    case "over_limit": return "negative";
+    case "near_limit": return "warning";
+    default: return "positive";
+  }
+};
+
+const getWatchLabel = (status: FinanceMonthPlanItem["categoryWatches"][number]["status"]) => {
+  switch (status) {
+    case "over_limit": return "Over";
+    case "near_limit": return "Near";
+    default: return "OK";
   }
 };
 
@@ -108,9 +118,9 @@ const getBillGroups = (monthPlan: FinanceMonthPlanItem | null) => {
   }
 
   return [
-    { key: "today", label: "Today and overdue", items: monthPlan.billTimeline.today },
+    { key: "today", label: "Due now", items: monthPlan.billTimeline.today },
     { key: "thisWeek", label: "This week", items: monthPlan.billTimeline.thisWeek },
-    { key: "laterThisMonth", label: "Later this month", items: monthPlan.billTimeline.laterThisMonth },
+    { key: "laterThisMonth", label: "Later", items: monthPlan.billTimeline.laterThisMonth },
   ].filter((group) => group.items.length > 0);
 };
 
@@ -135,18 +145,22 @@ export const FinancePlanPanel = ({
   }, [monthPlan?.id, monthPlan?.month]);
 
   const billGroups = useMemo(() => getBillGroups(monthPlan), [monthPlan]);
-  const paceTone = monthPlan ? getPaceTone(monthPlan.paceStatus) : "";
+  const paceTone = monthPlan ? getPaceTone(monthPlan.paceStatus) : "neutral";
   const monthDelta =
     previousMonthTotalSpentMinor > 0
       ? Math.round(((monthTotalSpentMinor - previousMonthTotalSpentMinor) / previousMonthTotalSpentMinor) * 100)
       : null;
-  const paceBarWidth = (() => {
-    if (!monthPlan?.expectedSpendToDateMinor || monthPlan.expectedSpendToDateMinor <= 0) {
-      return Math.min((monthTotalSpentMinor / Math.max(previousMonthTotalSpentMinor, 1)) * 100, 100);
+  const pacePercent = (() => {
+    if (monthPlan?.plannedSpendMinor && monthPlan.plannedSpendMinor > 0) {
+      return Math.min((monthTotalSpentMinor / monthPlan.plannedSpendMinor) * 100, 100);
     }
-
-    return Math.min((monthTotalSpentMinor / monthPlan.expectedSpendToDateMinor) * 100, 100);
+    if (previousMonthTotalSpentMinor > 0) {
+      return Math.min((monthTotalSpentMinor / previousMonthTotalSpentMinor) * 100, 100);
+    }
+    return 0;
   })();
+
+  const totalBillCount = billGroups.reduce((sum, group) => sum + group.items.length, 0);
 
   const availableCategoryOptions = categories.filter((category) =>
     !draft.categoryWatches.some((watch) => watch.expenseCategoryId === category.id),
@@ -209,91 +223,57 @@ export const FinancePlanPanel = ({
     setIsEditing(false);
   };
 
+  const hasPlan = monthPlan?.plannedSpendMinor != null;
+
   return (
-    <aside className="plan-panel">
-      <div className="plan-panel__hero">
-        <div>
-          <span className="plan-panel__eyebrow">Monthly plan</span>
-          <h2 className="plan-panel__title">
-            {monthPlan?.plannedSpendMinor != null
-              ? formatMinorCurrency(monthPlan.plannedSpendMinor, currencyCode)
-              : "Set a target"}
-          </h2>
-          <p className="plan-panel__copy">
-            {monthPlan?.paceSummary ?? "Add a monthly target and a few watch limits so this page can tell you when spending is drifting."}
-          </p>
-        </div>
-        <div className="plan-panel__hero-actions">
-          {monthPlan ? (
-            <span className={`plan-panel__status ${paceTone}`}>
-              {monthPlan.paceStatus === "no_plan"
-                ? "No plan"
-                : monthPlan.paceStatus === "on_pace"
-                  ? "On pace"
-                  : monthPlan.paceStatus === "slightly_heavy"
-                    ? "Slightly heavy"
-                    : "Off track"}
-            </span>
-          ) : null}
-          <button
-            className="button button--ghost button--small"
-            type="button"
-            onClick={() => {
-              if (isEditing) {
-                setDraft(buildDraft(monthPlan));
-              }
-              setIsEditing((value) => !value);
-            }}
-          >
-            {isEditing ? "Cancel" : monthPlan ? "Edit plan" : "Set plan"}
-          </button>
-        </div>
+    <aside className="mp">
+      {/* ── Header row ── */}
+      <div className="mp__head">
+        <span className="mp__eyebrow">Monthly plan</span>
+        <button
+          className="button button--ghost button--small"
+          type="button"
+          onClick={() => {
+            if (isEditing) {
+              setDraft(buildDraft(monthPlan));
+            }
+            setIsEditing((value) => !value);
+          }}
+        >
+          {isEditing ? "Cancel" : hasPlan ? "Edit" : "Set plan"}
+        </button>
       </div>
 
-      <div className="plan-panel__metrics">
-        <div className="plan-metric">
-          <span className="plan-metric__label">Actual spend</span>
-          <span className="plan-metric__value">{formatMinorCurrency(monthTotalSpentMinor, currencyCode)}</span>
-          {monthDelta != null ? (
-            <span className={`plan-metric__detail${monthDelta > 0 ? " plan-metric__detail--negative" : " plan-metric__detail--positive"}`}>
-              {monthDelta > 0 ? "+" : ""}{monthDelta}% vs last month
-            </span>
-          ) : (
-            <span className="plan-metric__detail">First tracked comparison month</span>
-          )}
-        </div>
-        <div className="plan-metric">
-          <span className="plan-metric__label">Expected by now</span>
-          <span className="plan-metric__value">
-            {monthPlan?.expectedSpendToDateMinor != null
-              ? formatMinorCurrency(monthPlan.expectedSpendToDateMinor, currencyCode)
-              : "No plan"}
+      {/* ── Hero: target amount + pace badge ── */}
+      <div className="mp__hero">
+        <span className="mp__target">
+          {hasPlan
+            ? formatMinorCurrency(monthPlan!.plannedSpendMinor!, currencyCode)
+            : "No target set"}
+        </span>
+        {hasPlan && (
+          <span className={`mp__pace-badge mp__pace-badge--${paceTone}`}>
+            {getPaceLabel(monthPlan!.paceStatus)}
           </span>
-          <span className="plan-metric__detail">
-            {isCurrentMonth ? "Current month pace target" : "Full month view"}
-          </span>
-        </div>
-        <div className="plan-metric">
-          <span className="plan-metric__label">Flexible left</span>
-          <span className="plan-metric__value">
-            {monthPlan?.remainingFlexibleSpendMinor != null
-              ? formatMinorCurrency(monthPlan.remainingFlexibleSpendMinor, currencyCode)
-              : "No target"}
-          </span>
-          <span className="plan-metric__detail">After fixed obligations</span>
-        </div>
+        )}
       </div>
 
-      <div className="plan-panel__pace">
-        <div className="plan-panel__pace-track">
-          <div className={`plan-panel__pace-fill ${paceTone}`} style={{ width: `${paceBarWidth}%` }} />
+      {/* ── Pace summary copy ── */}
+      <p className="mp__summary">
+        {monthPlan?.paceSummary ?? "Set a monthly spend target to see pace tracking and spending insights here."}
+      </p>
+
+      {/* ── Pace bar ── */}
+      <div className="mp__bar">
+        <div className="mp__bar-track">
+          <div className={`mp__bar-fill mp__bar-fill--${paceTone}`} style={{ width: `${pacePercent}%` }} />
         </div>
-        <div className="plan-panel__pace-legend">
-          <span>Actual</span>
+        <div className="mp__bar-labels">
+          <span>{formatMinorCurrency(monthTotalSpentMinor, currencyCode)} spent</span>
           <span>
             {monthPlan?.remainingPlannedSpendMinor != null
-              ? `${formatMinorCurrency(monthPlan.remainingPlannedSpendMinor, currencyCode)} left to target`
-              : "Plan not set"}
+              ? `${formatMinorCurrency(monthPlan.remainingPlannedSpendMinor, currencyCode)} left`
+              : hasPlan ? "Calculating..." : "—"}
           </span>
         </div>
       </div>
@@ -303,10 +283,11 @@ export const FinancePlanPanel = ({
       ) : null}
 
       {isEditing ? (
-        <div className="plan-editor">
-          <div className="plan-editor__grid">
+        /* ── EDIT MODE ── */
+        <div className="mp__editor">
+          <div className="mp__editor-grid">
             <label className="field">
-              <span>Planned monthly spend</span>
+              <span>Monthly target</span>
               <input
                 type="text"
                 inputMode="decimal"
@@ -336,7 +317,7 @@ export const FinancePlanPanel = ({
               />
             </label>
             <label className="field">
-              <span>Planned income / paydays</span>
+              <span>Planned income</span>
               <input
                 type="text"
                 inputMode="decimal"
@@ -346,7 +327,7 @@ export const FinancePlanPanel = ({
               />
             </label>
             <label className="field">
-              <span>Large one-off costs</span>
+              <span>Large one-offs</span>
               <input
                 type="text"
                 inputMode="decimal"
@@ -357,188 +338,200 @@ export const FinancePlanPanel = ({
             </label>
           </div>
 
-          <div className="plan-editor__section">
-            <div className="plan-editor__section-header">
-              <div>
-                <span className="plan-panel__eyebrow">Watched categories</span>
-                <p className="plan-editor__hint">Use watch limits for categories that tend to drift first.</p>
-              </div>
+          <div className="mp__editor-section">
+            <div className="mp__editor-section-head">
+              <span className="mp__sub-label">Watched categories</span>
               <button
                 className="button button--ghost button--small"
                 type="button"
                 onClick={addWatch}
                 disabled={availableCategoryOptions.length === 0}
               >
-                Add watch
+                + Add
               </button>
             </div>
 
             {draft.categoryWatches.length > 0 ? (
-              <div className="plan-editor__watches">
+              <div className="mp__editor-watches">
                 {draft.categoryWatches.map((watch, index) => (
-                  <div key={`${watch.expenseCategoryId}-${index}`} className="plan-editor__watch-row">
-                    <label className="field">
-                      <span>Category</span>
-                      <select
-                        value={watch.expenseCategoryId}
-                        onChange={(event) => updateWatch(index, { expenseCategoryId: event.target.value })}
-                      >
-                        {categories
-                          .filter((category) =>
-                            category.id === watch.expenseCategoryId
-                            || !draft.categoryWatches.some((item) => item.expenseCategoryId === category.id),
-                          )
-                          .map((category) => (
-                            <option key={category.id} value={category.id}>
-                              {category.name}
-                            </option>
-                          ))}
-                      </select>
-                    </label>
-                    <label className="field">
-                      <span>Watch limit</span>
-                      <input
-                        type="text"
-                        inputMode="decimal"
-                        placeholder="0.00"
-                        value={watch.watchLimit}
-                        onChange={(event) => updateWatch(index, { watchLimit: event.target.value })}
-                      />
-                    </label>
+                  <div key={`${watch.expenseCategoryId}-${index}`} className="mp__editor-watch-row">
+                    <select
+                      className="mp__editor-select"
+                      value={watch.expenseCategoryId}
+                      onChange={(event) => updateWatch(index, { expenseCategoryId: event.target.value })}
+                    >
+                      {categories
+                        .filter((category) =>
+                          category.id === watch.expenseCategoryId
+                          || !draft.categoryWatches.some((item) => item.expenseCategoryId === category.id),
+                        )
+                        .map((category) => (
+                          <option key={category.id} value={category.id}>
+                            {category.name}
+                          </option>
+                        ))}
+                    </select>
+                    <input
+                      className="mp__editor-input"
+                      type="text"
+                      inputMode="decimal"
+                      placeholder="Limit"
+                      value={watch.watchLimit}
+                      onChange={(event) => updateWatch(index, { watchLimit: event.target.value })}
+                    />
                     <button
-                      className="button button--ghost button--small"
+                      className="mp__editor-remove"
                       type="button"
                       onClick={() => removeWatch(index)}
+                      aria-label="Remove watch"
                     >
-                      Remove
+                      ×
                     </button>
                   </div>
                 ))}
               </div>
             ) : (
-              <p className="plan-editor__hint">No watched categories yet.</p>
+              <p className="mp__hint">No watches yet — add categories to track limits.</p>
             )}
           </div>
 
-          <div className="button-row">
-            <button
-              className="button button--primary button--small"
-              type="button"
-              disabled={isSaving}
-              onClick={() => void handleSave()}
-            >
-              {isSaving ? "Saving..." : "Save monthly plan"}
-            </button>
-          </div>
+          <button
+            className="button button--primary button--small"
+            type="button"
+            disabled={isSaving}
+            onClick={() => void handleSave()}
+            style={{ alignSelf: "flex-start" }}
+          >
+            {isSaving ? "Saving..." : "Save plan"}
+          </button>
         </div>
       ) : (
+        /* ── VIEW MODE ── */
         <>
-          <div className="plan-panel__support-grid">
-            <div className="plan-support">
-              <span className="plan-support__label">Planned income</span>
-              <span className="plan-support__value">
-                {monthPlan?.plannedIncomeMinor != null
-                  ? formatMinorCurrency(monthPlan.plannedIncomeMinor, currencyCode)
-                  : "Not set"}
+          {/* ── Key figures row ── */}
+          <div className="mp__figures">
+            <div className="mp__fig">
+              <span className="mp__fig-value">{formatMinorCurrency(monthTotalSpentMinor, currencyCode)}</span>
+              <span className="mp__fig-label">
+                Spent
+                {monthDelta != null && (
+                  <span className={monthDelta > 0 ? "mp__delta--negative" : "mp__delta--positive"}>
+                    {" "}{monthDelta > 0 ? "+" : ""}{monthDelta}%
+                  </span>
+                )}
               </span>
             </div>
-            <div className="plan-support">
-              <span className="plan-support__label">Fixed obligations</span>
-              <span className="plan-support__value">
-                {monthPlan?.fixedObligationsMinor != null
-                  ? formatMinorCurrency(monthPlan.fixedObligationsMinor, currencyCode)
-                  : "Not set"}
+            <div className="mp__fig">
+              <span className="mp__fig-value">
+                {monthPlan?.expectedSpendToDateMinor != null
+                  ? formatMinorCurrency(monthPlan.expectedSpendToDateMinor, currencyCode)
+                  : "—"}
               </span>
+              <span className="mp__fig-label">{isCurrentMonth ? "Expected" : "Full month"}</span>
             </div>
-            <div className="plan-support">
-              <span className="plan-support__label">Large one-offs</span>
-              <span className="plan-support__value">
-                {monthPlan?.expectedLargeExpensesMinor != null
-                  ? formatMinorCurrency(monthPlan.expectedLargeExpensesMinor, currencyCode)
-                  : "Not set"}
+            <div className="mp__fig">
+              <span className="mp__fig-value">
+                {monthPlan?.remainingFlexibleSpendMinor != null
+                  ? formatMinorCurrency(monthPlan.remainingFlexibleSpendMinor, currencyCode)
+                  : "—"}
               </span>
+              <span className="mp__fig-label">Flexible</span>
             </div>
           </div>
 
-          <div className="plan-section">
-            <div className="plan-section__header">
-              <span className="plan-panel__eyebrow">Bill timeline</span>
-              <span className="plan-section__meta">
-                {billGroups.reduce((sum, group) => sum + group.items.length, 0)} upcoming
-              </span>
+          {/* ── Breakdown list ── */}
+          {hasPlan && (
+            <div className="mp__breakdown">
+              <span className="mp__sub-label">Breakdown</span>
+              <div className="mp__breakdown-rows">
+                {monthPlan!.plannedIncomeMinor != null && (
+                  <div className="mp__brow">
+                    <span>Income</span>
+                    <span>{formatMinorCurrency(monthPlan!.plannedIncomeMinor, currencyCode)}</span>
+                  </div>
+                )}
+                {monthPlan!.fixedObligationsMinor != null && (
+                  <div className="mp__brow">
+                    <span>Fixed bills</span>
+                    <span>{formatMinorCurrency(monthPlan!.fixedObligationsMinor, currencyCode)}</span>
+                  </div>
+                )}
+                {monthPlan!.flexibleSpendTargetMinor != null && (
+                  <div className="mp__brow">
+                    <span>Flexible target</span>
+                    <span>{formatMinorCurrency(monthPlan!.flexibleSpendTargetMinor, currencyCode)}</span>
+                  </div>
+                )}
+                {monthPlan!.expectedLargeExpensesMinor != null && (
+                  <div className="mp__brow">
+                    <span>Large one-offs</span>
+                    <span>{formatMinorCurrency(monthPlan!.expectedLargeExpensesMinor, currencyCode)}</span>
+                  </div>
+                )}
+              </div>
             </div>
-            {billGroups.length > 0 ? (
-              <div className="timeline-list">
-                {billGroups.map((group) => (
-                  <div key={group.key} className="timeline-group">
-                    <div className="timeline-group__label">{group.label}</div>
-                    <div className="timeline-group__items">
-                      {group.items.map((bill: BillItem) => (
-                        <div key={bill.id} className="timeline-item">
-                          <div>
-                            <div className="timeline-item__title">{bill.title}</div>
-                            <div className="timeline-item__meta">
-                              {group.key === "today" ? formatDueLabel(bill.dueOn) : formatShortDate(bill.dueOn)}
-                            </div>
-                          </div>
-                          <span className="timeline-item__amount">
-                            {bill.amountMinor != null
-                              ? formatMinorCurrency(bill.amountMinor, currencyCode)
-                              : "Amount open"}
-                          </span>
-                        </div>
-                      ))}
+          )}
+
+          {/* ── Bill timeline ── */}
+          {totalBillCount > 0 && (
+            <div className="mp__bills">
+              <div className="mp__bills-head">
+                <span className="mp__sub-label">Bills</span>
+                <span className="mp__sub-count">{totalBillCount}</span>
+              </div>
+              {billGroups.map((group) => (
+                <div key={group.key} className="mp__bill-group">
+                  <span className="mp__bill-group-label">{group.label}</span>
+                  {group.items.map((bill: BillItem) => (
+                    <div key={bill.id} className="mp__bill-row">
+                      <span className="mp__bill-title">{bill.title}</span>
+                      <span className="mp__bill-meta">
+                        {bill.amountMinor != null
+                          ? formatMinorCurrency(bill.amountMinor, currencyCode)
+                          : "Open"}
+                        {" · "}
+                        {group.key === "today" ? formatDueLabel(bill.dueOn) : formatShortDate(bill.dueOn)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* ── Category watches ── */}
+          {(monthPlan?.categoryWatches.length ?? 0) > 0 && (
+            <div className="mp__watches">
+              <span className="mp__sub-label">Watched</span>
+              {monthPlan!.categoryWatches.map((watch) => {
+                const ratio = watch.watchLimitMinor > 0
+                  ? Math.min((watch.actualSpentMinor / watch.watchLimitMinor) * 100, 100)
+                  : 0;
+                const tone = getWatchTone(watch.status);
+
+                return (
+                  <div key={watch.expenseCategoryId} className="mp__watch">
+                    <div className="mp__watch-head">
+                      <span className="mp__watch-name">
+                        <span className="mp__watch-dot" style={{ background: watch.color ?? "var(--text-tertiary)" }} />
+                        {watch.name}
+                      </span>
+                      <span className={`mp__watch-badge mp__watch-badge--${tone}`}>
+                        {getWatchLabel(watch.status)}
+                      </span>
+                    </div>
+                    <div className="mp__watch-bar">
+                      <div className={`mp__watch-bar-fill mp__watch-bar-fill--${tone}`} style={{ width: `${ratio}%` }} />
+                    </div>
+                    <div className="mp__watch-nums">
+                      <span>{formatMinorCurrency(watch.actualSpentMinor, currencyCode)}</span>
+                      <span>of {formatMinorCurrency(watch.watchLimitMinor, currencyCode)}</span>
                     </div>
                   </div>
-                ))}
-              </div>
-            ) : (
-              <p className="plan-editor__hint">No pending bills for this month.</p>
-            )}
-          </div>
-
-          <div className="plan-section">
-            <div className="plan-section__header">
-              <span className="plan-panel__eyebrow">Category watch</span>
-              <span className="plan-section__meta">{monthPlan?.categoryWatches.length ?? 0} active</span>
+                );
+              })}
             </div>
-            {monthPlan?.categoryWatches.length ? (
-              <div className="watch-list">
-                {monthPlan.categoryWatches.map((watch) => {
-                  const ratio = watch.watchLimitMinor > 0
-                    ? Math.min((watch.actualSpentMinor / watch.watchLimitMinor) * 100, 100)
-                    : 0;
-
-                  return (
-                    <div key={watch.expenseCategoryId} className="watch-row">
-                      <div className="watch-row__header">
-                        <span className="watch-row__name">
-                          <span className="watch-row__dot" style={{ background: watch.color ?? "var(--text-tertiary)" }} />
-                          {watch.name}
-                        </span>
-                        <span className={`watch-row__status ${getWatchTone(watch.status)}`}>
-                          {watch.status === "within_limit"
-                            ? "Within limit"
-                            : watch.status === "near_limit"
-                              ? "Near limit"
-                              : "Over limit"}
-                        </span>
-                      </div>
-                      <div className="watch-row__meta">
-                        <span>{formatMinorCurrency(watch.actualSpentMinor, currencyCode)} spent</span>
-                        <span>{formatMinorCurrency(watch.watchLimitMinor, currencyCode)} limit</span>
-                      </div>
-                      <div className="watch-row__track">
-                        <div className={`watch-row__fill ${getWatchTone(watch.status)}`} style={{ width: `${ratio}%` }} />
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            ) : (
-              <p className="plan-editor__hint">No category watches yet. Add a few categories you want to keep tight.</p>
-            )}
-          </div>
+          )}
         </>
       )}
     </aside>
