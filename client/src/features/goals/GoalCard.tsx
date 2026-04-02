@@ -1,14 +1,5 @@
 import type { GoalOverviewItem } from "../../shared/lib/api";
 
-const domainLabels: Record<string, string> = {
-  health: "Health",
-  money: "Money",
-  work_growth: "Work & Growth",
-  home_admin: "Home admin",
-  discipline: "Discipline",
-  other: "Other",
-};
-
 const healthLabels: Record<string, string> = {
   on_track: "On Track",
   drifting: "Drifting",
@@ -21,15 +12,6 @@ const statusDisplayLabels: Record<string, string> = {
   drifting: "NEEDS ATTENTION",
   stalled: "STALLED",
   achieved: "ACHIEVED",
-};
-
-const domainIcons: Record<string, string> = {
-  health: "💪",
-  money: "💰",
-  work_growth: "🚀",
-  home_admin: "🏠",
-  discipline: "🎯",
-  other: "✦",
 };
 
 function formatDate(iso: string | null): string {
@@ -53,10 +35,12 @@ export function GoalCard({
   goal,
   selected,
   onSelect,
+  onOpenInPlan,
 }: {
   goal: GoalOverviewItem;
   selected: boolean;
   onSelect: () => void;
+  onOpenInPlan?: () => void;
 }) {
   const milestoneName = getNextMilestoneName(goal);
   const healthState = goal.health ?? "on_track";
@@ -76,14 +60,16 @@ export function GoalCard({
         }
       }}
     >
-      {/* Status badge & domain icon */}
+      {/* Status badge & horizon */}
       <div className="ap-goal-card__top-row">
         <span className={`ap-goal-card__status-badge ap-goal-card__status-badge--${healthState}`}>
           {statusLabel}
         </span>
-        <span className="ap-goal-card__domain-icon" title={domainLabels[goal.domain] ?? goal.domain}>
-          {domainIcons[goal.domain] ?? "✦"}
-        </span>
+        <div className="ap-goal-card__badges">
+          {goal.horizonName && (
+            <span className="ap-goal-card__horizon-badge">{goal.horizonName}</span>
+          )}
+        </div>
       </div>
 
       {/* Title */}
@@ -106,6 +92,11 @@ export function GoalCard({
           <span className="ap-goal-card__meta-item">
             <span className="ap-goal-card__meta-icon">●</span>
             {goal.linkedSummary.dueHabitsToday}/{habitCount} Habits
+          </span>
+        )}
+        {goal.parentGoalId && (
+          <span className="ap-goal-card__meta-item ap-goal-card__meta-item--subtle">
+            child goal
           </span>
         )}
       </div>
@@ -148,6 +139,20 @@ export function GoalCard({
             />
           </div>
         </div>
+      )}
+
+      {/* Plan mode link */}
+      {onOpenInPlan && (
+        <button
+          className="ap-goal-card__plan-link"
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onOpenInPlan();
+          }}
+        >
+          View in Plan →
+        </button>
       )}
     </div>
   );

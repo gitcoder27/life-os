@@ -1,874 +1,271 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { Link } from "react-router-dom";
+import { useState } from "react";
 
 import {
-  formatMonthLabel,
   getMonthStartDate,
   getTodayDate,
   getWeekStartDate,
   useCreateGoalMutation,
-  useDayPlanQuery,
-  useFilteredGoalsQuery,
-  useGoalsDataQuery,
+  useGoalDetailQuery,
+  useGoalsWorkspaceQuery,
   useUpdateGoalMutation,
-  useUpdateMonthFocusMutation,
-  useUpdateWeekPrioritiesMutation,
-  type GoalDomain,
+  type GoalDetailItem,
   type GoalOverviewItem,
-  type GoalStatus,
-  type LinkedGoal,
 } from "../../shared/lib/api";
 import {
-  EmptyState,
-  InlineErrorState,
   PageErrorState,
   PageLoadingState,
 } from "../../shared/ui/PageState";
-import { SectionCard } from "../../shared/ui/SectionCard";
-import { GoalDomainSections } from "./GoalDomainSections";
-import { GoalFilters } from "./GoalFilters";
-import { GoalInspectorPanel } from "./GoalInspectorPanel";
 import {
-  SortablePlanningEditor,
-  type RankedPlanningDraft,
-} from "./SortablePlanningEditor";
-import { useGoalTodayAction } from "./useGoalTodayAction";
-
-/* ── Constants ── */
-
-const domainLabels: Record<string, string> = {
-  health: "Health",
-  money: "Money",
-  work_growth: "Work & Growth",
-  home_admin: "Home admin",
-  discipline: "Discipline",
-  other: "Other",
-};
-
-const domainOptions = Object.entries(domainLabels).map(([value, label]) => ({
-  value: value as GoalDomain,
-  label,
-}));
-
-const statusLabels: Record<string, string> = {
-  active: "Active",
-  paused: "Paused",
-  completed: "Completed",
-  archived: "Archived",
-};
-
-/* ── Helpers ── */
-
-function GoalChip({ goal }: { goal: LinkedGoal }) {
-  return (
-    <Link to="/goals" className="goal-chip">
-      <span className={`goal-chip__dot goal-chip__dot--${goal.domain}`} />
-      <span>{goal.title}</span>
-    </Link>
-  );
-}
-
-type GoalFormData = {
-  title: string;
-  domain: GoalDomain;
-  targetDate: string;
-  notes: string;
-};
-
-const emptyGoalForm: GoalFormData = {
-  title: "",
-  domain: "other",
-  targetDate: "",
-  notes: "",
-};
-
-type CarryForwardPrompt = {
-  source: "week" | "month";
-  goalId: string;
-};
-
-const planningSlots: Array<1 | 2 | 3> = [1, 2, 3];
-
-let planningDraftKeyCounter = 0;
-
-function nextPlanningDraftKey() {
-  planningDraftKeyCounter += 1;
-  return `planning-draft-${planningDraftKeyCounter}`;
-}
-
-function createPlanningDraft(): RankedPlanningDraft {
-  return {
-    sortKey: nextPlanningDraftKey(),
-    title: "",
-    goalId: "",
-  };
-}
-
-function toRankedPlanningDrafts<T extends { id: string; slot: 1 | 2 | 3; title: string; goalId: string | null }>(
-  items: T[],
-): RankedPlanningDraft[] {
-  return [...items]
-    .sort((left, right) => left.slot - right.slot)
-    .map((item) => ({
-      id: item.id,
-      sortKey: item.id,
-      title: item.title,
-      goalId: item.goalId ?? "",
-    }));
-}
-
-function buildPlanningSnapshot(drafts: RankedPlanningDraft[]) {
-  return drafts.map((draft) => ({
-    id: draft.id,
-    title: draft.title.trim(),
-    goalId: draft.goalId || null,
-  }));
-}
-
-function buildCarryForwardPrompt({
-  source,
-  goalIds,
-  goalsById,
-  todayRepresentationAvailable,
-  todayRepresentedGoalIds,
-}: {
-  source: CarryForwardPrompt["source"];
-  goalIds: Array<string | null>;
-  goalsById: Map<string, GoalOverviewItem>;
-  todayRepresentationAvailable: boolean;
-  todayRepresentedGoalIds: Set<string>;
-}): CarryForwardPrompt | null {
-  if (!todayRepresentationAvailable) return null;
-
-  const seenGoalIds = new Set<string>();
-  for (const goalId of goalIds) {
-    if (!goalId || seenGoalIds.has(goalId)) continue;
-    seenGoalIds.add(goalId);
-
-    const goal = goalsById.get(goalId);
-    if (!goal || goal.status !== "active" || !goal.nextBestAction || todayRepresentedGoalIds.has(goalId)) {
-      continue;
-    }
-    return { source, goalId };
-  }
-  return null;
-}
-
-/* ── Goal Form (inline) ── */
-
-function GoalForm({
-  form,
-  editing,
-  isPending,
-  onChangeForm,
-  onSubmit,
-  onCancel,
-  formRef,
-  titleRef,
-}: {
-  form: GoalFormData;
-  editing: boolean;
-  isPending: boolean;
-  onChangeForm: (updater: (prev: GoalFormData) => GoalFormData) => void;
-  onSubmit: () => void;
-  onCancel: () => void;
-  formRef: React.RefObject<HTMLDivElement>;
-  titleRef: React.RefObject<HTMLInputElement>;
-}) {
-  return (
-    <div className="stack-form ap-goal-form" ref={formRef}>
-      <label className="field">
-        <span>Title</span>
-        <input
-          ref={titleRef}
-          type="text"
-          value={form.title}
-          placeholder="What do you want to achieve?"
-          onChange={(e) => onChangeForm((p) => ({ ...p, title: e.target.value }))}
-        />
-      </label>
-      <label className="field">
-        <span>Domain</span>
-        <select
-          value={form.domain}
-          onChange={(e) => onChangeForm((p) => ({ ...p, domain: e.target.value as GoalDomain }))}
-        >
-          {domainOptions.map((opt) => (
-            <option key={opt.value} value={opt.value}>{opt.label}</option>
-          ))}
-        </select>
-      </label>
-      <label className="field">
-        <span>Target date (optional)</span>
-        <input
-          type="date"
-          value={form.targetDate}
-          onChange={(e) => onChangeForm((p) => ({ ...p, targetDate: e.target.value }))}
-        />
-      </label>
-      <label className="field">
-        <span>Notes (optional)</span>
-        <textarea
-          rows={2}
-          value={form.notes}
-          placeholder="Context or motivation"
-          onChange={(e) => onChangeForm((p) => ({ ...p, notes: e.target.value }))}
-        />
-      </label>
-      <div className="button-row">
-        <button
-          className="button button--primary button--small"
-          type="button"
-          onClick={onSubmit}
-          disabled={isPending}
-        >
-          {editing ? "Update" : "Create"}
-        </button>
-        <button
-          className="button button--ghost button--small"
-          type="button"
-          onClick={onCancel}
-        >
-          Cancel
-        </button>
-      </div>
-    </div>
-  );
-}
-
-/* ── Carry-Forward Banner ── */
-
-function CarryForwardBanner({
-  source,
-  goal,
-  onDismiss,
-  onLinkedToToday,
-}: {
-  source: CarryForwardPrompt["source"];
-  goal: GoalOverviewItem;
-  onDismiss: () => void;
-  onLinkedToToday: () => void;
-}) {
-  const {
-    isAvailable,
-    updateDayPrioritiesMutation,
-    canAddToToday,
-    helperCopy,
-    buttonLabel,
-    addToToday,
-  } = useGoalTodayAction({
-    goalId: goal.id,
-    goalStatus: goal.status,
-    nextBestAction: goal.nextBestAction,
-    onLinkedToToday,
-  });
-
-  if (!isAvailable || !goal.nextBestAction) return null;
-
-  const sourceLabel = source === "week" ? "weekly priorities" : "monthly focus";
-
-  return (
-    <div className="goal-carry-banner" role="status">
-      <div className="goal-carry-banner__top">
-        <div>
-          <div className="goal-carry-banner__eyebrow">From {sourceLabel}</div>
-          <div className="goal-carry-banner__title">Carry one into Today</div>
-        </div>
-        <button className="button button--ghost button--small" type="button" onClick={onDismiss}>
-          Dismiss
-        </button>
-      </div>
-      <p className="goal-carry-banner__copy">
-        <strong>{goal.title}</strong> is planned in {sourceLabel} but not represented in Today yet.
-      </p>
-      <div className="goal-nba">
-        <span className="goal-nba__icon">→</span>
-        <span>{goal.nextBestAction}</span>
-      </div>
-      <p className="goal-carry-banner__helper">{helperCopy}</p>
-      <div className="button-row button-row--wrap">
-        <button
-          className="button button--primary button--small"
-          type="button"
-          onClick={() => void addToToday()}
-          disabled={updateDayPrioritiesMutation.isPending || !canAddToToday}
-        >
-          {buttonLabel}
-        </button>
-        <Link to="/today" className="button button--ghost button--small">
-          Open Today
-        </Link>
-      </div>
-      {updateDayPrioritiesMutation.error instanceof Error ? (
-        <InlineErrorState
-          message={updateDayPrioritiesMutation.error.message}
-          onRetry={() => void addToToday()}
-        />
-      ) : null}
-    </div>
-  );
-}
-
-/* ── Planning Panel (collapsible) ── */
-
-function PlanningPanel({
-  children,
-  defaultOpen = false,
-}: {
-  children: React.ReactNode;
-  defaultOpen?: boolean;
-}) {
-  const [open, setOpen] = useState(defaultOpen);
-
-  return (
-    <div className="ap-planning-panel">
-      <button
-        className="ap-planning-panel__toggle"
-        type="button"
-        onClick={() => setOpen(!open)}
-      >
-        <span className="ap-planning-panel__toggle-icon">{open ? "▾" : "▸"}</span>
-        <span>Weekly & Monthly Planning</span>
-      </button>
-      {open && (
-        <div className="ap-planning-panel__body">
-          {children}
-        </div>
-      )}
-    </div>
-  );
-}
-
-/* ── Main Page ── */
+  GoalFormDialog,
+  emptyGoalForm,
+  goalToFormData,
+  suggestChildHorizon,
+  type GoalFormData,
+} from "./GoalFormDialog";
+import { GoalInspectorPanel } from "./GoalInspectorPanel";
+import { GoalsModeToggle, type GoalsMode } from "./GoalsModeToggle";
+import { GoalsOverviewWorkspace } from "./GoalsOverviewWorkspace";
+import { GoalsPlanWorkspace } from "./GoalsPlanWorkspace";
 
 export function GoalsPage() {
   const today = getTodayDate();
   const weekStart = getWeekStartDate(today);
   const monthStart = getMonthStartDate(today);
 
-  // Filter state
-  const [filterDomain, setFilterDomain] = useState<GoalDomain | undefined>(undefined);
+  // Mode state
+  const [mode, setMode] = useState<GoalsMode>("overview");
 
-  // Detail panel
+  // Selection
   const [selectedGoalId, setSelectedGoalId] = useState<string | null>(null);
-  const [carryForwardPrompt, setCarryForwardPrompt] = useState<CarryForwardPrompt | null>(null);
 
-  const goalsQuery = useGoalsDataQuery(today);
-  const dayPlanQuery = useDayPlanQuery(today);
-  const filteredGoalsQuery = useFilteredGoalsQuery(
-    filterDomain ? { domain: filterDomain } : undefined,
-  );
-  const createGoalMutation = useCreateGoalMutation();
-  const updateGoalMutation = useUpdateGoalMutation();
-  const updateWeekPrioritiesMutation = useUpdateWeekPrioritiesMutation(weekStart);
-  const updateMonthFocusMutation = useUpdateMonthFocusMutation(monthStart);
-
-  // Goal form
+  // Goal form (overview create/edit)
   const [showGoalForm, setShowGoalForm] = useState(false);
   const [editingGoalId, setEditingGoalId] = useState<string | null>(null);
-  const [goalForm, setGoalForm] = useState<GoalFormData>(emptyGoalForm);
-  const goalFormRef = useRef<HTMLDivElement>(null);
-  const goalTitleRef = useRef<HTMLInputElement>(null);
+  const [goalForm, setGoalForm] = useState<GoalFormData>(emptyGoalForm());
 
-  useEffect(() => {
-    if (showGoalForm && goalFormRef.current) {
-      goalFormRef.current.scrollIntoView({ behavior: "smooth", block: "center" });
-      goalTitleRef.current?.focus();
-    }
-  }, [showGoalForm]);
+  // Child goal form (plan mode breakdown)
+  const [showChildForm, setShowChildForm] = useState(false);
+  const [childFormParent, setChildFormParent] = useState<GoalOverviewItem | null>(null);
+  const [childForm, setChildForm] = useState<GoalFormData>(emptyGoalForm());
 
-  // Weekly priorities editing
-  const [editingWeek, setEditingWeek] = useState(false);
-  const [weekDrafts, setWeekDrafts] = useState<RankedPlanningDraft[]>([]);
+  // Queries
+  const workspaceQuery = useGoalsWorkspaceQuery(today);
+  const createGoalMutation = useCreateGoalMutation();
+  const updateGoalMutation = useUpdateGoalMutation();
 
-  // Monthly focus editing
-  const [editingMonth, setEditingMonth] = useState(false);
-  const [monthTheme, setMonthTheme] = useState("");
-  const [monthOutcomes, setMonthOutcomes] = useState<RankedPlanningDraft[]>([]);
-
-  const isFiltering = filterDomain !== undefined;
-  const allGoals = goalsQuery.data?.goals.goals ?? [];
-  const allGoalsById = useMemo(
-    () => new Map(allGoals.map((goal) => [goal.id, goal])),
-    [allGoals],
-  );
-  const filteredGoals = isFiltering
-    ? (filteredGoalsQuery.data?.goals ?? allGoals)
-    : allGoals;
-  const todayRepresentationAvailable = Boolean(dayPlanQuery.data) && !dayPlanQuery.isError;
-  const todayRepresentedGoalIds = useMemo(() => {
-    if (!dayPlanQuery.data) return new Set<string>();
-    return new Set(
-      [
-        ...dayPlanQuery.data.priorities.map((p) => p.goalId),
-        ...dayPlanQuery.data.tasks.map((t) => t.goalId),
-      ].filter((id): id is string => typeof id === "string" && id.length > 0),
-    );
-  }, [dayPlanQuery.data]);
-
-  const activeGoals = allGoals.filter((g) => g.status === "active");
-  const displayActiveGoals = filteredGoals.filter((g) => g.status === "active");
-  const displayOtherGoals = filteredGoals.filter((g) => g.status !== "active");
-
-  // Planning state
-  const weeklyPriorities = goalsQuery.data?.weekPlan?.priorities ?? [];
-  const monthPlan = goalsQuery.data?.monthPlan ?? null;
-  const savedWeekSnapshot = buildPlanningSnapshot(toRankedPlanningDrafts(weeklyPriorities));
-  const weekDraftSnapshot = buildPlanningSnapshot(weekDrafts);
-  const savedMonthOutcomeSnapshot = buildPlanningSnapshot(
-    toRankedPlanningDrafts(monthPlan?.topOutcomes ?? []),
-  );
-  const monthDraftSnapshot = buildPlanningSnapshot(monthOutcomes);
-  const savedMonthTheme = monthPlan?.theme ?? "";
-  const weekDraftsHaveBlankTitle = weekDrafts.some((d) => !d.title.trim());
-  const monthOutcomesHaveBlankTitle = monthOutcomes.some((o) => !o.title.trim());
-  const isWeekDirty = JSON.stringify(weekDraftSnapshot) !== JSON.stringify(savedWeekSnapshot);
-  const isMonthDirty =
-    monthTheme.trim() !== savedMonthTheme.trim()
-    || JSON.stringify(monthDraftSnapshot) !== JSON.stringify(savedMonthOutcomeSnapshot);
-  const carryForwardGoal = carryForwardPrompt ? allGoalsById.get(carryForwardPrompt.goalId) ?? null : null;
-
-  useEffect(() => {
-    if (!carryForwardPrompt) return;
-    if (!todayRepresentationAvailable) {
-      setCarryForwardPrompt(null);
-      return;
-    }
-    if (!carryForwardGoal || carryForwardGoal.status !== "active" || !carryForwardGoal.nextBestAction) {
-      setCarryForwardPrompt(null);
-      return;
-    }
-    if (todayRepresentationAvailable && todayRepresentedGoalIds.has(carryForwardPrompt.goalId)) {
-      setCarryForwardPrompt(null);
-    }
-  }, [carryForwardGoal, carryForwardPrompt, todayRepresentationAvailable, todayRepresentedGoalIds]);
-
-  if (goalsQuery.isLoading && !goalsQuery.data) {
+  if (workspaceQuery.isLoading && !workspaceQuery.data) {
     return (
       <PageLoadingState
-        title="Loading goals"
-        description="Pulling together life-area goals, weekly priorities, and monthly focus."
+        title="Loading Goals HQ"
+        description="Pulling together your planning workspace."
       />
     );
   }
 
-  if (goalsQuery.isError || !goalsQuery.data) {
+  if (workspaceQuery.isError || !workspaceQuery.data) {
     return (
       <PageErrorState
         title="Goals could not load"
-        message={goalsQuery.error instanceof Error ? goalsQuery.error.message : undefined}
-        onRetry={() => void goalsQuery.refetch()}
+        message={workspaceQuery.error instanceof Error ? workspaceQuery.error.message : undefined}
+        onRetry={() => void workspaceQuery.refetch()}
       />
     );
   }
 
+  const workspace = workspaceQuery.data;
+  const { domains, horizons, goals, weekPlan, monthPlan, todayAlignment } = workspace;
+
+  /* ── Handlers ── */
+
   function openCreateGoal() {
+    const defaultDomain = domains.find((d) => !d.isArchived);
     setEditingGoalId(null);
-    setGoalForm(emptyGoalForm);
+    setGoalForm(emptyGoalForm({ domainId: defaultDomain?.id ?? "" }));
     setShowGoalForm(true);
   }
 
   function openEditGoal(goal: GoalOverviewItem) {
     setEditingGoalId(goal.id);
-    setGoalForm({
-      title: goal.title,
-      domain: goal.domain,
-      targetDate: goal.targetDate ?? "",
-      notes: goal.notes ?? "",
-    });
+    setGoalForm(goalToFormData(goal));
     setShowGoalForm(true);
   }
 
   async function handleGoalSubmit() {
-    if (!goalForm.title.trim()) return;
+    if (!goalForm.title.trim() || !goalForm.domainId) return;
     if (editingGoalId) {
       await updateGoalMutation.mutateAsync({
         goalId: editingGoalId,
         title: goalForm.title.trim(),
-        domain: goalForm.domain,
+        domainId: goalForm.domainId,
+        horizonId: goalForm.horizonId || null,
+        parentGoalId: goalForm.parentGoalId || null,
+        why: goalForm.why.trim() || null,
         targetDate: goalForm.targetDate || null,
         notes: goalForm.notes.trim() || null,
       });
     } else {
       await createGoalMutation.mutateAsync({
         title: goalForm.title.trim(),
-        domain: goalForm.domain,
+        domainId: goalForm.domainId,
+        horizonId: goalForm.horizonId || null,
+        parentGoalId: goalForm.parentGoalId || null,
+        why: goalForm.why.trim() || null,
         targetDate: goalForm.targetDate || null,
         notes: goalForm.notes.trim() || null,
       });
     }
     setShowGoalForm(false);
     setEditingGoalId(null);
-    setGoalForm(emptyGoalForm);
+    setGoalForm(emptyGoalForm());
   }
 
-  async function handleGoalStatusChange(goalId: string, status: GoalStatus) {
-    await updateGoalMutation.mutateAsync({ goalId, status });
-    if (selectedGoalId === goalId && (status === "archived" || status === "completed" || status === "paused")) {
-      setSelectedGoalId(null);
-    }
-  }
-
-  function openEditWeek() {
-    setWeekDrafts(toRankedPlanningDrafts(weeklyPriorities));
-    setEditingWeek(true);
-  }
-
-  function cancelEditWeek() {
-    setWeekDrafts(toRankedPlanningDrafts(weeklyPriorities));
-    setEditingWeek(false);
-  }
-
-  async function handleWeekSave() {
-    const priorities = weekDrafts
-      .filter((d) => d.title.trim())
-      .map((d, i) => ({
-        id: d.id,
-        slot: planningSlots[i],
-        title: d.title.trim(),
-        goalId: d.goalId || null,
-      }));
-    await updateWeekPrioritiesMutation.mutateAsync({ priorities });
-    setCarryForwardPrompt(
-      buildCarryForwardPrompt({
-        source: "week",
-        goalIds: priorities.map((p) => p.goalId),
-        goalsById: allGoalsById,
-        todayRepresentationAvailable,
-        todayRepresentedGoalIds,
-      }),
-    );
-    setEditingWeek(false);
-  }
-
-  function openEditMonth() {
-    setMonthTheme(monthPlan?.theme ?? "");
-    setMonthOutcomes(toRankedPlanningDrafts(monthPlan?.topOutcomes ?? []));
-    setEditingMonth(true);
-  }
-
-  function cancelEditMonth() {
-    setMonthTheme(monthPlan?.theme ?? "");
-    setMonthOutcomes(toRankedPlanningDrafts(monthPlan?.topOutcomes ?? []));
-    setEditingMonth(false);
-  }
-
-  async function handleMonthSave() {
-    const topOutcomes = monthOutcomes
-      .filter((o) => o.title.trim())
-      .map((o, i) => ({
-        id: o.id,
-        slot: planningSlots[i],
-        title: o.title.trim(),
-        goalId: o.goalId || null,
-      }));
-    await updateMonthFocusMutation.mutateAsync({
-      theme: monthTheme.trim() || null,
-      topOutcomes,
+  async function handleChildGoalSubmit() {
+    if (!childForm.title.trim() || !childForm.domainId) return;
+    await createGoalMutation.mutateAsync({
+      title: childForm.title.trim(),
+      domainId: childForm.domainId,
+      horizonId: childForm.horizonId || null,
+      parentGoalId: childForm.parentGoalId || null,
+      why: childForm.why.trim() || null,
+      targetDate: childForm.targetDate || null,
+      notes: childForm.notes.trim() || null,
     });
-    setCarryForwardPrompt(
-      buildCarryForwardPrompt({
-        source: "month",
-        goalIds: topOutcomes.map((o) => o.goalId),
-        goalsById: allGoalsById,
-        todayRepresentationAvailable,
-        todayRepresentedGoalIds,
-      }),
-    );
-    setEditingMonth(false);
+    setShowChildForm(false);
+    setChildFormParent(null);
+    setChildForm(emptyGoalForm());
   }
 
   function handleSelectGoal(goalId: string) {
     setSelectedGoalId(selectedGoalId === goalId ? null : goalId);
+    setShowChildForm(false);
   }
 
+  function handleSwitchToPlan(goalId?: string) {
+    setMode("plan");
+    if (goalId) setSelectedGoalId(goalId);
+  }
+
+  function handleCreateChildFromPlan(parentGoal: GoalDetailItem) {
+    const suggestedHorizon = suggestChildHorizon(parentGoal.horizonId, horizons);
+    setChildFormParent(parentGoal);
+    setChildForm(emptyGoalForm({
+      domainId: parentGoal.domainId,
+      horizonId: suggestedHorizon,
+      parentGoalId: parentGoal.id,
+    }));
+    setShowChildForm(true);
+  }
+
+  // Build section errors for overview planning panels
+  const sectionErrors = {
+    weekPlan: null as { message: string } | null,
+    monthPlan: null as { message: string } | null,
+  };
+
   return (
-    <div className="ap-page">
+    <div className="ghq-page">
       {/* Page header */}
-      <header className="ap-page-header">
-        <h1 className="ap-page-header__title">Active Pursuits</h1>
-        <p className="ap-page-header__subtitle">What are you moving towards today?</p>
+      <header className="ghq-page-header">
+        <div className="ghq-page-header__left">
+          <h1 className="ghq-page-header__title">Goals</h1>
+          <p className="ghq-page-header__subtitle">
+            {mode === "overview"
+              ? "Scan your active goals and current planning."
+              : "Structure your goals and connect them to weekly and monthly work."}
+          </p>
+        </div>
+        <GoalsModeToggle mode={mode} onModeChange={setMode} />
       </header>
 
-      {/* Domain filters */}
-      <GoalFilters activeDomain={filterDomain} onChangeDomain={setFilterDomain} />
+      {/* Mode content */}
+      {mode === "overview" ? (
+        <GoalsOverviewWorkspace
+          goals={goals}
+          domains={domains}
+          horizons={horizons}
+          weekPlan={weekPlan}
+          monthPlan={monthPlan}
+          weekStart={weekStart}
+          monthStart={monthStart}
+          today={today}
+          selectedGoalId={selectedGoalId}
+          onSelectGoal={handleSelectGoal}
+          onSwitchToPlan={handleSwitchToPlan}
+          onOpenCreateGoal={openCreateGoal}
+          showGoalForm={showGoalForm}
+          goalForm={goalForm}
+          editingGoalId={editingGoalId}
+          onChangeGoalForm={setGoalForm}
+          onSubmitGoalForm={() => void handleGoalSubmit()}
+          onCancelGoalForm={() => {
+            setShowGoalForm(false);
+            setEditingGoalId(null);
+          }}
+          createIsPending={createGoalMutation.isPending}
+          updateIsPending={updateGoalMutation.isPending}
+          onRefetch={() => void workspaceQuery.refetch()}
+          sectionErrors={sectionErrors}
+        />
+      ) : (
+        <GoalsPlanWorkspace
+          goals={goals}
+          domains={domains}
+          horizons={horizons}
+          weekPlan={weekPlan}
+          monthPlan={monthPlan}
+          selectedGoalId={selectedGoalId}
+          onSelectGoal={handleSelectGoal}
+          onOpenCreateGoal={openCreateGoal}
+          showChildForm={showChildForm}
+          childFormParent={childFormParent}
+          childForm={childForm}
+          onChangeChildForm={setChildForm}
+          onSubmitChildForm={() => void handleChildGoalSubmit()}
+          onCancelChildForm={() => {
+            setShowChildForm(false);
+            setChildFormParent(null);
+          }}
+          createIsPending={createGoalMutation.isPending}
+        />
+      )}
 
-      {filteredGoalsQuery.isFetching && isFiltering ? (
-        <p className="support-copy">Filtering…</p>
-      ) : null}
+      {/* Overview inspector overlay */}
+      {mode === "overview" && selectedGoalId && (
+        <>
+          <div className="detail-backdrop" onClick={() => setSelectedGoalId(null)} />
+          <div className="goals-workspace__detail">
+            <GoalInspectorPanel
+              goalId={selectedGoalId}
+              onClose={() => setSelectedGoalId(null)}
+            />
+          </div>
+        </>
+      )}
 
-      {/* Main layout */}
-      <div className="ap-workspace">
-        {/* Goal list */}
-        <div className="ap-workspace__list">
-          {/* Goal form */}
-          {showGoalForm && (
-            <GoalForm
+      {/* Overview goal form overlay */}
+      {mode === "overview" && showGoalForm && (
+        <div className="ghq-form-overlay">
+          <div className="ghq-form-overlay__backdrop" onClick={() => {
+            setShowGoalForm(false);
+            setEditingGoalId(null);
+          }} />
+          <div className="ghq-form-overlay__panel">
+            <GoalFormDialog
               form={goalForm}
               editing={Boolean(editingGoalId)}
               isPending={createGoalMutation.isPending || updateGoalMutation.isPending}
+              domains={domains}
+              horizons={horizons}
               onChangeForm={setGoalForm}
               onSubmit={() => void handleGoalSubmit()}
               onCancel={() => {
                 setShowGoalForm(false);
                 setEditingGoalId(null);
               }}
-              formRef={goalFormRef}
-              titleRef={goalTitleRef}
             />
-          )}
-
-          {/* Carry-forward banner */}
-          {todayRepresentationAvailable && carryForwardPrompt && carryForwardGoal ? (
-            <CarryForwardBanner
-              source={carryForwardPrompt.source}
-              goal={carryForwardGoal}
-              onDismiss={() => setCarryForwardPrompt(null)}
-              onLinkedToToday={() => setCarryForwardPrompt(null)}
-            />
-          ) : null}
-
-          {/* Active goals grouped by domain */}
-          {displayActiveGoals.length > 0 ? (
-            <GoalDomainSections
-              goals={displayActiveGoals}
-              selectedGoalId={selectedGoalId}
-              onSelectGoal={handleSelectGoal}
-            />
-          ) : displayOtherGoals.length === 0 && !showGoalForm ? (
-            <EmptyState
-              title={isFiltering ? "No matching goals" : "No active goals"}
-              description={isFiltering ? "Try adjusting the filters above." : "Create your first goal to start planning with purpose."}
-              actionLabel={isFiltering ? undefined : "+ Add your first goal"}
-              onAction={isFiltering ? undefined : openCreateGoal}
-            />
-          ) : null}
-
-          {/* Inactive goals */}
-          {displayOtherGoals.length > 0 && (
-            <SectionCard
-              title="Inactive goals"
-              subtitle={`${displayOtherGoals.length} ${displayOtherGoals.length === 1 ? "goal" : "goals"}`}
-            >
-              <div className="inactive-goals">
-                {displayOtherGoals.map((goal) => (
-                  <div key={goal.id} className="inactive-goal-row">
-                    <span className={`goal-chip__dot goal-chip__dot--${goal.domain}`} />
-                    <span className="inactive-goal-row__title">{goal.title}</span>
-                    <span className={`tag ${goal.status === "completed" ? "tag--positive" : goal.status === "paused" ? "tag--warning" : "tag--neutral"}`}>
-                      {statusLabels[goal.status] ?? goal.status}
-                    </span>
-                    <div className="inactive-goal-row__actions">
-                      <button className="button button--ghost button--small" type="button" onClick={() => void handleGoalStatusChange(goal.id, "active")}>
-                        Reactivate
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </SectionCard>
-          )}
-
-          {/* Add goal button */}
-          {!showGoalForm && (
-            <div className="ap-add-goal-row">
-              <button
-                className="button button--primary button--small"
-                type="button"
-                onClick={openCreateGoal}
-              >
-                + Add goal
-              </button>
-              {selectedGoalId && (
-                <button
-                  className="button button--ghost button--small"
-                  type="button"
-                  onClick={() => {
-                    const goal = allGoals.find((g) => g.id === selectedGoalId);
-                    if (goal) openEditGoal(goal);
-                  }}
-                >
-                  Edit selected goal
-                </button>
-              )}
-            </div>
-          )}
-
-          {/* Planning panel (collapsible) */}
-          <PlanningPanel>
-            <div className="dashboard-grid">
-              {/* Monthly focus */}
-              <SectionCard
-                title="Monthly focus"
-                subtitle={formatMonthLabel(monthPlan?.startDate.slice(0, 7) ?? today.slice(0, 7))}
-              >
-                {goalsQuery.data.sectionErrors.monthPlan ? (
-                  <InlineErrorState
-                    message={goalsQuery.data.sectionErrors.monthPlan.message}
-                    onRetry={() => void goalsQuery.refetch()}
-                  />
-                ) : editingMonth ? (
-                  <div className="stack-form">
-                    <div className="goals-planning-editor__toolbar">
-                      <p className="goals-planning-editor__hint">
-                        Drag to reorder outcomes and keep the most important work at the top.
-                      </p>
-                      <button className="button button--ghost button--small" type="button" onClick={cancelEditMonth} disabled={updateMonthFocusMutation.isPending}>
-                        Cancel
-                      </button>
-                    </div>
-                    <label className="field">
-                      <span>Theme</span>
-                      <input type="text" value={monthTheme} placeholder="What is this month about?" onChange={(e) => setMonthTheme(e.target.value)} disabled={updateMonthFocusMutation.isPending} />
-                    </label>
-                    <SortablePlanningEditor
-                      drafts={monthOutcomes}
-                      onChangeDrafts={setMonthOutcomes}
-                      createDraft={createPlanningDraft}
-                      activeGoals={activeGoals}
-                      slotPrefix="M"
-                      itemLabel="outcome"
-                      titlePlaceholder="Key outcome"
-                      addLabel="+ Add outcome"
-                      emptyMessage="No monthly outcomes added yet."
-                      disabled={updateMonthFocusMutation.isPending}
-                    />
-                    {updateMonthFocusMutation.error instanceof Error ? (
-                      <InlineErrorState message={updateMonthFocusMutation.error.message} onRetry={() => void handleMonthSave()} />
-                    ) : null}
-                    {isMonthDirty ? (
-                      <div className="priority-stack__save-bar">
-                        <span className="priority-stack__save-hint">
-                          {monthOutcomesHaveBlankTitle ? "Fill every outcome title before saving" : "Unsaved changes"}
-                        </span>
-                        <button className="button button--primary button--small" type="button" onClick={() => void handleMonthSave()} disabled={updateMonthFocusMutation.isPending || monthOutcomesHaveBlankTitle}>
-                          {updateMonthFocusMutation.isPending ? "Saving…" : "Save"}
-                        </button>
-                      </div>
-                    ) : (
-                      <button className="button button--ghost button--small" type="button" onClick={cancelEditMonth} disabled={updateMonthFocusMutation.isPending} style={{ alignSelf: "flex-start" }}>
-                        Done editing
-                      </button>
-                    )}
-                  </div>
-                ) : (
-                  <div style={{ display: "flex", flexDirection: "column", gap: "0.6rem" }}>
-                    <div style={{ fontFamily: "var(--font-display)", fontSize: "1.25rem", fontWeight: 500 }}>
-                      {monthPlan?.theme ?? "No theme set"}
-                    </div>
-                    {monthPlan?.topOutcomes.length ? (
-                      <ol className="priority-list">
-                        {monthPlan.topOutcomes.map((outcome) => (
-                          <li key={outcome.id} className="priority-list__item">
-                            <span style={{ display: "flex", flexDirection: "column", gap: "0.2rem" }}>
-                              <span>{outcome.title}</span>
-                              {outcome.goal ? <GoalChip goal={outcome.goal} /> : null}
-                            </span>
-                            <span className={outcome.status === "completed" ? "tag tag--positive" : "tag tag--warning"}>
-                              {outcome.status === "completed" ? "achieved" : "tracking"}
-                            </span>
-                          </li>
-                        ))}
-                      </ol>
-                    ) : (
-                      <p className="support-copy">No monthly outcomes defined yet.</p>
-                    )}
-                    <button className="button button--ghost button--small" type="button" onClick={openEditMonth} style={{ alignSelf: "flex-start" }}>
-                      Edit monthly focus
-                    </button>
-                  </div>
-                )}
-              </SectionCard>
-
-              {/* Weekly priorities */}
-              <SectionCard title="Weekly priorities" subtitle="This week">
-                {goalsQuery.data.sectionErrors.weekPlan ? (
-                  <InlineErrorState message={goalsQuery.data.sectionErrors.weekPlan.message} onRetry={() => void goalsQuery.refetch()} />
-                ) : editingWeek ? (
-                  <div className="stack-form">
-                    <div className="goals-planning-editor__toolbar">
-                      <p className="goals-planning-editor__hint">
-                        Reorder the week visually before you lock in what matters most.
-                      </p>
-                      <button className="button button--ghost button--small" type="button" onClick={cancelEditWeek} disabled={updateWeekPrioritiesMutation.isPending}>
-                        Cancel
-                      </button>
-                    </div>
-                    <SortablePlanningEditor
-                      drafts={weekDrafts}
-                      onChangeDrafts={setWeekDrafts}
-                      createDraft={createPlanningDraft}
-                      activeGoals={activeGoals}
-                      slotPrefix="W"
-                      itemLabel="priority"
-                      titlePlaceholder="Weekly priority"
-                      addLabel="+ Add priority"
-                      emptyMessage="No weekly priorities added yet."
-                      disabled={updateWeekPrioritiesMutation.isPending}
-                    />
-                    {updateWeekPrioritiesMutation.error instanceof Error ? (
-                      <InlineErrorState message={updateWeekPrioritiesMutation.error.message} onRetry={() => void handleWeekSave()} />
-                    ) : null}
-                    {isWeekDirty ? (
-                      <div className="priority-stack__save-bar">
-                        <span className="priority-stack__save-hint">
-                          {weekDraftsHaveBlankTitle ? "Fill every priority title before saving" : "Unsaved changes"}
-                        </span>
-                        <button className="button button--primary button--small" type="button" onClick={() => void handleWeekSave()} disabled={updateWeekPrioritiesMutation.isPending || weekDraftsHaveBlankTitle}>
-                          {updateWeekPrioritiesMutation.isPending ? "Saving…" : "Save"}
-                        </button>
-                      </div>
-                    ) : (
-                      <button className="button button--ghost button--small" type="button" onClick={cancelEditWeek} disabled={updateWeekPrioritiesMutation.isPending} style={{ alignSelf: "flex-start" }}>
-                        Done editing
-                      </button>
-                    )}
-                  </div>
-                ) : (
-                  <>
-                    {weeklyPriorities.length > 0 ? (
-                      <ol className="priority-list">
-                        {weeklyPriorities.map((item, index) => (
-                          <li key={item.id} className="priority-list__item">
-                            <span style={{ display: "flex", flexDirection: "column", gap: "0.2rem" }}>
-                              <span>
-                                <span className="tag tag--neutral" style={{ marginRight: "0.5rem" }}>W{index + 1}</span>
-                                {item.title}
-                              </span>
-                              {item.goal ? <GoalChip goal={item.goal} /> : null}
-                            </span>
-                          </li>
-                        ))}
-                      </ol>
-                    ) : (
-                      <EmptyState
-                        title="No weekly priorities"
-                        description="This week has not been seeded with priorities yet."
-                      />
-                    )}
-                    <button className="button button--ghost button--small" type="button" onClick={openEditWeek} style={{ marginTop: "0.5rem" }}>
-                      Edit weekly priorities
-                    </button>
-                  </>
-                )}
-              </SectionCard>
-            </div>
-          </PlanningPanel>
+          </div>
         </div>
-
-        {/* Inspector Panel */}
-        {selectedGoalId && (
-          <>
-            <div className="detail-backdrop" onClick={() => setSelectedGoalId(null)} />
-            <div className="ap-workspace__inspector">
-              <GoalInspectorPanel
-                goalId={selectedGoalId}
-                onClose={() => setSelectedGoalId(null)}
-              />
-            </div>
-          </>
-        )}
-      </div>
+      )}
     </div>
   );
 }

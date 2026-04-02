@@ -12,15 +12,6 @@ import { useGoalTodayAction } from "./useGoalTodayAction";
 
 /* ── Helpers ── */
 
-const domainLabels: Record<string, string> = {
-  health: "Health & Vitality",
-  money: "Wealth & Finance",
-  work_growth: "Work & Growth",
-  home_admin: "Home & Admin",
-  discipline: "Discipline & Focus",
-  other: "General",
-};
-
 const domainIcons: Record<string, string> = {
   health: "💪",
   money: "💰",
@@ -205,12 +196,12 @@ export function GoalInspectorPanel({
         {/* Primary Domain */}
         <div className="ap-inspector__domain">
           <span className="ap-inspector__domain-icon">
-            {domainIcons[goal.domain] ?? "✦"}
+            {domainIcons[goal.domainSystemKey ?? "other"] ?? "✦"}
           </span>
           <div>
             <div className="ap-inspector__domain-label">Primary Domain</div>
             <div className="ap-inspector__domain-value">
-              {domainLabels[goal.domain] ?? goal.domain}
+              {goal.domain}
             </div>
           </div>
         </div>

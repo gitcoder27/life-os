@@ -542,8 +542,8 @@ export function GoalDetailPanel({
         <div className="goal-detail__title">{goal.title}</div>
         <div className="goal-detail__meta">
           <span className="goal-overview-card__domain">
-            <span className={`goal-chip__dot goal-chip__dot--${goal.domain}`} />
-            {domainLabels[goal.domain] ?? goal.domain}
+            <span className={`goal-chip__dot goal-chip__dot--${goal.domainSystemKey ?? "other"}`} />
+            {goal.domain}
           </span>
           {goal.health && (
             <span className={`health-badge health-badge--${goal.health}`}>

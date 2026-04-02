@@ -26,6 +26,8 @@ import {
   PageLoadingState,
 } from "../../shared/ui/PageState";
 import { SectionCard } from "../../shared/ui/SectionCard";
+import { GoalDomainManager } from "./GoalDomainManager";
+import { GoalHorizonManager } from "./GoalHorizonManager";
 
 const weekDayOptions = [
   { value: 0, label: "Sunday" },
@@ -336,6 +338,9 @@ export function SettingsPage() {
             </label>
           </div>
         </SectionCard>
+
+        <GoalDomainManager />
+        <GoalHorizonManager />
 
         <SectionCard title="Notification behavior" subtitle="Control which alerts reach you and how often they repeat">
           <div className="notif-settings-grid">
