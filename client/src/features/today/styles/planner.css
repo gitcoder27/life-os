@@ -108,20 +108,80 @@ body.planner-dragging-cursor * {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 0.85rem;
-  padding: 0.75rem 0.9rem;
-  border-radius: 1rem;
-  border: 1px solid rgba(255,255,255,0.06);
-  background:
-    linear-gradient(135deg, rgba(255,255,255,0.05), rgba(255,255,255,0.02)),
-    rgba(17, 16, 14, 0.75);
+  gap: 1rem;
+  padding: 0.5rem 0.65rem;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--border);
+  background: var(--panel);
 }
 
 .planner-date-nav__controls {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
-  flex-wrap: wrap;
+  gap: 0.25rem;
+}
+
+.planner-date-nav__step {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 50%;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all var(--dur-fast) var(--ease);
+  flex-shrink: 0;
+}
+
+.planner-date-nav__step:hover {
+  background: rgba(255,255,255,0.06);
+  color: var(--text);
+  border-color: var(--border);
+}
+
+.planner-date-nav__step:active {
+  background: rgba(255,255,255,0.1);
+  transform: scale(0.92);
+}
+
+/* SmartDatePicker overrides inside planner nav */
+.planner-date-nav .smart-date-picker {
+  min-width: auto;
+  flex: 0 0 auto;
+}
+
+.planner-date-nav .smart-date-picker__trigger {
+  border: none;
+  background: transparent;
+  padding: 0.35rem 0.5rem;
+  border-radius: var(--r-sm);
+  gap: 0.35rem;
+  font-weight: 600;
+  font-size: var(--fs-small);
+  color: var(--text);
+  transition: background var(--dur-fast) var(--ease);
+}
+
+.planner-date-nav .smart-date-picker__trigger:hover:not(:disabled) {
+  background: rgba(255,255,255,0.06);
+  border-color: transparent;
+}
+
+.planner-date-nav .smart-date-picker__icon {
+  display: none;
+}
+
+.planner-date-nav .smart-date-picker__caret {
+  font-size: 0.5rem;
+  opacity: 0.5;
+  transition: opacity var(--dur-fast) var(--ease);
+}
+
+.planner-date-nav .smart-date-picker__trigger:hover .smart-date-picker__caret {
+  opacity: 0.8;
 }
 
 .planner-date-nav__copy {
@@ -141,9 +201,25 @@ body.planner-dragging-cursor * {
 
 .planner-date-nav__subtitle {
   font-size: var(--fs-micro);
-  color: var(--text-tertiary);
+  color: var(--accent-bright);
   text-transform: uppercase;
   letter-spacing: 0.08em;
+  font-weight: 600;
+}
+
+.planner-date-nav__today-btn {
+  font-size: var(--fs-micro);
+  color: var(--accent);
+  cursor: pointer;
+  background: none;
+  border: none;
+  padding: 0;
+  letter-spacing: 0.03em;
+  transition: color var(--dur-fast) var(--ease);
+}
+
+.planner-date-nav__today-btn:hover {
+  color: var(--accent-bright);
 }
 
 .planner__meta {
@@ -2534,6 +2610,9 @@ body.planner-dragging-cursor * {
     width: 100%;
     flex-direction: column;
     align-items: flex-start;
+    border-radius: var(--r);
+    padding: 0.6rem 0.75rem;
+    gap: 0.5rem;
   }
 
   .planner-date-nav__copy {
