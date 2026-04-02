@@ -2,7 +2,6 @@ import type { FastifyPluginAsync } from "fastify";
 import type {
   MealSlot as PrismaMealSlot,
   Prisma,
-  RoutinePeriod as PrismaRoutinePeriod,
 } from "@prisma/client";
 
 import type {
@@ -136,10 +135,6 @@ const onboardingCompletionSchema = z.object({
   firstWeekStartDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   firstMonthStartDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
 });
-
-function toRoutinePeriod(period: "morning" | "evening"): PrismaRoutinePeriod {
-  return period === "morning" ? "MORNING" : "EVENING";
-}
 
 function toMealSlot(
   mealSlot: "breakfast" | "lunch" | "dinner" | "snack" | null | undefined,
@@ -342,12 +337,19 @@ export const registerOnboardingRoutes: FastifyPluginAsync = async (app) => {
           userId: user.id,
         },
       });
-      for (const routine of payload.routines) {
+      const orderedRoutines = [...payload.routines].sort((left, right) => {
+        const leftWeight = left.period === "morning" ? 0 : 1;
+        const rightWeight = right.period === "morning" ? 0 : 1;
+
+        return leftWeight - rightWeight;
+      });
+
+      for (const [index, routine] of orderedRoutines.entries()) {
         const createdRoutine = await tx.routine.create({
           data: {
             userId: user.id,
             name: routine.name,
-            period: toRoutinePeriod(routine.period),
+            sortOrder: index,
           },
         });
 

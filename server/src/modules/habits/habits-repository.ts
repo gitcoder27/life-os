@@ -151,7 +151,7 @@ export const listRoutinesForUser = async (prisma: HabitsPrisma, userId: string, 
       userId,
     },
     include: buildRoutineWithCheckinsInclude(onDate),
-    orderBy: [{ period: "asc" }, { createdAt: "asc" }],
+    orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
   });
 
 export const findOwnedRoutine = async (prisma: HabitsPrisma, userId: string, routineId: string) => {

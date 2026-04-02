@@ -5,7 +5,6 @@ import type { RecurrenceDefinition, RecurrenceInput } from "./recurrence.js";
 export type HabitStatus = "active" | "paused" | "archived";
 export type HabitCheckinStatus = "completed" | "skipped";
 export type HabitPauseKind = "rest_day" | "vacation";
-export type RoutinePeriod = "morning" | "evening";
 export type RoutineStatus = "active" | "archived";
 export type HabitRiskLevel = "none" | "at_risk" | "drifting";
 export type HabitRiskReason = "streak_at_risk" | "missed_recently" | "low_completion_rate" | null;
@@ -71,7 +70,7 @@ export interface RoutineItemState {
 export interface RoutineRecord {
   id: EntityId;
   name: string;
-  period: RoutinePeriod;
+  sortOrder: number;
   status: RoutineStatus;
   completedItems: number;
   totalItems: number;
@@ -135,12 +134,12 @@ export interface RoutineItemInput {
 
 export interface CreateRoutineRequest {
   name: string;
-  period: RoutinePeriod;
   items: RoutineItemInput[];
 }
 
 export interface UpdateRoutineRequest {
   name?: string;
+  sortOrder?: number;
   status?: RoutineStatus;
   items?: RoutineItemInput[];
 }

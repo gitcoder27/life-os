@@ -129,7 +129,7 @@ describe("scoring service", () => {
     expect(score.topReasons).toHaveLength(2);
   });
 
-  it("scores only due habits and aggregates routines across the same period", async () => {
+  it("scores only due habits and splits routine points across all active routines", async () => {
     const prisma = {
       planningCycle: {
         upsert: vi
@@ -182,12 +182,12 @@ describe("scoring service", () => {
         findMany: vi.fn().mockResolvedValue([
           {
             id: "routine-1",
-            period: "MORNING",
+            sortOrder: 0,
             items: [{ id: "item-1" }, { id: "item-2" }],
           },
           {
             id: "routine-2",
-            period: "MORNING",
+            sortOrder: 1,
             items: [{ id: "item-3" }, { id: "item-4" }],
           },
         ]),
@@ -209,8 +209,8 @@ describe("scoring service", () => {
     const routinesBucket = score.buckets.find((bucket) => bucket.key === "routines_and_habits");
 
     expect(routinesBucket).toMatchObject({
-      earnedPoints: 17.5,
-      applicablePoints: 20,
+      earnedPoints: 20,
+      applicablePoints: 25,
     });
   });
 });

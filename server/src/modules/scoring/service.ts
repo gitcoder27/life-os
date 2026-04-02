@@ -1,4 +1,4 @@
-import type { Prisma, PrismaClient, RoutinePeriod } from "@prisma/client";
+import type { Prisma, PrismaClient } from "@prisma/client";
 
 import { filterDueHabits } from "../../lib/habits/schedule.js";
 import {
@@ -335,15 +335,10 @@ async function getDayContext(prisma: PrismaClient, userId: string, date: Date) {
 }
 
 function getRoutineCompletion(
-  period: RoutinePeriod,
   routines: Awaited<ReturnType<typeof getDayContext>>["activeRoutines"],
   routineCheckins: Awaited<ReturnType<typeof getDayContext>>["routineCheckins"],
 ) {
-  const routineItems = routines
-    .filter((entry) => entry.period === period)
-    .flatMap((routine) => routine.items);
-
-  if (routineItems.length === 0) {
+  if (routines.length === 0) {
     return {
       earned: 0,
       applicable: 0,
@@ -352,15 +347,33 @@ function getRoutineCompletion(
     };
   }
 
-  const completed = routineItems.filter((item) =>
-    routineCheckins.some((checkin) => checkin.routineItemId === item.id),
-  ).length;
+  const routineShare = 10 / routines.length;
+  const earned = routines.reduce((sum, routine) => {
+    if (routine.items.length === 0) {
+      return sum;
+    }
+
+    const completed = routine.items.filter((item) =>
+      routineCheckins.some((checkin) => checkin.routineItemId === item.id),
+    ).length;
+
+    return sum + routineShare * (completed / routine.items.length);
+  }, 0);
+  const completed = routines.reduce(
+    (sum, routine) =>
+      sum +
+      routine.items.filter((item) =>
+        routineCheckins.some((checkin) => checkin.routineItemId === item.id),
+      ).length,
+    0,
+  );
+  const total = routines.reduce((sum, routine) => sum + routine.items.length, 0);
 
   return {
-    earned: 5 * (completed / routineItems.length),
-    applicable: 5,
+    earned,
+    applicable: 10,
     completed,
-    total: routineItems.length,
+    total,
   };
 }
 
@@ -392,8 +405,7 @@ export async function calculateDailyScore(
     "Top priorities and today tasks scheduled for the day.",
   );
 
-  const morningRoutine = getRoutineCompletion("MORNING", context.activeRoutines, context.routineCheckins);
-  const eveningRoutine = getRoutineCompletion("EVENING", context.activeRoutines, context.routineCheckins);
+  const routines = getRoutineCompletion(context.activeRoutines, context.routineCheckins);
   const dueHabits = filterDueHabits(context.activeHabits, context.targetIsoDate);
   const completedHabits = dueHabits.filter((habit) =>
     context.habitCheckins.some(
@@ -405,9 +417,9 @@ export async function calculateDailyScore(
   const routineHabitBucket = buildBucket(
     "routines_and_habits",
     "Routines and Habits",
-    morningRoutine.earned + eveningRoutine.earned + habitEarned,
-    morningRoutine.applicable + eveningRoutine.applicable + habitApplicable,
-    "Morning routine, evening routine, and due habits for the day.",
+    routines.earned + habitEarned,
+    routines.applicable + habitApplicable,
+    "Your active routines and due habits for the day.",
   );
 
   const waterTarget = context.preferences?.dailyWaterTargetMl ?? 2500;

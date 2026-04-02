@@ -174,11 +174,25 @@ function HabitForm({
 
 type RoutineFormValues = {
   name: string;
-  period: "morning" | "evening";
   itemsText: string;
 };
 
-const emptyRoutineForm: RoutineFormValues = { name: "", period: "morning", itemsText: "" };
+const emptyRoutineForm: RoutineFormValues = { name: "", itemsText: "" };
+
+function buildRoutineItemsInput(itemsText: string) {
+  return itemsText
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((title, index) => ({ title, sortOrder: index }));
+}
+
+function buildRoutineItemsText(items: Array<{ title: string; sortOrder: number }>) {
+  return [...items]
+    .sort((left, right) => left.sortOrder - right.sortOrder)
+    .map((item) => item.title)
+    .join("\n");
+}
 
 function RoutineForm({
   initial = emptyRoutineForm,
@@ -186,14 +200,12 @@ function RoutineForm({
   isPending,
   onSubmit,
   onCancel,
-  lockPeriod = false,
 }: {
   initial?: RoutineFormValues;
   submitLabel: string;
   isPending: boolean;
   onSubmit: (values: RoutineFormValues) => void;
   onCancel: () => void;
-  lockPeriod?: boolean;
 }) {
   const [values, setValues] = useState<RoutineFormValues>(initial);
 
@@ -206,34 +218,21 @@ function RoutineForm({
   return (
     <form className="manage-form" onSubmit={handleSubmit}>
       <div className="manage-form__fields">
-        <div className="manage-form__row">
-          <label className="field" style={{ flex: 1 }}>
-            <span>Name</span>
-            <input
-              type="text"
-              placeholder="e.g. Morning routine"
-              value={values.name}
-              onChange={(e) => setValues((v) => ({ ...v, name: e.target.value }))}
-              autoFocus
-            />
-          </label>
-          <label className="field" style={{ width: "9rem" }}>
-            <span>Period</span>
-            <select
-              value={values.period}
-              onChange={(e) => setValues((v) => ({ ...v, period: e.target.value as "morning" | "evening" }))}
-              disabled={lockPeriod}
-            >
-              <option value="morning">Morning</option>
-              <option value="evening">Evening</option>
-            </select>
-          </label>
-        </div>
+        <label className="field">
+          <span>Name</span>
+          <input
+            type="text"
+            placeholder="e.g. Night routine"
+            value={values.name}
+            onChange={(e) => setValues((v) => ({ ...v, name: e.target.value }))}
+            autoFocus
+          />
+        </label>
         <label className="field">
           <span>Items (one per line)</span>
           <textarea
             rows={4}
-            placeholder={"Drink water\nReview priorities\nCheck calendar"}
+            placeholder={"Stretch\nReview priorities\nPrep for tomorrow"}
             value={values.itemsText}
             onChange={(e) => setValues((v) => ({ ...v, itemsText: e.target.value }))}
           />
@@ -362,28 +361,16 @@ export function HabitsPage() {
   });
   const [showAddRoutine, setShowAddRoutine] = useState(false);
   const [editingRoutineId, setEditingRoutineId] = useState<string | null>(null);
-  const [inlineCreatePeriod, setInlineCreatePeriod] = useState<"morning" | "evening" | null>(null);
 
   /* Derived data */
   const dueHabits = habitsQuery.data?.dueHabits ?? [];
   const allHabits = habitsQuery.data?.habits ?? [];
   const weeklyChallenge = habitsQuery.data?.weeklyChallenge ?? null;
-  const routines = habitsQuery.data?.routines ?? [];
+  const routines = [...(habitsQuery.data?.routines ?? [])].sort((left, right) => left.sortOrder - right.sortOrder);
   const activeRoutines = routines.filter((r) => r.status === "active");
-  const morningRoutine = activeRoutines.find((r) => r.period === "morning");
-  const eveningRoutine = activeRoutines.find((r) => r.period === "evening");
-  const morningItems = morningRoutine?.items ?? [];
-  const eveningItems = eveningRoutine?.items ?? [];
   const consistencyBars = weeklyMomentumQuery.data?.dailyScores ?? [];
 
-  /* Time awareness */
-  const currentHour = new Date().getHours();
-  const isMorning = currentHour < 12;
-
-  /* Completion counts */
   const dueCompleted = dueHabits.filter((h) => h.completedToday).length;
-  const morningCompleted = morningItems.filter((i) => i.completedToday).length;
-  const eveningCompleted = eveningItems.filter((i) => i.completedToday).length;
 
   /* Loading & error */
   if (habitsQuery.isLoading && !habitsQuery.data) {
@@ -481,33 +468,28 @@ export function HabitsPage() {
   }
 
   function handleCreateRoutine(values: RoutineFormValues) {
-    const items = values.itemsText
-      .split("\n")
-      .map((line) => line.trim())
-      .filter(Boolean)
-      .map((title, index) => ({ title, sortOrder: index }));
+    const items = buildRoutineItemsInput(values.itemsText);
     if (!items.length) return;
     createRoutineMutation.mutate(
-      { name: values.name.trim(), period: values.period, items },
+      { name: values.name.trim(), items },
       {
         onSuccess: () => {
           setShowAddRoutine(false);
-          setInlineCreatePeriod(null);
         },
       },
     );
   }
 
   function handleUpdateRoutine(routineId: string, values: RoutineFormValues) {
-    const items = values.itemsText
-      .split("\n")
-      .map((line) => line.trim())
-      .filter(Boolean)
-      .map((title, index) => ({ title, sortOrder: index }));
+    const items = buildRoutineItemsInput(values.itemsText);
     updateRoutineMutation.mutate(
       { routineId, name: values.name.trim(), items: items.length ? items : undefined },
       { onSuccess: () => setEditingRoutineId(null) },
     );
+  }
+
+  function handleMoveRoutine(routineId: string, sortOrder: number) {
+    updateRoutineMutation.mutate({ routineId, sortOrder });
   }
 
   function handleArchiveRoutine(routineId: string) {
@@ -516,65 +498,16 @@ export function HabitsPage() {
 
   /* ── Renderers ── */
 
-  function renderRoutineGroup(
-    period: "morning" | "evening",
-    routine: typeof morningRoutine,
-    items: typeof morningItems,
-    completedCount: number,
-  ) {
-    const label = period === "morning" ? "Morning routine" : "Evening routine";
-    const icon = period === "morning" ? "\u2600\uFE0F" : "\uD83C\uDF19";
-    const isCreatingInline = inlineCreatePeriod === period;
-
-    if (isCreatingInline) {
-      return (
-        <div className="habits-group">
-          <div className="habits-group__header">
-            <span className="habits-group__label">{icon} {label}</span>
-          </div>
-          <RoutineForm
-            initial={{ name: label, period, itemsText: "" }}
-            submitLabel="Create routine"
-            isPending={createRoutineMutation.isPending}
-            onSubmit={handleCreateRoutine}
-            onCancel={() => setInlineCreatePeriod(null)}
-            lockPeriod
-          />
-        </div>
-      );
-    }
-
-    if (!routine || items.length === 0) {
-      return (
-        <div className="habits-group">
-          <div className="habits-group__header">
-            <span className="habits-group__label">{icon} {label}</span>
-          </div>
-          <div className="habits-group__empty">
-            <span className="habits-group__empty-text">No {period} routine set up yet</span>
-            <button
-              className="button button--ghost button--small"
-              type="button"
-              onClick={() => {
-                setInlineCreatePeriod(period);
-                setShowAddRoutine(false);
-              }}
-            >
-              + Create {period} routine
-            </button>
-          </div>
-        </div>
-      );
-    }
-
-    const allDone = completedCount === items.length;
+  function renderRoutineGroup(routine: (typeof activeRoutines)[number]) {
+    const items = [...routine.items].sort((a, b) => a.sortOrder - b.sortOrder);
+    const allDone = routine.completedItems === items.length && items.length > 0;
 
     return (
       <div className="habits-group">
         <div className="habits-group__header">
-          <span className="habits-group__label">{icon} {label}</span>
+          <span className="habits-group__label">{routine.name}</span>
           <span className={`habits-group__count${allDone ? " habits-group__count--done" : ""}`}>
-            {completedCount}/{items.length}
+            {routine.completedItems}/{items.length}
           </span>
         </div>
         <div className="habits-group__items">
@@ -688,16 +621,6 @@ export function HabitsPage() {
     );
   }
 
-  /* ── Render order (time-aware) ── */
-
-  const firstRoutine = isMorning
-    ? renderRoutineGroup("morning", morningRoutine, morningItems, morningCompleted)
-    : renderRoutineGroup("evening", eveningRoutine, eveningItems, eveningCompleted);
-
-  const secondRoutine = isMorning
-    ? renderRoutineGroup("evening", eveningRoutine, eveningItems, eveningCompleted)
-    : renderRoutineGroup("morning", morningRoutine, morningItems, morningCompleted);
-
   return (
     <div className="page">
       <PageHeader
@@ -708,9 +631,19 @@ export function HabitsPage() {
 
       {/* ═══ Daily Focus ═══ */}
       <div className="habits-daily">
-        {firstRoutine}
+        {activeRoutines.length > 0 ? (
+          activeRoutines.map((routine) => renderRoutineGroup(routine))
+        ) : (
+          <div className="habits-group">
+            <div className="habits-group__header">
+              <span className="habits-group__label">Routines</span>
+            </div>
+            <div className="habits-group__empty">
+              <span className="habits-group__empty-text">No routines set up yet.</span>
+            </div>
+          </div>
+        )}
         {renderDueHabitsGroup()}
-        {secondRoutine}
       </div>
 
       {/* ═══ Signals ═══ */}
@@ -1075,25 +1008,19 @@ export function HabitsPage() {
                   <RoutineForm
                     initial={{
                       name: routine.name,
-                      period: routine.period,
-                      itemsText: routine.items
-                        .sort((a, b) => a.sortOrder - b.sortOrder)
-                        .map((item) => item.title)
-                        .join("\n"),
+                      itemsText: buildRoutineItemsText(routine.items),
                     }}
                     submitLabel="Save changes"
                     isPending={updateRoutineMutation.isPending}
                     onSubmit={(values) => handleUpdateRoutine(routine.id, values)}
                     onCancel={() => setEditingRoutineId(null)}
-                    lockPeriod
                   />
                 ) : (
                   <div className="manage-list__row">
                     <div className="manage-list__info">
                       <div className="manage-list__name">
                         {routine.name}
-                        <span className="tag tag--neutral" style={{ marginLeft: "0.4rem" }}>{routine.period}</span>
-                        <span className="tag tag--neutral" style={{ marginLeft: "0.3rem" }}>{routine.status}</span>
+                        <span className="tag tag--neutral" style={{ marginLeft: "0.4rem" }}>{routine.status}</span>
                       </div>
                       <div className="manage-list__meta">
                         {routine.items.length} item{routine.items.length !== 1 ? "s" : ""} \u00b7 {routine.completedItems}/{routine.totalItems} today
@@ -1106,6 +1033,22 @@ export function HabitsPage() {
                         onClick={() => { setEditingRoutineId(routine.id); setShowAddRoutine(false); }}
                       >
                         Edit
+                      </button>
+                      <button
+                        className="button button--ghost button--small"
+                        type="button"
+                        onClick={() => handleMoveRoutine(routine.id, Math.max(0, routine.sortOrder - 1))}
+                        disabled={updateRoutineMutation.isPending || routine.sortOrder === 0}
+                      >
+                        Move up
+                      </button>
+                      <button
+                        className="button button--ghost button--small"
+                        type="button"
+                        onClick={() => handleMoveRoutine(routine.id, Math.min(routines.length - 1, routine.sortOrder + 1))}
+                        disabled={updateRoutineMutation.isPending || routine.sortOrder === routines.length - 1}
+                      >
+                        Move down
                       </button>
                       {routine.status !== "archived" ? (
                         <button
@@ -1126,7 +1069,7 @@ export function HabitsPage() {
           </div>
         ) : !showAddRoutine ? (
           <div className="habits-group__empty">
-            <span className="habits-group__empty-text">No routines yet. Add a morning or evening routine to build structure.</span>
+            <span className="habits-group__empty-text">No routines yet. Add your first routine to build structure.</span>
             <button
               className="button button--ghost button--small"
               type="button"

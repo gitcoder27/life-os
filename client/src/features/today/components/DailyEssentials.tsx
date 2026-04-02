@@ -31,7 +31,7 @@ type RoutineItem = {
 type Routine = {
   id: string;
   name: string;
-  period: "morning" | "evening";
+  sortOrder: number;
   status: "active" | "archived";
   completedItems: number;
   totalItems: number;
@@ -110,7 +110,9 @@ function RoutinesRow({
     );
   }
 
-  const routines: Routine[] = data.routines.filter((r: Routine) => r.status === "active");
+  const routines: Routine[] = [...data.routines]
+    .filter((r: Routine) => r.status === "active")
+    .sort((left: Routine, right: Routine) => left.sortOrder - right.sortOrder);
   const dueHabits: DueHabit[] = data.dueHabits;
 
   const totalRoutineItems = routines.reduce((sum, r) => sum + r.totalItems, 0);
@@ -150,7 +152,7 @@ function RoutinesRow({
           {routines.map((routine) => (
             <div key={routine.id} className="de-routine">
               <div className="de-routine__header">
-                <span>{routine.period === "morning" ? "☀" : "🌙"} {routine.name}</span>
+                <span>{routine.name}</span>
                 <span className="de-routine__count">{routine.completedItems}/{routine.totalItems}</span>
               </div>
               <div className="de-routine__items">

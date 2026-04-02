@@ -17,7 +17,7 @@ type RoutineItem = {
 type Routine = {
   id: string;
   name: string;
-  period: "morning" | "evening";
+  sortOrder: number;
   status: "active" | "archived";
   completedItems: number;
   totalItems: number;
@@ -59,7 +59,9 @@ export function RoutinesHabits() {
   const data = habitsQuery.data;
   if (!data) return null;
 
-  const routines = data.routines.filter((r: Routine) => r.status === "active");
+  const routines = [...data.routines]
+    .filter((r: Routine) => r.status === "active")
+    .sort((left: Routine, right: Routine) => left.sortOrder - right.sortOrder);
   const dueHabits = data.dueHabits as DueHabit[];
   const hasContent = routines.length > 0 || dueHabits.length > 0;
 
@@ -119,13 +121,12 @@ function RoutineSection({
   isPending: boolean;
 }) {
   const allDone = routine.completedItems === routine.totalItems && routine.totalItems > 0;
-  const periodIcon = routine.period === "morning" ? "☀" : "🌙";
 
   return (
     <div className="today-rh__group">
       <div className="today-rh__group-header">
         <span className="today-rh__group-label">
-          {periodIcon} {routine.name}
+          {routine.name}
         </span>
         <span className={`today-rh__group-count${allDone ? " today-rh__group-count--done" : ""}`}>
           {routine.completedItems}/{routine.totalItems}

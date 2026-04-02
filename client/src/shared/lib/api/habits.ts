@@ -92,7 +92,7 @@ type HabitsResponse = {
   routines: Array<{
     id: string;
     name: string;
-    period: "morning" | "evening";
+    sortOrder: number;
     status: "active" | "archived";
     completedItems: number;
     totalItems: number;
@@ -267,7 +267,6 @@ export const useCreateRoutineMutation = () => {
   return useMutation({
     mutationFn: (payload: {
       name: string;
-      period: "morning" | "evening";
       items: Array<{ title: string; sortOrder: number; isRequired?: boolean }>;
     }) =>
       apiRequest<RoutineMutationResponse>("/api/routines", {
@@ -292,6 +291,7 @@ export const useUpdateRoutineMutation = () => {
     }: {
       routineId: string;
       name?: string;
+      sortOrder?: number;
       status?: "active" | "archived";
       items?: Array<{ title: string; sortOrder: number; isRequired?: boolean }>;
     }) =>

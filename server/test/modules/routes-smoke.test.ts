@@ -1602,18 +1602,18 @@ describe("module route smoke tests", () => {
         {
           id: "routine-1",
           name: "Morning",
-          period: "MORNING",
+          sortOrder: 0,
           status: "ACTIVE",
           createdAt: new Date(),
           items: [],
         },
       ]),
-      findFirst: vi.fn().mockResolvedValue({ id: "routine-1", userId: "user-1" }),
+      findFirst: vi.fn().mockResolvedValue({ id: "routine-1", userId: "user-1", sortOrder: 0 }),
       create: vi.fn().mockResolvedValue({
         id: "routine-1",
         userId: "user-1",
         name: "Evening",
-        period: "EVENING",
+        sortOrder: 1,
         status: "ACTIVE",
         createdAt: new Date(),
         updatedAt: new Date(),
@@ -1622,7 +1622,7 @@ describe("module route smoke tests", () => {
       findUniqueOrThrow: vi.fn().mockResolvedValue({
         id: "routine-1",
         name: "Evening",
-        period: "EVENING",
+        sortOrder: 1,
         status: "ACTIVE",
         createdAt: new Date(),
         updatedAt: new Date(),
@@ -1707,7 +1707,7 @@ describe("module route smoke tests", () => {
     const routinesCreate = await app!.inject({
       method: "POST",
       url: "/api/routines",
-      payload: { name: "Night", period: "evening", items: [{ title: "Read", sortOrder: 1 }] },
+      payload: { name: "Night", items: [{ title: "Read", sortOrder: 1 }] },
     });
     const routinesPatch = await app!.inject({
       method: "PATCH",

@@ -17,7 +17,6 @@ export const isoDateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/) as unknown 
 const habitStatusSchema = z.enum(["active", "paused", "archived"]);
 const habitPauseKindSchema = z.enum(["rest_day", "vacation"]);
 const habitCheckinStatusSchema = z.enum(["completed", "skipped"]);
-const routinePeriodSchema = z.enum(["morning", "evening"]);
 const routineStatusSchema = z.enum(["active", "archived"]);
 
 const habitScheduleRuleSchema = z.object({
@@ -110,13 +109,13 @@ export const createHabitPauseWindowSchema = z
 
 export const createRoutineSchema = z.object({
   name: z.string().min(1).max(200),
-  period: routinePeriodSchema,
   items: z.array(routineItemInputSchema),
 }) as z.ZodType<CreateRoutineRequest>;
 
 export const updateRoutineSchema = z
   .object({
     name: z.string().min(1).max(200).optional(),
+    sortOrder: z.number().int().min(0).optional(),
     status: routineStatusSchema.optional(),
     items: z.array(routineItemInputSchema).optional(),
   })

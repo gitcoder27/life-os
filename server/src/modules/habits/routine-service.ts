@@ -15,8 +15,45 @@ import {
   listRoutinesForUser,
   loadRoutineById,
 } from "./habits-repository.js";
-import type { HabitsApp } from "./module-types.js";
-import { serializeRoutine, toPrismaRoutinePeriod, toPrismaRoutineStatus } from "./routine-mappers.js";
+import type { HabitsApp, HabitsPrisma } from "./module-types.js";
+import { serializeRoutine, toPrismaRoutineStatus } from "./routine-mappers.js";
+
+const normalizeRoutineOrder = async (
+  tx: HabitsPrisma,
+  userId: string,
+  targetRoutineId: string,
+  nextSortOrder: number,
+) => {
+  const routines = await tx.routine.findMany({
+    where: {
+      userId,
+    },
+    orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
+    select: {
+      id: true,
+    },
+  });
+
+  const orderedIds = routines
+    .map((routine) => routine.id)
+    .filter((routineId) => routineId !== targetRoutineId);
+  const insertAt = Math.max(0, Math.min(nextSortOrder, orderedIds.length));
+
+  orderedIds.splice(insertAt, 0, targetRoutineId);
+
+  await Promise.all(
+    orderedIds.map((routineId, index) =>
+      tx.routine.update({
+        where: {
+          id: routineId,
+        },
+        data: {
+          sortOrder: index,
+        },
+      }),
+    ),
+  );
+};
 
 export const listRoutines = async (app: HabitsApp, userId: string): Promise<RoutinesResponse> => {
   const { targetIsoDate } = await getTodayContext(app, userId);
@@ -34,11 +71,22 @@ export const createRoutine = async (
   userId: string,
   payload: CreateRoutineRequest,
 ): Promise<RoutineMutationResponse> => {
+  const lastRoutine = await app.prisma.routine.findFirst({
+    where: {
+      userId,
+    },
+    orderBy: {
+      sortOrder: "desc",
+    },
+    select: {
+      sortOrder: true,
+    },
+  });
   const routine = await app.prisma.routine.create({
     data: {
       userId,
       name: payload.name,
-      period: toPrismaRoutinePeriod(payload.period),
+      sortOrder: (lastRoutine?.sortOrder ?? -1) + 1,
       items: {
         create: payload.items.map((item) => ({
           title: item.title,
@@ -61,7 +109,7 @@ export const updateRoutine = async (
   routineId: string,
   payload: UpdateRoutineRequest,
 ): Promise<RoutineMutationResponse> => {
-  await findOwnedRoutine(app.prisma, userId, routineId);
+  const routine = await findOwnedRoutine(app.prisma, userId, routineId);
 
   await app.prisma.$transaction(async (tx) => {
     await tx.routine.update({
@@ -73,6 +121,10 @@ export const updateRoutine = async (
         status: payload.status ? toPrismaRoutineStatus(payload.status) : undefined,
       },
     });
+
+    if (payload.sortOrder !== undefined && payload.sortOrder !== routine.sortOrder) {
+      await normalizeRoutineOrder(tx, userId, routineId, payload.sortOrder);
+    }
 
     if (!payload.items) {
       return;
