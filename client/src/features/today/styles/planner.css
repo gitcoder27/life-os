@@ -334,7 +334,7 @@ body.planner-dragging-cursor * {
 
 .planner__sidebar-pane {
   position: sticky;
-  top: var(--planner-sidebar-top, var(--today-sticky-offset));
+  top: var(--today-sticky-offset);
   align-self: start;
   min-width: 0;
   z-index: 8;
@@ -1583,6 +1583,7 @@ body.planner-dragging-cursor * {
   backdrop-filter: blur(8px);
   max-height: calc(100vh - var(--today-sticky-offset) - 1.5rem);
   overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .unplanned-lane::-webkit-scrollbar {

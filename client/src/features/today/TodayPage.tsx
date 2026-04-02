@@ -1,5 +1,5 @@
 import "./today.css";
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useState, type CSSProperties } from "react";
 import { useSearchParams } from "react-router-dom";
 import {
   InlineErrorState,
@@ -34,7 +34,7 @@ export function TodayPage() {
   const [todayTaskCaptureOpen, setTodayTaskCaptureOpen] = useState(false);
   const [topRailHeight, setTopRailHeight] = useState(0);
   const [stickyTop, setStickyTop] = useState(0);
-  const topRailRef = useRef<HTMLDivElement>(null);
+  const [topRailElement, setTopRailElement] = useState<HTMLDivElement | null>(null);
   const rawPlannerDate = searchParams.get("planDate");
   const plannerDate = rawPlannerDate && ISO_DATE_PATTERN.test(rawPlannerDate)
     ? rawPlannerDate
@@ -98,6 +98,9 @@ export function TodayPage() {
   );
 
   const phase = getDayPhase(plannerNow);
+  const topRailRef = useCallback((node: HTMLDivElement | null) => {
+    setTopRailElement(node);
+  }, []);
 
   useEffect(() => {
     const intervalId = window.setInterval(() => setPlannerNow(new Date()), 60_000);
@@ -105,7 +108,6 @@ export function TodayPage() {
   }, []);
 
   useLayoutEffect(() => {
-    const topRailElement = topRailRef.current;
     if (!topRailElement) {
       return;
     }
@@ -152,6 +154,10 @@ export function TodayPage() {
 
     const resizeObserver = new ResizeObserver(() => scheduleStickyLayoutUpdate());
     resizeObserver.observe(topRailElement);
+    const shellHeaderElement = document.querySelector(".shell-header");
+    if (shellHeaderElement instanceof HTMLElement) {
+      resizeObserver.observe(shellHeaderElement);
+    }
 
     return () => {
       if (frameId !== 0) {
@@ -161,7 +167,7 @@ export function TodayPage() {
       window.removeEventListener("pageshow", scheduleStickyLayoutUpdate);
       resizeObserver.disconnect();
     };
-  }, []);
+  }, [topRailElement]);
 
   useEffect(() => {
     if (!rawPlannerDate) {
