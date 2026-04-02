@@ -22,6 +22,41 @@ describe("scoring service", () => {
     expect(upsert).toHaveBeenCalled();
   });
 
+  it("returns the created cycle when concurrent upserts collide on the unique key", async () => {
+    const cycleStartDate = new Date("2026-03-14T00:00:00.000Z");
+    const conflict = Object.assign(new Error("Unique constraint failed"), {
+      code: "P2002",
+    });
+    const findUnique = vi.fn().mockResolvedValue({
+      id: "cycle-1",
+      cycleEndDate: cycleStartDate,
+      priorities: [],
+      dailyReview: null,
+      dailyScore: null,
+      weeklyReview: null,
+      monthlyReview: null,
+    });
+    const update = vi.fn();
+    const prisma = {
+      planningCycle: {
+        upsert: vi.fn().mockRejectedValueOnce(conflict),
+        findUnique,
+        update,
+      },
+    } as any;
+
+    const cycle = await ensureCycle(prisma, {
+      userId: "user-1",
+      cycleType: "DAY",
+      cycleStartDate,
+      cycleEndDate: cycleStartDate,
+    });
+
+    expect(cycle.id).toBe("cycle-1");
+    expect(findUnique).toHaveBeenCalledOnce();
+    expect(update).not.toHaveBeenCalled();
+  });
+
   it("builds weekly momentum for finalized scores", async () => {
     const dailyScoreFindMany = vi.fn().mockResolvedValue([
       {

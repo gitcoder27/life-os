@@ -66,6 +66,32 @@ const PRIORITY_POINTS: Record<number, number> = {
   3: 6,
 };
 
+const planningCycleInclude = {
+  priorities: {
+    orderBy: {
+      slot: "asc",
+    },
+    include: {
+      goal: {
+        include: goalSummaryInclude,
+      },
+    },
+  },
+  dailyReview: true,
+  dailyScore: true,
+  weeklyReview: true,
+  monthlyReview: true,
+} satisfies Prisma.PlanningCycleInclude;
+
+function isPrismaErrorCode(error: unknown, code: string) {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    (error as { code?: unknown }).code === code
+  );
+}
+
 function roundToOneDecimal(value: number) {
   return Math.round(value * 10) / 10;
 }
@@ -95,35 +121,49 @@ export async function ensureCycle(
     cycleEndDate: Date;
   },
 ) {
-  return prisma.planningCycle.upsert({
-    where: {
-      userId_cycleType_cycleStartDate: {
-        userId: input.userId,
-        cycleType: input.cycleType,
-        cycleStartDate: input.cycleStartDate,
+  const where = {
+    userId_cycleType_cycleStartDate: {
+      userId: input.userId,
+      cycleType: input.cycleType,
+      cycleStartDate: input.cycleStartDate,
+    },
+  } satisfies Prisma.PlanningCycleWhereUniqueInput;
+
+  try {
+    return await prisma.planningCycle.upsert({
+      where,
+      update: {
+        cycleEndDate: input.cycleEndDate,
       },
-    },
-    update: {
-      cycleEndDate: input.cycleEndDate,
-    },
-    create: input,
-    include: {
-      priorities: {
-        orderBy: {
-          slot: "asc",
-        },
-        include: {
-          goal: {
-            include: goalSummaryInclude,
-          },
-        },
+      create: input,
+      include: planningCycleInclude,
+    });
+  } catch (error) {
+    if (!isPrismaErrorCode(error, "P2002")) {
+      throw error;
+    }
+
+    const existingCycle = await prisma.planningCycle.findUnique({
+      where,
+      include: planningCycleInclude,
+    });
+
+    if (!existingCycle) {
+      throw error;
+    }
+
+    if (existingCycle.cycleEndDate.getTime() === input.cycleEndDate.getTime()) {
+      return existingCycle;
+    }
+
+    return prisma.planningCycle.update({
+      where,
+      data: {
+        cycleEndDate: input.cycleEndDate,
       },
-      dailyReview: true,
-      dailyScore: true,
-      weeklyReview: true,
-      monthlyReview: true,
-    },
-  });
+      include: planningCycleInclude,
+    });
+  }
 }
 
 function buildBucket(
