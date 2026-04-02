@@ -1,4 +1,4 @@
-import { type FormEvent, useState } from "react";
+import { type CSSProperties, type FormEvent, useState } from "react";
 
 import {
   type RoutineItemEntry,
@@ -11,6 +11,7 @@ import {
   useCreateHabitPauseWindowMutation,
   useCreateHabitMutation,
   useCreateRoutineMutation,
+  useDailyScoreQuery,
   useDeleteHabitPauseWindowMutation,
   useGoalsListQuery,
   useHabitCheckinMutation,
@@ -54,6 +55,50 @@ function ChallengeProgressRing({ completions, target }: { completions: number; t
         transform="rotate(-90 20 20)"
       />
     </svg>
+  );
+}
+
+function getScoreColor(value: number) {
+  if (value >= 85) return "var(--positive)";
+  if (value >= 70) return "var(--accent-bright)";
+  if (value >= 50) return "var(--accent)";
+  return "var(--negative)";
+}
+
+function HabitScoreRing({ value, color }: { value: number; color: string }) {
+  const size = 50;
+  const strokeWidth = 4;
+  const radius = (size - strokeWidth * 2) / 2;
+  const circumference = 2 * Math.PI * radius;
+  const offset = circumference - (value / 100) * circumference;
+
+  return (
+    <div className="habits-score-strip__ring" style={{ width: size, height: size }}>
+      <svg viewBox={`0 0 ${size} ${size}`} width={size} height={size}>
+        <circle
+          cx={size / 2}
+          cy={size / 2}
+          r={radius}
+          fill="none"
+          stroke="rgba(255,255,255,0.06)"
+          strokeWidth={strokeWidth}
+        />
+        <circle
+          cx={size / 2}
+          cy={size / 2}
+          r={radius}
+          fill="none"
+          stroke={color}
+          strokeWidth={strokeWidth}
+          strokeLinecap="round"
+          strokeDasharray={circumference}
+          strokeDashoffset={offset}
+          transform={`rotate(-90 ${size / 2} ${size / 2})`}
+          className="habits-score-strip__ring-progress"
+        />
+      </svg>
+      <span className="habits-score-strip__ring-value">{value}</span>
+    </div>
   );
 }
 
@@ -334,6 +379,7 @@ function CollapsibleSection({
 export function HabitsPage() {
   const today = getTodayDate();
   const habitsQuery = useHabitsQuery();
+  const scoreQuery = useDailyScoreQuery(today);
   const weeklyMomentumQuery = useWeeklyMomentumQuery(today);
   const habitCheckinMutation = useHabitCheckinMutation(today);
   const routineCheckinMutation = useRoutineCheckinMutation(today);
@@ -369,8 +415,15 @@ export function HabitsPage() {
   const nonArchivedRoutines = routines.filter((r) => r.status !== "archived");
   const archivedRoutines = routines.filter((r) => r.status === "archived");
   const consistencyBars = weeklyMomentumQuery.data?.dailyScores ?? [];
-
+  const score = scoreQuery.data;
+  const scorePercent = score
+    ? Math.round((score.earnedPoints / Math.max(score.possiblePoints, 1)) * 100)
+    : 0;
   const dueCompleted = dueHabits.filter((h) => h.completedToday).length;
+  const routineCompleted = activeRoutines.reduce((sum, routine) => sum + routine.completedItems, 0);
+  const routineTotal = activeRoutines.reduce((sum, routine) => sum + routine.totalItems, 0);
+  const strongDayStreak = weeklyMomentumQuery.data?.strongDayStreak ?? 0;
+  const statsCount = strongDayStreak > 0 ? 4 : 3;
 
   /* Loading & error */
   if (habitsQuery.isLoading && !habitsQuery.data) {
@@ -635,6 +688,98 @@ export function HabitsPage() {
         description="Check in on what matters today, track your streaks, and keep the system working."
       />
 
+      <section className="habits-score-strip" aria-label="Habit score summary">
+        <div className="habits-score-strip__primary">
+          {scoreQuery.isError ? (
+            <>
+              <div className="habits-score-strip__ring-placeholder" />
+              <div className="habits-score-strip__primary-body">
+                <span className="habits-score-strip__eyebrow">Overall score</span>
+                <span className="habits-score-strip__label">Score unavailable</span>
+              </div>
+            </>
+          ) : score ? (
+            <>
+              <HabitScoreRing value={score.value} color={getScoreColor(score.value)} />
+              <div className="habits-score-strip__primary-body">
+                <span className="habits-score-strip__eyebrow">Overall score</span>
+                <div className="habits-score-strip__headline">
+                  <span className="habits-score-strip__label">{score.label}</span>
+                  <span className="habits-score-strip__value">{score.value}</span>
+                </div>
+                <span className="habits-score-strip__pts">
+                  {score.earnedPoints}/{score.possiblePoints} pts ({scorePercent}%)
+                </span>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="habits-score-strip__ring-placeholder" />
+              <div className="habits-score-strip__primary-body">
+                <span className="habits-score-strip__eyebrow">Overall score</span>
+                <span className="habits-score-strip__label">Loading score...</span>
+              </div>
+            </>
+          )}
+        </div>
+
+        <div className="habits-score-strip__trend">
+          <div className="habits-score-strip__trend-header">
+            <span className="habits-score-strip__trend-label">Daily score trend</span>
+            <span className="habits-score-strip__trend-period">Last 7 days</span>
+          </div>
+          {weeklyMomentumQuery.isError ? (
+            <span className="habits-score-strip__trend-empty">Trend unavailable right now.</span>
+          ) : consistencyBars.length > 0 ? (
+            <div className="habits-score-strip__bars" aria-label="Daily score trend">
+              {consistencyBars.map((day, index) => (
+                <div
+                  key={day.date}
+                  className={`habits-score-strip__bar${index === consistencyBars.length - 1 ? " habits-score-strip__bar--current" : ""}`}
+                  style={{
+                    height: `${Math.max(day.value, 8)}%`,
+                    background: day.value >= 70
+                      ? "linear-gradient(180deg, var(--accent-bright), rgba(217,153,58,0.28))"
+                      : "rgba(255,255,255,0.08)",
+                  }}
+                  title={`${day.date}: ${day.value} (${day.label})`}
+                />
+              ))}
+            </div>
+          ) : (
+            <span className="habits-score-strip__trend-empty">Trend will appear after a few scored days.</span>
+          )}
+        </div>
+
+        <div
+          className="habits-score-strip__stats"
+          style={{ "--stats-count": statsCount } as CSSProperties}
+        >
+          <div className="habits-score-strip__stat">
+            <span className="habits-score-strip__stat-label">Habits due</span>
+            <span className="habits-score-strip__stat-value">
+              {dueHabits.length > 0 ? `${dueCompleted}/${dueHabits.length}` : "None"}
+            </span>
+          </div>
+          <div className="habits-score-strip__stat">
+            <span className="habits-score-strip__stat-label">Routine steps</span>
+            <span className="habits-score-strip__stat-value">
+              {routineTotal > 0 ? `${routineCompleted}/${routineTotal}` : "None"}
+            </span>
+          </div>
+          <div className="habits-score-strip__stat">
+            <span className="habits-score-strip__stat-label">Momentum</span>
+            <span className="habits-score-strip__stat-value">{weeklyMomentumQuery.data?.value ?? "—"}</span>
+          </div>
+          {strongDayStreak > 0 ? (
+            <div className="habits-score-strip__stat">
+              <span className="habits-score-strip__stat-label">Strong days</span>
+              <span className="habits-score-strip__stat-value">{strongDayStreak}</span>
+            </div>
+          ) : null}
+        </div>
+      </section>
+
       {/* ═══ Daily Focus ═══ */}
       <div className="habits-daily">
         {activeRoutines.length > 0 ? (
@@ -693,31 +838,6 @@ export function HabitsPage() {
             message={weeklyMomentumQuery.error instanceof Error ? weeklyMomentumQuery.error.message : "Consistency data could not load."}
             onRetry={() => void weeklyMomentumQuery.refetch()}
           />
-        ) : consistencyBars.length > 0 ? (
-          <div className="habits-consistency">
-            <div className="habits-consistency__header">
-              <span className="habits-consistency__label">Daily score trend</span>
-              <span className="habits-consistency__period">Last 7 days</span>
-            </div>
-            <div className="habits-consistency__bars">
-              {consistencyBars.map((day) => (
-                <div
-                  key={day.date}
-                  className="habits-consistency__bar"
-                  style={{
-                    height: `${day.value}%`,
-                    background: day.value >= 70
-                      ? "linear-gradient(180deg, var(--accent), rgba(217,153,58,0.3))"
-                      : "rgba(255,255,255,0.06)",
-                  }}
-                />
-              ))}
-            </div>
-            <div className="habits-consistency__axis">
-              <span>Mon</span>
-              <span>Sun</span>
-            </div>
-          </div>
         ) : null}
       </div>
 
@@ -1085,7 +1205,7 @@ export function HabitsPage() {
                         {routine.name}
                       </div>
                       <div className="manage-list__meta">
-                        {routine.items.length} item{routine.items.length !== 1 ? "s" : ""}{" · "}{routine.completedItems}/{routine.totalItems} today
+                        {routine.items.length} step{routine.items.length !== 1 ? "s" : ""}{" · "}{routine.completedItems}/{routine.totalItems} today
                       </div>
                     </div>
                     <div className="habits-manage-actions">
@@ -1176,7 +1296,7 @@ export function HabitsPage() {
                         {routine.name}
                       </div>
                       <div className="manage-list__meta">
-                        {routine.items.length} item{routine.items.length !== 1 ? "s" : ""}
+                        {routine.items.length} step{routine.items.length !== 1 ? "s" : ""}
                       </div>
                     </div>
                     <div className="habits-manage-actions">

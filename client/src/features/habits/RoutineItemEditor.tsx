@@ -84,8 +84,8 @@ export function RoutineItemEditor({ items, onChange }: RoutineItemEditorProps) {
   return (
     <div className="routine-item-editor">
       <div className="routine-item-editor__header">
-        <span className="routine-item-editor__label">Checklist items</span>
-        <span className="routine-item-editor__hint">{items.length} item{items.length !== 1 ? "s" : ""}</span>
+        <span className="routine-item-editor__label">Checklist steps</span>
+        <span className="routine-item-editor__hint">{items.length} step{items.length !== 1 ? "s" : ""}</span>
       </div>
 
       <div className="routine-item-editor__list">
@@ -145,7 +145,7 @@ export function RoutineItemEditor({ items, onChange }: RoutineItemEditorProps) {
               className="routine-item-row__delete"
               onClick={() => removeItem(item.key)}
               disabled={items.length <= 1}
-              aria-label="Remove item"
+              aria-label="Remove step"
               tabIndex={-1}
             >
               &times;
@@ -160,11 +160,11 @@ export function RoutineItemEditor({ items, onChange }: RoutineItemEditorProps) {
         onClick={addItem}
       >
         <span className="routine-item-editor__add-icon">+</span>
-        Add item
+        Add step
       </button>
 
       <p className="routine-item-editor__shortcuts">
-        <kbd>Enter</kbd> new item &middot; <kbd>Alt+&uarr;&darr;</kbd> reorder &middot; <kbd>Backspace</kbd> on empty to remove
+        <kbd>Enter</kbd> new step &middot; <kbd>Alt+&uarr;&darr;</kbd> reorder &middot; <kbd>Backspace</kbd> on empty to remove
       </p>
     </div>
   );
