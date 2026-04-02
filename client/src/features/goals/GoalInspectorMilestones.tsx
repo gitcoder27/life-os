@@ -1,4 +1,21 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  DndContext,
+  KeyboardSensor,
+  PointerSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  arrayMove,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 
 import {
   useUpdateGoalMilestonesMutation,
@@ -6,6 +23,7 @@ import {
 } from "../../shared/lib/api";
 
 type MilestoneDraft = {
+  draftKey: string;
   id?: string;
   title: string;
   targetDate: string;
@@ -43,17 +61,123 @@ const getDueLabel = (targetDate: string | null) => {
 
 const toDrafts = (milestones: GoalMilestoneItem[]): MilestoneDraft[] =>
   milestones.map((milestone) => ({
+    draftKey: milestone.id,
     id: milestone.id,
     title: milestone.title,
     targetDate: milestone.targetDate ?? "",
     status: milestone.status,
   }));
 
-const createDraft = (): MilestoneDraft => ({
+const createDraft = (draftKey: string): MilestoneDraft => ({
+  draftKey,
   title: "",
   targetDate: "",
   status: "pending",
 });
+
+const GripIcon = () => (
+  <svg width="10" height="18" viewBox="0 0 10 18" fill="currentColor" aria-hidden="true">
+    <circle cx="2.5" cy="2.5" r="1.2" />
+    <circle cx="7.5" cy="2.5" r="1.2" />
+    <circle cx="2.5" cy="9" r="1.2" />
+    <circle cx="7.5" cy="9" r="1.2" />
+    <circle cx="2.5" cy="15.5" r="1.2" />
+    <circle cx="7.5" cy="15.5" r="1.2" />
+  </svg>
+);
+
+const SortableMilestoneDraftRow = ({
+  draft,
+  index,
+  disabled,
+  setInputRef,
+  onUpdate,
+  onTitleSubmit,
+  onRemove,
+}: {
+  draft: MilestoneDraft;
+  index: number;
+  disabled: boolean;
+  setInputRef: (node: HTMLInputElement | null) => void;
+  onUpdate: (partial: Partial<MilestoneDraft>) => void;
+  onTitleSubmit: () => void;
+  onRemove: () => void;
+}) => {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: draft.draftKey, disabled });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+  };
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={`ap-inspector-milestones__editor-row${isDragging ? " ap-inspector-milestones__editor-row--dragging" : ""}`}
+    >
+      <button
+        className="ap-inspector-milestones__drag-handle"
+        type="button"
+        aria-label={`Drag milestone ${index + 1}`}
+        disabled={disabled}
+        {...attributes}
+        {...listeners}
+      >
+        <GripIcon />
+      </button>
+
+      <button
+        className={`ap-inspector-milestone__check${draft.status === "completed" ? " ap-inspector-milestone__check--done" : ""}`}
+        type="button"
+        onClick={() => onUpdate({
+          status: draft.status === "completed" ? "pending" : "completed",
+        })}
+        aria-label={`Toggle ${draft.title || `milestone ${index + 1}`}`}
+      >
+        {draft.status === "completed" ? "✓" : ""}
+      </button>
+
+      <input
+        ref={setInputRef}
+        className="ap-inspector-milestones__input"
+        type="text"
+        value={draft.title}
+        placeholder="Milestone title"
+        onChange={(event) => onUpdate({ title: event.target.value })}
+        onKeyDown={(event) => {
+          if (event.key !== "Enter" || event.nativeEvent.isComposing) return;
+
+          event.preventDefault();
+          onTitleSubmit();
+        }}
+      />
+
+      <input
+        className="ap-inspector-milestones__input ap-inspector-milestones__date"
+        type="date"
+        value={draft.targetDate}
+        onChange={(event) => onUpdate({ targetDate: event.target.value })}
+      />
+
+      <button
+        className="ap-inspector-milestones__icon-btn ap-inspector-milestones__icon-btn--danger"
+        type="button"
+        onClick={onRemove}
+        aria-label="Remove milestone"
+      >
+        ×
+      </button>
+    </div>
+  );
+};
 
 export const GoalInspectorMilestones = ({
   milestones,
@@ -67,8 +191,14 @@ export const GoalInspectorMilestones = ({
   const mutation = useUpdateGoalMilestonesMutation(goalId);
   const [drafts, setDrafts] = useState<MilestoneDraft[]>(() => toDrafts(milestones));
   const [editing, setEditing] = useState(false);
-  const addInputRef = useRef<HTMLInputElement | null>(null);
-  const shouldFocusAddedDraftRef = useRef(false);
+  const draftInputRefs = useRef<Array<HTMLInputElement | null>>([]);
+  const focusDraftIndexRef = useRef<number | null>(null);
+  const nextDraftKeyRef = useRef(0);
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
+  const sortableItems = useMemo(() => drafts.map((draft) => draft.draftKey), [drafts]);
 
   useEffect(() => {
     if (!editing) {
@@ -77,31 +207,38 @@ export const GoalInspectorMilestones = ({
   }, [editing, milestones]);
 
   useEffect(() => {
-    if (!editing || !shouldFocusAddedDraftRef.current) return;
+    if (!editing || focusDraftIndexRef.current === null) return;
 
-    shouldFocusAddedDraftRef.current = false;
-    const timeoutId = window.setTimeout(() => addInputRef.current?.focus(), 40);
+    const focusIndex = focusDraftIndexRef.current;
+    focusDraftIndexRef.current = null;
+    const timeoutId = window.setTimeout(() => draftInputRefs.current[focusIndex]?.focus(), 40);
 
     return () => window.clearTimeout(timeoutId);
   }, [drafts.length, editing]);
+
+  const createLocalDraft = () => createDraft(`draft-${nextDraftKeyRef.current++}`);
 
   const openEditor = ({ addNewDraft = false }: { addNewDraft?: boolean } = {}) => {
     const nextDrafts = toDrafts(milestones);
 
     if (addNewDraft && nextDrafts.length < MAX_MILESTONES) {
-      nextDrafts.push(createDraft());
-      shouldFocusAddedDraftRef.current = true;
+      nextDrafts.push(createLocalDraft());
+      focusDraftIndexRef.current = nextDrafts.length - 1;
     }
 
     setDrafts(nextDrafts);
     setEditing(true);
   };
 
-  const addDraft = () => {
+  const addDraft = (index = drafts.length) => {
     if (drafts.length >= MAX_MILESTONES) return;
 
-    shouldFocusAddedDraftRef.current = true;
-    setDrafts((currentDrafts) => [...currentDrafts, createDraft()]);
+    setDrafts((currentDrafts) => {
+      const nextDrafts = [...currentDrafts];
+      nextDrafts.splice(index, 0, createLocalDraft());
+      focusDraftIndexRef.current = index;
+      return nextDrafts;
+    });
   };
 
   const updateDraft = (index: number, partial: Partial<MilestoneDraft>) => {
@@ -116,15 +253,42 @@ export const GoalInspectorMilestones = ({
     setDrafts((currentDrafts) => currentDrafts.filter((_, currentIndex) => currentIndex !== index));
   };
 
-  const moveDraft = (index: number, direction: -1 | 1) => {
-    const nextIndex = index + direction;
-    if (nextIndex < 0 || nextIndex >= drafts.length) return;
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) {
+      return;
+    }
 
-    setDrafts((currentDrafts) => {
-      const reorderedDrafts = [...currentDrafts];
-      [reorderedDrafts[index], reorderedDrafts[nextIndex]] = [reorderedDrafts[nextIndex], reorderedDrafts[index]];
-      return reorderedDrafts;
-    });
+    const oldIndex = drafts.findIndex((draft) => draft.draftKey === active.id);
+    const newIndex = drafts.findIndex((draft) => draft.draftKey === over.id);
+    if (oldIndex < 0 || newIndex < 0) {
+      return;
+    }
+
+    setDrafts((currentDrafts) => arrayMove(currentDrafts, oldIndex, newIndex));
+  };
+
+  const focusDraft = (index: number) => {
+    window.setTimeout(() => draftInputRefs.current[index]?.focus(), 0);
+  };
+
+  const handleTitleSubmit = (index: number) => {
+    const draft = drafts[index];
+    if (!draft || !draft.title.trim()) return;
+
+    const nextDraft = drafts[index + 1];
+    if (
+      nextDraft
+      && !nextDraft.id
+      && !nextDraft.title.trim()
+      && !nextDraft.targetDate
+      && nextDraft.status === "pending"
+    ) {
+      focusDraft(index + 1);
+      return;
+    }
+
+    addDraft(index + 1);
   };
 
   const toggleSavedMilestone = (index: number) => {
@@ -179,68 +343,30 @@ export const GoalInspectorMilestones = ({
           </button>
         </div>
 
-        <div className="ap-inspector-milestones__editor">
-          {drafts.map((draft, index) => (
-            <div key={draft.id ?? `draft-${index}`} className="ap-inspector-milestones__editor-row">
-              <button
-                className={`ap-inspector-milestone__check${draft.status === "completed" ? " ap-inspector-milestone__check--done" : ""}`}
-                type="button"
-                onClick={() => updateDraft(index, {
-                  status: draft.status === "completed" ? "pending" : "completed",
-                })}
-                aria-label={`Toggle ${draft.title || `milestone ${index + 1}`}`}
-              >
-                {draft.status === "completed" ? "✓" : ""}
-              </button>
-
-              <input
-                ref={index === drafts.length - 1 ? addInputRef : undefined}
-                className="ap-inspector-milestones__input"
-                type="text"
-                value={draft.title}
-                placeholder="Milestone title"
-                onChange={(event) => updateDraft(index, { title: event.target.value })}
-              />
-
-              <input
-                className="ap-inspector-milestones__input ap-inspector-milestones__date"
-                type="date"
-                value={draft.targetDate}
-                onChange={(event) => updateDraft(index, { targetDate: event.target.value })}
-              />
-
-              <div className="ap-inspector-milestones__reorder">
-                <button
-                  className="ap-inspector-milestones__icon-btn"
-                  type="button"
-                  disabled={index === 0}
-                  onClick={() => moveDraft(index, -1)}
-                  aria-label="Move milestone up"
-                >
-                  ▲
-                </button>
-                <button
-                  className="ap-inspector-milestones__icon-btn"
-                  type="button"
-                  disabled={index === drafts.length - 1}
-                  onClick={() => moveDraft(index, 1)}
-                  aria-label="Move milestone down"
-                >
-                  ▼
-                </button>
-              </div>
-
-              <button
-                className="ap-inspector-milestones__icon-btn ap-inspector-milestones__icon-btn--danger"
-                type="button"
-                onClick={() => removeDraft(index)}
-                aria-label="Remove milestone"
-              >
-                ×
-              </button>
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCenter}
+          onDragEnd={handleDragEnd}
+        >
+          <SortableContext items={sortableItems} strategy={verticalListSortingStrategy}>
+            <div className="ap-inspector-milestones__editor">
+              {drafts.map((draft, index) => (
+                <SortableMilestoneDraftRow
+                  key={draft.draftKey}
+                  draft={draft}
+                  index={index}
+                  disabled={mutation.isPending}
+                  setInputRef={(node) => {
+                    draftInputRefs.current[index] = node;
+                  }}
+                  onUpdate={(partial) => updateDraft(index, partial)}
+                  onTitleSubmit={() => handleTitleSubmit(index)}
+                  onRemove={() => removeDraft(index)}
+                />
+              ))}
             </div>
-          ))}
-        </div>
+          </SortableContext>
+        </DndContext>
 
         <div className="ap-inspector-milestones__editor-footer">
           <div className="ap-inspector-milestones__editor-actions">
@@ -248,7 +374,7 @@ export const GoalInspectorMilestones = ({
               <button
                 className="button button--ghost button--small"
                 type="button"
-                onClick={addDraft}
+                onClick={() => addDraft()}
                 disabled={mutation.isPending}
               >
                 + Add milestone

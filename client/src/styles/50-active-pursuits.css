@@ -627,6 +627,42 @@
   gap: 0.4rem;
 }
 
+.ap-inspector-milestones__editor-row--dragging {
+  opacity: 0.6;
+  box-shadow: var(--shadow-lg);
+}
+
+.ap-inspector-milestones__drag-handle {
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: var(--r-xs);
+  background: none;
+  color: var(--text-tertiary);
+  cursor: grab;
+  touch-action: none;
+  flex: 0 0 24px;
+  transition: color var(--dur-fast) var(--ease),
+              background var(--dur-fast) var(--ease);
+}
+
+.ap-inspector-milestones__drag-handle:hover:not(:disabled) {
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.ap-inspector-milestones__drag-handle:active:not(:disabled) {
+  cursor: grabbing;
+}
+
+.ap-inspector-milestones__drag-handle:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
 .ap-inspector-milestones__input {
   min-width: 0;
   flex: 1;
@@ -649,12 +685,6 @@
 .ap-inspector-milestones__date {
   width: 8.5rem;
   flex: 0 0 8.5rem;
-}
-
-.ap-inspector-milestones__reorder {
-  display: flex;
-  flex-direction: column;
-  gap: 0;
 }
 
 .ap-inspector-milestones__icon-btn {
@@ -1059,11 +1089,15 @@
 
   .ap-inspector-milestones__editor-row {
     display: grid;
-    grid-template-columns: 22px minmax(0, 1fr) auto auto;
+    grid-template-columns: 22px 22px minmax(0, 1fr) auto;
     grid-template-areas:
-      "check title reorder remove"
+      "drag check title remove"
       ". date date date";
     align-items: center;
+  }
+
+  .ap-inspector-milestones__editor-row > .ap-inspector-milestones__drag-handle {
+    grid-area: drag;
   }
 
   .ap-inspector-milestones__editor-row > .ap-inspector-milestone__check {
@@ -1078,10 +1112,6 @@
     grid-area: date;
     width: 100%;
     flex: initial;
-  }
-
-  .ap-inspector-milestones__editor-row > .ap-inspector-milestones__reorder {
-    grid-area: reorder;
   }
 
   .ap-inspector-milestones__editor-row > .ap-inspector-milestones__icon-btn--danger {
