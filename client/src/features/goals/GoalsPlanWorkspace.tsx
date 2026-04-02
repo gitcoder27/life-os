@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 
 import type {
@@ -539,15 +539,51 @@ export function GoalsPlanWorkspace({
   createIsPending: boolean;
 }) {
   const [planView, setPlanView] = useState<PlanSubview>("outline");
+  const [isGraphExpanded, setIsGraphExpanded] = useState(false);
 
   const activeGoals = goals.filter((g) => g.status === "active");
   const tree = useMemo(() => buildHierarchyTree(activeGoals), [activeGoals]);
+
+  useEffect(() => {
+    if (planView !== "graph") {
+      setIsGraphExpanded(false);
+    }
+  }, [planView]);
+
+  useEffect(() => {
+    if (!isGraphExpanded) return undefined;
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setIsGraphExpanded(false);
+      }
+    };
+
+    document.body.classList.add("ghq-graph-expanded-body");
+    window.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.body.classList.remove("ghq-graph-expanded-body");
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [isGraphExpanded]);
 
   // Graph: trigger child creation for the selected goal
   const handleGraphAddChild = useCallback(() => {
     const goal = goals.find((g) => g.id === selectedGoalId);
     if (goal) onStartCreateChild(goal);
   }, [goals, selectedGoalId, onStartCreateChild]);
+
+  const handleDismissExpandedInspector = useCallback(() => {
+    if (showChildForm) {
+      onCancelChildForm();
+      return;
+    }
+
+    if (selectedGoalId) {
+      onSelectGoal(selectedGoalId);
+    }
+  }, [onCancelChildForm, onSelectGoal, selectedGoalId, showChildForm]);
 
   // Shared inspector content
   const inspectorContent = showChildForm && childFormParent ? (
@@ -595,13 +631,16 @@ export function GoalsPlanWorkspace({
   );
 
   return (
-    <div className="ghq-plan-container">
+    <div className={`ghq-plan-container${isGraphExpanded ? " ghq-plan-container--graph-expanded" : ""}`}>
       {/* Subview toggle */}
       <div className="ghq-plan-subview">
         <button
           className={`ghq-plan-subview__btn${planView === "outline" ? " ghq-plan-subview__btn--active" : ""}`}
           type="button"
-          onClick={() => setPlanView("outline")}
+          onClick={() => {
+            setPlanView("outline");
+            setIsGraphExpanded(false);
+          }}
         >
           Outline
         </button>
@@ -614,7 +653,7 @@ export function GoalsPlanWorkspace({
         </button>
       </div>
 
-      <div className={`ghq-plan${planView === "graph" ? " ghq-plan--graph" : ""}`}>
+      <div className={`ghq-plan${planView === "graph" ? " ghq-plan--graph" : ""}${isGraphExpanded ? " ghq-plan--graph-expanded" : ""}`}>
         {/* Left: outline rail OR graph canvas */}
         {planView === "outline" ? (
           <div className="ghq-plan__rail">
@@ -661,7 +700,7 @@ export function GoalsPlanWorkspace({
             </div>
           </div>
         ) : (
-          <div className="ghq-plan__graph">
+          <div className={`ghq-plan__graph${isGraphExpanded ? " ghq-plan__graph--expanded" : ""}`}>
             <GoalsPlanGraphView
               goals={goals}
               domains={domains}
@@ -671,14 +710,32 @@ export function GoalsPlanWorkspace({
               selectedGoalId={selectedGoalId}
               onSelectGoal={onSelectGoal}
               onAddChild={handleGraphAddChild}
+              isExpanded={isGraphExpanded}
+              onToggleExpanded={() => setIsGraphExpanded((current) => !current)}
             />
+
+            {isGraphExpanded && (showChildForm || selectedGoalId) && (
+              <aside className="ghq-plan__floating-inspector" aria-label="Goal details">
+                <button
+                  className="button button--ghost button--small ghq-plan__floating-close"
+                  type="button"
+                  onClick={handleDismissExpandedInspector}
+                  aria-label="Close details panel"
+                >
+                  ×
+                </button>
+                {inspectorContent}
+              </aside>
+            )}
           </div>
         )}
 
         {/* Right: inspector (shared between outline and graph) */}
-        <div className="ghq-plan__inspector">
-          {inspectorContent}
-        </div>
+        {!isGraphExpanded && (
+          <div className="ghq-plan__inspector">
+            {inspectorContent}
+          </div>
+        )}
       </div>
     </div>
   );

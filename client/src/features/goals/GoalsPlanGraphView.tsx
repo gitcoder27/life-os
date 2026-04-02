@@ -8,7 +8,7 @@ import {
   useReactFlow,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import type { Node, Edge, NodeProps } from "@xyflow/react";
+import type { Node, Edge, NodeProps, NodeMouseHandler } from "@xyflow/react";
 
 import type {
   GoalOverviewItem,
@@ -76,7 +76,7 @@ const GoalGraphNode = memo(function GoalGraphNode({ data }: NodeProps) {
 
   return (
     <div
-      className={`graph-goal-node${isSelected ? " graph-goal-node--selected" : ""}${isDimmed ? " graph-goal-node--dimmed" : ""}`}
+      className={`graph-goal-node nopan${isSelected ? " graph-goal-node--selected" : ""}${isDimmed ? " graph-goal-node--dimmed" : ""}`}
       onClick={(e) => {
         e.stopPropagation();
         onSelect(goal.id);
@@ -135,7 +135,7 @@ const GhostAddNode = memo(function GhostAddNode({ data }: NodeProps) {
 
   return (
     <div
-      className="graph-ghost"
+      className="graph-ghost nopan"
       onClick={(e) => {
         e.stopPropagation();
         d.onAdd();
@@ -512,6 +512,7 @@ function GraphInner(props: GoalsPlanGraphViewProps) {
     monthPlan,
     onSelectGoal,
     onAddChild,
+    isExpanded,
   } = props;
 
   const { fitView } = useReactFlow();
@@ -568,16 +569,51 @@ function GraphInner(props: GoalsPlanGraphViewProps) {
     return () => clearTimeout(t);
   }, [fitView]);
 
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (focusIds.length > 0) {
+        fitView({
+          nodes: focusIds.map((id) => ({ id })),
+          padding: isExpanded ? 0.18 : 0.28,
+          duration: 300,
+        });
+        return;
+      }
+
+      fitView({
+        padding: isExpanded ? 0.12 : 0.2,
+        duration: 300,
+      });
+    }, 80);
+
+    return () => clearTimeout(timer);
+  }, [focusIds, fitView, isExpanded]);
+
   // Click empty canvas to deselect
   const onPaneClick = useCallback(() => {
     if (selectedGoalId) stableSelect(selectedGoalId);
   }, [selectedGoalId, stableSelect]);
+
+  const onNodeClick = useCallback<NodeMouseHandler<Node>>(
+    (_event, node) => {
+      if (node.type === "goalNode") {
+        stableSelect(node.id);
+        return;
+      }
+
+      if (node.type === "ghostNode") {
+        stableAdd();
+      }
+    },
+    [stableAdd, stableSelect],
+  );
 
   return (
     <ReactFlow
       nodes={nodes}
       edges={edges}
       nodeTypes={nodeTypes}
+      onNodeClick={onNodeClick}
       onPaneClick={onPaneClick}
       fitView
       fitViewOptions={{ padding: 0.2 }}
@@ -605,6 +641,8 @@ export type GoalsPlanGraphViewProps = {
   selectedGoalId: string | null;
   onSelectGoal: (goalId: string) => void;
   onAddChild: () => void;
+  isExpanded: boolean;
+  onToggleExpanded: () => void;
 };
 
 export function GoalsPlanGraphView(props: GoalsPlanGraphViewProps) {
@@ -626,7 +664,19 @@ export function GoalsPlanGraphView(props: GoalsPlanGraphViewProps) {
   }
 
   return (
-    <div className="ghq-graph">
+    <div className={`ghq-graph${props.isExpanded ? " ghq-graph--expanded" : ""}`}>
+      <div className="ghq-graph__toolbar">
+        <button
+          className="button button--ghost button--small ghq-graph__expand-btn"
+          type="button"
+          onClick={props.onToggleExpanded}
+          aria-label={props.isExpanded ? "Exit expanded graph view" : "Expand graph view"}
+          aria-pressed={props.isExpanded}
+        >
+          {props.isExpanded ? "Collapse canvas" : "Expand canvas"}
+        </button>
+      </div>
+
       <ReactFlowProvider>
         <GraphInner {...props} />
       </ReactFlowProvider>
