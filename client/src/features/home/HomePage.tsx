@@ -118,6 +118,7 @@ export function HomePage() {
         <TodayControl
           priorities={home.topPriorities}
           openTaskCount={nonPriorityOpenTasks.length}
+          overdueTaskCount={home.accountabilityRadar.overdueTaskCount}
         />
 
         <EssentialsBand

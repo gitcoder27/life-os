@@ -685,6 +685,122 @@
   padding-top: 0.25rem;
 }
 
+.today-control__tasks--summary {
+  color: var(--text-secondary);
+  font-weight: 600;
+  padding-top: 0;
+}
+
+.today-control__summary-card {
+  display: flex;
+  align-items: stretch;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem 1.1rem;
+  border-radius: var(--r-sm);
+  border: 1px solid rgba(217, 153, 58, 0.18);
+  background:
+    radial-gradient(ellipse at left top, rgba(217, 153, 58, 0.09), transparent 58%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.025), rgba(255, 255, 255, 0.015));
+  color: inherit;
+  text-decoration: none;
+  transition:
+    transform var(--dur) var(--ease),
+    border-color var(--dur) var(--ease),
+    background var(--dur) var(--ease);
+}
+
+.today-control__summary-card:hover {
+  transform: translateY(-1px);
+  border-color: rgba(217, 153, 58, 0.32);
+  background:
+    radial-gradient(ellipse at left top, rgba(217, 153, 58, 0.13), transparent 58%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0.02));
+}
+
+.today-control__summary-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  min-width: 0;
+}
+
+.today-control__summary-eyebrow {
+  font-size: var(--fs-micro);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--accent-bright);
+}
+
+.today-control__summary-headline {
+  font-family: var(--font-display);
+  font-size: clamp(1rem, 2vw, 1.15rem);
+  font-weight: 500;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+  color: var(--text-primary);
+}
+
+.today-control__summary-stats {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-shrink: 0;
+}
+
+.today-control__summary-stat {
+  min-width: 4.6rem;
+  padding: 0.65rem 0.7rem;
+  border-radius: var(--r-xs);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.03);
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  align-items: flex-start;
+}
+
+.today-control__summary-stat--overdue {
+  border-color: rgba(201, 85, 76, 0.18);
+  background: rgba(201, 85, 76, 0.08);
+}
+
+.today-control__summary-count {
+  font-family: var(--font-display);
+  font-size: 1.3rem;
+  font-weight: 500;
+  line-height: 1;
+  letter-spacing: -0.03em;
+  color: var(--text-primary);
+}
+
+.today-control__summary-stat--overdue .today-control__summary-count {
+  color: #f0a099;
+}
+
+.today-control__summary-label {
+  font-size: var(--fs-micro);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+}
+
+@media (max-width: 720px) {
+  .today-control__summary-card {
+    flex-direction: column;
+  }
+
+  .today-control__summary-stats {
+    width: 100%;
+  }
+
+  .today-control__summary-stat {
+    flex: 1;
+  }
+}
+
 /* ── Essentials Band ────────────────────────── */
 
 .essentials-band {
