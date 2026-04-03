@@ -11,6 +11,7 @@
     "postinstall": "npm run prisma:generate -w server",
     "dev": "concurrently --kill-others-on-fail --names server,client --prefix-colors green,blue \"npm run dev:server\" \"npm run dev:client\"",
     "build": "npm run build:contracts && npm run build:server && npm run build:client",
+    "deploy:prod": "bash deploy/deploy-production.sh",
     "typecheck": "npm run typecheck:contracts && npm run typecheck:server && npm run typecheck:client",
     "dev:client": "npm run dev -w client",
     "dev:server": "npm run dev -w server",

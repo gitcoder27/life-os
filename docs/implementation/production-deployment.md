@@ -24,6 +24,26 @@ Run on the server from a privileged shell:
 
 ```bash
 cd /home/ubuntu/apps/life-os-prod
+npm run deploy:prod
+```
+
+The deploy script runs the full production flow for you:
+
+- fails if the production checkout has local git changes
+- confirms the server and client production CSRF cookie names match
+- runs `git pull --ff-only`
+- runs `npm ci`
+- runs `npm run build`
+- stops `life-os.service`
+- runs `npx prisma migrate deploy --schema server/prisma/schema.prisma`
+- syncs `client/dist/` into `/var/www/personal.daycommand.online/`
+- starts `life-os.service`
+- verifies `http://127.0.0.1:3104/healthz`
+
+If you need the manual fallback, use:
+
+```bash
+cd /home/ubuntu/apps/life-os-prod
 
 # 0) Confirm backend and frontend production cookie names match before building
 grep '^CSRF_COOKIE_NAME=' server/.env.production
@@ -35,41 +55,24 @@ git pull
 # 2) Reinstall deps if package-lock changed
 npm ci
 
-# 3) Apply pending production database migrations
-npx prisma migrate deploy --schema server/prisma/schema.prisma
-
-# 4) Build server/client/contracts
+# 3) Build server/client/contracts
 npm run build
 
-# 5) Deploy frontend bundle to nginx doc root
+# 4) Stop the API before applying schema changes
+sudo systemctl stop life-os.service
+
+# 5) Apply pending production database migrations
+npx prisma migrate deploy --schema server/prisma/schema.prisma
+
+# 6) Deploy frontend bundle to nginx doc root
 sudo rsync -a --delete client/dist/ /var/www/personal.daycommand.online/
 
-# 6) Restart API service so updated server code is loaded
-sudo systemctl restart life-os.service
+# 7) Start the API service
+sudo systemctl start life-os.service
 ```
 
 The production client build now reads `client/.env.production` via `vite build --mode production`.
 Keep `server/.env.production` `CSRF_COOKIE_NAME` and `client/.env.production` `VITE_CSRF_COOKIE_NAME` set to the same production value before every deploy.
-
-## Safer schema-change deploy order
-
-If the release includes database schema changes, avoid leaving the API running while the migration is changing tables or constraints. Use this order instead:
-
-```bash
-cd /home/ubuntu/apps/life-os-prod
-
-grep '^CSRF_COOKIE_NAME=' server/.env.production
-cat client/.env.production
-git pull
-npm ci
-sudo systemctl stop life-os.service
-npx prisma migrate deploy --schema server/prisma/schema.prisma
-npm run build
-sudo rsync -a --delete client/dist/ /var/www/personal.daycommand.online/
-sudo systemctl start life-os.service
-```
-
-This is the safer path for releases like the Goals HQ backend change because the app and the database are changing together.
 
 ## Optional but recommended verification
 
@@ -105,9 +108,10 @@ If only server logic changed:
 
 ```bash
 cd /home/ubuntu/apps/life-os-prod
+sudo systemctl stop life-os.service
 npx prisma migrate deploy --schema server/prisma/schema.prisma
 npm run build:server
-sudo systemctl restart life-os.service
+sudo systemctl start life-os.service
 ```
 
 ## Notes
