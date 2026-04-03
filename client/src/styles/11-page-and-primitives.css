@@ -54,8 +54,20 @@
   max-width: 42rem;
 }
 
+.page-state--loading {
+  align-items: flex-start;
+  gap: 1.1rem;
+  padding: 1.7rem;
+}
+
 .page-state--error {
   border-color: rgba(201, 85, 76, 0.25);
+}
+
+.page-state__content {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
 }
 
 .page-state__title {
@@ -65,9 +77,115 @@
   line-height: 1.15;
 }
 
+.page-state--loading .page-state__title {
+  font-size: clamp(1.4rem, 2vw, 1.85rem);
+}
+
 .page-state__copy,
 .empty-state__copy {
   color: var(--text-secondary);
+}
+
+.page-state__progress {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  width: min(15rem, 100%);
+}
+
+.page-state__progress-track {
+  position: relative;
+  display: block;
+  height: 4px;
+  border-radius: var(--r-pill);
+  overflow: hidden;
+  background: rgba(255,255,255,0.06);
+}
+
+.page-state__progress-track::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  width: 36%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, rgba(217,153,58,0), var(--accent-bright), rgba(93,184,106,0.8));
+  box-shadow: 0 0 18px rgba(217,153,58,0.22);
+  animation: loadingSweep 1.35s var(--ease) infinite;
+}
+
+.page-state__progress-track--short {
+  width: 58%;
+}
+
+.page-state__progress-track--short::after {
+  animation-delay: 0.18s;
+}
+
+.state-loader {
+  position: relative;
+  width: 4.25rem;
+  height: 4.25rem;
+  border-radius: 50%;
+  isolation: isolate;
+}
+
+.state-loader__ring,
+.state-loader__core,
+.state-loader__dot {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+}
+
+.state-loader__ring--outer {
+  border: 1px solid rgba(217,153,58,0.16);
+  background:
+    radial-gradient(circle at 35% 30%, rgba(217,153,58,0.14), transparent 45%),
+    radial-gradient(circle at 70% 75%, rgba(93,184,106,0.10), transparent 38%);
+  box-shadow:
+    inset 0 0 0 1px rgba(255,255,255,0.02),
+    0 0 28px rgba(217,153,58,0.10);
+  animation: loaderDrift 2.6s var(--ease) infinite;
+}
+
+.state-loader__ring--inner {
+  inset: 0.6rem;
+  border: 1px solid rgba(237,228,209,0.12);
+  animation: loaderSpin 2.2s linear infinite reverse;
+}
+
+.state-loader__core {
+  inset: 1.45rem;
+  background:
+    radial-gradient(circle at 30% 30%, rgba(240,192,96,0.95), rgba(217,153,58,0.92) 50%, rgba(217,153,58,0.08) 72%),
+    radial-gradient(circle at 70% 70%, rgba(93,184,106,0.16), transparent 50%);
+  box-shadow:
+    0 0 28px rgba(217,153,58,0.32),
+    0 0 10px rgba(240,192,96,0.24);
+  animation: loaderPulse 1.8s var(--ease) infinite;
+}
+
+.state-loader__dot {
+  inset: auto;
+  width: 0.42rem;
+  height: 0.42rem;
+}
+
+.state-loader__dot--amber {
+  top: 0.2rem;
+  left: 50%;
+  margin-left: -0.21rem;
+  background: var(--accent-bright);
+  box-shadow: 0 0 16px rgba(240,192,96,0.45);
+  animation: loaderOrbit 1.8s linear infinite;
+}
+
+.state-loader__dot--green {
+  bottom: 0.55rem;
+  right: 0.45rem;
+  background: rgba(93,184,106,0.9);
+  box-shadow: 0 0 14px rgba(93,184,106,0.38);
+  animation: loaderOrbit 2.4s linear infinite reverse;
 }
 
 .empty-state,
@@ -137,6 +255,53 @@
 .feedback-toast__dismiss {
   color: var(--text-secondary);
   font-size: var(--fs-small);
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+@keyframes loaderSpin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@keyframes loaderOrbit {
+  from { transform: rotate(0deg) translateY(-1.7rem) rotate(0deg); }
+  to { transform: rotate(360deg) translateY(-1.7rem) rotate(-360deg); }
+}
+
+@keyframes loaderPulse {
+  0%, 100% { transform: scale(0.94); opacity: 0.92; }
+  50% { transform: scale(1.02); opacity: 1; }
+}
+
+@keyframes loaderDrift {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.03); }
+}
+
+@keyframes loadingSweep {
+  0% { transform: translateX(-160%); }
+  100% { transform: translateX(340%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .state-loader__ring--outer,
+  .state-loader__ring--inner,
+  .state-loader__core,
+  .state-loader__dot,
+  .page-state__progress-track::after {
+    animation: none;
+  }
 }
 
 /* ── Grids ── */

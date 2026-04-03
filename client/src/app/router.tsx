@@ -16,12 +16,14 @@ import {
   useOnboardingStateQuery,
   useSessionQuery,
 } from "../shared/lib/api";
+import { LoadingIndicator } from "../shared/ui/PageState";
 import { AppShell } from "./shell/AppShell";
 
 function RouteLoading() {
   return (
     <div className="auth-layout">
-      <div className="auth-layout__panel">
+      <div className="auth-layout__panel auth-layout__panel--loading" role="status" aria-live="polite">
+        <LoadingIndicator label="Connecting" />
         <span className="page-eyebrow">Connecting</span>
         <h1 className="auth-layout__title">Checking your session</h1>
         <p className="auth-layout__copy">
