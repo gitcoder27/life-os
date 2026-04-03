@@ -1495,6 +1495,8 @@
   min-height: 500px;
   height: calc(100vh - 16rem);
   overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
 .ghq-plan__graph--expanded {
@@ -1518,7 +1520,7 @@
   position: absolute;
   top: 1rem;
   right: 1rem;
-  bottom: 1rem;
+  bottom: 13rem;
   width: min(400px, calc(100% - 2rem));
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: calc(var(--r) + 2px);
@@ -1565,6 +1567,8 @@
 .ghq-graph {
   width: 100%;
   height: 100%;
+  flex: 1;
+  min-height: 0;
   position: relative;
 }
 
@@ -1621,6 +1625,25 @@
   gap: 0.5rem;
 }
 
+.ghq-graph__notice {
+  position: absolute;
+  left: 50%;
+  bottom: 1rem;
+  transform: translateX(-50%);
+  padding: 0.55rem 0.95rem;
+  border-radius: var(--r-pill);
+  background: rgba(110, 34, 27, 0.92);
+  border: 1px solid rgba(220, 111, 102, 0.28);
+  box-shadow: var(--shadow-sm);
+  z-index: 5;
+}
+
+.ghq-graph__notice p {
+  margin: 0;
+  font-size: var(--fs-small);
+  color: #ffd3ce;
+}
+
 .ghq-graph__expand-btn {
   background: rgba(17, 16, 13, 0.82);
   border-color: rgba(255, 255, 255, 0.08);
@@ -1650,6 +1673,8 @@
   display: flex;
   flex-direction: column;
   gap: 0.3rem;
+  position: relative;
+  overflow: visible;
 }
 
 .graph-goal-node:hover:not(.graph-goal-node--dimmed) {
@@ -1664,9 +1689,18 @@
   box-shadow: 0 0 0 1px rgba(217, 153, 58, 0.2), 0 4px 16px rgba(217, 153, 58, 0.08);
 }
 
+.graph-goal-node--branch {
+  box-shadow: 0 0 0 1px rgba(217, 153, 58, 0.12), 0 10px 18px rgba(0, 0, 0, 0.12);
+}
+
 .graph-goal-node--dimmed {
-  opacity: 0.3;
+  opacity: 0.28;
   pointer-events: auto;
+}
+
+.graph-goal-node--drop-target {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px rgba(217, 153, 58, 0.22), 0 12px 22px rgba(0, 0, 0, 0.18);
 }
 
 .graph-goal-node__row {
@@ -1697,6 +1731,20 @@
   flex: 1;
   min-width: 0;
   color: var(--text);
+}
+
+.graph-goal-node__expand {
+  width: 1.4rem;
+  min-width: 1.4rem;
+  height: 1.4rem;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-secondary);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
 }
 
 .graph-goal-node__meta {
@@ -1746,6 +1794,336 @@
 .graph-goal-node__bar-fill--drifting { background: linear-gradient(90deg, #e8b038, #c4942f); }
 .graph-goal-node__bar-fill--stalled { background: linear-gradient(90deg, var(--negative), #d47068); }
 .graph-goal-node__bar-fill--achieved { background: linear-gradient(90deg, var(--positive), #7fd98a); }
+
+.graph-goal-node__footer {
+  margin-top: 0.1rem;
+}
+
+.graph-goal-node__action {
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--accent);
+  font-size: var(--fs-micro);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.graph-goal-node__drop-hint {
+  margin-top: 0.1rem;
+  font-size: var(--fs-micro);
+  color: var(--accent);
+}
+
+/* ── Graph: Inline Planner ── */
+
+.graph-planner {
+  position: absolute;
+  top: -0.2rem;
+  left: calc(100% + 1.1rem);
+  width: 262px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  padding-left: 1.1rem;
+  z-index: 6;
+  animation: slideInRight 0.22s var(--ease) both;
+}
+
+.graph-planner__stem {
+  position: absolute;
+  left: 0;
+  top: 1.15rem;
+  width: 0.85rem;
+  height: 1px;
+  background: linear-gradient(90deg, rgba(217, 153, 58, 0.55), rgba(217, 153, 58, 0.16));
+}
+
+.graph-planner__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  min-height: 1rem;
+}
+
+.graph-planner__eyebrow {
+  font-size: var(--fs-micro);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.graph-planner__toggle {
+  border: none;
+  background: transparent;
+  color: var(--text-tertiary);
+  font-size: var(--fs-micro);
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0;
+}
+
+.graph-planner__toggle:hover {
+  color: var(--accent);
+}
+
+.graph-planner__lanes {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.graph-planner__lanes::before {
+  content: "";
+  position: absolute;
+  left: -0.55rem;
+  top: 0.9rem;
+  bottom: 0.9rem;
+  width: 1px;
+  background: linear-gradient(180deg, rgba(217, 153, 58, 0.34), rgba(217, 153, 58, 0.06));
+}
+
+.graph-planner__lane {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  padding: 0.7rem 0.8rem 0.75rem;
+  border-radius: calc(var(--r-sm) + 2px);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background:
+    linear-gradient(180deg, rgba(24, 22, 18, 0.96), rgba(17, 16, 13, 0.94));
+  box-shadow: 0 14px 30px rgba(0, 0, 0, 0.24);
+}
+
+.graph-planner__lane::before {
+  content: "";
+  position: absolute;
+  left: -0.55rem;
+  top: 1rem;
+  width: 0.55rem;
+  height: 1px;
+  background: rgba(217, 153, 58, 0.32);
+}
+
+.graph-planner__lane--draft,
+.graph-planner__lane--replace {
+  border-color: rgba(217, 153, 58, 0.24);
+}
+
+.graph-planner__lane-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.graph-planner__lane-label {
+  font-size: var(--fs-micro);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+}
+
+.graph-planner__lane-count {
+  font-size: var(--fs-micro);
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.graph-planner__slot-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.graph-planner__slot {
+  flex: 1 1 calc(50% - 0.2rem);
+  min-width: 0;
+  padding: 0.42rem 0.48rem;
+  border-radius: var(--r-xs);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.03);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  cursor: pointer;
+  transition: all var(--dur-fast) var(--ease);
+  color: var(--text-secondary);
+}
+
+.graph-planner__slot:hover {
+  border-color: rgba(217, 153, 58, 0.28);
+  transform: translateY(-1px);
+}
+
+.graph-planner__slot--empty {
+  border-style: dashed;
+  color: var(--text-tertiary);
+}
+
+.graph-planner__slot--filled,
+.graph-planner__slot--selected {
+  background: rgba(217, 153, 58, 0.08);
+}
+
+.graph-planner__slot--selected {
+  border-color: rgba(217, 153, 58, 0.56);
+  box-shadow: 0 0 0 1px rgba(217, 153, 58, 0.16);
+}
+
+.graph-planner__slot--drag-over {
+  border-color: rgba(217, 153, 58, 0.56);
+  background: rgba(217, 153, 58, 0.12);
+}
+
+.graph-planner__slot--draft,
+.graph-planner__slot--replace {
+  border-color: rgba(217, 153, 58, 0.42);
+}
+
+.graph-planner__slot-badge {
+  flex-shrink: 0;
+  padding: 0.08rem 0.28rem;
+  border-radius: var(--r-pill);
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-tertiary);
+  font-size: var(--fs-micro);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.graph-planner__slot-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.72rem;
+  line-height: 1.2;
+}
+
+.graph-planner__editor,
+.graph-planner__replace {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  padding-top: 0.1rem;
+}
+
+.graph-planner__editor-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.graph-planner__input,
+.graph-planner__select {
+  width: 100%;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--r-xs);
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--text);
+  font-size: var(--fs-small);
+  padding: 0.55rem 0.65rem;
+}
+
+.graph-planner__replace-text {
+  font-size: var(--fs-small);
+  line-height: 1.4;
+  color: var(--text-secondary);
+}
+
+.graph-planner__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+/* ── Graph: Columns ── */
+
+.graph-column-label {
+  width: 244px;
+  padding: 0.35rem 0.55rem;
+  border-radius: var(--r-pill);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(17, 16, 13, 0.9);
+  color: var(--text-tertiary);
+  font-size: var(--fs-micro);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  text-align: center;
+}
+
+.graph-column-label--unassigned {
+  border-style: dashed;
+}
+
+.graph-column-drop {
+  width: 100%;
+  height: 100%;
+  border: 1px solid rgba(255, 255, 255, 0.04);
+  border-radius: calc(var(--r) + 2px);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.015), rgba(255, 255, 255, 0.005));
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 2.2rem;
+  transition: all var(--dur-fast) var(--ease);
+}
+
+.graph-column-drop--unassigned {
+  border-style: dashed;
+}
+
+.graph-column-drop--active {
+  border-color: rgba(217, 153, 58, 0.32);
+  background: linear-gradient(180deg, rgba(217, 153, 58, 0.08), rgba(217, 153, 58, 0.02));
+}
+
+.graph-column-drop__hint {
+  font-size: 0.68rem;
+  color: rgba(255, 255, 255, 0.18);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  pointer-events: none;
+}
+
+/* ── Graph: Child Draft ── */
+
+.graph-child-draft {
+  width: 244px;
+  min-height: 120px;
+  padding: 0.75rem;
+  border-radius: var(--r-sm);
+  border: 1px dashed rgba(217, 153, 58, 0.38);
+  background: rgba(17, 16, 13, 0.92);
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.graph-child-draft__input {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: var(--r-xs);
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--text);
+  font-size: var(--fs-small);
+  padding: 0.65rem 0.75rem;
+}
+
+.graph-child-draft__actions {
+  display: flex;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
 
 /* ── Graph: Planning Slot ── */
 
@@ -1918,6 +2296,28 @@
   opacity: 0.7;
 }
 
+@media (max-width: 1180px) {
+  .graph-planner {
+    top: calc(100% + 0.9rem);
+    left: 0;
+    width: 244px;
+    padding-left: 0;
+  }
+
+  .graph-planner__stem {
+    left: 1.1rem;
+    top: -0.9rem;
+    width: 1px;
+    height: 0.9rem;
+    background: linear-gradient(180deg, rgba(217, 153, 58, 0.55), rgba(217, 153, 58, 0.16));
+  }
+
+  .graph-planner__lanes::before,
+  .graph-planner__lane::before {
+    display: none;
+  }
+}
+
 /* ── Graph: Empty State ── */
 
 .ghq-graph-empty {
@@ -1985,6 +2385,179 @@
   bottom: 1rem;
 }
 
+/* ── Planning Dock ── */
+
+.ghq-plan-dock {
+  border-top: 1px solid var(--border);
+  background:
+    linear-gradient(180deg, rgba(21, 19, 15, 0.96), rgba(17, 16, 13, 0.98));
+  padding: 1rem 1rem 1.1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+  z-index: 3;
+}
+
+.ghq-plan-dock__header {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: flex-start;
+}
+
+.ghq-plan-dock__eyebrow {
+  display: inline-block;
+  margin-bottom: 0.2rem;
+  color: var(--accent);
+  font-size: var(--fs-micro);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.ghq-plan-dock__header h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.ghq-plan-dock__header p {
+  margin: 0.15rem 0 0;
+  color: var(--text-tertiary);
+  font-size: var(--fs-small);
+}
+
+.ghq-plan-dock__header-actions {
+  display: flex;
+  gap: 0.45rem;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.ghq-plan-dock__lanes {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.ghq-plan-dock__lane {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.ghq-plan-dock__lane-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  align-items: center;
+}
+
+.ghq-plan-dock__lane-header h4 {
+  margin: 0;
+  font-size: var(--fs-small);
+}
+
+.ghq-plan-dock__lane-header span {
+  color: var(--text-tertiary);
+  font-size: var(--fs-micro);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.ghq-plan-dock__slots {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.7rem;
+}
+
+.ghq-plan-dock__slot {
+  min-height: 92px;
+  padding: 0.7rem 0.8rem;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--border);
+  background: var(--panel-elevated);
+  display: flex;
+  gap: 0.6rem;
+  cursor: pointer;
+  transition: all var(--dur-fast) var(--ease);
+}
+
+.ghq-plan-dock__slot:hover {
+  border-color: rgba(217, 153, 58, 0.22);
+}
+
+.ghq-plan-dock__slot--empty {
+  border-style: dashed;
+  opacity: 0.86;
+}
+
+.ghq-plan-dock__slot--filled,
+.ghq-plan-dock__slot--selected {
+  background: linear-gradient(135deg, rgba(217, 153, 58, 0.05), var(--panel-elevated));
+}
+
+.ghq-plan-dock__slot--selected {
+  border-color: rgba(217, 153, 58, 0.72);
+  box-shadow: 0 0 0 1px rgba(217, 153, 58, 0.18);
+}
+
+.ghq-plan-dock__slot--draft,
+.ghq-plan-dock__slot--replace {
+  cursor: default;
+  min-height: 120px;
+}
+
+.ghq-plan-dock__slot-badge {
+  flex-shrink: 0;
+  margin-top: 0.1rem;
+  padding: 0.16rem 0.38rem;
+  border-radius: var(--r-xs);
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-tertiary);
+  font-size: var(--fs-micro);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.ghq-plan-dock__slot-content {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.ghq-plan-dock__slot-content strong {
+  font-size: var(--fs-small);
+  color: var(--text-secondary);
+}
+
+.ghq-plan-dock__slot-content span,
+.ghq-plan-dock__slot-content p {
+  margin: 0;
+  font-size: var(--fs-micro);
+  color: var(--text-tertiary);
+  line-height: 1.45;
+}
+
+.ghq-plan-dock__slot-actions {
+  display: flex;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+  margin-top: 0.2rem;
+}
+
+.ghq-plan-dock__input,
+.ghq-plan-dock__select {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: var(--r-xs);
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--text);
+  font-size: var(--fs-small);
+  padding: 0.55rem 0.65rem;
+}
+
 .ghq-graph-expanded-body {
   overflow: hidden;
 }
@@ -2008,7 +2581,7 @@
   }
 
   .ghq-plan__graph {
-    height: 50vh;
+    height: 60vh;
     min-height: 300px;
   }
 
@@ -2023,7 +2596,7 @@
     width: min(380px, calc(100% - 1.5rem));
     top: 0.75rem;
     right: 0.75rem;
-    bottom: 0.75rem;
+    bottom: 10rem;
   }
 
   .ghq-plan__inspector {
@@ -2039,6 +2612,18 @@
   }
 
   .ghq-form__row {
+    grid-template-columns: 1fr;
+  }
+
+  .ghq-plan-dock__header {
+    flex-direction: column;
+  }
+
+  .ghq-plan-dock__header-actions {
+    justify-content: flex-start;
+  }
+
+  .ghq-plan-dock__slots {
     grid-template-columns: 1fr;
   }
 }

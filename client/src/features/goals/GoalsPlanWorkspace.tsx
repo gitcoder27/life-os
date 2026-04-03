@@ -14,7 +14,9 @@ import {
   getMonthStartDate,
   getTodayDate,
   getWeekStartDate,
+  useCreateGoalMutation,
   useGoalDetailQuery,
+  useUpdateGoalMutation,
   useUpdateDayPrioritiesMutation,
   useUpdateMonthFocusMutation,
   useUpdateWeekPrioritiesMutation,
@@ -24,6 +26,7 @@ import { GoalInspectorMilestones } from "./GoalInspectorMilestones";
 import { useGoalTodayAction } from "./useGoalTodayAction";
 import {
   GoalFormDialog,
+  suggestChildHorizon,
   type GoalFormData,
 } from "./GoalFormDialog";
 import { GoalsPlanPlanningEditor } from "./GoalsPlanPlanningEditor";
@@ -32,6 +35,7 @@ import {
   buildDraftTitleForGoal,
   getLaneDuplicateCount,
   getPlanningItemAtSlot,
+  getPlanningItems,
   planningSlots,
   type PlanningItem,
   type PlanningDraft,
@@ -69,6 +73,45 @@ function findFirstOpenSlot(occupiedSlots: PlanningSlot[]) {
 
 function sortPlanningItemsBySlot<T extends { slot: PlanningSlot }>(items: T[]) {
   return [...items].sort((left, right) => left.slot - right.slot);
+}
+
+function areGoalIdSetsEqual(left: Set<string>, right: Set<string>) {
+  if (left.size !== right.size) {
+    return false;
+  }
+
+  for (const value of left) {
+    if (!right.has(value)) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+function getRootGoalIds(goals: GoalOverviewItem[]) {
+  const goalIds = new Set(goals.map((goal) => goal.id));
+  return goals
+    .filter((goal) => !goal.parentGoalId || !goalIds.has(goal.parentGoalId))
+    .map((goal) => goal.id);
+}
+
+function isGoalDescendant(
+  goals: GoalOverviewItem[],
+  ancestorGoalId: string,
+  candidateGoalId: string,
+) {
+  const goalMap = new Map(goals.map((goal) => [goal.id, goal]));
+  let current = goalMap.get(candidateGoalId) ?? null;
+
+  while (current?.parentGoalId) {
+    if (current.parentGoalId === ancestorGoalId) {
+      return true;
+    }
+    current = goalMap.get(current.parentGoalId) ?? null;
+  }
+
+  return false;
 }
 
 type HierarchyNode = GoalOverviewItem & {
@@ -544,6 +587,7 @@ export function GoalsPlanWorkspace({
   todayAlignment,
   selectedGoalId,
   onSelectGoal,
+  onClearSelectedGoal,
   onOpenCreateGoal,
   onStartCreateChild,
   showChildForm,
@@ -562,6 +606,7 @@ export function GoalsPlanWorkspace({
   todayAlignment: GoalsWorkspaceTodayAlignment;
   selectedGoalId: string | null;
   onSelectGoal: (goalId: string) => void;
+  onClearSelectedGoal: () => void;
   onOpenCreateGoal: () => void;
   onStartCreateChild: (parentGoal: GoalOverviewItem) => void;
   showChildForm: boolean;
@@ -575,17 +620,31 @@ export function GoalsPlanWorkspace({
   const [planView, setPlanView] = useState<PlanSubview>("outline");
   const [isGraphExpanded, setIsGraphExpanded] = useState(false);
   const [isGraphInspectorVisible, setIsGraphInspectorVisible] = useState(true);
+  const [isGraphFocusMode, setIsGraphFocusMode] = useState(false);
+  const [expandedGoalIds, setExpandedGoalIds] = useState<Set<string>>(new Set());
   const [showTodayLane, setShowTodayLane] = useState(true);
   const [selectedPlanningSelection, setSelectedPlanningSelection] = useState<PlanningSelection | null>(null);
   const [planningDraft, setPlanningDraft] = useState<PlanningDraft | null>(null);
   const [planningReplaceState, setPlanningReplaceState] = useState<PlanningReplaceState | null>(null);
   const [planningError, setPlanningError] = useState<string | null>(null);
+  const [graphStructureError, setGraphStructureError] = useState<string | null>(null);
+  const [graphChildDraft, setGraphChildDraft] = useState<{
+    parentGoalId: string;
+    title: string;
+    horizonId: string | null;
+    domainId: string;
+  } | null>(null);
 
-  const activeGoals = goals.filter((g) => g.status === "active");
+  const activeGoals = useMemo(
+    () => goals.filter((goal) => goal.status === "active"),
+    [goals],
+  );
+  const rootGoalIds = useMemo(() => getRootGoalIds(activeGoals), [activeGoals]);
   const tree = useMemo(() => buildHierarchyTree(activeGoals), [activeGoals]);
-  const selectedGoal = selectedGoalId
-    ? goals.find((goal) => goal.id === selectedGoalId) ?? null
-    : null;
+  const selectedGoal = useMemo(
+    () => (selectedGoalId ? goals.find((goal) => goal.id === selectedGoalId) ?? null : null),
+    [goals, selectedGoalId],
+  );
   const todayDate = todayAlignment.date || getTodayDate();
   const weekStart = weekPlan?.startDate ?? getWeekStartDate(todayDate);
   const monthStart = monthPlan?.startDate ?? getMonthStartDate(todayDate);
@@ -593,6 +652,8 @@ export function GoalsPlanWorkspace({
   const updateDayMutation = useUpdateDayPrioritiesMutation(todayDate);
   const updateWeekMutation = useUpdateWeekPrioritiesMutation(weekStart);
   const updateMonthMutation = useUpdateMonthFocusMutation(monthStart);
+  const updateGoalMutation = useUpdateGoalMutation();
+  const createGoalMutation = useCreateGoalMutation();
 
   const clearPlanningUi = useCallback(() => {
     setSelectedPlanningSelection(null);
@@ -615,12 +676,38 @@ export function GoalsPlanWorkspace({
     if (planView !== "graph") {
       setIsGraphExpanded(false);
       setIsGraphInspectorVisible(true);
+      setIsGraphFocusMode(false);
     }
   }, [planView]);
 
   useEffect(() => {
+    const validGoalIds = new Set(activeGoals.map((goal) => goal.id));
+    setExpandedGoalIds((current) => {
+      const next = new Set([...current].filter((goalId) => validGoalIds.has(goalId)));
+      if (next.size === 0) {
+        for (const rootGoalId of rootGoalIds) {
+          next.add(rootGoalId);
+        }
+      }
+      return areGoalIdSetsEqual(current, next) ? current : next;
+    });
+  }, [activeGoals, rootGoalIds]);
+
+  useEffect(() => {
     clearPlanningUi();
   }, [selectedGoalId, clearPlanningUi]);
+
+  useEffect(() => {
+    setGraphStructureError(null);
+    setGraphChildDraft((current) => {
+      if (!current) {
+        return current;
+      }
+
+      const parentStillExists = activeGoals.some((goal) => goal.id === current.parentGoalId);
+      return parentStillExists ? current : null;
+    });
+  }, [activeGoals, selectedGoalId]);
 
   useEffect(() => {
     if (!selectedGoalId && !selectedPlanningSelection && !showChildForm) {
@@ -733,6 +820,7 @@ export function GoalsPlanWorkspace({
   const handleGraphSelectGoal = useCallback(
     (goalId: string) => {
       clearPlanningUi();
+      setGraphStructureError(null);
       setIsGraphInspectorVisible(true);
       onSelectGoal(goalId);
     },
@@ -764,7 +852,7 @@ export function GoalsPlanWorkspace({
       }
 
       setSelectedPlanningSelection(null);
-      setIsGraphInspectorVisible(true);
+      setIsGraphInspectorVisible(false);
       setPlanningDraft({
         lane,
         slot,
@@ -796,11 +884,12 @@ export function GoalsPlanWorkspace({
       if (existingItem) {
         setPlanningDraft(null);
         setPlanningReplaceState({ lane, slot, goalId });
+        setIsGraphInspectorVisible(false);
         return;
       }
 
       setPlanningReplaceState(null);
-      setIsGraphInspectorVisible(true);
+      setIsGraphInspectorVisible(false);
       setPlanningDraft({
         lane,
         slot,
@@ -938,12 +1027,124 @@ export function GoalsPlanWorkspace({
     [activeGoals, commitLaneItems, monthPlan?.topOutcomes, planningReplaceState, todayAlignment.priorities, weekPlan?.priorities],
   );
 
-  const handleGraphAddChild = useCallback(() => {
-    clearPlanningUi();
-    setIsGraphInspectorVisible(true);
-    const goal = goals.find((g) => g.id === selectedGoalId);
-    if (goal) onStartCreateChild(goal);
-  }, [clearPlanningUi, goals, onStartCreateChild, selectedGoalId]);
+  const handleToggleGoalExpanded = useCallback((goalId: string) => {
+    setExpandedGoalIds((current) => {
+      const next = new Set(current);
+      if (next.has(goalId)) {
+        next.delete(goalId);
+      } else {
+        next.add(goalId);
+      }
+      return next;
+    });
+  }, []);
+
+  const handleOpenGraphChildDraft = useCallback(
+    (parentGoalId: string) => {
+      const parentGoal = activeGoals.find((goal) => goal.id === parentGoalId);
+      if (!parentGoal) {
+        return;
+      }
+
+      setGraphStructureError(null);
+      setGraphChildDraft({
+        parentGoalId,
+        title: "",
+        horizonId: suggestChildHorizon(parentGoal.horizonId, horizons) || null,
+        domainId: parentGoal.domainId,
+      });
+      setExpandedGoalIds((current) => new Set(current).add(parentGoalId));
+      setIsGraphInspectorVisible(false);
+
+      if (selectedGoalId !== parentGoalId) {
+        onSelectGoal(parentGoalId);
+      }
+    },
+    [activeGoals, horizons, onSelectGoal, selectedGoalId],
+  );
+
+  const handleGraphChildDraftChange = useCallback((title: string) => {
+    setGraphChildDraft((current) => (current ? { ...current, title } : current));
+  }, []);
+
+  const handleGraphChildDraftCancel = useCallback(() => {
+    setGraphChildDraft(null);
+    setGraphStructureError(null);
+  }, []);
+
+  const handleGraphChildDraftSave = useCallback(async () => {
+    if (!graphChildDraft || !graphChildDraft.title.trim()) {
+      return;
+    }
+
+    try {
+      await createGoalMutation.mutateAsync({
+        title: graphChildDraft.title.trim(),
+        domainId: graphChildDraft.domainId,
+        horizonId: graphChildDraft.horizonId || null,
+        parentGoalId: graphChildDraft.parentGoalId,
+      });
+      setGraphChildDraft(null);
+      setGraphStructureError(null);
+      setExpandedGoalIds((current) => new Set(current).add(graphChildDraft.parentGoalId));
+    } catch (error) {
+      setGraphStructureError(error instanceof Error ? error.message : "Supporting goal could not be created.");
+    }
+  }, [createGoalMutation, graphChildDraft]);
+
+  const handleDropGoalOnGoal = useCallback(
+    async (targetGoalId: string, draggedGoalId: string) => {
+      if (targetGoalId === draggedGoalId) {
+        return;
+      }
+
+      const draggedGoal = activeGoals.find((goal) => goal.id === draggedGoalId);
+      if (!draggedGoal) {
+        return;
+      }
+
+      if (isGoalDescendant(activeGoals, draggedGoalId, targetGoalId)) {
+        setGraphStructureError("A goal cannot be moved under one of its own descendants.");
+        return;
+      }
+
+      if (draggedGoal.parentGoalId === targetGoalId) {
+        return;
+      }
+
+      try {
+        await updateGoalMutation.mutateAsync({
+          goalId: draggedGoalId,
+          parentGoalId: targetGoalId,
+        });
+        setGraphStructureError(null);
+        setExpandedGoalIds((current) => new Set(current).add(targetGoalId));
+      } catch (error) {
+        setGraphStructureError(error instanceof Error ? error.message : "Goal hierarchy could not be updated.");
+      }
+    },
+    [activeGoals, updateGoalMutation],
+  );
+
+  const handleDropGoalOnHorizon = useCallback(
+    async (horizonId: string | null, goalId: string) => {
+      const goal = activeGoals.find((item) => item.id === goalId);
+      if (!goal || goal.horizonId === horizonId) {
+        return;
+      }
+
+      try {
+        await updateGoalMutation.mutateAsync({
+          goalId,
+          horizonId,
+        });
+        setGraphStructureError(null);
+      } catch (error) {
+        setGraphStructureError(error instanceof Error ? error.message : "Goal layer could not be updated.");
+      }
+    },
+    [activeGoals, updateGoalMutation],
+  );
 
   const handlePlanningItemSave = useCallback(
     async (updates: { title: string; goalId: string | null; slot: PlanningSlot }) => {
@@ -1026,6 +1227,8 @@ export function GoalsPlanWorkspace({
       setPlanningDraft(null);
       setPlanningReplaceState(null);
       setPlanningError(null);
+      setGraphStructureError(null);
+      setIsGraphInspectorVisible(true);
 
       if (selectedGoalId !== goalId) {
         onSelectGoal(goalId);
@@ -1064,27 +1267,69 @@ export function GoalsPlanWorkspace({
     setIsGraphInspectorVisible(true);
   }, []);
 
-  const handleClearGraphFocus = useCallback(() => {
+  const handleEnterGraphFocusMode = useCallback(() => {
+    if (!selectedGoalId) {
+      return;
+    }
+    setIsGraphFocusMode(true);
+  }, [selectedGoalId]);
+
+  const handleExitGraphFocusMode = useCallback(() => {
+    setIsGraphFocusMode(false);
+  }, []);
+
+  const handleClearGraphSelection = useCallback(() => {
     clearPlanningUi();
-    setIsGraphInspectorVisible(true);
+    setGraphChildDraft(null);
+    setGraphStructureError(null);
+    setIsGraphInspectorVisible(false);
+    setIsGraphFocusMode(false);
 
     if (showChildForm) {
       onCancelChildForm();
     }
 
-    if (selectedGoalId) {
-      onSelectGoal(selectedGoalId);
-    }
-  }, [clearPlanningUi, onCancelChildForm, onSelectGoal, selectedGoalId, showChildForm]);
+    onClearSelectedGoal();
+  }, [clearPlanningUi, onCancelChildForm, onClearSelectedGoal, showChildForm]);
 
   const handleGraphPaneClear = useCallback(() => {
-    clearPlanningUi();
-    setIsGraphInspectorVisible(false);
+    setGraphStructureError(null);
 
     if (showChildForm) {
       onCancelChildForm();
+      setIsGraphInspectorVisible(false);
+      return;
     }
-  }, [clearPlanningUi, onCancelChildForm, showChildForm]);
+
+    if (isGraphInspectorVisible) {
+      setIsGraphInspectorVisible(false);
+      return;
+    }
+
+    if (
+      selectedGoalId ||
+      selectedPlanningSelection ||
+      planningDraft ||
+      planningReplaceState ||
+      graphChildDraft
+    ) {
+      clearPlanningUi();
+      setGraphChildDraft(null);
+      setIsGraphFocusMode(false);
+      onClearSelectedGoal();
+    }
+  }, [
+    clearPlanningUi,
+    graphChildDraft,
+    isGraphInspectorVisible,
+    onCancelChildForm,
+    onClearSelectedGoal,
+    planningDraft,
+    planningReplaceState,
+    selectedGoalId,
+    selectedPlanningSelection,
+    showChildForm,
+  ]);
 
   // Shared inspector content
   const inspectorContent = showChildForm && childFormParent ? (
@@ -1162,6 +1407,25 @@ export function GoalsPlanWorkspace({
     </div>
   );
 
+  const monthDockItems = getPlanningItems("month", weekPlan, monthPlan, todayAlignment).map((item) => ({
+    id: item.id,
+    slot: item.slot,
+    title: item.title,
+    goalId: item.goalId,
+  }));
+  const weekDockItems = getPlanningItems("week", weekPlan, monthPlan, todayAlignment).map((item) => ({
+    id: item.id,
+    slot: item.slot,
+    title: item.title,
+    goalId: item.goalId,
+  }));
+  const todayDockItems = getPlanningItems("today", weekPlan, monthPlan, todayAlignment).map((item) => ({
+    id: item.id,
+    slot: item.slot,
+    title: item.title,
+    goalId: item.goalId,
+  }));
+
   return (
     <div className={`ghq-plan-container${isGraphExpanded ? " ghq-plan-container--graph-expanded" : ""}`}>
       {/* Subview toggle */}
@@ -1235,17 +1499,28 @@ export function GoalsPlanWorkspace({
           <div className={`ghq-plan__graph${isGraphExpanded ? " ghq-plan__graph--expanded" : ""}`}>
             <GoalsPlanGraphView
               goals={goals}
-              domains={domains}
               horizons={horizons}
-              weekPlan={weekPlan}
-              monthPlan={monthPlan}
-              todayAlignment={todayAlignment}
+              monthItems={monthDockItems}
+              weekItems={weekDockItems}
+              todayItems={todayDockItems}
               selectedGoalId={selectedGoalId}
+              expandedGoalIds={expandedGoalIds}
+              isFocusMode={isGraphFocusMode}
+              childDraft={graphChildDraft}
+              childDraftIsPending={createGoalMutation.isPending}
               selectedPlanningSelection={selectedPlanningSelection}
               planningDraft={planningDraft}
               planningReplaceState={planningReplaceState}
               showTodayLane={showTodayLane}
+              structureError={graphStructureError}
               onSelectGoal={handleGraphSelectGoal}
+              onToggleExpanded={handleToggleGoalExpanded}
+              onOpenAddChild={handleOpenGraphChildDraft}
+              onDropGoalOnGoal={handleDropGoalOnGoal}
+              onDropGoalOnHorizon={handleDropGoalOnHorizon}
+              onChildDraftChange={handleGraphChildDraftChange}
+              onSaveChildDraft={handleGraphChildDraftSave}
+              onCancelChildDraft={handleGraphChildDraftCancel}
               onSelectPlanningSlot={handleGraphSelectPlanningSlot}
               onDropGoalOnSlot={handleGraphDropGoalOnSlot}
               onPlanningDraftChange={handlePlanningDraftChange}
@@ -1253,15 +1528,16 @@ export function GoalsPlanWorkspace({
               onCancelPlanningDraft={handlePlanningDraftCancel}
               onPlanningReplaceAction={handlePlanningReplaceAction}
               onCancelPlanningReplace={handlePlanningReplaceCancel}
-              onClearActiveSelection={handleGraphPaneClear}
-              onAddChild={handleGraphAddChild}
+              onToggleTodayLane={() => setShowTodayLane((current) => !current)}
+              onCanvasClear={handleGraphPaneClear}
               isExpanded={isGraphExpanded}
               isInspectorVisible={isGraphInspectorVisible}
               onShowInspector={handleShowInspector}
               onHideInspector={() => setIsGraphInspectorVisible(false)}
-              onClearGoalFocus={handleClearGraphFocus}
-              onToggleTodayLane={() => setShowTodayLane((current) => !current)}
-              onToggleExpanded={() => setIsGraphExpanded((current) => !current)}
+              onEnterFocusMode={handleEnterGraphFocusMode}
+              onExitFocusMode={handleExitGraphFocusMode}
+              onClearSelection={handleClearGraphSelection}
+              onToggleExpandedCanvas={() => setIsGraphExpanded((current) => !current)}
             />
 
             {isGraphInspectorVisible && (showChildForm || selectedGoalId || selectedPlanningSelection) && (
