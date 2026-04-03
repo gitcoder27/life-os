@@ -7,6 +7,8 @@ DOC_ROOT="/var/www/personal.daycommand.online"
 SERVICE_NAME="life-os.service"
 HEALTH_URL="http://127.0.0.1:3104/healthz"
 PRISMA_SCHEMA_PATH="server/prisma/schema.prisma"
+SERVER_ENV_FILE="server/.env.production"
+service_stopped=0
 
 cd "$REPO_ROOT"
 
@@ -17,6 +19,17 @@ log() {
 fail() {
   printf '[deploy] %s\n' "$1" >&2
   exit 1
+}
+
+restore_service_on_error() {
+  local exit_code=$?
+
+  if [[ $exit_code -ne 0 && $service_stopped -eq 1 ]]; then
+    printf '[deploy] Deploy failed after stopping the API service. Attempting to start it again.\n' >&2
+    sudo systemctl start "$SERVICE_NAME" || true
+  fi
+
+  exit "$exit_code"
 }
 
 wait_for_health() {
@@ -59,6 +72,8 @@ require_file "server/.env.production"
 require_file "client/.env.production"
 require_clean_git_state
 
+trap restore_service_on_error EXIT
+
 server_csrf_cookie="$(read_env_value "server/.env.production" "CSRF_COOKIE_NAME")"
 client_csrf_cookie="$(read_env_value "client/.env.production" "VITE_CSRF_COOKIE_NAME")"
 
@@ -81,8 +96,12 @@ npm run build
 
 log "Stopping API service"
 sudo systemctl stop "$SERVICE_NAME"
+service_stopped=1
 
 log "Applying production database migrations"
+set -a
+source "$SERVER_ENV_FILE"
+set +a
 npx prisma migrate deploy --schema "$PRISMA_SCHEMA_PATH"
 
 log "Publishing frontend bundle to nginx doc root"
@@ -90,6 +109,7 @@ sudo rsync -a --delete client/dist/ "$DOC_ROOT/"
 
 log "Starting API service"
 sudo systemctl start "$SERVICE_NAME"
+service_stopped=0
 
 log "Checking API health"
 wait_for_health
