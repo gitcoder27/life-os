@@ -136,7 +136,7 @@ export function GoalsPage() {
   }
 
   function handleSelectGoal(goalId: string) {
-    setSelectedGoalId(selectedGoalId === goalId ? null : goalId);
+    setSelectedGoalId(goalId);
     setShowChildForm(false);
   }
 
@@ -207,6 +207,7 @@ export function GoalsPage() {
           todayAlignment={todayAlignment}
           selectedGoalId={selectedGoalId}
           onSelectGoal={handleSelectGoal}
+          onClearSelectedGoal={() => setSelectedGoalId(null)}
           onOpenCreateGoal={openCreateGoal}
           onStartCreateChild={handleCreateChildFromPlan}
           showChildForm={showChildForm}
