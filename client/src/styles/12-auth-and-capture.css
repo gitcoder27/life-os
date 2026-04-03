@@ -20,6 +20,13 @@
   animation: scaleIn 0.5s var(--ease) both;
 }
 
+.auth-layout__panel--loading {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1rem;
+}
+
 .auth-layout__title {
   font-family: var(--font-display);
   font-size: clamp(1.8rem, 3.5vw, 2.4rem);
