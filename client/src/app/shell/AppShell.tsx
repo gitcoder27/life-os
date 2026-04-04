@@ -34,7 +34,7 @@ import {
 
 const SHELL_SIDEBAR_STORAGE_KEY = "lifeos:shell-sidebar";
 const SHELL_SIDEBAR_STORAGE_VERSION = 1;
-const COLLAPSED_TOOLTIP_DELAY_MS = 650;
+const COLLAPSED_TOOLTIP_DELAY_MS = 250;
 
 type StoredShellSidebarPreference = {
   version: 1;
@@ -168,9 +168,7 @@ export function AppShell() {
   }, [sidebarCollapsed]);
 
   useEffect(() => {
-    if (!sidebarCollapsed) {
-      setCollapsedTooltip(null);
-    }
+    setCollapsedTooltip(null);
   }, [sidebarCollapsed]);
 
   useEffect(() => () => {
@@ -237,12 +235,27 @@ export function AppShell() {
     setCollapsedTooltip(null);
   }, []);
 
-  const showCollapsedTooltip = useCallback((target: HTMLElement) => {
-    if (!sidebarCollapsed) {
-      return;
+  const getTooltipLabel = useCallback((target: HTMLElement) => {
+    const label = target.dataset.shellLabel;
+    const shortcut = target.dataset.shellShortcut;
+
+    if (sidebarCollapsed) {
+      if (label && shortcut) {
+        return `${label} · ${shortcut}`;
+      }
+
+      return label ?? null;
     }
 
-    const label = target.dataset.shellLabel;
+    if (shortcut) {
+      return `Shortcut: ${shortcut}`;
+    }
+
+    return null;
+  }, [sidebarCollapsed]);
+
+  const showCollapsedTooltip = useCallback((target: HTMLElement) => {
+    const label = getTooltipLabel(target);
     if (!label) {
       return;
     }
@@ -253,7 +266,7 @@ export function AppShell() {
       top: bounds.top + bounds.height / 2,
       left: bounds.right + 14,
     });
-  }, [sidebarCollapsed]);
+  }, [getTooltipLabel]);
 
   const queueCollapsedTooltip = useCallback((target: HTMLElement) => {
     hideCollapsedTooltip();
@@ -335,6 +348,7 @@ export function AppShell() {
             type="button"
             aria-label={sidebarCollapsed ? "Quick capture" : undefined}
             data-shell-label="Quick capture"
+            data-shell-shortcut="Ctrl+K / Cmd+K"
             onMouseEnter={handleCollapsedTooltipMouseEnter}
             onMouseLeave={hideCollapsedTooltip}
             onFocus={handleCollapsedTooltipFocus}
@@ -344,7 +358,6 @@ export function AppShell() {
               <CaptureIcon />
             </span>
             <span className="shell-sidebar__action-text">Quick capture</span>
-            <span className="kbd shell-sidebar__action-kbd">⌘K</span>
           </button>
           <NavLink
             to="/settings"
