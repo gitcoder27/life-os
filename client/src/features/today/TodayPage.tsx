@@ -16,6 +16,7 @@ import { ExecutionStream } from "./components/ExecutionStream";
 import { DailyEssentials } from "./components/DailyEssentials";
 import { RecoveryTray } from "./components/RecoveryTray";
 import { DayPlanner } from "./components/DayPlanner";
+import { DayNotes } from "./components/DayNotes";
 import { TodayTaskCaptureSheet } from "./components/TodayTaskCaptureSheet";
 import { buildPlannerExecutionModel } from "./helpers/planner-execution";
 import { getDayPhase } from "./helpers/day-phase";
@@ -358,6 +359,7 @@ export function TodayPage() {
               activeGoals={data.activeGoals}
               phase={phase}
             />
+            <DayNotes tasks={data.quickCaptureTasks} today={data.today} />
             <DailyEssentials
               currentDay={data.currentDay}
               phase={phase}

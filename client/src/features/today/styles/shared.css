@@ -1039,10 +1039,24 @@
 /* ── Day Notes ───────────────────────────────────────── */
 
 .today-day-notes {
-  padding: 0.7rem 0.85rem;
-  border-radius: var(--r);
-  border: 1px solid rgba(216,166,95,0.12);
-  background: linear-gradient(180deg, var(--panel-elevated), var(--panel));
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  padding-top: 0.15rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.today-day-notes__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.today-day-notes__count {
+  font-size: var(--fs-micro);
+  font-weight: 700;
+  color: var(--text-tertiary);
 }
 
 .today-day-notes__list {
@@ -1051,39 +1065,207 @@
   margin: 0;
   display: flex;
   flex-direction: column;
-  gap: 0.35rem;
+  gap: 0;
 }
 
 .today-day-note {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 0.75rem;
   align-items: center;
-  justify-content: space-between;
-  gap: 0.5rem;
-  padding: 0.3rem 0;
+  padding: 0.55rem 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.035);
   font-size: var(--fs-small);
+}
+
+.today-day-note--expanded {
+  align-items: start;
+}
+
+.today-day-note:last-child {
+  border-bottom: 0;
+}
+
+.today-day-note--done .today-day-note__text {
+  color: var(--text-tertiary);
+}
+
+.today-day-note__body {
+  display: block;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
 }
 
 .today-day-note__text {
   color: var(--text-secondary);
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  line-height: 1.5;
+  text-wrap: pretty;
 }
 
-.today-day-note__tag {
+.today-day-note__meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.today-day-note__manage {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font-size: var(--fs-small);
+  font-weight: 600;
+  cursor: pointer;
+  transition: color var(--dur-fast) var(--ease);
+}
+
+.today-day-note__manage:hover {
+  color: var(--accent-bright);
+}
+
+.today-day-note__kind,
+.today-day-note__status {
   font-size: var(--fs-micro);
   font-weight: 600;
   color: var(--text-tertiary);
-  padding: 0.1rem 0.4rem;
+  padding: 0.12rem 0.42rem;
   border-radius: var(--r-pill);
   background: rgba(255,255,255,0.04);
   flex-shrink: 0;
 }
 
-.today-day-note__tag--done {
+.today-day-note__kind--note {
+  color: #9fc2ff;
+  background: rgba(124, 161, 214, 0.12);
+}
+
+.today-day-note__kind--reminder {
+  color: var(--accent-bright);
+  background: rgba(217, 153, 58, 0.12);
+}
+
+.today-day-note__status--done {
   color: var(--positive);
   background: var(--positive-soft);
+}
+
+.today-day-note__editor {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  margin-top: 0.1rem;
+  padding: 0.15rem 0 0.05rem;
+}
+
+.today-day-note__input {
+  width: 100%;
+  min-height: 4.6rem;
+  resize: vertical;
+  padding: 0.7rem 0.8rem;
+  border-radius: var(--r-sm);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--text);
+  line-height: 1.55;
+}
+
+.today-day-note__input:focus {
+  outline: none;
+  border-color: var(--border-focus);
+  box-shadow: 0 0 0 3px rgba(217, 153, 58, 0.08);
+}
+
+.today-day-note__schedule {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  flex-wrap: wrap;
+}
+
+.today-day-note__chip {
+  padding: 0.22rem 0.55rem;
+  border-radius: var(--r-pill);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.025);
+  color: var(--text-secondary);
+  font-size: var(--fs-micro);
+  font-weight: 700;
+  cursor: pointer;
+  transition: all var(--dur-fast) var(--ease);
+}
+
+.today-day-note__chip:hover {
+  border-color: rgba(255, 255, 255, 0.16);
+  color: var(--text);
+}
+
+.today-day-note__chip--active {
+  border-color: rgba(217, 153, 58, 0.2);
+  background: var(--accent-soft);
+  color: var(--accent-bright);
+}
+
+.today-day-note__date-input {
+  font-size: var(--fs-small);
+  padding: 0.38rem 0.55rem;
+  border-radius: var(--r-xs);
+  border: 1px solid var(--border-active);
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--text);
+}
+
+.today-day-note__actions {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  flex-wrap: wrap;
+}
+
+.today-day-note__action {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-secondary);
+  font-size: var(--fs-small);
+  font-weight: 600;
+  cursor: pointer;
+  transition: color var(--dur-fast) var(--ease);
+}
+
+.today-day-note__action:hover {
+  color: var(--text);
+}
+
+.today-day-note__action--danger:hover {
+  color: var(--negative);
+}
+
+@media (max-width: 600px) {
+  .today-day-note {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .today-day-note__meta {
+    grid-column: 1 / 2;
+    justify-content: flex-start;
+  }
+
+  .today-day-note__manage {
+    grid-column: 2 / 3;
+  }
+
+  .today-day-note--expanded .today-day-note__manage {
+    align-self: start;
+  }
 }
 
 /* ── Goal Nudges ─────────────────────────────────────── */

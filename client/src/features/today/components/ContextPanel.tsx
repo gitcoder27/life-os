@@ -18,6 +18,7 @@ type HealthDay = {
 
 export function ContextPanel({
   currentDay,
+  today,
   timedTasks,
   quickCaptureTasks,
   goalNudges,
@@ -30,6 +31,7 @@ export function ContextPanel({
   onSwitchToPlanner,
 }: {
   currentDay: HealthDay | undefined;
+  today: string;
   timedTasks: TaskItem[];
   quickCaptureTasks: TaskItem[];
   goalNudges: GoalNudgeItem[];
@@ -55,7 +57,7 @@ export function ContextPanel({
       ) : (
         <TimeBlocks tasks={timedTasks} />
       )}
-      <DayNotes tasks={quickCaptureTasks} />
+      <DayNotes tasks={quickCaptureTasks} today={today} />
       <GoalNudges
         nudges={goalNudges}
         priorityDraft={priorityDraft}
