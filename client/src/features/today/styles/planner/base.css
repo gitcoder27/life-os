@@ -388,7 +388,7 @@ body.planner-dragging-cursor * {
   position: absolute;
   left: calc(100% + 12px);
   top: 50%;
-  width: 12rem;
+  width: var(--planner-guide-width, 12rem);
   height: 1px;
   background: rgba(255,255,255,0.045);
   pointer-events: none;
@@ -417,7 +417,7 @@ body.planner-dragging-cursor * {
   left: 0;
   right: 0;
   height: 2px;
-  z-index: 0;
+  z-index: 4;
   background: linear-gradient(90deg, rgba(217,153,58,0.92) 0%, rgba(217,153,58,0.24) 26%, rgba(217,153,58,0.08) 100%);
   box-shadow: 0 0 10px rgba(217,153,58,0.12);
   pointer-events: none;
@@ -557,4 +557,3 @@ body.planner-dragging-cursor * {
   margin-bottom: 1.25rem;
   opacity: 0.65;
 }
-

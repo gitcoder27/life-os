@@ -181,8 +181,15 @@ export const buildPlannerTimelineModel = (input: {
   const earliestBlockMinutes = blocks.length > 0 ? getFloorHour(blocks[0].startsAt) : preferredStartMinutes;
   const latestBlockMinutes =
     blocks.length > 0 ? getCeilHour(blocks[blocks.length - 1].endsAt) : preferredEndMinutes;
-  const renderedStartMinutes = Math.min(preferredStartMinutes, earliestBlockMinutes);
-  const renderedEndMinutes = Math.max(preferredEndMinutes, latestBlockMinutes);
+  const nowMinutes = input.now.getHours() * 60 + input.now.getMinutes();
+  const liveStartMinutes = input.isLiveDate
+    ? Math.floor(nowMinutes / 60) * 60
+    : preferredStartMinutes;
+  const liveEndMinutes = input.isLiveDate
+    ? Math.min(Math.ceil(nowMinutes / 60) * 60, 23 * 60 + 59)
+    : preferredEndMinutes;
+  const renderedStartMinutes = Math.min(preferredStartMinutes, earliestBlockMinutes, liveStartMinutes);
+  const renderedEndMinutes = Math.max(preferredEndMinutes, latestBlockMinutes, liveEndMinutes);
   const renderedRange = {
     startMinutes: renderedStartMinutes,
     endMinutes: renderedEndMinutes,
@@ -294,7 +301,6 @@ export const buildPlannerTimelineModel = (input: {
     return Math.round((minutes - renderedStartMinutes) * CALENDAR_PIXELS_PER_MINUTE);
   };
 
-  const nowMinutes = input.now.getHours() * 60 + input.now.getMinutes();
   const nowLinePercent =
     input.isLiveDate &&
     nowMinutes >= renderedStartMinutes &&

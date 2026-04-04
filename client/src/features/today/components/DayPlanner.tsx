@@ -93,7 +93,9 @@ export function DayPlanner({
   const [suppressedTaskId, setSuppressedTaskId] = useState<string | null>(null);
   const [disableDropAnimation, setDisableDropAnimation] = useState(false);
   const nowLineRef = useRef<HTMLDivElement | null>(null);
+  const timelineTrackRef = useRef<HTMLDivElement | null>(null);
   const hasAutoCenteredNowRef = useRef(false);
+  const [guideWidth, setGuideWidth] = useState<number | null>(null);
 
   const orderedBlocks = useMemo(() => sortPlannerBlocksByTime(blocks), [blocks]);
   const blockIndexMap = useMemo(
@@ -177,6 +179,33 @@ export function DayPlanner({
       behavior: "auto",
     });
   }, [isLiveDate, timeline.nowLinePx]);
+
+  useLayoutEffect(() => {
+    const timelineTrackElement = timelineTrackRef.current;
+    if (!timelineTrackElement) {
+      return;
+    }
+
+    const updateGuideWidth = () => {
+      setGuideWidth(Math.round(timelineTrackElement.getBoundingClientRect().width));
+    };
+
+    updateGuideWidth();
+
+    if (typeof ResizeObserver === "undefined") {
+      window.addEventListener("resize", updateGuideWidth);
+      return () => {
+        window.removeEventListener("resize", updateGuideWidth);
+      };
+    }
+
+    const resizeObserver = new ResizeObserver(() => updateGuideWidth());
+    resizeObserver.observe(timelineTrackElement);
+
+    return () => {
+      resizeObserver.disconnect();
+    };
+  }, [timeline.totalHeightPx, orderedBlocks.length, Boolean(formDraft)]);
 
   function openBlockForm(initialValues?: {
     title?: string;
@@ -565,7 +594,14 @@ export function DayPlanner({
             ) : null}
 
             {orderedBlocks.length > 0 || formDraft ? (
-              <div className="planner__timeline-area">
+              <div
+                className="planner__timeline-area"
+                style={
+                  guideWidth !== null
+                    ? ({ "--planner-guide-width": `${guideWidth}px` } as CSSProperties)
+                    : undefined
+                }
+              >
                 <div
                   className="planner__gutter"
                   aria-hidden="true"
@@ -593,6 +629,7 @@ export function DayPlanner({
                 </div>
 
                 <div
+                  ref={timelineTrackRef}
                   className="planner__timeline-track"
                   style={{ height: `${timeline.totalHeightPx}px` }}
                 >
