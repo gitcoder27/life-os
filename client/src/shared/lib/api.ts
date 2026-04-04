@@ -44,6 +44,13 @@ export {
   useHomeOverviewQuery,
   useHomeQuoteQuery,
 } from "./api/home";
+export type {
+  HomeAction,
+  HomeAttentionItem,
+  HomeDestination,
+  HomeGuidanceRecommendation,
+  HomeOverviewResponse,
+} from "./api/home";
 export {
   useCompleteOnboardingMutation,
   useOnboardingStateQuery,

@@ -16,6 +16,7 @@ import {
 import { AtRiskLane } from "./AtRiskLane";
 import { CommandBlock } from "./CommandBlock";
 import { EssentialsBand } from "./EssentialsBand";
+import { GuidanceRail } from "./GuidanceRail";
 import { SecondaryContext } from "./SecondaryContext";
 import { StatusStrip } from "./StatusStrip";
 import { TodayControl } from "./TodayControl";
@@ -93,20 +94,29 @@ export function HomePage() {
       />
 
       <div className="home-operator__core">
-        <CommandBlock
-          topPriority={topOpenPriority}
-          openTaskCount={openExecutionTasks.length}
-          nextTimedTask={
-            nextTimedTask
-              ? { title: nextTimedTask.title, timeLabel: formatTimeLabel(nextTimedTask.dueAt) }
-              : null
-          }
-          recovery={home.guidance.recovery}
-          phase={home.phase}
-          topScoreReason={topReasonLabel}
-        />
+        <div className="home-operator__main-stack">
+          <CommandBlock
+            topPriority={topOpenPriority}
+            openTaskCount={openExecutionTasks.length}
+            nextTimedTask={
+              nextTimedTask
+                ? { title: nextTimedTask.title, timeLabel: formatTimeLabel(nextTimedTask.dueAt) }
+                : null
+            }
+            recovery={null}
+            phase={home.phase}
+            topScoreReason={topReasonLabel}
+          />
+
+          <GuidanceRail
+            recovery={home.guidance.recovery}
+            weeklyChallenge={home.guidance.weeklyChallenge}
+            recommendations={home.guidance.recommendations}
+          />
+        </div>
 
         <AtRiskLane
+          sessionKey={home.date}
           radarItems={home.accountabilityRadar.items}
           attentionItems={home.attentionItems}
           overdueCount={home.accountabilityRadar.overdueTaskCount}
@@ -132,7 +142,7 @@ export function HomePage() {
       <SecondaryContext
         inboxItems={inboxItems.slice(0, 3)}
         inboxHasMore={inboxItems.length > 3}
-        weeklyChallenge={home.guidance.weeklyChallenge}
+        weeklyChallenge={null}
         quote={quoteQuery.data?.quote ?? null}
       />
     </div>

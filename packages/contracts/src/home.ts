@@ -88,16 +88,65 @@ export interface AttentionItem {
   kind: "task" | "habit" | "routine" | "finance" | "admin" | "review" | "notification";
   tone: "info" | "warning" | "urgent";
   detail?: string;
-  action:
-    | {
-        type: "open_review";
-        route: string;
-      }
-    | {
-        type: "open_route";
-        route: string;
-      };
+  dismissible?: boolean;
+  action: HomeAction;
 }
+
+export type HomeDestination =
+  | {
+      kind: "today_planning";
+      date: IsoDateString;
+    }
+  | {
+      kind: "today_execute";
+      priorityId?: EntityId | null;
+      taskId?: EntityId | null;
+    }
+  | {
+      kind: "today_overdue";
+      taskId?: EntityId | null;
+    }
+  | {
+      kind: "inbox_triage";
+    }
+  | {
+      kind: "habit_focus";
+      habitId?: EntityId | null;
+      surface: "due_today" | "weekly_challenge";
+    }
+  | {
+      kind: "health_focus";
+      surface: "water" | "meals" | "workout" | "patterns";
+    }
+  | {
+      kind: "finance_bills";
+      adminItemId?: EntityId | null;
+      section: "due_now" | "pending_bills";
+    }
+  | {
+      kind: "goal_plan";
+      goalId?: EntityId | null;
+      mode: "overview" | "plan";
+    }
+  | {
+      kind: "review";
+      cadence: "daily" | "weekly" | "monthly";
+      date: IsoDateString;
+    };
+
+export type HomeAction =
+  | {
+      type: "open_review";
+      route: string;
+    }
+  | {
+      type: "open_route";
+      route: string;
+    }
+  | {
+      type: "open_destination";
+      destination: HomeDestination;
+    };
 
 export interface HomeNotificationItem {
   id: EntityId;
@@ -119,7 +168,7 @@ export interface HomeGuidanceRecommendation {
   title: string;
   detail: string;
   impactLabel: string;
-  action: AttentionItem["action"];
+  action: HomeAction;
 }
 
 export interface HomeGuidance {

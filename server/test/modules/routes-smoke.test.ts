@@ -1596,6 +1596,7 @@ describe("module route smoke tests", () => {
       }),
     } as any;
     prisma.workoutDay = { findUnique: vi.fn().mockResolvedValue(null) } as any;
+    prisma.dayPlannerBlock = { count: vi.fn().mockResolvedValue(0) } as any;
     prisma.routineItem = { findMany: vi.fn().mockResolvedValue([]) } as any;
 
     const response = await app!.inject({ method: "GET", url: "/api/home/overview?date=2026-03-14" });
@@ -1647,11 +1648,16 @@ describe("module route smoke tests", () => {
     );
     expect(payload.attentionItems[0]).toEqual(
       expect.objectContaining({
-        kind: "task",
-        action: {
-          type: "open_route",
-          route: "/today",
-        },
+        kind: "admin",
+        dismissible: true,
+        action: expect.objectContaining({
+          type: "open_destination",
+          destination: expect.objectContaining({
+            kind: "finance_bills",
+            adminItemId: "admin-1",
+            section: "due_now",
+          }),
+        }),
       }),
     );
     expect(payload.guidance.weeklyChallenge).toEqual(
@@ -1669,7 +1675,15 @@ describe("module route smoke tests", () => {
     );
     expect(payload.guidance.recommendations[0]).toEqual(
       expect.objectContaining({
-        kind: "habit",
+        id: "planning-gap:2026-03-14",
+        kind: "priority",
+        action: expect.objectContaining({
+          type: "open_destination",
+          destination: expect.objectContaining({
+            kind: "today_planning",
+            date: "2026-03-14",
+          }),
+        }),
       }),
     );
     expect(prisma.recurrenceRule.findMany).toHaveBeenCalled();
@@ -1776,6 +1790,7 @@ describe("module route smoke tests", () => {
     prisma.waterLog = { findMany: vi.fn().mockResolvedValue([]) } as any;
     prisma.mealLog = { findMany: vi.fn().mockResolvedValue([]) } as any;
     prisma.workoutDay = { findUnique: vi.fn().mockResolvedValue(null) } as any;
+    prisma.dayPlannerBlock = { count: vi.fn().mockResolvedValue(0) } as any;
     prisma.expense = { findMany: vi.fn().mockResolvedValue([]) } as any;
     prisma.adminItem = { findMany: vi.fn().mockResolvedValue([]) } as any;
     prisma.notification = { findMany: vi.fn().mockResolvedValue([]) } as any;

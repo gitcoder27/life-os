@@ -5,6 +5,7 @@ import { ChallengeProgressRing } from "./ChallengeProgressRing";
 
 type SignalsSectionProps = {
   weeklyChallenge: WeeklyChallenge;
+  highlightWeeklyChallenge?: boolean;
   isMomentumError: boolean;
   momentumErrorMessage?: string;
   onRetry: () => void;
@@ -12,6 +13,7 @@ type SignalsSectionProps = {
 
 export function SignalsSection({
   weeklyChallenge,
+  highlightWeeklyChallenge = false,
   isMomentumError,
   momentumErrorMessage,
   onRetry,
@@ -19,7 +21,10 @@ export function SignalsSection({
   return (
     <div className="habits-signals">
       {weeklyChallenge ? (
-        <WeeklyChallengeCard weeklyChallenge={weeklyChallenge} />
+        <WeeklyChallengeCard
+          weeklyChallenge={weeklyChallenge}
+          highlight={highlightWeeklyChallenge}
+        />
       ) : null}
 
       {isMomentumError ? (
@@ -34,16 +39,28 @@ export function SignalsSection({
 
 function WeeklyChallengeCard({
   weeklyChallenge,
+  highlight = false,
 }: {
   weeklyChallenge: NonNullable<WeeklyChallenge>;
+  highlight?: boolean;
 }) {
   const isDueAndIncomplete =
     weeklyChallenge.status === "due_today" && !weeklyChallenge.completedToday;
 
   return (
     <div
+      id="habits-weekly-challenge"
       className={`challenge-card${weeklyChallenge.status === "behind" ? " challenge-card--behind" : ""}`}
-      style={{ cursor: "default" }}
+      style={{
+        cursor: "default",
+        ...(highlight
+          ? {
+              borderColor: "rgba(217, 153, 58, 0.4)",
+              boxShadow: "0 0 0 1px rgba(217, 153, 58, 0.25)",
+              background: "rgba(217, 153, 58, 0.06)",
+            }
+          : {}),
+      }}
     >
       <ChallengeProgressRing
         completions={weeklyChallenge.weekCompletions}

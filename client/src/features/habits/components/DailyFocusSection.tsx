@@ -8,6 +8,7 @@ type DailyFocusSectionProps = {
   allHabits: HabitItem[];
   dueHabits: DueHabit[];
   activeRoutines: Routine[];
+  highlightedHabitId?: string | null;
   dueCompletedUnits: number;
   dueTargetUnits: number;
   isHabitCheckinPending: boolean;
@@ -24,6 +25,7 @@ export function DailyFocusSection({
   allHabits,
   dueHabits,
   activeRoutines,
+  highlightedHabitId = null,
   dueCompletedUnits,
   dueTargetUnits,
   isHabitCheckinPending,
@@ -36,10 +38,11 @@ export function DailyFocusSection({
   onRestDay,
 }: DailyFocusSectionProps) {
   return (
-    <div className="habits-daily">
+    <div className="habits-daily" id="habits-daily-focus">
       <DueHabitsGroup
         allHabits={allHabits}
         dueHabits={dueHabits}
+        highlightedHabitId={highlightedHabitId}
         dueCompletedUnits={dueCompletedUnits}
         dueTargetUnits={dueTargetUnits}
         isHabitCheckinPending={isHabitCheckinPending}
@@ -75,6 +78,7 @@ export function DailyFocusSection({
 type DueHabitsGroupProps = {
   allHabits: HabitItem[];
   dueHabits: DueHabit[];
+  highlightedHabitId?: string | null;
   dueCompletedUnits: number;
   dueTargetUnits: number;
   isHabitCheckinPending: boolean;
@@ -87,6 +91,7 @@ type DueHabitsGroupProps = {
 function DueHabitsGroup({
   allHabits,
   dueHabits,
+  highlightedHabitId = null,
   dueCompletedUnits,
   dueTargetUnits,
   isHabitCheckinPending,
@@ -115,7 +120,16 @@ function DueHabitsGroup({
             return (
               <div
                 key={habit.id}
+                id={`habits-focus-${habit.id}`}
+                data-habit-id={habit.id}
                 className={`habits-check-row habits-check-row--habit${riskLevel === "at_risk" ? " habits-check-row--at-risk" : riskLevel === "drifting" ? " habits-check-row--drifting" : ""}`}
+                style={highlightedHabitId === habit.id
+                  ? {
+                      borderColor: "rgba(217, 153, 58, 0.4)",
+                      boxShadow: "0 0 0 1px rgba(217, 153, 58, 0.25)",
+                      background: "rgba(217, 153, 58, 0.06)",
+                    }
+                  : undefined}
               >
                 <button
                   className={`habits-check-row__box${habit.completedToday ? " habits-check-row__box--done" : ""}`}

@@ -370,6 +370,11 @@ async function buildHomeOverview(
     !isHabitPermanentlyInactive(habit) &&
     isHabitDueOnIsoDate(resolveHabitRecurrence(habit, targetIsoDate), targetIsoDate, habit.pauseWindows),
   );
+  const plannerBlockCount = await app.prisma.dayPlannerBlock.count({
+    where: {
+      planningCycleId: dayCycle.id,
+    },
+  });
   const completedHabits = dueHabits.filter((habit) =>
     isHabitCompletedOnIsoDate(
       recentHabitCheckins.filter((checkin) => checkin.habitId === habit.id),
@@ -479,37 +484,6 @@ async function buildHomeOverview(
   };
 
   const attentionItems: AttentionItem[] = [];
-  const incompleteTask = tasks.find((task) => task.status === "PENDING");
-  if (incompleteTask) {
-    attentionItems.push({
-      id: incompleteTask.id,
-      title: `Task still open: ${incompleteTask.title}`,
-      kind: "task",
-      tone: "warning",
-      detail: "Open Today to finish it, move it, or drop it.",
-      action: {
-        type: "open_route",
-        route: "/today",
-      },
-    });
-  }
-  const missedHabit = dueHabits.find(
-    (habit) =>
-      !recentHabitCheckins.some((checkin) => checkin.habitId === habit.id && checkin.status === "COMPLETED"),
-  );
-  if (missedHabit) {
-    attentionItems.push({
-      id: missedHabit.id,
-      title: `Habit due: ${missedHabit.title}`,
-      kind: "habit",
-      tone: "warning",
-      detail: "Open Habits to keep the streak alive.",
-      action: {
-        type: "open_route",
-        route: "/habits",
-      },
-    });
-  }
   const now = new Date();
   const openDailyReviewRoute =
     targetIsoDate === currentIsoDate ? getOpenDailyReviewRoute(now, preferences) : null;
@@ -525,20 +499,6 @@ async function buildHomeOverview(
         })
     : null;
   const dailyReviewAvailable = Boolean(openDailyReviewRoute && openDailyReviewCycle && !openDailyReviewCycle.dailyReview);
-
-  if (dailyReviewAvailable && openDailyReviewRoute) {
-    attentionItems.push({
-      id: `review-${openDailyReviewDate}`,
-      title: "Complete your daily review",
-      kind: "review",
-      tone: "warning",
-      detail: "Close the day and seed tomorrow's priorities.",
-      action: {
-        type: "open_review",
-        route: openDailyReviewRoute,
-      },
-    });
-  }
   for (const item of todayAdminItems.slice(0, 2)) {
     attentionItems.push({
       id: item.id,
@@ -546,9 +506,33 @@ async function buildHomeOverview(
       kind: "admin",
       tone: "urgent",
       detail: "Open Finance to handle the bill or admin item.",
+      dismissible: true,
       action: {
-        type: "open_route",
-        route: "/finance",
+        type: "open_destination",
+        destination: {
+          kind: "finance_bills",
+          adminItemId: item.id,
+          section: "due_now",
+        },
+      },
+    });
+  }
+  const upcomingAdminItem = monthlyPendingAdminItems.find((item) => toIsoDateString(item.dueOn) > targetIsoDate);
+  if (todayAdminItems.length === 0 && upcomingAdminItem) {
+    attentionItems.push({
+      id: `upcoming-admin:${upcomingAdminItem.id}`,
+      title: upcomingAdminItem.title,
+      kind: "finance",
+      tone: "warning",
+      detail: `Upcoming on ${toIsoDateString(upcomingAdminItem.dueOn)}.`,
+      dismissible: true,
+      action: {
+        type: "open_destination",
+        destination: {
+          kind: "finance_bills",
+          adminItemId: upcomingAdminItem.id,
+          section: "pending_bills",
+        },
       },
     });
   }
@@ -617,6 +601,18 @@ async function buildHomeOverview(
       status:
         task.status === "COMPLETED" ? "completed" : task.status === "DROPPED" ? "dropped" : "pending",
     })),
+    planning: {
+      date: targetIsoDate,
+      hasPlannerBlocks: plannerBlockCount > 0,
+      pendingPriorityCount: dayCycle.priorities.filter((priority) => priority.status !== "COMPLETED" && priority.status !== "DROPPED").length,
+      openTaskCount: tasks.filter((task) => task.status === "PENDING").length,
+    },
+    accountability: {
+      staleInboxCount: staleInboxTasks.length,
+      staleInboxTaskId: staleInboxTasks[0]?.id ?? null,
+      overdueTaskCount: overdueTasks.length,
+      overdueTaskId: overdueTasks[0]?.id ?? null,
+    },
     weeklyChallenge,
     dailyReviewAvailable,
     dailyReviewRoute: dailyReviewAvailable ? openDailyReviewRoute : null,
