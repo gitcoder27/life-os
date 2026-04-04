@@ -86,81 +86,111 @@ export function AtRiskLane({
     [attentionItems, dismissedIds],
   );
   const totalRisks = overdueCount + staleInboxCount + visibleAttentionItems.length;
-
-  if (totalRisks === 0) return null;
+  const isClear = totalRisks === 0;
 
   return (
-    <div className="at-risk-lane">
+    <div
+      className={`at-risk-lane${isClear ? " at-risk-lane--clear" : ""}`}
+      data-state={isClear ? "clear" : "active"}
+    >
       <div className="at-risk-lane__header">
         <h3 className="section-label">At Risk</h3>
-        <span className="at-risk-lane__count">{totalRisks}</span>
+        <span className={`at-risk-lane__count${isClear ? " at-risk-lane__count--clear" : ""}`}>
+          {totalRisks}
+        </span>
       </div>
 
-      <div className="at-risk-lane__summary">
-        {overdueCount > 0 ? (
-          <Link to="/today?view=overdue" className="risk-badge risk-badge--overdue">
-            <span className="risk-badge__count">{overdueCount}</span>
-            <span className="risk-badge__label">overdue task{overdueCount !== 1 ? "s" : ""}</span>
-          </Link>
-        ) : null}
-        {staleInboxCount > 0 ? (
-          <Link to="/inbox" className="risk-badge risk-badge--stale">
-            <span className="risk-badge__count">{staleInboxCount}</span>
-            <span className="risk-badge__label">stale inbox</span>
-          </Link>
-        ) : null}
-      </div>
-
-      <div className="at-risk-lane__items">
-        {radarItems.slice(0, 3).map((item) => (
-          <Link
-            key={item.id}
-            to={radarRoute(item.kind, item.id)}
-            className="risk-row"
-          >
-            <span className="risk-row__title">
-              {item.kind === "stale_inbox"
-                ? getQuickCaptureDisplayText(
-                    { kind: item.taskKind, notes: item.notes, reminderAt: item.reminderAt },
-                    item.title,
-                  )
-                : item.title}
-            </span>
-            <span className="risk-row__detail">{item.label}</span>
-          </Link>
-        ))}
-
-        {visibleAttentionItems.slice(0, 3).map((item) => {
-          const target = resolveHomeActionTarget(item.action);
-
-          return (
-            <div key={item.id} className="risk-row-shell">
-              <Link
-                to={target.to}
-                state={target.state}
-                className={`risk-row risk-row--${item.tone}`}
-              >
-                <span className="risk-row__title">{item.title}</span>
-                {item.detail ? (
-                  <span className="risk-row__detail">{item.detail}</span>
-                ) : null}
-              </Link>
-
-              {item.dismissible ? (
-                <button
-                  className="risk-row__dismiss"
-                  type="button"
-                  onClick={() => {
-                    setDismissedIds((current) => current.includes(item.id) ? current : [...current, item.id]);
-                  }}
-                >
-                  Dismiss
-                </button>
-              ) : null}
+      {isClear ? (
+        <div className="risk-clear-state">
+          <div className="risk-clear-state__hero">
+            <span className="risk-clear-state__halo" aria-hidden="true" />
+            <div className="risk-clear-state__copy">
+              <span className="risk-clear-state__eyebrow">All clear</span>
+              <p className="risk-clear-state__title">Nothing is slipping right now.</p>
+              <p className="risk-clear-state__detail">
+                No overdue tasks, no stale inbox backlog, and no urgent admin follow-up for today.
+              </p>
             </div>
-          );
-        })}
-      </div>
+          </div>
+
+          <div className="risk-clear-state__actions">
+            <Link to="/today" className="risk-clear-state__link">
+              Review Today
+            </Link>
+            <Link to="/inbox" className="risk-clear-state__link risk-clear-state__link--secondary">
+              Check Inbox
+            </Link>
+          </div>
+        </div>
+      ) : (
+        <>
+          <div className="at-risk-lane__summary">
+            {overdueCount > 0 ? (
+              <Link to="/today?view=overdue" className="risk-badge risk-badge--overdue">
+                <span className="risk-badge__count">{overdueCount}</span>
+                <span className="risk-badge__label">overdue task{overdueCount !== 1 ? "s" : ""}</span>
+              </Link>
+            ) : null}
+            {staleInboxCount > 0 ? (
+              <Link to="/inbox" className="risk-badge risk-badge--stale">
+                <span className="risk-badge__count">{staleInboxCount}</span>
+                <span className="risk-badge__label">stale inbox</span>
+              </Link>
+            ) : null}
+          </div>
+
+          <div className="at-risk-lane__items">
+            {radarItems.slice(0, 3).map((item) => (
+              <Link
+                key={item.id}
+                to={radarRoute(item.kind, item.id)}
+                className="risk-row"
+              >
+                <span className="risk-row__title">
+                  {item.kind === "stale_inbox"
+                    ? getQuickCaptureDisplayText(
+                        { kind: item.taskKind, notes: item.notes, reminderAt: item.reminderAt },
+                        item.title,
+                      )
+                    : item.title}
+                </span>
+                <span className="risk-row__detail">{item.label}</span>
+              </Link>
+            ))}
+
+            {visibleAttentionItems.slice(0, 3).map((item) => {
+              const target = resolveHomeActionTarget(item.action);
+
+              return (
+                <div key={item.id} className="risk-row-shell">
+                  <Link
+                    to={target.to}
+                    state={target.state}
+                    className={`risk-row risk-row--${item.tone}`}
+                  >
+                    <span className="risk-row__title">{item.title}</span>
+                    {item.detail ? (
+                      <span className="risk-row__detail">{item.detail}</span>
+                    ) : null}
+                  </Link>
+
+                  {item.dismissible ? (
+                    <button
+                      className="risk-row__dismiss"
+                      type="button"
+                      onClick={() => {
+                        setDismissedIds((current) => current.includes(item.id) ? current : [...current, item.id]);
+                      }}
+                    >
+                      Dismiss
+                    </button>
+                  ) : null}
+                </div>
+              );
+            })}
+          </div>
+        </>
+      )}
     </div>
   );
 }

@@ -32,6 +32,17 @@ type SecondaryContextProps = {
   quote: Quote | null;
 };
 
+function formatInboxKindLabel(kind: InboxItem["kind"]) {
+  if (kind === "reminder") return "Reminder";
+  if (kind === "note") return "Note";
+  return "Task";
+}
+
+function formatInboxPreview(item: InboxItem) {
+  const text = getQuickCaptureDisplayText(item, item.title).replace(/\s+/g, " ").trim();
+  return text.length > 78 ? `${text.slice(0, 77).trimEnd()}…` : text;
+}
+
 export function SecondaryContext({
   inboxItems,
   inboxHasMore,
@@ -47,17 +58,33 @@ export function SecondaryContext({
   return (
     <div className="secondary-context">
       {hasInbox ? (
-        <Link to="/inbox" className="secondary-context__block">
+        <Link to="/inbox" className="secondary-context__block secondary-context__block--inbox">
           <div className="secondary-context__header">
             <span className="section-label section-label--small">Inbox</span>
             <span className="secondary-context__count">{inboxItems.length}{inboxHasMore ? "+" : ""}</span>
           </div>
-          <div className="secondary-context__list">
+          <p className="secondary-context__intro">
+            Recent captures waiting for triage.
+          </p>
+          <div className="secondary-context__list secondary-context__list--inbox">
             {inboxItems.map((item) => (
-              <span key={item.id} className="secondary-context__item">
-                {getQuickCaptureDisplayText(item, item.title)}
+              <span key={item.id} className="secondary-context__inbox-row">
+                <span
+                  className={`secondary-context__inbox-kind secondary-context__inbox-kind--${item.kind}`}
+                >
+                  {formatInboxKindLabel(item.kind)}
+                </span>
+                <span className="secondary-context__inbox-text">
+                  {formatInboxPreview(item)}
+                </span>
               </span>
             ))}
+          </div>
+          <div className="secondary-context__footer">
+            <span className="secondary-context__footer-copy">
+              {inboxHasMore ? "More items waiting in Inbox." : "Open Inbox for the full queue."}
+            </span>
+            <span className="secondary-context__footer-link">Open Inbox</span>
           </div>
         </Link>
       ) : null}
