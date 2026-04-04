@@ -1,6 +1,7 @@
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -8,7 +9,7 @@ import {
   type FocusEvent,
   type MouseEvent,
 } from "react";
-import { NavLink, Outlet } from "react-router-dom";
+import { NavLink, Outlet, useLocation, useNavigationType } from "react-router-dom";
 import { createPortal } from "react-dom";
 
 import { QuickCaptureSheet } from "../../features/capture/QuickCaptureSheet";
@@ -113,6 +114,8 @@ const formatGreetingName = (displayName?: string | null, email?: string | null) 
 };
 
 export function AppShell() {
+  const location = useLocation();
+  const navigationType = useNavigationType();
   const [captureOpen, setCaptureOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => readStoredShellSidebarPreference());
@@ -217,6 +220,14 @@ export function AppShell() {
       window.removeEventListener("resize", dismissTooltip);
     };
   }, [collapsedTooltip]);
+
+  useLayoutEffect(() => {
+    if (navigationType === "POP") {
+      return;
+    }
+
+    window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+  }, [location.pathname, navigationType]);
 
   const hideCollapsedTooltip = useCallback(() => {
     if (collapsedTooltipTimeoutRef.current !== null) {
