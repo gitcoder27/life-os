@@ -15,6 +15,52 @@ type SnoozeMenuProps = {
   onSnooze: (notificationId: string, preset: SnoozePreset) => void;
 };
 
+const CheckIcon = () => (
+  <svg viewBox="0 0 16 16" aria-hidden="true">
+    <path
+      d="M3.5 8.5 6.5 11.5 12.5 4.5"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  </svg>
+);
+
+const DismissIcon = () => (
+  <svg viewBox="0 0 16 16" aria-hidden="true">
+    <path
+      d="M4 4 12 12M12 4 4 12"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+    />
+  </svg>
+);
+
+const ClockIcon = () => (
+  <svg viewBox="0 0 16 16" aria-hidden="true">
+    <circle
+      cx="8"
+      cy="8"
+      r="5.5"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.4"
+    />
+    <path
+      d="M8 5.1v3.2l2.2 1.3"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.4"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  </svg>
+);
+
 const SnoozeMenu = ({
   isPending,
   notificationId,
@@ -26,20 +72,22 @@ const SnoozeMenu = ({
   if (!open) {
     return (
       <button
-        className="button button--ghost button--small"
+        className="notif-utility-btn"
         type="button"
         onClick={() => setOpen(true)}
         disabled={isPending}
       >
-        Snooze
+        <span className="notif-utility-btn__icon"><ClockIcon /></span>
+        Later
       </button>
     );
   }
 
   return (
-    <div className="notif-snooze-group">
+    <div className="notif-snooze-menu" role="group" aria-label="Snooze notification">
+      <span className="notif-snooze-menu__label">Later</span>
       <button
-        className="button button--ghost button--small notif-snooze-btn"
+        className="notif-snooze-menu__option"
         type="button"
         disabled={isPending}
         onClick={() => {
@@ -51,7 +99,7 @@ const SnoozeMenu = ({
       </button>
       {tonightAvailable ? (
         <button
-          className="button button--ghost button--small notif-snooze-btn"
+          className="notif-snooze-menu__option"
           type="button"
           disabled={isPending}
           onClick={() => {
@@ -63,7 +111,7 @@ const SnoozeMenu = ({
         </button>
       ) : null}
       <button
-        className="button button--ghost button--small notif-snooze-btn"
+        className="notif-snooze-menu__option"
         type="button"
         disabled={isPending}
         onClick={() => {
@@ -74,12 +122,12 @@ const SnoozeMenu = ({
         Tomorrow
       </button>
       <button
-        className="button button--ghost button--small"
+        className="notif-snooze-menu__cancel"
         type="button"
         onClick={() => setOpen(false)}
         aria-label="Cancel snooze"
       >
-        ✕
+        <DismissIcon />
       </button>
     </div>
   );
@@ -108,6 +156,7 @@ export const NotificationActionCard = ({
 }: NotificationActionCardProps) => {
   const route = resolveEntityRoute(item.entityType, item.entityId);
   const isUnread = !item.read;
+  const actionLabel = resolveActionLabel(item.entityType);
 
   return (
     <div
@@ -123,48 +172,57 @@ export const NotificationActionCard = ({
 
       <div className="notif-action-card__body">
         <div className="notif-action-card__top">
-          <span className={`notif-category-badge notif-category-badge--${item.notificationType}`}>
-            {CATEGORY_LABELS[item.notificationType]}
-          </span>
-          <span className="notif-action-card__title">{item.title}</span>
+          <div className="notif-action-card__meta">
+            <span className={`notif-category-badge notif-category-badge--${item.notificationType}`}>
+              {CATEGORY_LABELS[item.notificationType]}
+            </span>
+            {isUnread ? <span className="notif-action-card__status">New</span> : null}
+          </div>
           <span className="notif-action-card__time">{formatNotificationTime(item.createdAt)}</span>
         </div>
 
+        <div className="notif-action-card__title">{item.title}</div>
         <div className="notif-action-card__text">{item.body}</div>
 
-        <div className="notif-action-card__actions">
+        <div className="notif-action-card__footer">
           {route ? (
             <button
-              className="button button--primary button--small"
+              className="notif-action-card__primary"
               type="button"
               onClick={onOpen}
             >
-              {resolveActionLabel(item.entityType)}
+              {actionLabel}
             </button>
           ) : null}
-          {isUnread ? (
+          <div className="notif-action-card__actions">
+            {isUnread ? (
+              <button
+                className="notif-utility-btn"
+                type="button"
+                onClick={onMarkRead}
+                disabled={isMarkingRead}
+                aria-label="Mark notification as read"
+              >
+                <span className="notif-utility-btn__icon"><CheckIcon /></span>
+                Read
+              </button>
+            ) : null}
+            <SnoozeMenu
+              notificationId={item.id}
+              onSnooze={onSnooze}
+              isPending={isSnoozing}
+            />
             <button
-              className="button button--ghost button--small"
+              className="notif-utility-btn notif-utility-btn--danger"
               type="button"
-              onClick={onMarkRead}
-              disabled={isMarkingRead}
+              onClick={onDismiss}
+              disabled={isDismissing}
+              aria-label="Dismiss notification"
             >
-              Mark read
+              <span className="notif-utility-btn__icon"><DismissIcon /></span>
+              Dismiss
             </button>
-          ) : null}
-          <SnoozeMenu
-            notificationId={item.id}
-            onSnooze={onSnooze}
-            isPending={isSnoozing}
-          />
-          <button
-            className="button button--ghost button--small"
-            type="button"
-            onClick={onDismiss}
-            disabled={isDismissing}
-          >
-            Dismiss
-          </button>
+          </div>
         </div>
       </div>
     </div>

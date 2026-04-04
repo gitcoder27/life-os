@@ -22,6 +22,10 @@ const reviewsMock = {
   submitMonthlyReview: vi.fn(),
 };
 
+const notificationServiceMock = {
+  generateRuleNotificationsForUser: vi.fn(),
+};
+
 vi.mock("../../src/modules/scoring/service.js", () => ({
   calculateDailyScore: (...args: unknown[]) => scoringMock.calculateDailyScore(...args),
   getWeeklyMomentum: (...args: unknown[]) => scoringMock.getWeeklyMomentum(...args),
@@ -37,6 +41,15 @@ vi.mock("../../src/modules/reviews/service.js", () => ({
   getMonthlyReviewModel: (...args: unknown[]) => reviewsMock.getMonthlyReviewModel(...args),
   submitMonthlyReview: (...args: unknown[]) => reviewsMock.submitMonthlyReview(...args),
 }));
+vi.mock("../../src/modules/notifications/service.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../src/modules/notifications/service.js")>();
+
+  return {
+    ...actual,
+    generateRuleNotificationsForUser: (...args: unknown[]) =>
+      notificationServiceMock.generateRuleNotificationsForUser(...args),
+  };
+});
 
 const testEnv = {
   NODE_ENV: "test",
@@ -238,6 +251,10 @@ describe("module route smoke tests", () => {
       existingReview: null,
       generatedAt: new Date().toISOString(),
     } as any);
+    notificationServiceMock.generateRuleNotificationsForUser.mockResolvedValue({
+      created: 0,
+      skippedExisting: 0,
+    });
     scoringMock.getWeeklyMomentum.mockResolvedValue({
       endingOn: "2026-03-14",
       value: 70,
@@ -1024,6 +1041,12 @@ describe("module route smoke tests", () => {
 
     const response = await app!.inject({ method: "GET", url: "/api/notifications" });
     expect(response.statusCode).toBe(200);
+    expect(notificationServiceMock.generateRuleNotificationsForUser).toHaveBeenCalledTimes(1);
+    const [calledPrisma, calledUserId, calledNow] =
+      notificationServiceMock.generateRuleNotificationsForUser.mock.calls[0] ?? [];
+    expect(calledPrisma).toBe(prisma);
+    expect(calledUserId).toBe(authenticatedUser.id);
+    expect(calledNow).toBeInstanceOf(Date);
   });
 
   it("serves settings profile", async () => {
@@ -2610,6 +2633,34 @@ describe("module route smoke tests", () => {
 
     expect(read.statusCode).toBe(200);
     expect(dismiss.statusCode).toBe(200);
+  });
+
+  it("dismisses all active notifications", async () => {
+    prisma.notification = {
+      updateMany: vi.fn().mockResolvedValue({
+        count: 4,
+      }),
+    } as any;
+
+    const response = await app!.inject({ method: "POST", url: "/api/notifications/dismiss-all" });
+
+    expect(response.statusCode).toBe(200);
+    expect(prisma.notification.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          userId: authenticatedUser.id,
+          dismissedAt: null,
+        }),
+        data: expect.objectContaining({
+          dismissedAt: expect.any(Date),
+        }),
+      }),
+    );
+    expect(JSON.parse(response.body)).toEqual(
+      expect.objectContaining({
+        dismissedCount: 4,
+      }),
+    );
   });
 
   it("snoozes notifications", async () => {

@@ -51,12 +51,18 @@ type NotificationMutationResponse = {
   notification: NotificationItem;
 };
 
+type NotificationBulkDismissResponse = {
+  generatedAt: string;
+  dismissedCount: number;
+};
+
 export type SnoozePreset = "one_hour" | "tonight" | "tomorrow";
 
 export const useNotificationsQuery = () =>
   useQuery({
     queryKey: queryKeys.notifications,
     queryFn: () => apiRequest<NotificationsResponse>("/api/notifications"),
+    refetchInterval: 60_000,
     retry: false,
   });
 
@@ -89,6 +95,24 @@ export const useDismissNotificationMutation = () => {
     meta: {
       successMessage: "Notification dismissed.",
       errorMessage: "Could not dismiss notification.",
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.notifications });
+    },
+  });
+};
+
+export const useDismissAllNotificationsMutation = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: () =>
+      apiRequest<NotificationBulkDismissResponse>("/api/notifications/dismiss-all", {
+        method: "POST",
+      }),
+    meta: {
+      successMessage: "All notifications cleared.",
+      errorMessage: "Could not clear notifications.",
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.notifications });

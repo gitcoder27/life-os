@@ -165,6 +165,7 @@ export {
   useSubmitWeeklyReviewMutation,
 } from "./api/reviews";
 export {
+  useDismissAllNotificationsMutation,
   useDismissNotificationMutation,
   useMarkNotificationReadMutation,
   useNotificationsQuery,

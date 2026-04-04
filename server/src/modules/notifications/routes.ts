@@ -16,6 +16,7 @@ import { requireAuthenticatedUser } from "../../lib/auth/require-auth.js";
 import { AppError } from "../../lib/errors/app-error.js";
 import { withGeneratedAt } from "../../lib/http/response.js";
 import { parseOrThrow } from "../../lib/validation/parse.js";
+import { generateRuleNotificationsForUser } from "./service.js";
 import {
   notificationCategories,
   resolveNotificationSnoozeTime,
@@ -68,6 +69,11 @@ function serializeNotification(notification: Notification): NotificationItem {
   };
 }
 
+type NotificationBulkDismissResponse = {
+  generatedAt: string;
+  dismissedCount: number;
+};
+
 async function findOwnedNotification(
   app: Parameters<FastifyPluginAsync>[0],
   userId: string,
@@ -95,6 +101,16 @@ export const registerNotificationRoutes: FastifyPluginAsync = async (app) => {
   app.get("/", async (request, reply) => {
     const user = requireAuthenticatedUser(request);
     const now = new Date();
+
+    try {
+      await generateRuleNotificationsForUser(app.prisma, user.id, now);
+    } catch (error) {
+      request.log.warn(
+        { err: error, userId: user.id },
+        "notification sync failed before serving notification center",
+      );
+    }
+
     const notifications = await app.prisma.notification.findMany({
       where: {
         userId: user.id,
@@ -221,6 +237,29 @@ export const registerNotificationRoutes: FastifyPluginAsync = async (app) => {
 
     const response: NotificationMutationResponse = withGeneratedAt({
       notification: serializeNotification(notification),
+    });
+
+    return reply.send(response);
+  });
+
+  app.post("/dismiss-all", async (request, reply) => {
+    const user = requireAuthenticatedUser(request);
+    const now = new Date();
+
+    const result = await app.prisma.notification.updateMany({
+      where: {
+        userId: user.id,
+        dismissedAt: null,
+        OR: [{ visibleFrom: null }, { visibleFrom: { lte: now } }],
+        AND: [{ OR: [{ expiresAt: null }, { expiresAt: { gt: now } }] }],
+      },
+      data: {
+        dismissedAt: now,
+      },
+    });
+
+    const response: NotificationBulkDismissResponse = withGeneratedAt({
+      dismissedCount: result.count,
     });
 
     return reply.send(response);

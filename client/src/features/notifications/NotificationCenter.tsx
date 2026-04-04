@@ -10,6 +10,7 @@ import { createPortal } from "react-dom";
 import { useLocation, useNavigate } from "react-router-dom";
 
 import {
+  useDismissAllNotificationsMutation,
   useDismissNotificationMutation,
   useMarkNotificationReadMutation,
   useNotificationsQuery,
@@ -90,6 +91,7 @@ export const NotificationCenter = ({
   const notificationsQuery = useNotificationsQuery();
   const markReadMutation = useMarkNotificationReadMutation();
   const dismissMutation = useDismissNotificationMutation();
+  const dismissAllMutation = useDismissAllNotificationsMutation();
   const snoozeMutation = useSnoozeNotificationMutation();
 
   useEffect(() => {
@@ -284,13 +286,25 @@ export const NotificationCenter = ({
               Alerts, reminders, and updates that need your attention.
             </p>
           </div>
-          <button
-            className="button button--ghost button--small notification-center__close"
-            type="button"
-            onClick={onClose}
-          >
-            Close
-          </button>
+          <div className="notification-center__header-actions">
+            {activeItems.length > 0 ? (
+              <button
+                className="button button--ghost button--small notification-center__clear"
+                type="button"
+                onClick={() => dismissAllMutation.mutate()}
+                disabled={dismissAllMutation.isPending}
+              >
+                {dismissAllMutation.isPending ? "Clearing..." : "Clear all"}
+              </button>
+            ) : null}
+            <button
+              className="button button--ghost button--small notification-center__close"
+              type="button"
+              onClick={onClose}
+            >
+              Close
+            </button>
+          </div>
         </div>
 
         <div className="notification-center__summary">

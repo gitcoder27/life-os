@@ -211,6 +211,7 @@ export const invalidateCoreData = (queryClient: QueryClient, _date: string) => {
   void queryClient.invalidateQueries({ queryKey: ["goals"] });
   void queryClient.invalidateQueries({ queryKey: ["review"] });
   void queryClient.invalidateQueries({ queryKey: ["reviewHistory"] });
+  void queryClient.invalidateQueries({ queryKey: queryKeys.notifications });
 };
 
 export const invalidateTaskTemplateData = (queryClient: QueryClient) => {
