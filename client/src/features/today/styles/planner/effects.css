@@ -1,0 +1,62 @@
+/* ── Stagger entrance animation ─────────────────────── */
+
+.stagger > * {
+  animation: slideUp 0.35s var(--ease) both;
+}
+
+.stagger > *:nth-child(1) { animation-delay: 0.05s; }
+.stagger > *:nth-child(2) { animation-delay: 0.1s; }
+.stagger > *:nth-child(3) { animation-delay: 0.15s; }
+.stagger > *:nth-child(4) { animation-delay: 0.2s; }
+.stagger > *:nth-child(5) { animation-delay: 0.25s; }
+.stagger > *:nth-child(6) { animation-delay: 0.3s; }
+.stagger > *:nth-child(7) { animation-delay: 0.35s; }
+.stagger > *:nth-child(8) { animation-delay: 0.4s; }
+
+/* ── Recovery Lane Count Badge ──────────────────────── */
+
+.recovery-lane__count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 2rem;
+  height: 2rem;
+  padding: 0 0.4rem;
+  border-radius: var(--r-pill);
+  background: rgba(217,153,58,0.15);
+  border: 1px solid rgba(217,153,58,0.25);
+  color: var(--accent-bright);
+  font-size: var(--fs-body);
+  font-weight: 800;
+  flex-shrink: 0;
+}
+
+.recovery-lane__copy {
+  font-size: var(--fs-small);
+  color: var(--text-secondary);
+  margin: 0;
+}
+
+/* ── Card hover lift micro-interaction ───────────────── */
+
+.today-priority-hero:hover,
+.today-task-queue:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-md), 0 6px 24px rgba(0,0,0,0.12);
+  transition: transform 0.2s var(--ease), box-shadow 0.2s var(--ease);
+}
+
+/* ── Checkbox bounce ────────────────────────────────── */
+
+@keyframes checkBounce {
+  0% { transform: scale(1); }
+  40% { transform: scale(1.2); }
+  100% { transform: scale(1); }
+}
+
+.today-priority-card__check--done,
+.today-task-card__check--done,
+.today-rh__check--done {
+  animation: checkBounce 0.35s var(--ease-bounce);
+}
+

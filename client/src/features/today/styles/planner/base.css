@@ -1,0 +1,560 @@
+/* ═══════════════════════════════════════════════════════
+   DAY PLANNER — Mode Toggle · Timeline · Blocks · Unplanned Lane
+   ═══════════════════════════════════════════════════════ */
+
+/* ── Top Bar ────────────────────────────────────────── */
+
+.today-top-bar {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.today-top-bar > .today-score-strip {
+  flex: 1;
+  min-width: 0;
+}
+
+/* ── Mode Toggle ────────────────────────────────────── */
+
+.mode-toggle {
+  display: flex;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--border-active);
+  background: var(--panel);
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.mode-toggle__btn {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.5rem 1rem;
+  font-size: var(--fs-small);
+  font-weight: 600;
+  color: var(--text-secondary);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  transition: all var(--dur-fast) var(--ease);
+  white-space: nowrap;
+}
+
+.mode-toggle__btn:hover {
+  color: var(--text);
+  background: rgba(255,255,255,0.04);
+}
+
+.mode-toggle__btn--active {
+  color: #0f0d08;
+  background: linear-gradient(135deg, var(--accent), #c4842f);
+  box-shadow: 0 1px 8px rgba(217,153,58,0.25);
+}
+
+.mode-toggle__btn--active:hover {
+  color: #0f0d08;
+  background: linear-gradient(135deg, var(--accent-bright), var(--accent));
+}
+
+.mode-toggle__icon {
+  font-size: 0.75rem;
+}
+
+.mode-toggle__badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.15rem;
+  height: 1.15rem;
+  padding: 0 0.3rem;
+  border-radius: var(--r-pill);
+  font-size: var(--fs-micro);
+  font-weight: 700;
+  background: rgba(0,0,0,0.2);
+  color: inherit;
+}
+
+/* ── Planner Layout (Redesign) ──────────────────────── */
+
+.planner {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  animation: fadeIn 0.2s var(--ease) both;
+  margin-top: 0.75rem;
+}
+
+body.planner-dragging-cursor,
+body.planner-dragging-cursor * {
+  cursor: grabbing !important;
+}
+
+.planner__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.planner__header-main {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  min-width: 0;
+}
+
+.planner-date-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.5rem 0.9rem;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--border);
+  background: var(--panel);
+}
+
+.planner-date-nav__controls {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.planner-date-nav__step {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 50%;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all var(--dur-fast) var(--ease);
+  flex-shrink: 0;
+}
+
+.planner-date-nav__step:hover {
+  background: rgba(255,255,255,0.06);
+  color: var(--text);
+  border-color: var(--border);
+}
+
+.planner-date-nav__step:active {
+  background: rgba(255,255,255,0.1);
+  transform: scale(0.92);
+}
+
+/* SmartDatePicker overrides inside planner nav */
+.planner-date-nav .smart-date-picker {
+  min-width: auto;
+  flex: 0 0 auto;
+}
+
+.planner-date-nav .smart-date-picker__trigger {
+  border: none;
+  background: transparent;
+  padding: 0.35rem 0.5rem;
+  border-radius: var(--r-sm);
+  gap: 0.35rem;
+  font-weight: 600;
+  font-size: var(--fs-small);
+  color: var(--text);
+  transition: background var(--dur-fast) var(--ease);
+}
+
+.planner-date-nav .smart-date-picker__trigger:hover:not(:disabled) {
+  background: rgba(255,255,255,0.06);
+  border-color: transparent;
+}
+
+.planner-date-nav .smart-date-picker__icon {
+  display: none;
+}
+
+.planner-date-nav .smart-date-picker__caret {
+  font-size: 0.5rem;
+  opacity: 0.5;
+  transition: opacity var(--dur-fast) var(--ease);
+}
+
+.planner-date-nav .smart-date-picker__trigger:hover .smart-date-picker__caret {
+  opacity: 0.8;
+}
+
+.planner-date-nav__copy {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.15rem;
+  min-width: 0;
+  padding-inline: 0.4rem 0.15rem;
+  text-align: right;
+}
+
+.planner-date-nav__title {
+  font-size: var(--fs-small);
+  font-weight: 700;
+  color: var(--text);
+  white-space: normal;
+}
+
+.planner-date-nav__subtitle {
+  font-size: var(--fs-micro);
+  color: var(--accent-bright);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 600;
+}
+
+.planner-date-nav__today-btn {
+  font-size: var(--fs-micro);
+  color: var(--accent);
+  cursor: pointer;
+  background: none;
+  border: none;
+  padding: 0;
+  letter-spacing: 0.03em;
+  transition: color var(--dur-fast) var(--ease);
+}
+
+.planner-date-nav__today-btn:hover {
+  color: var(--accent-bright);
+}
+
+.planner__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  font-size: var(--fs-micro);
+  color: var(--text-tertiary);
+}
+
+.planner__meta span {
+  padding: 0.15rem 0.5rem;
+  border-radius: var(--r-pill);
+  border: 1px solid rgba(255,255,255,0.04);
+  background: rgba(255,255,255,0.02);
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+}
+
+.planner__header-actions {
+  display: flex;
+  gap: 0.4rem;
+  flex-shrink: 0;
+  align-items: center;
+}
+
+.planner__history-note {
+  font-size: var(--fs-small);
+  color: var(--text-secondary);
+}
+
+.planner__error {
+  padding: 0.45rem 0.75rem;
+  border-radius: var(--r-pill);
+  background: rgba(201,85,76,0.08);
+  border: 1px solid rgba(201,85,76,0.15);
+  color: var(--negative);
+  font-size: var(--fs-small);
+}
+
+.planner__cleanup-banner {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.55rem 0.85rem;
+  border-radius: var(--r-pill);
+  border: 1px solid rgba(201,85,76,0.18);
+  background: rgba(201,85,76,0.06);
+}
+
+.planner__cleanup-indicator {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--negative);
+  flex-shrink: 0;
+  animation: nowLinePulse 2.5s ease-in-out infinite;
+}
+
+.planner__cleanup-copy {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex: 1;
+  min-width: 0;
+}
+
+.planner__cleanup-count {
+  font-size: var(--fs-small);
+  font-weight: 800;
+  color: #f6c0b9;
+}
+
+.planner__cleanup-label {
+  font-size: var(--fs-small);
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.planner__cleanup-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  flex-shrink: 0;
+}
+
+.planner__assign-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.5rem 0.85rem;
+  border-radius: var(--r-pill);
+  background: rgba(217,153,58,0.06);
+  border: 1px solid rgba(217,153,58,0.15);
+  color: var(--accent-bright);
+  font-size: var(--fs-small);
+  font-weight: 600;
+  animation: slideUp 0.2s var(--ease) both;
+}
+
+.planner__body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(300px, 20rem);
+  gap: 1rem;
+  align-items: start;
+  position: relative;
+}
+
+.planner__sidebar-pane {
+  position: sticky;
+  top: var(--today-sticky-offset);
+  align-self: start;
+  min-width: 0;
+  z-index: 8;
+}
+
+.planner-block__task-handle--static {
+  cursor: default;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.planner__timeline-pane {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  min-width: 0;
+  padding-bottom: 2rem;
+}
+
+/* ── Time Gutter + Track ────────────────────────────── */
+
+.planner__timeline-area {
+  position: relative;
+  display: grid;
+  grid-template-columns: 48px 1fr;
+  gap: 0;
+}
+
+.planner__gutter {
+  position: relative;
+  border-right: 1px solid rgba(255,255,255,0.04);
+}
+
+.planner__gutter-hour {
+  position: absolute;
+  right: 12px;
+  transform: translateY(-50%);
+  font-size: 0.6rem;
+  font-weight: 600;
+  font-family: var(--font-body);
+  color: rgba(190, 180, 160, 0.9);
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  pointer-events: none;
+  transition: color var(--dur) var(--ease), opacity var(--dur) var(--ease);
+  font-variant-numeric: tabular-nums;
+}
+
+.planner__gutter-hour::after {
+  content: '';
+  position: absolute;
+  left: calc(100% + 12px);
+  top: 50%;
+  width: 12rem;
+  height: 1px;
+  background: rgba(255,255,255,0.045);
+  pointer-events: none;
+}
+
+.planner__gutter-hour--past {
+  opacity: 0.5;
+}
+
+.planner__gutter-now {
+  position: absolute;
+  right: -5px;
+  transform: translateY(-50%);
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 10px rgba(217,153,58,0.5), 0 0 24px rgba(217,153,58,0.2);
+  z-index: 5;
+  animation: nowDotPulse 3s ease-in-out infinite;
+}
+
+/* Global now-line across the timeline track */
+.planner__now-line {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 2px;
+  z-index: 0;
+  background: linear-gradient(90deg, rgba(217,153,58,0.92) 0%, rgba(217,153,58,0.24) 26%, rgba(217,153,58,0.08) 100%);
+  box-shadow: 0 0 10px rgba(217,153,58,0.12);
+  pointer-events: none;
+}
+
+.planner__now-line::before {
+  content: none;
+}
+
+@keyframes nowDotPulse {
+  0%, 100% { box-shadow: 0 0 10px rgba(217,153,58,0.4), 0 0 24px rgba(217,153,58,0.15); }
+  50%      { box-shadow: 0 0 16px rgba(217,153,58,0.6), 0 0 36px rgba(217,153,58,0.25); }
+}
+
+/* Keep legacy keyframe name for reuse */
+@keyframes nowLinePulse {
+  0%, 100% { opacity: 0.75; }
+  50%      { opacity: 1; }
+}
+
+.planner__timeline-track {
+  position: relative;
+  /* height set via inline style = totalHeightPx */
+  /* children are absolutely positioned */
+}
+
+.planner__hours-card {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem 1rem;
+  padding: 0.75rem 0.85rem;
+  border-radius: var(--r-sm);
+  border: 1px solid rgba(255,255,255,0.06);
+  background: rgba(255,255,255,0.02);
+  backdrop-filter: blur(8px);
+}
+
+.planner__hours-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  max-width: 28rem;
+}
+
+.planner__hours-title {
+  font-size: var(--fs-small);
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.planner__hours-desc {
+  font-size: var(--fs-small);
+  color: var(--text-secondary);
+}
+
+.planner__hours-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.6rem;
+}
+
+.planner__hours-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-width: 6.5rem;
+}
+
+.planner__hours-field span {
+  font-size: var(--fs-micro);
+  font-weight: 700;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.planner__hours-input {
+  padding: 0.5rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  background: rgba(255,255,255,0.03);
+  color: var(--text);
+  font-size: var(--fs-body);
+  font-family: var(--font-body);
+}
+
+.planner__hours-input:focus {
+  outline: none;
+  border-color: var(--border-focus);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.planner__hours-actions {
+  display: flex;
+  gap: 0.45rem;
+  flex-wrap: wrap;
+}
+
+.planner__hours-error {
+  width: 100%;
+  font-size: var(--fs-small);
+  color: var(--negative);
+}
+
+.planner__empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 5rem 1.5rem;
+  text-align: center;
+  animation: fadeIn 0.4s var(--ease) both;
+}
+
+.planner__empty-icon {
+  font-size: 1.25rem;
+  margin-bottom: 0.75rem;
+  color: var(--accent);
+  opacity: 0.5;
+}
+
+.planner__empty-title {
+  font-family: var(--font-display);
+  font-size: var(--fs-h2);
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 0.3rem;
+}
+
+.planner__empty-desc {
+  font-size: var(--fs-small);
+  color: var(--text-tertiary);
+  max-width: 18rem;
+  margin-bottom: 1.25rem;
+  opacity: 0.65;
+}
+
