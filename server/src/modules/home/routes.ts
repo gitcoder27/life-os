@@ -122,6 +122,8 @@ function fromPrismaTaskOriginType(originType: PrismaTaskOriginType): TaskOriginT
       return "recurring";
     case "TEMPLATE":
       return "template";
+    case "MEAL_PLAN":
+      return "meal_plan";
   }
 }
 

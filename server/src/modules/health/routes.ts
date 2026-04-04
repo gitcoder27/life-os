@@ -10,13 +10,17 @@ import type {
   HealthSummaryResponse,
   IsoDateString,
   MealLogItem,
+  MealPlanWeekResponse,
+  MealTemplateIngredient,
   MealLogsResponse,
   MealLogMutationResponse,
   MealLoggingQuality,
   MealTemplateMutationResponse,
   MealTemplateItem,
+  SaveMealPlanWeekRequest,
   MealTemplatesResponse,
   MealSlot,
+  PlannedMealTodayItem,
   UpdateMealLogRequest,
   UpdateMealTemplateRequest,
   UpdateWaterLogRequest,
@@ -36,7 +40,15 @@ import type {
 import type {
   MealLog,
   MealLoggingQuality as PrismaMealLoggingQuality,
+  MealPlanEntry,
+  MealPlanGroceryItem as PrismaMealPlanGroceryItem,
+  MealPlanGrocerySourceType as PrismaMealPlanGrocerySourceType,
+  MealPlanWeek,
   MealSlot as PrismaMealSlot,
+  MealTemplate as PrismaMealTemplate,
+  MealPrepSession,
+  Prisma,
+  Task,
   WaterLog,
   WaterLogSource as PrismaWaterLogSource,
   WeightLog,
@@ -49,7 +61,8 @@ import { z } from "zod";
 import { AppError } from "../../lib/errors/app-error.js";
 import { requireAuthenticatedUser } from "../../lib/auth/require-auth.js";
 import { withGeneratedAt } from "../../lib/http/response.js";
-import { parseIsoDate } from "../../lib/time/cycle.js";
+import { fromPrismaTaskStatus, toPrismaTaskOriginType, toPrismaTaskStatus } from "../planning/planning-mappers.js";
+import { addIsoDays, getWeekEndDate, getWeekStartIsoDate, parseIsoDate } from "../../lib/time/cycle.js";
 import { toIsoDateString } from "../../lib/time/date.js";
 import {
   getDateRangeWindowUtc,
@@ -97,39 +110,6 @@ const updateWaterLogSchema = z
   })
   .refine((value) => Object.keys(value).length > 0, "At least one field must be updated");
 
-const createMealLogSchema = z.object({
-  occurredAt: isoDateTimeSchema.optional(),
-  mealSlot: mealSlotSchema.nullable().optional(),
-  mealTemplateId: z.string().uuid().nullable().optional(),
-  description: z.string().min(1).max(4000),
-  loggingQuality: mealLoggingQualitySchema,
-});
-
-const updateMealLogSchema = z
-  .object({
-    occurredAt: isoDateTimeSchema.optional(),
-    mealSlot: mealSlotSchema.nullable().optional(),
-    mealTemplateId: z.string().uuid().nullable().optional(),
-    description: z.string().min(1).max(4000).optional(),
-    loggingQuality: mealLoggingQualitySchema.optional(),
-  })
-  .refine((value) => Object.keys(value).length > 0, "At least one field must be updated");
-
-const createMealTemplateSchema = z.object({
-  name: z.string().min(1).max(200),
-  mealSlot: mealSlotSchema.nullable().optional(),
-  description: z.string().max(4000).nullable().optional(),
-});
-
-const updateMealTemplateSchema = z
-  .object({
-    name: z.string().min(1).max(200).optional(),
-    mealSlot: mealSlotSchema.nullable().optional(),
-    description: z.string().max(4000).nullable().optional(),
-    archived: z.boolean().optional(),
-  })
-  .refine((value) => Object.keys(value).length > 0, "At least one field must be updated");
-
 const updateWorkoutDaySchema = z
   .object({
     planType: workoutPlanTypeSchema.optional(),
@@ -154,6 +134,296 @@ const updateWeightLogSchema = z
     note: z.string().max(4000).nullable().optional(),
   })
   .refine((value) => Object.keys(value).length > 0, "At least one field must be updated");
+
+const entityIdSchema = z.string().uuid();
+const decimalSchema = z.number().positive().max(100000).nullable().optional();
+const sortOrderSchema = z.number().int().min(0).optional();
+const shortTextSchema = z.string().trim().min(1).max(200);
+const optionalShortTextSchema = z.string().trim().max(200).nullable().optional();
+const optionalNoteSchema = z.string().trim().max(4000).nullable().optional();
+const optionalSectionSchema = z.string().trim().max(80).nullable().optional();
+const optionalUnitSchema = z.string().trim().max(64).nullable().optional();
+const ingredientInputSchema = z.object({
+  name: shortTextSchema,
+  quantity: decimalSchema,
+  unit: optionalUnitSchema,
+  section: optionalSectionSchema,
+  note: optionalNoteSchema,
+});
+const instructionInputSchema = z.string().trim().min(1).max(1000);
+const tagInputSchema = z.string().trim().min(1).max(40);
+
+const createMealTemplateSchema = z.object({
+  name: z.string().trim().min(1).max(200),
+  mealSlot: mealSlotSchema.nullable().optional(),
+  description: z.string().trim().max(4000).nullable().optional(),
+  servings: z.number().positive().max(1000).nullable().optional(),
+  prepMinutes: z.number().int().positive().max(1440).nullable().optional(),
+  cookMinutes: z.number().int().positive().max(1440).nullable().optional(),
+  ingredients: z.array(ingredientInputSchema).max(200).optional(),
+  instructions: z.array(instructionInputSchema).max(200).optional(),
+  tags: z.array(tagInputSchema).max(40).optional(),
+  notes: z.string().trim().max(4000).nullable().optional(),
+});
+
+const updateMealTemplateSchema = z
+  .object({
+    name: z.string().trim().min(1).max(200).optional(),
+    mealSlot: mealSlotSchema.nullable().optional(),
+    description: z.string().trim().max(4000).nullable().optional(),
+    servings: z.number().positive().max(1000).nullable().optional(),
+    prepMinutes: z.number().int().positive().max(1440).nullable().optional(),
+    cookMinutes: z.number().int().positive().max(1440).nullable().optional(),
+    ingredients: z.array(ingredientInputSchema).max(200).optional(),
+    instructions: z.array(instructionInputSchema).max(200).optional(),
+    tags: z.array(tagInputSchema).max(40).optional(),
+    notes: z.string().trim().max(4000).nullable().optional(),
+    archived: z.boolean().optional(),
+  })
+  .refine((value) => Object.keys(value).length > 0, "At least one field must be updated");
+
+const createMealLogSchema = z.object({
+  occurredAt: isoDateTimeSchema.optional(),
+  mealSlot: mealSlotSchema.nullable().optional(),
+  mealTemplateId: z.string().uuid().nullable().optional(),
+  mealPlanEntryId: z.string().uuid().nullable().optional(),
+  description: z.string().trim().min(1).max(4000),
+  loggingQuality: mealLoggingQualitySchema,
+});
+
+const updateMealLogSchema = z
+  .object({
+    occurredAt: isoDateTimeSchema.optional(),
+    mealSlot: mealSlotSchema.nullable().optional(),
+    mealTemplateId: z.string().uuid().nullable().optional(),
+    mealPlanEntryId: z.string().uuid().nullable().optional(),
+    description: z.string().trim().min(1).max(4000).optional(),
+    loggingQuality: mealLoggingQualitySchema.optional(),
+  })
+  .refine((value) => Object.keys(value).length > 0, "At least one field must be updated");
+
+const mealPlanEntryInputSchema = z.object({
+  id: entityIdSchema.optional(),
+  date: isoDateSchema,
+  mealSlot: mealSlotSchema,
+  mealTemplateId: entityIdSchema,
+  servings: z.number().positive().max(1000).nullable().optional(),
+  note: optionalNoteSchema,
+  sortOrder: sortOrderSchema,
+});
+
+const mealPrepSessionInputSchema = z.object({
+  id: entityIdSchema.optional(),
+  scheduledForDate: isoDateSchema,
+  title: z.string().trim().min(1).max(200),
+  notes: optionalNoteSchema,
+  sortOrder: sortOrderSchema,
+});
+
+const manualGroceryItemInputSchema = z.object({
+  id: entityIdSchema.optional(),
+  name: shortTextSchema,
+  quantity: decimalSchema,
+  unit: optionalUnitSchema,
+  section: optionalSectionSchema,
+  note: optionalNoteSchema,
+  isChecked: z.boolean().optional(),
+  sortOrder: sortOrderSchema,
+});
+
+const plannedGroceryCheckInputSchema = z.object({
+  name: shortTextSchema,
+  unit: optionalUnitSchema,
+  isChecked: z.boolean().optional(),
+});
+
+const saveMealPlanWeekSchema = z.object({
+  notes: z.string().trim().max(4000).nullable().optional(),
+  entries: z.array(mealPlanEntryInputSchema).max(100),
+  prepSessions: z.array(mealPrepSessionInputSchema).max(50),
+  manualGroceryItems: z.array(manualGroceryItemInputSchema).max(300),
+  plannedGroceryItems: z.array(plannedGroceryCheckInputSchema).max(300).optional().default([]),
+});
+
+type MealTemplatePayload = {
+  description: string | null;
+  servings: number | null;
+  prepMinutes: number | null;
+  cookMinutes: number | null;
+  ingredients: MealTemplateIngredient[];
+  instructions: string[];
+  tags: string[];
+  notes: string | null;
+};
+
+type MealTemplatePayloadInput = {
+  description?: string | null;
+  servings?: number | null;
+  prepMinutes?: number | null;
+  cookMinutes?: number | null;
+  ingredients?: Array<{
+    name: string;
+    quantity?: number | null;
+    unit?: string | null;
+    section?: string | null;
+    note?: string | null;
+  }>;
+  instructions?: string[];
+  tags?: string[];
+  notes?: string | null;
+};
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function trimToNull(value: string | null | undefined) {
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+function normalizeIngredientInput(input: MealTemplateIngredient): MealTemplateIngredient {
+  return {
+    name: input.name.trim(),
+    quantity: input.quantity ?? null,
+    unit: trimToNull(input.unit),
+    section: trimToNull(input.section),
+    note: trimToNull(input.note),
+  };
+}
+
+function readStringArray(value: unknown, maxLength: number) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .filter((item): item is string => typeof item === "string")
+    .map((item) => item.trim())
+    .filter((item) => item.length > 0)
+    .slice(0, maxLength);
+}
+
+function readNullableNumber(value: unknown) {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function readIngredientArray(value: unknown): MealTemplateIngredient[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .filter(isPlainObject)
+    .map((item) => {
+      const name = trimToNull(typeof item.name === "string" ? item.name : null);
+      if (!name) {
+        return null;
+      }
+
+      return normalizeIngredientInput({
+        name,
+        quantity: readNullableNumber(item.quantity),
+        unit: typeof item.unit === "string" ? item.unit : null,
+        section: typeof item.section === "string" ? item.section : null,
+        note: typeof item.note === "string" ? item.note : null,
+      });
+    })
+    .filter((item): item is MealTemplateIngredient => item !== null);
+}
+
+function parseMealTemplatePayload(templatePayloadJson: unknown): MealTemplatePayload {
+  const payload = isPlainObject(templatePayloadJson) ? templatePayloadJson : {};
+
+  return {
+    description: trimToNull(typeof payload.description === "string" ? payload.description : null),
+    servings: readNullableNumber(payload.servings),
+    prepMinutes: readNullableNumber(payload.prepMinutes),
+    cookMinutes: readNullableNumber(payload.cookMinutes),
+    ingredients: readIngredientArray(payload.ingredients),
+    instructions: readStringArray(payload.instructions, 200),
+    tags: readStringArray(payload.tags, 40),
+    notes: trimToNull(typeof payload.notes === "string" ? payload.notes : null),
+  };
+}
+
+function normalizeMealTemplatePayloadInput(
+  input: MealTemplatePayloadInput,
+  existing?: MealTemplatePayload,
+): Prisma.InputJsonObject {
+  const normalizedIngredients = input.ingredients === undefined
+    ? (existing?.ingredients ?? []).map((ingredient) => ({
+        name: ingredient.name,
+        quantity: ingredient.quantity,
+        unit: ingredient.unit,
+        section: ingredient.section,
+        note: ingredient.note,
+      }))
+    : input.ingredients.map((ingredient) => normalizeIngredientInput({
+        name: ingredient.name,
+        quantity: ingredient.quantity ?? null,
+        unit: ingredient.unit ?? null,
+        section: ingredient.section ?? null,
+        note: ingredient.note ?? null,
+      }));
+
+  return {
+    description: input.description === undefined
+      ? existing?.description ?? null
+      : trimToNull(input.description),
+    servings: input.servings === undefined ? existing?.servings ?? null : input.servings ?? null,
+    prepMinutes: input.prepMinutes === undefined ? existing?.prepMinutes ?? null : input.prepMinutes ?? null,
+    cookMinutes: input.cookMinutes === undefined ? existing?.cookMinutes ?? null : input.cookMinutes ?? null,
+    ingredients: normalizedIngredients as unknown as Prisma.InputJsonValue,
+    instructions: input.instructions === undefined
+      ? existing?.instructions ?? []
+      : input.instructions.map((item) => item.trim()).filter((item) => item.length > 0),
+    tags: input.tags === undefined
+      ? existing?.tags ?? []
+      : input.tags.map((item) => item.trim()).filter((item) => item.length > 0),
+    notes: input.notes === undefined ? existing?.notes ?? null : trimToNull(input.notes),
+  };
+}
+
+function normalizeKeyPart(value: string | null | undefined) {
+  return (value ?? "").trim().toLocaleLowerCase();
+}
+
+function getGroceryCheckKey(name: string, unit: string | null | undefined) {
+  return `${normalizeKeyPart(name)}::${normalizeKeyPart(unit)}`;
+}
+
+function assertIsoDateWithinWeek(date: IsoDateString, startDate: IsoDateString, endDate: IsoDateString, field: string) {
+  if (date < startDate || date > endDate) {
+    throw new AppError({
+      statusCode: 400,
+      code: "BAD_REQUEST",
+      message: `${field} must stay within the selected week`,
+    });
+  }
+}
+
+function toPrismaMealPlanGrocerySourceType(sourceType: "planned" | "manual"): PrismaMealPlanGrocerySourceType {
+  switch (sourceType) {
+    case "planned":
+      return "PLANNED";
+    case "manual":
+      return "MANUAL";
+  }
+}
+
+function fromPrismaMealPlanGrocerySourceType(sourceType: PrismaMealPlanGrocerySourceType): "planned" | "manual" {
+  switch (sourceType) {
+    case "PLANNED":
+      return "planned";
+    case "MANUAL":
+      return "manual";
+  }
+}
 
 async function getTodayIsoDate(
   app: Parameters<FastifyPluginAsync>[0],
@@ -322,6 +592,7 @@ function serializeMealLog(mealLog: MealLog): MealLogItem {
     occurredAt: mealLog.occurredAt.toISOString(),
     mealSlot: fromPrismaMealSlot(mealLog.mealSlot),
     mealTemplateId: mealLog.mealTemplateId,
+    mealPlanEntryId: mealLog.mealPlanEntryId,
     description: mealLog.description,
     loggingQuality: fromPrismaMealLoggingQuality(mealLog.loggingQuality),
     createdAt: mealLog.createdAt.toISOString(),
@@ -336,20 +607,20 @@ function serializeMealTemplate(mealTemplate: {
   createdAt: Date;
   updatedAt: Date;
 }): MealTemplateItem {
-  const description =
-    mealTemplate.templatePayloadJson &&
-    typeof mealTemplate.templatePayloadJson === "object" &&
-    !Array.isArray(mealTemplate.templatePayloadJson) &&
-    "description" in mealTemplate.templatePayloadJson &&
-    typeof mealTemplate.templatePayloadJson.description === "string"
-      ? mealTemplate.templatePayloadJson.description
-      : null;
+  const payload = parseMealTemplatePayload(mealTemplate.templatePayloadJson);
 
   return {
     id: mealTemplate.id,
     name: mealTemplate.name,
     mealSlot: fromPrismaMealSlot(mealTemplate.mealSlot),
-    description,
+    description: payload.description,
+    servings: payload.servings,
+    prepMinutes: payload.prepMinutes,
+    cookMinutes: payload.cookMinutes,
+    ingredients: payload.ingredients,
+    instructions: payload.instructions,
+    tags: payload.tags,
+    notes: payload.notes,
     createdAt: mealTemplate.createdAt.toISOString(),
     updatedAt: mealTemplate.updatedAt.toISOString(),
   };
@@ -376,6 +647,634 @@ function serializeWeightLog(weightLog: WeightLog): WeightLogItem {
     note: weightLog.note,
     createdAt: weightLog.createdAt.toISOString(),
   };
+}
+
+type MealPlanEntryRecord = MealPlanEntry & {
+  mealTemplate: Pick<PrismaMealTemplate, "id" | "name" | "templatePayloadJson">;
+  mealLogs: Array<Pick<MealLog, "id">>;
+};
+
+type MealPrepSessionRecord = MealPrepSession & {
+  task: Pick<Task, "id" | "status"> | null;
+};
+
+type MealPlanWeekRecord = MealPlanWeek & {
+  entries: MealPlanEntryRecord[];
+  prepSessions: MealPrepSessionRecord[];
+  groceryItems: PrismaMealPlanGroceryItem[];
+};
+
+function roundToTwoDecimals(value: number) {
+  return Math.round(value * 100) / 100;
+}
+
+function serializeMealPlanEntry(entry: MealPlanEntryRecord) {
+  return {
+    id: entry.id,
+    date: toIsoDateString(entry.date),
+    mealSlot: fromPrismaMealSlot(entry.mealSlot) ?? "breakfast",
+    mealTemplateId: entry.mealTemplateId,
+    mealTemplateName: entry.mealTemplate.name,
+    servings: entry.servings ? Number(entry.servings) : null,
+    note: entry.note,
+    sortOrder: entry.sortOrder,
+    isLogged: entry.mealLogs.length > 0,
+    loggedMealCount: entry.mealLogs.length,
+    createdAt: entry.createdAt.toISOString(),
+    updatedAt: entry.updatedAt.toISOString(),
+  };
+}
+
+function serializeMealPrepSession(session: MealPrepSessionRecord) {
+  return {
+    id: session.id,
+    scheduledForDate: toIsoDateString(session.scheduledForDate),
+    title: session.title,
+    notes: session.notes,
+    taskId: session.taskId,
+    taskStatus: session.task ? fromPrismaTaskStatus(session.task.status) : null,
+    sortOrder: session.sortOrder,
+    createdAt: session.createdAt.toISOString(),
+    updatedAt: session.updatedAt.toISOString(),
+  };
+}
+
+function serializeMealPlanGroceryItem(groceryItem: PrismaMealPlanGroceryItem) {
+  return {
+    id: groceryItem.id,
+    name: groceryItem.name,
+    quantity: groceryItem.quantity ? Number(groceryItem.quantity) : null,
+    unit: groceryItem.unit,
+    section: groceryItem.section,
+    note: groceryItem.note,
+    sourceType: fromPrismaMealPlanGrocerySourceType(groceryItem.sourceType),
+    isChecked: groceryItem.isChecked,
+    sortOrder: groceryItem.sortOrder,
+    createdAt: groceryItem.createdAt.toISOString(),
+    updatedAt: groceryItem.updatedAt.toISOString(),
+  };
+}
+
+function serializePlannedMealToday(entry: MealPlanEntryRecord): PlannedMealTodayItem {
+  return {
+    mealPlanEntryId: entry.id,
+    date: toIsoDateString(entry.date),
+    mealSlot: fromPrismaMealSlot(entry.mealSlot) ?? "breakfast",
+    mealTemplateId: entry.mealTemplateId,
+    title: entry.mealTemplate.name,
+    servings: entry.servings ? Number(entry.servings) : null,
+    note: entry.note,
+    isLogged: entry.mealLogs.length > 0,
+  };
+}
+
+function buildMealPlanWeekSummary(week: MealPlanWeekRecord | null) {
+  const entries = week?.entries ?? [];
+  const prepSessions = week?.prepSessions ?? [];
+  const groceryItems = week?.groceryItems ?? [];
+
+  return {
+    totalPlannedMeals: entries.length,
+    loggedPlannedMeals: entries.filter((entry) => entry.mealLogs.length > 0).length,
+    prepSessionsCount: prepSessions.length,
+    completedPrepSessionsCount: prepSessions.filter((session) => session.task?.status === "COMPLETED").length,
+    groceryItemCount: groceryItems.length,
+  };
+}
+
+function buildPlannedGroceryRows(
+  entries: SaveMealPlanWeekRequest["entries"],
+  templateById: Map<string, Pick<PrismaMealTemplate, "id" | "templatePayloadJson">>,
+  checkedByKey: Map<string, boolean>,
+) {
+  const aggregate = new Map<string, {
+    name: string;
+    quantity: number | null;
+    unit: string | null;
+    section: string | null;
+    note: string | null;
+  }>();
+
+  entries.forEach((entry) => {
+    const template = templateById.get(entry.mealTemplateId);
+    if (!template) {
+      return;
+    }
+
+    const payload = parseMealTemplatePayload(template.templatePayloadJson);
+    const multiplier = payload.servings && entry.servings
+      ? entry.servings / payload.servings
+      : 1;
+
+    payload.ingredients.forEach((ingredient) => {
+      const key = `${normalizeKeyPart(ingredient.name)}::${normalizeKeyPart(ingredient.unit)}`;
+      const scaledQuantity = ingredient.quantity === null ? null : roundToTwoDecimals(ingredient.quantity * multiplier);
+      const existing = aggregate.get(key);
+
+      if (!existing) {
+        aggregate.set(key, {
+          name: ingredient.name,
+          quantity: scaledQuantity,
+          unit: ingredient.unit,
+          section: ingredient.section,
+          note: ingredient.note,
+        });
+        return;
+      }
+
+      existing.quantity = existing.quantity !== null && scaledQuantity !== null
+        ? roundToTwoDecimals(existing.quantity + scaledQuantity)
+        : null;
+
+      if (normalizeKeyPart(existing.section) !== normalizeKeyPart(ingredient.section)) {
+        existing.section = null;
+      }
+
+      if (normalizeKeyPart(existing.note) !== normalizeKeyPart(ingredient.note)) {
+        existing.note = null;
+      }
+    });
+  });
+
+  return [...aggregate.values()]
+    .sort((left, right) => {
+      const sectionCompare = normalizeKeyPart(left.section).localeCompare(normalizeKeyPart(right.section));
+      if (sectionCompare !== 0) {
+        return sectionCompare;
+      }
+
+      return left.name.localeCompare(right.name);
+    })
+    .map((item, index) => ({
+      name: item.name,
+      quantity: item.quantity,
+      unit: item.unit,
+      section: item.section,
+      note: item.note,
+      sourceType: "planned" as const,
+      isChecked: checkedByKey.get(getGroceryCheckKey(item.name, item.unit)) ?? false,
+      sortOrder: index,
+    }));
+}
+
+async function findOwnedMealPlanEntry(
+  app: Parameters<FastifyPluginAsync>[0],
+  userId: string,
+  mealPlanEntryId: string | null | undefined,
+) {
+  if (!mealPlanEntryId) {
+    return null;
+  }
+
+  const mealPlanEntry = await app.prisma.mealPlanEntry.findFirst({
+    where: {
+      id: mealPlanEntryId,
+      mealPlanWeek: {
+        userId,
+      },
+    },
+  });
+
+  if (!mealPlanEntry) {
+    throw new AppError({
+      statusCode: 404,
+      code: "NOT_FOUND",
+      message: "Planned meal not found",
+    });
+  }
+
+  return mealPlanEntry;
+}
+
+async function getTodayPlannedMeals(
+  app: Parameters<FastifyPluginAsync>[0],
+  userId: string,
+  todayIsoDate: IsoDateString,
+  weekStartsOn: number,
+) {
+  const weekStartIsoDate = getWeekStartIsoDate(todayIsoDate, weekStartsOn);
+  const mealPlanWeek = await app.prisma.mealPlanWeek.findUnique({
+    where: {
+      userId_startDate: {
+        userId,
+        startDate: parseIsoDate(weekStartIsoDate),
+      },
+    },
+    include: {
+      entries: {
+        where: {
+          date: parseIsoDate(todayIsoDate),
+        },
+        include: {
+          mealTemplate: {
+            select: {
+              id: true,
+              name: true,
+              templatePayloadJson: true,
+            },
+          },
+          mealLogs: {
+            select: {
+              id: true,
+            },
+          },
+        },
+        orderBy: [{ mealSlot: "asc" }, { sortOrder: "asc" }],
+      },
+    },
+  });
+
+  return (mealPlanWeek?.entries ?? []).map(serializePlannedMealToday);
+}
+
+async function buildMealPlanWeekResponse(
+  app: Parameters<FastifyPluginAsync>[0],
+  userId: string,
+  startDate: IsoDateString,
+): Promise<MealPlanWeekResponse> {
+  const startDateValue = parseIsoDate(startDate);
+  const mealPlanWeek = await app.prisma.mealPlanWeek.findUnique({
+    where: {
+      userId_startDate: {
+        userId,
+        startDate: startDateValue,
+      },
+    },
+    include: {
+      entries: {
+        include: {
+          mealTemplate: {
+            select: {
+              id: true,
+              name: true,
+              templatePayloadJson: true,
+            },
+          },
+          mealLogs: {
+            select: {
+              id: true,
+            },
+          },
+        },
+        orderBy: [{ date: "asc" }, { mealSlot: "asc" }, { sortOrder: "asc" }],
+      },
+      prepSessions: {
+        include: {
+          task: {
+            select: {
+              id: true,
+              status: true,
+            },
+          },
+        },
+        orderBy: [{ scheduledForDate: "asc" }, { sortOrder: "asc" }],
+      },
+      groceryItems: {
+        orderBy: [{ sourceType: "asc" }, { sortOrder: "asc" }, { name: "asc" }],
+      },
+    },
+  });
+  const mealTemplates = await app.prisma.mealTemplate.findMany({
+    where: {
+      userId,
+      archivedAt: null,
+    },
+    orderBy: [{ mealSlot: "asc" }, { name: "asc" }],
+  });
+
+  return withGeneratedAt({
+    startDate,
+    endDate: toIsoDateString(getWeekEndDate(startDateValue)),
+    notes: mealPlanWeek?.notes ?? null,
+    entries: (mealPlanWeek?.entries ?? []).map(serializeMealPlanEntry),
+    prepSessions: (mealPlanWeek?.prepSessions ?? []).map(serializeMealPrepSession),
+    groceryItems: (mealPlanWeek?.groceryItems ?? []).map(serializeMealPlanGroceryItem),
+    summary: buildMealPlanWeekSummary(mealPlanWeek),
+    mealTemplates: mealTemplates.map(serializeMealTemplate),
+  });
+}
+
+async function saveMealPlanWeek(
+  app: Parameters<FastifyPluginAsync>[0],
+  userId: string,
+  startDate: IsoDateString,
+  payload: SaveMealPlanWeekRequest,
+) {
+  const startDateValue = parseIsoDate(startDate);
+  const endDate = addIsoDays(startDate, 6);
+  const mealTemplateIds = [...new Set(payload.entries.map((entry) => entry.mealTemplateId))];
+
+  payload.entries.forEach((entry) => {
+    assertIsoDateWithinWeek(entry.date, startDate, endDate, "Meal entry date");
+  });
+  payload.prepSessions.forEach((session) => {
+    assertIsoDateWithinWeek(session.scheduledForDate, startDate, endDate, "Prep session date");
+  });
+
+  const [mealTemplates, existingWeek] = await Promise.all([
+    app.prisma.mealTemplate.findMany({
+      where: {
+        userId,
+        archivedAt: null,
+        id: {
+          in: mealTemplateIds,
+        },
+      },
+      select: {
+        id: true,
+        templatePayloadJson: true,
+      },
+    }),
+    app.prisma.mealPlanWeek.findUnique({
+      where: {
+        userId_startDate: {
+          userId,
+          startDate: startDateValue,
+        },
+      },
+      include: {
+        entries: true,
+        prepSessions: true,
+        groceryItems: {
+          where: {
+            sourceType: "MANUAL",
+          },
+        },
+      },
+    }),
+  ]);
+
+  if (mealTemplates.length !== mealTemplateIds.length) {
+    throw new AppError({
+      statusCode: 404,
+      code: "NOT_FOUND",
+      message: "Meal template not found",
+    });
+  }
+
+  const existingEntryById = new Map((existingWeek?.entries ?? []).map((entry) => [entry.id, entry]));
+  const existingPrepById = new Map((existingWeek?.prepSessions ?? []).map((session) => [session.id, session]));
+  const existingManualGroceryById = new Map((existingWeek?.groceryItems ?? []).map((item) => [item.id, item]));
+
+  payload.entries.forEach((entry) => {
+    if (entry.id && !existingEntryById.has(entry.id)) {
+      throw new AppError({
+        statusCode: 404,
+        code: "NOT_FOUND",
+        message: "Meal plan entry not found",
+      });
+    }
+  });
+  payload.prepSessions.forEach((session) => {
+    if (session.id && !existingPrepById.has(session.id)) {
+      throw new AppError({
+        statusCode: 404,
+        code: "NOT_FOUND",
+        message: "Prep session not found",
+      });
+    }
+  });
+  payload.manualGroceryItems.forEach((item) => {
+    if (item.id && !existingManualGroceryById.has(item.id)) {
+      throw new AppError({
+        statusCode: 404,
+        code: "NOT_FOUND",
+        message: "Manual grocery item not found",
+      });
+    }
+  });
+
+  const mealTemplateById = new Map(mealTemplates.map((template) => [template.id, template]));
+  const plannedCheckedByKey = new Map(
+    (payload.plannedGroceryItems ?? []).map((item) => [
+      getGroceryCheckKey(item.name, item.unit),
+      item.isChecked ?? false,
+    ]),
+  );
+  const submittedEntryIds = new Set(payload.entries.map((entry) => entry.id).filter((id): id is string => Boolean(id)));
+  const submittedPrepIds = new Set(payload.prepSessions.map((session) => session.id).filter((id): id is string => Boolean(id)));
+  const submittedManualGroceryIds = new Set(
+    payload.manualGroceryItems.map((item) => item.id).filter((id): id is string => Boolean(id)),
+  );
+
+  await app.prisma.$transaction(async (tx) => {
+    const mealPlanWeek = existingWeek
+      ? await tx.mealPlanWeek.update({
+          where: {
+            id: existingWeek.id,
+          },
+          data: {
+            notes: trimToNull(payload.notes) ?? null,
+          },
+        })
+      : await tx.mealPlanWeek.create({
+          data: {
+            userId,
+            startDate: startDateValue,
+            notes: trimToNull(payload.notes) ?? null,
+          },
+        });
+
+    const mealPlanWeekId = mealPlanWeek.id;
+
+    const entryIdsToDelete = (existingWeek?.entries ?? [])
+      .filter((entry) => !submittedEntryIds.has(entry.id))
+      .map((entry) => entry.id);
+    if (entryIdsToDelete.length > 0) {
+      await tx.mealPlanEntry.deleteMany({
+        where: {
+          id: {
+            in: entryIdsToDelete,
+          },
+        },
+      });
+    }
+
+    for (const [index, entry] of payload.entries.entries()) {
+      const sortOrder = entry.sortOrder ?? index;
+      const data = {
+        date: parseIsoDate(entry.date),
+        mealSlot: toPrismaMealSlot(entry.mealSlot) ?? "BREAKFAST",
+        mealTemplateId: entry.mealTemplateId,
+        servings: entry.servings ?? null,
+        note: trimToNull(entry.note) ?? null,
+        sortOrder,
+      };
+
+      if (entry.id) {
+        await tx.mealPlanEntry.update({
+          where: {
+            id: entry.id,
+          },
+          data,
+        });
+      } else {
+        await tx.mealPlanEntry.create({
+          data: {
+            mealPlanWeekId,
+            ...data,
+          },
+        });
+      }
+    }
+
+    const prepSessionsToDelete = (existingWeek?.prepSessions ?? []).filter(
+      (session) => !submittedPrepIds.has(session.id),
+    );
+    for (const prepSession of prepSessionsToDelete) {
+      if (prepSession.taskId) {
+        await tx.task.updateMany({
+          where: {
+            id: prepSession.taskId,
+            userId,
+          },
+          data: {
+            status: toPrismaTaskStatus("dropped"),
+          },
+        });
+      }
+    }
+    if (prepSessionsToDelete.length > 0) {
+      await tx.mealPrepSession.deleteMany({
+        where: {
+          id: {
+            in: prepSessionsToDelete.map((session) => session.id),
+          },
+        },
+      });
+    }
+
+    for (const [index, session] of payload.prepSessions.entries()) {
+      const sortOrder = session.sortOrder ?? index;
+      const existingSession = session.id ? existingPrepById.get(session.id) ?? null : null;
+      let taskId = existingSession?.taskId ?? null;
+
+      if (taskId) {
+        const updatedTask = await tx.task.updateMany({
+          where: {
+            id: taskId,
+            userId,
+          },
+          data: {
+            title: session.title.trim(),
+            notes: trimToNull(session.notes) ?? null,
+            kind: "TASK",
+            originType: toPrismaTaskOriginType("meal_plan"),
+            scheduledForDate: parseIsoDate(session.scheduledForDate),
+          },
+        });
+
+        if (updatedTask.count === 0) {
+          taskId = null;
+        }
+      }
+
+      if (!taskId) {
+        const createdTask = await tx.task.create({
+          data: {
+            userId,
+            title: session.title.trim(),
+            notes: trimToNull(session.notes) ?? null,
+            kind: "TASK",
+            originType: toPrismaTaskOriginType("meal_plan"),
+            scheduledForDate: parseIsoDate(session.scheduledForDate),
+          },
+        });
+        taskId = createdTask.id;
+      }
+
+      const sessionData = {
+        scheduledForDate: parseIsoDate(session.scheduledForDate),
+        title: session.title.trim(),
+        notes: trimToNull(session.notes) ?? null,
+        taskId,
+        sortOrder,
+      };
+
+      if (session.id) {
+        await tx.mealPrepSession.update({
+          where: {
+            id: session.id,
+          },
+          data: sessionData,
+        });
+      } else {
+        await tx.mealPrepSession.create({
+          data: {
+            mealPlanWeekId,
+            ...sessionData,
+          },
+        });
+      }
+    }
+
+    await tx.mealPlanGroceryItem.deleteMany({
+      where: {
+        mealPlanWeekId,
+        sourceType: "PLANNED",
+      },
+    });
+
+    const manualGroceryIdsToDelete = (existingWeek?.groceryItems ?? [])
+      .filter((item) => !submittedManualGroceryIds.has(item.id))
+      .map((item) => item.id);
+    if (manualGroceryIdsToDelete.length > 0) {
+      await tx.mealPlanGroceryItem.deleteMany({
+        where: {
+          id: {
+            in: manualGroceryIdsToDelete,
+          },
+        },
+      });
+    }
+
+    for (const [index, item] of payload.manualGroceryItems.entries()) {
+      const sortOrder = item.sortOrder ?? index;
+      const groceryData = {
+        name: item.name.trim(),
+        quantity: item.quantity ?? null,
+        unit: trimToNull(item.unit),
+        section: trimToNull(item.section),
+        note: trimToNull(item.note),
+        sourceType: toPrismaMealPlanGrocerySourceType("manual"),
+        isChecked: item.isChecked ?? false,
+        sortOrder,
+      };
+
+      if (item.id) {
+        await tx.mealPlanGroceryItem.update({
+          where: {
+            id: item.id,
+          },
+          data: groceryData,
+        });
+      } else {
+        await tx.mealPlanGroceryItem.create({
+          data: {
+            mealPlanWeekId,
+            ...groceryData,
+          },
+        });
+      }
+    }
+
+    const plannedGroceryRows = buildPlannedGroceryRows(payload.entries, mealTemplateById, plannedCheckedByKey);
+    if (plannedGroceryRows.length > 0) {
+      await tx.mealPlanGroceryItem.createMany({
+        data: plannedGroceryRows.map((item) => ({
+          mealPlanWeekId,
+          name: item.name,
+          quantity: item.quantity,
+          unit: item.unit,
+          section: item.section,
+          note: item.note,
+          sourceType: toPrismaMealPlanGrocerySourceType(item.sourceType),
+          isChecked: item.isChecked,
+          sortOrder: item.sortOrder,
+        })),
+      });
+    }
+  });
 }
 
 async function assertOwnedMealTemplate(
@@ -556,11 +1455,9 @@ export const registerHealthRoutes: FastifyPluginAsync = async (app) => {
     const mealTemplate = await app.prisma.mealTemplate.create({
       data: {
         userId: user.id,
-        name: payload.name,
+        name: payload.name.trim(),
         mealSlot: toPrismaMealSlot(payload.mealSlot),
-        templatePayloadJson: {
-          description: payload.description ?? null,
-        },
+        templatePayloadJson: normalizeMealTemplatePayloadInput(payload),
       },
     });
 
@@ -580,19 +1477,15 @@ export const registerHealthRoutes: FastifyPluginAsync = async (app) => {
     );
 
     const existingTemplate = await findOwnedMealTemplate(app, user.id, mealTemplateId);
+    const existingPayload = parseMealTemplatePayload(existingTemplate.templatePayloadJson);
     const mealTemplate = await app.prisma.mealTemplate.update({
       where: {
         id: mealTemplateId,
       },
       data: {
-        name: payload.name,
+        name: payload.name?.trim(),
         mealSlot: toPrismaMealSlot(payload.mealSlot),
-        templatePayloadJson:
-          payload.description === undefined
-            ? undefined
-            : {
-                description: payload.description ?? null,
-              },
+        templatePayloadJson: normalizeMealTemplatePayloadInput(payload, existingPayload),
         archivedAt:
           payload.archived === undefined
             ? undefined
@@ -607,6 +1500,25 @@ export const registerHealthRoutes: FastifyPluginAsync = async (app) => {
     });
 
     return reply.send(response);
+  });
+
+  app.get("/meal-plans/weeks/:startDate", async (request, reply) => {
+    const user = requireAuthenticatedUser(request);
+    const { startDate } = request.params as { startDate: IsoDateString };
+    const parsedStartDate = parseOrThrow(isoDateSchema, startDate);
+
+    return reply.send(await buildMealPlanWeekResponse(app, user.id, parsedStartDate));
+  });
+
+  app.put("/meal-plans/weeks/:startDate", async (request, reply) => {
+    const user = requireAuthenticatedUser(request);
+    const { startDate } = request.params as { startDate: IsoDateString };
+    const parsedStartDate = parseOrThrow(isoDateSchema, startDate);
+    const payload = parseOrThrow(saveMealPlanWeekSchema, request.body as SaveMealPlanWeekRequest);
+
+    await saveMealPlanWeek(app, user.id, parsedStartDate, payload);
+
+    return reply.send(await buildMealPlanWeekResponse(app, user.id, parsedStartDate));
   });
 
   app.get("/meal-logs", async (request, reply) => {
@@ -666,6 +1578,7 @@ export const registerHealthRoutes: FastifyPluginAsync = async (app) => {
       currentDayWaterLogs,
       currentDayMealLogs,
       latestWeight,
+      todayPlannedMeals,
     ] = await Promise.all([
       app.prisma.waterLog.findMany({
         where: {
@@ -751,6 +1664,7 @@ export const registerHealthRoutes: FastifyPluginAsync = async (app) => {
         },
         orderBy: [{ measuredOn: "desc" }, { createdAt: "desc" }],
       }),
+      getTodayPlannedMeals(app, user.id, todayIsoDate, preferences?.weekStartsOn ?? 1),
     ]);
 
     const currentDayWaterMl = currentDayWaterLogs.reduce(
@@ -792,6 +1706,7 @@ export const registerHealthRoutes: FastifyPluginAsync = async (app) => {
         workoutDay: currentWorkout ? serializeWorkoutDay(currentWorkout) : null,
         latestWeight: latestWeight ? serializeWeightLog(latestWeight) : null,
         signals: enhancements.currentDay.signals,
+        plannedMeals: todayPlannedMeals,
         score: enhancements.currentDay.score,
         timeline: enhancements.currentDay.timeline,
       },
@@ -878,14 +1793,27 @@ export const registerHealthRoutes: FastifyPluginAsync = async (app) => {
   app.post("/meal-logs", async (request, reply) => {
     const user = requireAuthenticatedUser(request);
     const payload = parseOrThrow(createMealLogSchema, request.body as CreateMealLogRequest);
-    await assertOwnedMealTemplate(app, user.id, payload.mealTemplateId);
+    const [mealPlanEntry] = await Promise.all([
+      findOwnedMealPlanEntry(app, user.id, payload.mealPlanEntryId),
+      assertOwnedMealTemplate(app, user.id, payload.mealTemplateId),
+    ]);
+
+    if (mealPlanEntry && payload.mealTemplateId && payload.mealTemplateId !== mealPlanEntry.mealTemplateId) {
+      throw new AppError({
+        statusCode: 400,
+        code: "BAD_REQUEST",
+        message: "Planned meal template does not match the selected template",
+      });
+    }
+
     const mealLog = await app.prisma.mealLog.create({
       data: {
         userId: user.id,
         occurredAt: payload.occurredAt ? new Date(payload.occurredAt) : new Date(),
-        mealSlot: toPrismaMealSlot(payload.mealSlot),
-        mealTemplateId: payload.mealTemplateId ?? null,
-        description: payload.description,
+        mealSlot: toPrismaMealSlot(payload.mealSlot ?? fromPrismaMealSlot(mealPlanEntry?.mealSlot ?? null) ?? undefined),
+        mealTemplateId: payload.mealTemplateId ?? mealPlanEntry?.mealTemplateId ?? null,
+        mealPlanEntryId: payload.mealPlanEntryId ?? null,
+        description: payload.description.trim(),
         loggingQuality: toPrismaMealLoggingQuality(payload.loggingQuality),
       },
     });
@@ -901,10 +1829,25 @@ export const registerHealthRoutes: FastifyPluginAsync = async (app) => {
     const { mealLogId } = request.params as { mealLogId: string };
     const payload = parseOrThrow(updateMealLogSchema, request.body as UpdateMealLogRequest);
 
-    await Promise.all([
+    const [existingMealLog, , mealPlanEntry] = await Promise.all([
       findOwnedMealLog(app, user.id, mealLogId),
       assertOwnedMealTemplate(app, user.id, payload.mealTemplateId),
+      findOwnedMealPlanEntry(app, user.id, payload.mealPlanEntryId),
     ]);
+
+    const effectiveMealTemplateId = payload.mealTemplateId !== undefined
+      ? payload.mealTemplateId
+      : mealPlanEntry
+        ? mealPlanEntry.mealTemplateId
+        : undefined;
+
+    if (mealPlanEntry && effectiveMealTemplateId && effectiveMealTemplateId !== mealPlanEntry.mealTemplateId) {
+      throw new AppError({
+        statusCode: 400,
+        code: "BAD_REQUEST",
+        message: "Planned meal template does not match the selected template",
+      });
+    }
 
     const mealLog = await app.prisma.mealLog.update({
       where: {
@@ -912,9 +1855,16 @@ export const registerHealthRoutes: FastifyPluginAsync = async (app) => {
       },
       data: {
         occurredAt: payload.occurredAt ? new Date(payload.occurredAt) : undefined,
-        mealSlot: toPrismaMealSlot(payload.mealSlot),
-        mealTemplateId: payload.mealTemplateId,
-        description: payload.description,
+        mealSlot: payload.mealSlot === undefined
+          ? mealPlanEntry
+            ? mealPlanEntry.mealSlot
+            : undefined
+          : toPrismaMealSlot(payload.mealSlot),
+        mealTemplateId: effectiveMealTemplateId,
+        mealPlanEntryId: payload.mealPlanEntryId === undefined
+          ? undefined
+          : payload.mealPlanEntryId,
+        description: payload.description?.trim() ?? existingMealLog.description,
         loggingQuality: payload.loggingQuality
           ? toPrismaMealLoggingQuality(payload.loggingQuality)
           : undefined,

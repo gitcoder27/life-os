@@ -17,6 +17,7 @@ export type HealthGuidanceIntent =
   | "update_workout"
   | "log_weight"
   | "review_patterns";
+export type MealPlanGrocerySourceType = "planned" | "manual";
 
 export interface WaterLogItem {
   id: EntityId;
@@ -31,9 +32,29 @@ export interface MealLogItem {
   occurredAt: string;
   mealSlot: MealSlot | null;
   mealTemplateId: EntityId | null;
+  mealPlanEntryId?: EntityId | null;
   description: string;
   loggingQuality: MealLoggingQuality;
   createdAt: string;
+}
+
+export interface MealTemplateIngredient {
+  name: string;
+  quantity: number | null;
+  unit: string | null;
+  section: string | null;
+  note: string | null;
+}
+
+export interface PlannedMealTodayItem {
+  mealPlanEntryId: EntityId;
+  date: IsoDateString;
+  mealSlot: MealSlot;
+  mealTemplateId: EntityId | null;
+  title: string;
+  servings: number | null;
+  note: string | null;
+  isLogged: boolean;
 }
 
 export interface WorkoutDayItem {
@@ -127,6 +148,7 @@ export interface HealthSummaryResponse extends ApiMeta {
       meals: HealthMealSignal;
       workout: HealthWorkoutSignal;
     };
+    plannedMeals: PlannedMealTodayItem[];
     score: HealthScoreSnapshot;
     timeline: HealthTimelineItem[];
   };
@@ -175,6 +197,7 @@ export interface CreateMealLogRequest {
   occurredAt?: string;
   mealSlot?: MealSlot | null;
   mealTemplateId?: EntityId | null;
+  mealPlanEntryId?: EntityId | null;
   description: string;
   loggingQuality: MealLoggingQuality;
 }
@@ -183,6 +206,7 @@ export interface UpdateMealLogRequest {
   occurredAt?: string;
   mealSlot?: MealSlot | null;
   mealTemplateId?: EntityId | null;
+  mealPlanEntryId?: EntityId | null;
   description?: string;
   loggingQuality?: MealLoggingQuality;
 }
@@ -196,6 +220,13 @@ export interface MealTemplateItem {
   name: string;
   mealSlot: MealSlot | null;
   description: string | null;
+  servings: number | null;
+  prepMinutes: number | null;
+  cookMinutes: number | null;
+  ingredients: MealTemplateIngredient[];
+  instructions: string[];
+  tags: string[];
+  notes: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -208,12 +239,26 @@ export interface CreateMealTemplateRequest {
   name: string;
   mealSlot?: MealSlot | null;
   description?: string | null;
+  servings?: number | null;
+  prepMinutes?: number | null;
+  cookMinutes?: number | null;
+  ingredients?: MealTemplateIngredient[];
+  instructions?: string[];
+  tags?: string[];
+  notes?: string | null;
 }
 
 export interface UpdateMealTemplateRequest {
   name?: string;
   mealSlot?: MealSlot | null;
   description?: string | null;
+  servings?: number | null;
+  prepMinutes?: number | null;
+  cookMinutes?: number | null;
+  ingredients?: MealTemplateIngredient[];
+  instructions?: string[];
+  tags?: string[];
+  notes?: string | null;
   archived?: boolean;
 }
 
@@ -229,6 +274,101 @@ export interface MealLogsResponse extends ApiMeta {
 export interface DeleteMealLogResponse extends ApiMeta {
   deleted: true;
   mealLogId: EntityId;
+}
+
+export interface MealPlanEntryItem {
+  id: EntityId;
+  date: IsoDateString;
+  mealSlot: MealSlot;
+  mealTemplateId: EntityId;
+  mealTemplateName: string;
+  servings: number | null;
+  note: string | null;
+  sortOrder: number;
+  isLogged: boolean;
+  loggedMealCount: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface MealPrepSessionItem {
+  id: EntityId;
+  scheduledForDate: IsoDateString;
+  title: string;
+  notes: string | null;
+  taskId: EntityId | null;
+  taskStatus: "pending" | "completed" | "dropped" | null;
+  sortOrder: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface MealPlanGroceryItem {
+  id: EntityId;
+  name: string;
+  quantity: number | null;
+  unit: string | null;
+  section: string | null;
+  note: string | null;
+  sourceType: MealPlanGrocerySourceType;
+  isChecked: boolean;
+  sortOrder: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface MealPlanWeekSummary {
+  totalPlannedMeals: number;
+  loggedPlannedMeals: number;
+  prepSessionsCount: number;
+  completedPrepSessionsCount: number;
+  groceryItemCount: number;
+}
+
+export interface MealPlanWeekResponse extends ApiMeta {
+  startDate: IsoDateString;
+  endDate: IsoDateString;
+  notes: string | null;
+  entries: MealPlanEntryItem[];
+  prepSessions: MealPrepSessionItem[];
+  groceryItems: MealPlanGroceryItem[];
+  summary: MealPlanWeekSummary;
+  mealTemplates: MealTemplateItem[];
+}
+
+export interface SaveMealPlanWeekRequest {
+  notes?: string | null;
+  entries: Array<{
+    id?: EntityId;
+    date: IsoDateString;
+    mealSlot: MealSlot;
+    mealTemplateId: EntityId;
+    servings?: number | null;
+    note?: string | null;
+    sortOrder?: number;
+  }>;
+  prepSessions: Array<{
+    id?: EntityId;
+    scheduledForDate: IsoDateString;
+    title: string;
+    notes?: string | null;
+    sortOrder?: number;
+  }>;
+  manualGroceryItems: Array<{
+    id?: EntityId;
+    name: string;
+    quantity?: number | null;
+    unit?: string | null;
+    section?: string | null;
+    note?: string | null;
+      isChecked?: boolean;
+      sortOrder?: number;
+  }>;
+  plannedGroceryItems?: Array<{
+    name: string;
+    unit?: string | null;
+    isChecked?: boolean;
+  }>;
 }
 
 export interface UpdateWorkoutDayRequest {

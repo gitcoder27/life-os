@@ -5,6 +5,7 @@ import { FinancePage } from "../features/finance/FinancePage";
 import { GoalsPage } from "../features/goals/GoalsPage";
 import { HabitsPage } from "../features/habits/HabitsPage";
 import { HealthPage } from "../features/health/HealthPage";
+import { MealPlannerPage } from "../features/health/MealPlannerPage";
 import { HomePage } from "../features/home/HomePage";
 import { InboxPage } from "../features/inbox/InboxPage";
 import { OnboardingPage } from "../features/onboarding/OnboardingPage";
@@ -125,6 +126,10 @@ export const router = createBrowserRouter([
       {
         path: "health",
         element: <HealthPage />,
+      },
+      {
+        path: "health/meals",
+        element: <MealPlannerPage />,
       },
       {
         path: "finance",

@@ -93,6 +93,7 @@ export const queryKeys = {
   notifications: ["notifications"] as const,
   settings: ["settings"] as const,
   mealTemplates: ["health", "meal-templates"] as const,
+  mealPlanWeek: (startDate: string) => ["mealPlanWeek", startDate] as const,
   taskTemplates: ["planning", "task-templates"] as const,
 };
 

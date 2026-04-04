@@ -101,7 +101,7 @@ export interface PlanningTaskItem {
   dueAt: string | null;
   goalId: string | null;
   goal: GoalSummary | null;
-  originType: "manual" | "quick_capture" | "carry_forward" | "review_seed" | "recurring" | "template";
+  originType: "manual" | "quick_capture" | "carry_forward" | "review_seed" | "recurring" | "template" | "meal_plan";
   carriedFromTaskId: string | null;
   recurrence: RecurrenceDefinition | null;
   completedAt: string | null;

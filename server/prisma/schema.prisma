@@ -72,6 +72,7 @@ enum TaskOriginType {
   REVIEW_SEED
   RECURRING
   TEMPLATE
+  MEAL_PLAN
 }
 
 enum TaskKind {
@@ -142,6 +143,11 @@ enum MealLoggingQuality {
   PARTIAL
   MEANINGFUL
   FULL
+}
+
+enum MealPlanGrocerySourceType {
+  PLANNED
+  MANUAL
 }
 
 enum WorkoutPlanType {
@@ -225,6 +231,7 @@ model User {
   routines              Routine[]
   waterLogs             WaterLog[]
   mealTemplates         MealTemplate[]
+  mealPlanWeeks         MealPlanWeek[]
   mealLogs              MealLog[]
   workoutDays           WorkoutDay[]
   weightLogs            WeightLog[]
@@ -465,6 +472,7 @@ model Task {
   carriedFromTask   Task?          @relation("TaskCarryForward", fields: [carriedFromTaskId], references: [id], onDelete: SetNull)
   carriedTasks      Task[]         @relation("TaskCarryForward")
   plannerBlockTask  DayPlannerBlockTask?
+  mealPrepSession   MealPrepSession?
   adminItems        AdminItem[]    @relation("AdminItemTask")
   recurrenceRule    RecurrenceRule? @relation(fields: [recurrenceRuleId], references: [id], onDelete: SetNull)
 
@@ -596,7 +604,77 @@ model MealTemplate {
   updatedAt           DateTime  @updatedAt
   archivedAt          DateTime?
   user                User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  mealPlanEntries     MealPlanEntry[]
   mealLogs            MealLog[]
+}
+
+model MealPlanWeek {
+  id            String              @id @default(uuid())
+  userId        String
+  startDate     DateTime
+  notes         String?
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
+  user          User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  entries       MealPlanEntry[]
+  prepSessions  MealPrepSession[]
+  groceryItems  MealPlanGroceryItem[]
+
+  @@unique([userId, startDate])
+  @@index([userId, startDate])
+}
+
+model MealPlanEntry {
+  id              String       @id @default(uuid())
+  mealPlanWeekId  String
+  date            DateTime
+  mealSlot        MealSlot
+  mealTemplateId  String
+  servings        Decimal?     @db.Decimal(7, 2)
+  note            String?
+  sortOrder       Int          @default(0)
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+  mealPlanWeek    MealPlanWeek @relation(fields: [mealPlanWeekId], references: [id], onDelete: Cascade)
+  mealTemplate    MealTemplate @relation(fields: [mealTemplateId], references: [id], onDelete: Restrict)
+  mealLogs        MealLog[]
+
+  @@index([mealPlanWeekId, date, mealSlot, sortOrder])
+  @@index([mealTemplateId])
+}
+
+model MealPrepSession {
+  id               String       @id @default(uuid())
+  mealPlanWeekId   String
+  scheduledForDate DateTime
+  title            String
+  notes            String?
+  taskId           String?      @unique
+  sortOrder        Int          @default(0)
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+  mealPlanWeek     MealPlanWeek @relation(fields: [mealPlanWeekId], references: [id], onDelete: Cascade)
+  task             Task?        @relation(fields: [taskId], references: [id], onDelete: SetNull)
+
+  @@index([mealPlanWeekId, scheduledForDate, sortOrder])
+}
+
+model MealPlanGroceryItem {
+  id              String                    @id @default(uuid())
+  mealPlanWeekId  String
+  name            String
+  quantity        Decimal?                  @db.Decimal(9, 2)
+  unit            String?
+  section         String?
+  note            String?
+  sourceType      MealPlanGrocerySourceType
+  isChecked       Boolean                   @default(false)
+  sortOrder       Int                       @default(0)
+  createdAt       DateTime                  @default(now())
+  updatedAt       DateTime                  @updatedAt
+  mealPlanWeek    MealPlanWeek              @relation(fields: [mealPlanWeekId], references: [id], onDelete: Cascade)
+
+  @@index([mealPlanWeekId, sourceType, sortOrder])
 }
 
 model MealLog {
@@ -605,11 +683,15 @@ model MealLog {
   occurredAt     DateTime
   mealSlot       MealSlot?
   mealTemplateId String?
+  mealPlanEntryId String?
   description    String
   loggingQuality MealLoggingQuality
   createdAt      DateTime           @default(now())
   user           User               @relation(fields: [userId], references: [id], onDelete: Cascade)
   mealTemplate   MealTemplate?      @relation(fields: [mealTemplateId], references: [id], onDelete: SetNull)
+  mealPlanEntry  MealPlanEntry?     @relation(fields: [mealPlanEntryId], references: [id], onDelete: SetNull)
+
+  @@index([mealPlanEntryId])
 }
 
 model WorkoutDay {

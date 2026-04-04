@@ -11,7 +11,8 @@ export type TaskOriginType =
   | "carry_forward"
   | "review_seed"
   | "recurring"
-  | "template";
+  | "template"
+  | "meal_plan";
 export type TaskScheduledState = "all" | "scheduled" | "unscheduled";
 
 export interface PlanningPriorityItem {

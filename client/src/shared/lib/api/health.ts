@@ -108,6 +108,16 @@ type HealthSummaryResponse = {
       meals: HealthMealSignal;
       workout: HealthWorkoutSignal;
     };
+    plannedMeals: Array<{
+      mealPlanEntryId: string;
+      date: string;
+      mealSlot: "breakfast" | "lunch" | "dinner" | "snack";
+      mealTemplateId: string | null;
+      title: string;
+      servings: number | null;
+      note: string | null;
+      isLogged: boolean;
+    }>;
     score: HealthScoreSnapshot;
     timeline: HealthTimelineItem[];
   };
@@ -127,6 +137,7 @@ type HealthSummaryResponse = {
     occurredAt: string;
     mealSlot: "breakfast" | "lunch" | "dinner" | "snack" | null;
     mealTemplateId: string | null;
+    mealPlanEntryId?: string | null;
     description: string;
     loggingQuality: "partial" | "meaningful" | "full";
     createdAt: string;
@@ -153,16 +164,33 @@ type WaterLogsResponse = {
   }>;
 };
 
+export type MealTemplateIngredient = {
+  name: string;
+  quantity: number | null;
+  unit: string | null;
+  section: string | null;
+  note: string | null;
+};
+
+export type MealTemplateItem = {
+  id: string;
+  name: string;
+  mealSlot: "breakfast" | "lunch" | "dinner" | "snack" | null;
+  description: string | null;
+  servings: number | null;
+  prepMinutes: number | null;
+  cookMinutes: number | null;
+  ingredients: MealTemplateIngredient[];
+  instructions: string[];
+  tags: string[];
+  notes: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
 type MealTemplatesResponse = {
   generatedAt: string;
-  mealTemplates: Array<{
-    id: string;
-    name: string;
-    mealSlot: "breakfast" | "lunch" | "dinner" | "snack" | null;
-    description: string | null;
-    createdAt: string;
-    updatedAt: string;
-  }>;
+  mealTemplates: MealTemplateItem[];
 };
 
 type MealLogsResponse = {
@@ -173,6 +201,7 @@ type MealLogsResponse = {
     occurredAt: string;
     mealSlot: "breakfast" | "lunch" | "dinner" | "snack" | null;
     mealTemplateId: string | null;
+    mealPlanEntryId?: string | null;
     description: string;
     loggingQuality: "partial" | "meaningful" | "full";
     createdAt: string;
@@ -340,6 +369,7 @@ export const useAddMealMutation = (date: string) => {
       loggingQuality: "partial" | "meaningful" | "full";
       mealSlot?: "breakfast" | "lunch" | "dinner" | "snack" | null;
       mealTemplateId?: string | null;
+      mealPlanEntryId?: string | null;
     }) =>
       apiRequest<MealLogMutationResponse>("/api/health/meal-logs", {
         method: "POST",
@@ -497,6 +527,13 @@ export const useCreateMealTemplateMutation = () => {
       name: string;
       mealSlot?: "breakfast" | "lunch" | "dinner" | "snack" | null;
       description?: string;
+      servings?: number | null;
+      prepMinutes?: number | null;
+      cookMinutes?: number | null;
+      ingredients?: MealTemplateIngredient[];
+      instructions?: string[];
+      tags?: string[];
+      notes?: string | null;
     }) =>
       apiRequest<MealTemplateMutationResponse>("/api/health/meal-templates", {
         method: "POST",
@@ -509,6 +546,7 @@ export const useCreateMealTemplateMutation = () => {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.mealTemplates });
       void queryClient.invalidateQueries({ queryKey: ["health"] });
+      void queryClient.invalidateQueries({ queryKey: ["mealPlanWeek"] });
     },
   });
 };
@@ -525,6 +563,13 @@ export const useUpdateMealTemplateMutation = () => {
       name?: string;
       mealSlot?: "breakfast" | "lunch" | "dinner" | "snack" | null;
       description?: string | null;
+      servings?: number | null;
+      prepMinutes?: number | null;
+      cookMinutes?: number | null;
+      ingredients?: MealTemplateIngredient[];
+      instructions?: string[];
+      tags?: string[];
+      notes?: string | null;
       archived?: boolean;
     }) =>
       apiRequest<MealTemplateMutationResponse>(`/api/health/meal-templates/${mealTemplateId}`, {
@@ -538,6 +583,135 @@ export const useUpdateMealTemplateMutation = () => {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.mealTemplates });
       void queryClient.invalidateQueries({ queryKey: ["health"] });
+      void queryClient.invalidateQueries({ queryKey: ["mealPlanWeek"] });
+    },
+  });
+};
+
+/* ── Meal Plan Week ── */
+
+export type MealPlanEntryItem = {
+  id: string;
+  date: string;
+  mealSlot: "breakfast" | "lunch" | "dinner" | "snack";
+  mealTemplateId: string;
+  mealTemplateName: string;
+  servings: number | null;
+  note: string | null;
+  sortOrder: number;
+  isLogged: boolean;
+  loggedMealCount: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type MealPrepSessionItem = {
+  id: string;
+  scheduledForDate: string;
+  title: string;
+  notes: string | null;
+  taskId: string | null;
+  taskStatus: "pending" | "completed" | "dropped" | null;
+  sortOrder: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type MealPlanGroceryItem = {
+  id: string;
+  name: string;
+  quantity: number | null;
+  unit: string | null;
+  section: string | null;
+  note: string | null;
+  sourceType: "planned" | "manual";
+  isChecked: boolean;
+  sortOrder: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
+type MealPlanWeekSummary = {
+  totalPlannedMeals: number;
+  loggedPlannedMeals: number;
+  prepSessionsCount: number;
+  completedPrepSessionsCount: number;
+  groceryItemCount: number;
+};
+
+export type MealPlanWeekResponse = {
+  generatedAt: string;
+  startDate: string;
+  endDate: string;
+  notes: string | null;
+  entries: MealPlanEntryItem[];
+  prepSessions: MealPrepSessionItem[];
+  groceryItems: MealPlanGroceryItem[];
+  summary: MealPlanWeekSummary;
+  mealTemplates: MealTemplateItem[];
+};
+
+type SaveMealPlanWeekPayload = {
+  notes?: string | null;
+  entries: Array<{
+    id?: string;
+    date: string;
+    mealSlot: "breakfast" | "lunch" | "dinner" | "snack";
+    mealTemplateId: string;
+    servings?: number | null;
+    note?: string | null;
+    sortOrder?: number;
+  }>;
+  prepSessions: Array<{
+    id?: string;
+    scheduledForDate: string;
+    title: string;
+    notes?: string | null;
+    sortOrder?: number;
+  }>;
+  manualGroceryItems: Array<{
+    id?: string;
+    name: string;
+    quantity?: number | null;
+    unit?: string | null;
+    section?: string | null;
+    note?: string | null;
+    isChecked?: boolean;
+    sortOrder?: number;
+  }>;
+  plannedGroceryItems?: Array<{
+    name: string;
+    unit?: string | null;
+    isChecked?: boolean;
+  }>;
+};
+
+export const useMealPlanWeekQuery = (startDate: string) =>
+  useQuery({
+    queryKey: queryKeys.mealPlanWeek(startDate),
+    queryFn: () =>
+      apiRequest<MealPlanWeekResponse>(`/api/health/meal-plans/weeks/${startDate}`),
+    retry: false,
+  });
+
+export const useSaveMealPlanWeekMutation = (startDate: string) => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (payload: SaveMealPlanWeekPayload) =>
+      apiRequest<MealPlanWeekResponse>(`/api/health/meal-plans/weeks/${startDate}`, {
+        method: "PUT",
+        body: payload,
+      }),
+    meta: {
+      successMessage: "Meal plan saved.",
+      errorMessage: "Meal plan save failed.",
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["mealPlanWeek"] });
+      void queryClient.invalidateQueries({ queryKey: ["health"] });
+      void queryClient.invalidateQueries({ queryKey: ["tasks"] });
+      void queryClient.invalidateQueries({ queryKey: ["home"] });
     },
   });
 };

@@ -30,6 +30,7 @@ export const taskOriginSchema = z.enum([
   "review_seed",
   "recurring",
   "template",
+  "meal_plan",
 ]) as z.ZodType<PlanningTaskItem["originType"]>;
 export const carryPolicySchema = z.enum([
   "complete_and_clone",

@@ -102,7 +102,9 @@ export {
   useDeleteWaterLogMutation,
   useDeleteWeightLogMutation,
   useHealthDataQuery,
+  useMealPlanWeekQuery,
   useMealTemplatesQuery,
+  useSaveMealPlanWeekMutation,
   useUpdateMealLogMutation,
   useUpdateMealTemplateMutation,
   useUpdateWaterLogMutation,
@@ -113,6 +115,12 @@ export type {
   HealthGuidanceIntent,
   HealthGuidanceItem,
   HealthTimelineItem,
+  MealPlanEntryItem,
+  MealPlanGroceryItem,
+  MealPlanWeekResponse,
+  MealPrepSessionItem,
+  MealTemplateIngredient,
+  MealTemplateItem,
 } from "./api/health";
 export {
   useCreateCategoryMutation,

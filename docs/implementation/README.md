@@ -11,5 +11,8 @@ Current docs:
 - `goals-hq-redesign-master-plan-2026-04-02.md`: the master product and implementation handoff for the goals HQ redesign
 - `goals-hq-redesign-frontend-agent-2026-04-02.md`: the frontend implementation brief and agent prompt for the redesign
 - `goals-hq-redesign-backend-agent-2026-04-02.md`: the backend implementation brief and agent prompt for the redesign
+- `health-meals-planner-master-plan-2026-04-05.md`: the main product and implementation handoff for the Health meal-planning enhancement
+- `health-meals-planner-frontend-agent-2026-04-05.md`: the frontend implementation brief and agent prompt for the Health meal-planning enhancement
+- `health-meals-planner-backend-agent-2026-04-05.md`: the backend implementation brief and agent prompt for the Health meal-planning enhancement
 
 Historical implementation plans, checklists, and one-off reviews were moved to [`../archive/implementation/`](../archive/implementation/).

@@ -325,6 +325,8 @@ export function toPrismaTaskOriginType(originType: PlanningTaskItem["originType"
       return "RECURRING";
     case "template":
       return "TEMPLATE";
+    case "meal_plan":
+      return "MEAL_PLAN";
   }
 }
 
@@ -342,6 +344,8 @@ export function fromPrismaTaskOriginType(originType: PrismaTaskOriginType): Plan
       return "recurring";
     case "TEMPLATE":
       return "template";
+    case "MEAL_PLAN":
+      return "meal_plan";
   }
 }
 

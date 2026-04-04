@@ -2,7 +2,7 @@ import {
   useEffect,
   useState,
 } from "react";
-import { useLocation } from "react-router-dom";
+import { NavLink, useLocation } from "react-router-dom";
 
 import {
   formatMealSlotLabel,
@@ -90,24 +90,51 @@ function ScoreRing({ value, label }: { value: number; label: string }) {
 }
 
 /* ── Meal Log Form ── */
+type PlannedMealEntry = {
+  mealPlanEntryId: string;
+  date: string;
+  mealSlot: MealSlot;
+  mealTemplateId: string | null;
+  title: string;
+  servings: number | null;
+  note: string | null;
+  isLogged: boolean;
+};
+
 function MealLogForm({
   templates,
+  plannedMeals,
   onSave,
   onCancel,
   isPending,
 }: {
   templates: Array<{ id: string; name: string; mealSlot: MealSlot | null; description: string | null }>;
-  onSave: (payload: { description: string; mealSlot?: MealSlot; mealTemplateId?: string; loggingQuality: "partial" | "meaningful" | "full" }) => void;
+  plannedMeals: PlannedMealEntry[];
+  onSave: (payload: { description: string; mealSlot?: MealSlot; mealTemplateId?: string; mealPlanEntryId?: string; loggingQuality: "partial" | "meaningful" | "full" }) => void;
   onCancel: () => void;
   isPending: boolean;
 }) {
-  const [mode, setMode] = useState<"template" | "freeform">(templates.length > 0 ? "template" : "freeform");
+  const unloggedPlanned = plannedMeals.filter((p) => !p.isLogged);
+  const hasPlanned = unloggedPlanned.length > 0;
+  const defaultMode = hasPlanned ? "planned" : templates.length > 0 ? "template" : "freeform";
+  const [mode, setMode] = useState<"planned" | "template" | "freeform">(defaultMode);
+  const [selectedPlannedId, setSelectedPlannedId] = useState(unloggedPlanned[0]?.mealPlanEntryId ?? "");
   const [selectedTemplateId, setSelectedTemplateId] = useState(templates[0]?.id ?? "");
   const [freeDesc, setFreeDesc] = useState("");
   const [freeSlot, setFreeSlot] = useState<MealSlot>("breakfast");
 
   function handleSubmit() {
-    if (mode === "template") {
+    if (mode === "planned") {
+      const p = unloggedPlanned.find((pm) => pm.mealPlanEntryId === selectedPlannedId);
+      if (!p) return;
+      onSave({
+        description: p.title,
+        mealSlot: p.mealSlot,
+        mealTemplateId: p.mealTemplateId ?? undefined,
+        mealPlanEntryId: p.mealPlanEntryId,
+        loggingQuality: "meaningful",
+      });
+    } else if (mode === "template") {
       const t = templates.find((tpl) => tpl.id === selectedTemplateId);
       if (!t) return;
       onSave({ description: t.name, mealSlot: t.mealSlot ?? undefined, mealTemplateId: t.id, loggingQuality: "meaningful" });
@@ -121,13 +148,27 @@ function MealLogForm({
     <div className="health-form-area">
       <div className="inline-editor">
         <div className="stack-form">
-          {templates.length > 0 && (
-            <div className="meal-mode-toggle">
+          <div className="meal-mode-toggle">
+            {hasPlanned && (
+              <button type="button" className={`meal-mode-toggle__btn${mode === "planned" ? " meal-mode-toggle__btn--active" : ""}`} onClick={() => setMode("planned")}>From plan</button>
+            )}
+            {templates.length > 0 && (
               <button type="button" className={`meal-mode-toggle__btn${mode === "template" ? " meal-mode-toggle__btn--active" : ""}`} onClick={() => setMode("template")}>From template</button>
-              <button type="button" className={`meal-mode-toggle__btn${mode === "freeform" ? " meal-mode-toggle__btn--active" : ""}`} onClick={() => setMode("freeform")}>Freeform</button>
-            </div>
-          )}
-          {mode === "template" && templates.length > 0 ? (
+            )}
+            <button type="button" className={`meal-mode-toggle__btn${mode === "freeform" ? " meal-mode-toggle__btn--active" : ""}`} onClick={() => setMode("freeform")}>Freeform</button>
+          </div>
+          {mode === "planned" && hasPlanned ? (
+            <label className="field">
+              <span>Today&apos;s planned meal</span>
+              <select value={selectedPlannedId} onChange={(e) => setSelectedPlannedId(e.target.value)}>
+                {unloggedPlanned.map((p) => (
+                  <option key={p.mealPlanEntryId} value={p.mealPlanEntryId}>
+                    {p.title} — {formatMealSlotLabel(p.mealSlot)}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : mode === "template" && templates.length > 0 ? (
             <label className="field">
               <span>Template</span>
               <select value={selectedTemplateId} onChange={(e) => setSelectedTemplateId(e.target.value)}>
@@ -458,6 +499,31 @@ function TimelineRow({
    Health Page — Main Component
    ═══════════════════════════════════════════════ */
 
+/* ── Health Sub-Navigation ── */
+function HealthSubNav() {
+  return (
+    <nav className="mp-subnav" aria-label="Health sections">
+      <NavLink
+        to="/health"
+        className={({ isActive }) =>
+          `mp-subnav__link${isActive ? " mp-subnav__link--active" : ""}`
+        }
+        end
+      >
+        Basics
+      </NavLink>
+      <NavLink
+        to="/health/meals"
+        className={({ isActive }) =>
+          `mp-subnav__link${isActive ? " mp-subnav__link--active" : ""}`
+        }
+      >
+        Meals
+      </NavLink>
+    </nav>
+  );
+}
+
 export function HealthPage() {
   const location = useLocation();
   const today = getTodayDate();
@@ -519,20 +585,26 @@ export function HealthPage() {
 
   if (healthQuery.isLoading && !healthQuery.data) {
     return (
-      <PageLoadingState
-        title="Loading health basics"
-        description="Pulling together water, meals, workout status, and weight history."
-      />
+      <div className="health-page">
+        <HealthSubNav />
+        <PageLoadingState
+          title="Loading health basics"
+          description="Pulling together water, meals, workout status, and weight history."
+        />
+      </div>
     );
   }
 
   if (healthQuery.isError || !healthQuery.data) {
     return (
-      <PageErrorState
-        title="Health could not load"
-        message={healthQuery.error instanceof Error ? healthQuery.error.message : undefined}
-        onRetry={() => void healthQuery.refetch()}
-      />
+      <div className="health-page">
+        <HealthSubNav />
+        <PageErrorState
+          title="Health could not load"
+          message={healthQuery.error instanceof Error ? healthQuery.error.message : undefined}
+          onRetry={() => void healthQuery.refetch()}
+        />
+      </div>
     );
   }
 
@@ -545,6 +617,10 @@ export function HealthPage() {
   const waterLogs = healthQuery.data.waterLogs?.waterLogs ?? [];
   const weightLogs = summary.weightHistory ?? [];
 
+  const plannedMeals: PlannedMealEntry[] = (currentDay.plannedMeals ?? []).map((p) => ({
+    ...p,
+    mealSlot: p.mealSlot as MealSlot,
+  }));
   const waterMl = currentDay.waterMl ?? 0;
   const waterTargetMl = currentDay.waterTargetMl ?? 1;
   const waterPaceShortfallMl = Math.max(0, signals.water.paceTargetMl - waterMl);
@@ -625,6 +701,8 @@ export function HealthPage() {
 
   return (
     <div className="health-page">
+      <HealthSubNav />
+
       {/* ═══ Health Pulse Hero ═══ */}
       <section className="health-pulse" id="health-pulse">
         <div className="health-pulse__eyebrow">
@@ -790,6 +868,7 @@ export function HealthPage() {
       {activeForm === "meal" && (
         <MealLogForm
           templates={templates}
+          plannedMeals={plannedMeals}
           isPending={addMealMutation.isPending}
           onSave={(p) => { void addMealMutation.mutateAsync(p).then(() => setActiveForm(null)); }}
           onCancel={() => setActiveForm(null)}
