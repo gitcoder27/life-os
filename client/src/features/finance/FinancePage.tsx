@@ -1,4 +1,9 @@
-import { useMemo, useState } from "react";
+import {
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
+import { useLocation } from "react-router-dom";
 
 import {
   daysUntil,
@@ -39,6 +44,7 @@ import {
 } from "../../shared/ui/PageState";
 import { RecurrenceEditor, buildRecurrenceInput } from "../../shared/ui/RecurrenceEditor";
 import { SectionCard } from "../../shared/ui/SectionCard";
+import { readHomeDestinationState } from "../../shared/lib/homeNavigation";
 import { FinanceInsightsPanel } from "./FinanceInsightsPanel";
 import { FinancePlanPanel } from "./FinancePlanPanel";
 
@@ -90,9 +96,11 @@ function navigateMonth(month: string, delta: number): string {
 }
 
 export function FinancePage() {
+  const location = useLocation();
   const today = getTodayDate();
   const currentMonth = getMonthString(today);
   const [selectedMonth, setSelectedMonth] = useState(currentMonth);
+  const [highlightedBillId, setHighlightedBillId] = useState<string | null>(null);
   const isCurrentMonth = selectedMonth === currentMonth;
 
   const financeQuery = useFinanceDataQuery(selectedMonth);
@@ -144,6 +152,7 @@ export function FinancePage() {
   const [rescheduleDate, setRescheduleDate] = useState("");
 
   const financeData = financeQuery.data;
+  const homeDestination = readHomeDestinationState(location.state);
   const summary = financeData?.summary;
   const expenses = financeData?.expenses?.expenses ?? [];
   const recurringExpenses = financeData?.recurringExpenses?.recurringExpenses ?? [];
@@ -204,6 +213,29 @@ export function FinancePage() {
     }
     return Array.from(groups.entries());
   }, [sortedExpenses]);
+
+  useEffect(() => {
+    if (homeDestination?.kind !== "finance_bills") {
+      setHighlightedBillId(null);
+      return;
+    }
+
+    setSelectedMonth(currentMonth);
+    setHighlightedBillId(homeDestination.adminItemId ?? null);
+
+    requestAnimationFrame(() => {
+      const targetId = homeDestination.adminItemId
+        ? `finance-bill-${homeDestination.adminItemId}`
+        : homeDestination.section === "pending_bills"
+          ? "finance-pending-bills"
+          : "finance-due-bills";
+
+      document.getElementById(targetId)?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    });
+  }, [currentMonth, homeDestination, location.key]);
 
   if (financeQuery.isLoading && !financeQuery.data) {
     return (
@@ -623,15 +655,24 @@ export function FinancePage() {
 
           {/* ── Due Now ── */}
           {dueBills.length > 0 && (
-            <div className="due-now">
+            <div className="due-now" id="finance-due-bills">
               <div className="due-now__header">
                 <span className="section-label">Due now</span>
                 <span className="due-now__count">{dueBills.length}</span>
               </div>
               <div className="due-now__list">
                 {dueBills.map((bill) => (
-                  <div key={bill.id}>
-                    <div className={getBillRowClass(bill)}>
+                  <div key={bill.id} id={`finance-bill-${bill.id}`}>
+                    <div
+                      className={getBillRowClass(bill)}
+                      style={highlightedBillId === bill.id
+                        ? {
+                            borderColor: "rgba(217, 153, 58, 0.4)",
+                            boxShadow: "0 0 0 1px rgba(217, 153, 58, 0.25)",
+                            background: "rgba(217, 153, 58, 0.06)",
+                          }
+                        : undefined}
+                    >
                       <span className="bill-row__indicator" />
                       <div className="bill-row__info">
                         <span className="bill-row__title">{bill.title}</span>
@@ -873,7 +914,7 @@ export function FinancePage() {
 
           {/* Upcoming bills in this month */}
           {pendingBills.length > 0 && (
-            <div className="rail-card">
+            <div className="rail-card" id="finance-pending-bills">
               <span className="rail-card__title">Pending bills</span>
               <div className="rail-card__list">
                 {pendingBills.slice(0, 6).map((bill) => (

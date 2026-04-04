@@ -3,7 +3,12 @@ import { Link } from "react-router-dom";
 
 export function FinanceAdmin() {
   const today = getTodayDate();
-  const financeQuery = useFinanceDataQuery(today);
+  const financeQuery = useFinanceDataQuery(today, {
+    includeRecurringExpenses: false,
+    includeCategories: false,
+    includeMonthPlan: false,
+    includeInsights: false,
+  });
 
   if (financeQuery.isLoading && !financeQuery.data) {
     return (

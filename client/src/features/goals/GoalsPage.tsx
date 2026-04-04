@@ -1,4 +1,8 @@
-import { useState } from "react";
+import {
+  useEffect,
+  useState,
+} from "react";
+import { useLocation } from "react-router-dom";
 
 import {
   getMonthStartDate,
@@ -13,6 +17,7 @@ import {
   PageErrorState,
   PageLoadingState,
 } from "../../shared/ui/PageState";
+import { readHomeDestinationState } from "../../shared/lib/homeNavigation";
 import {
   GoalFormDialog,
   emptyGoalForm,
@@ -25,6 +30,7 @@ import { GoalsOverviewWorkspace } from "./GoalsOverviewWorkspace";
 import { GoalsPlanWorkspace } from "./GoalsPlanWorkspace";
 
 export function GoalsPage() {
+  const location = useLocation();
   const today = getTodayDate();
   const weekStart = getWeekStartDate(today);
   const monthStart = getMonthStartDate(today);
@@ -49,6 +55,23 @@ export function GoalsPage() {
   const workspaceQuery = useGoalsWorkspaceQuery(today);
   const createGoalMutation = useCreateGoalMutation();
   const updateGoalMutation = useUpdateGoalMutation();
+  const homeDestination = readHomeDestinationState(location.state);
+
+  useEffect(() => {
+    if (homeDestination?.kind !== "goal_plan") {
+      return;
+    }
+
+    setMode(homeDestination.mode);
+    setSelectedGoalId(homeDestination.goalId ?? null);
+
+    requestAnimationFrame(() => {
+      document.querySelector(".ghq-page-header")?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    });
+  }, [homeDestination, location.key]);
 
   if (workspaceQuery.isLoading && !workspaceQuery.data) {
     return (

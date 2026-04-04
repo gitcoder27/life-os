@@ -1,8 +1,11 @@
+import { useEffect, useState } from "react";
+import { useLocation } from "react-router-dom";
 import { PageHeader } from "../../shared/ui/PageHeader";
 import {
   PageErrorState,
   PageLoadingState,
 } from "../../shared/ui/PageState";
+import { readHomeDestinationState } from "../../shared/lib/homeNavigation";
 
 import { DailyFocusSection } from "./components/DailyFocusSection";
 import { HabitsScoreStrip } from "./components/HabitsScoreStrip";
@@ -12,7 +15,35 @@ import { SignalsSection } from "./components/SignalsSection";
 import { useHabitsPageController } from "./useHabitsPageController";
 
 export function HabitsPage() {
+  const location = useLocation();
   const controller = useHabitsPageController();
+  const [highlightedHabitId, setHighlightedHabitId] = useState<string | null>(null);
+  const [highlightWeeklyChallenge, setHighlightWeeklyChallenge] = useState(false);
+  const homeDestination = readHomeDestinationState(location.state);
+
+  useEffect(() => {
+    if (homeDestination?.kind !== "habit_focus") {
+      setHighlightedHabitId(null);
+      setHighlightWeeklyChallenge(false);
+      return;
+    }
+
+    const targetId = homeDestination.surface === "weekly_challenge"
+      ? "habits-weekly-challenge"
+      : homeDestination.habitId
+        ? `habits-focus-${homeDestination.habitId}`
+        : "habits-daily-focus";
+
+    setHighlightedHabitId(homeDestination.surface === "due_today" ? homeDestination.habitId ?? null : null);
+    setHighlightWeeklyChallenge(homeDestination.surface === "weekly_challenge");
+
+    requestAnimationFrame(() => {
+      document.getElementById(targetId)?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    });
+  }, [homeDestination, location.key]);
 
   if (controller.habitsQuery.isLoading && !controller.habitsQuery.data) {
     return (
@@ -64,6 +95,7 @@ export function HabitsPage() {
         allHabits={controller.allHabits}
         dueHabits={controller.dueHabits}
         activeRoutines={controller.activeRoutines}
+        highlightedHabitId={highlightedHabitId}
         dueCompletedUnits={controller.dueCompletedUnits}
         dueTargetUnits={controller.dueTargetUnits}
         isHabitCheckinPending={controller.habitCheckinMutation.isPending}
@@ -81,6 +113,7 @@ export function HabitsPage() {
 
       <SignalsSection
         weeklyChallenge={controller.weeklyChallenge}
+        highlightWeeklyChallenge={highlightWeeklyChallenge}
         isMomentumError={controller.weeklyMomentumQuery.isError}
         momentumErrorMessage={
           controller.weeklyMomentumQuery.error instanceof Error

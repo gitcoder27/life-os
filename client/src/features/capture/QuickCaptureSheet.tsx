@@ -79,7 +79,14 @@ export function QuickCaptureSheet({
   const addWeightMutation = useAddWeightMutation(today);
 
   // Smart defaults: load categories and meal templates
-  const financeQuery = useFinanceDataQuery(today);
+  const financeQuery = useFinanceDataQuery(today, {
+    enabled: open,
+    includeSummary: false,
+    includeExpenses: false,
+    includeRecurringExpenses: false,
+    includeMonthPlan: false,
+    includeInsights: false,
+  });
   const templatesQuery = useMealTemplatesQuery();
   const categories = financeQuery.data?.categories?.categories?.filter((c) => !c.archivedAt) ?? [];
   const mealTemplates = templatesQuery.data?.mealTemplates ?? [];

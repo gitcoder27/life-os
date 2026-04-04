@@ -1,4 +1,4 @@
-import { type ReactNode, useState } from "react";
+import { type ReactNode, useId, useState } from "react";
 
 type CollapsibleSectionProps = {
   title: string;
@@ -20,6 +20,7 @@ export function CollapsibleSection({
   children,
 }: CollapsibleSectionProps) {
   const [internalIsOpen, setInternalIsOpen] = useState(defaultOpen);
+  const bodyId = useId();
   const isSectionOpen = isOpen ?? internalIsOpen;
 
   function handleToggle() {
@@ -35,25 +36,29 @@ export function CollapsibleSection({
 
   return (
     <div className="habits-collapsible">
-      <button
-        type="button"
-        className="habits-collapsible__toggle"
-        onClick={handleToggle}
-      >
-        <div>
-          <h2 className="habits-collapsible__title">{title}</h2>
-          {subtitle ? <p className="habits-collapsible__subtitle">{subtitle}</p> : null}
-        </div>
-        <div className="habits-collapsible__right">
-          {trailing ?? null}
+      <div className="habits-collapsible__toggle">
+        <button
+          type="button"
+          className="habits-collapsible__toggle-button"
+          onClick={handleToggle}
+          aria-expanded={isSectionOpen}
+          aria-controls={bodyId}
+        >
+          <div>
+            <h2 className="habits-collapsible__title">{title}</h2>
+            {subtitle ? <p className="habits-collapsible__subtitle">{subtitle}</p> : null}
+          </div>
           <span
             className={`habits-collapsible__chevron${isSectionOpen ? " habits-collapsible__chevron--open" : ""}`}
           >
             &#x25B8;
           </span>
+        </button>
+        <div className="habits-collapsible__right">
+          {trailing ?? null}
         </div>
-      </button>
-      {isSectionOpen ? <div className="habits-collapsible__body">{children}</div> : null}
+      </div>
+      {isSectionOpen ? <div className="habits-collapsible__body" id={bodyId}>{children}</div> : null}
     </div>
   );
 }

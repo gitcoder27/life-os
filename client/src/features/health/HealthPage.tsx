@@ -1,4 +1,8 @@
-import { useState } from "react";
+import {
+  useEffect,
+  useState,
+} from "react";
+import { useLocation } from "react-router-dom";
 
 import {
   formatMealSlotLabel,
@@ -31,6 +35,7 @@ import {
   PageErrorState,
   PageLoadingState,
 } from "../../shared/ui/PageState";
+import { readHomeDestinationState } from "../../shared/lib/homeNavigation";
 
 type MealSlot = "breakfast" | "lunch" | "dinner" | "snack";
 
@@ -454,8 +459,10 @@ function TimelineRow({
    ═══════════════════════════════════════════════ */
 
 export function HealthPage() {
+  const location = useLocation();
   const today = getTodayDate();
   const healthQuery = useHealthDataQuery(today);
+  const homeDestination = readHomeDestinationState(location.state);
   const addWaterMutation = useAddWaterMutation(today);
   const updateWaterMutation = useUpdateWaterLogMutation(today);
   const deleteWaterMutation = useDeleteWaterLogMutation(today);
@@ -469,6 +476,7 @@ export function HealthPage() {
 
   // UI state
   const [activeForm, setActiveForm] = useState<"meal" | "weight" | "workout" | null>(null);
+  const [homeFocusHighlight, setHomeFocusHighlight] = useState<"water" | "meals" | "workout" | "patterns" | null>(null);
   const [showTemplates, setShowTemplates] = useState(false);
 
   // Inline editing state
@@ -483,6 +491,31 @@ export function HealthPage() {
   const [editWeightVal, setEditWeightVal] = useState("");
   const [editWeightUnit, setEditWeightUnit] = useState("kg");
   const [deletingWeightId, setDeletingWeightId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (homeDestination?.kind !== "health_focus") {
+      setHomeFocusHighlight(null);
+      return;
+    }
+
+    setHomeFocusHighlight(homeDestination.surface);
+
+    if (homeDestination.surface === "meals") {
+      setActiveForm("meal");
+    } else if (homeDestination.surface === "workout") {
+      setActiveForm("workout");
+    }
+
+    requestAnimationFrame(() => {
+      const targetId = homeDestination.surface === "patterns"
+        ? "health-patterns"
+        : "health-pulse";
+      document.getElementById(targetId)?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    });
+  }, [homeDestination, location.key]);
 
   if (healthQuery.isLoading && !healthQuery.data) {
     return (
@@ -593,7 +626,7 @@ export function HealthPage() {
   return (
     <div className="health-page">
       {/* ═══ Health Pulse Hero ═══ */}
-      <section className="health-pulse">
+      <section className="health-pulse" id="health-pulse">
         <div className="health-pulse__eyebrow">
           <span>Health basics</span>
           <span className="health-pulse__phase">{PHASE_LABEL[phase] ?? phase}</span>
@@ -622,7 +655,16 @@ export function HealthPage() {
         {/* Signal indicators */}
         <div className="health-pulse__signals">
           {/* Water signal */}
-          <div className="health-signal">
+          <div
+            className="health-signal"
+            style={homeFocusHighlight === "water"
+              ? {
+                  borderColor: "rgba(217, 153, 58, 0.4)",
+                  boxShadow: "0 0 0 1px rgba(217, 153, 58, 0.25)",
+                  background: "rgba(217, 153, 58, 0.06)",
+                }
+              : undefined}
+          >
             <div className="health-signal__header">
               <div className={`health-signal__dot health-signal__dot--${signals.water.status === "behind" ? "behind" : "water"}`} />
               <span className="health-signal__label">Water</span>
@@ -646,7 +688,16 @@ export function HealthPage() {
           </div>
 
           {/* Meals signal */}
-          <div className="health-signal">
+          <div
+            className="health-signal"
+            style={homeFocusHighlight === "meals"
+              ? {
+                  borderColor: "rgba(217, 153, 58, 0.4)",
+                  boxShadow: "0 0 0 1px rgba(217, 153, 58, 0.25)",
+                  background: "rgba(217, 153, 58, 0.06)",
+                }
+              : undefined}
+          >
             <div className="health-signal__header">
               <div className={`health-signal__dot health-signal__dot--${signals.meals.status === "behind" ? "behind" : "meals"}`} />
               <span className="health-signal__label">Meals</span>
@@ -672,7 +723,16 @@ export function HealthPage() {
           </div>
 
           {/* Workout signal */}
-          <div className="health-signal">
+          <div
+            className="health-signal"
+            style={homeFocusHighlight === "workout"
+              ? {
+                  borderColor: "rgba(217, 153, 58, 0.4)",
+                  boxShadow: "0 0 0 1px rgba(217, 153, 58, 0.25)",
+                  background: "rgba(217, 153, 58, 0.06)",
+                }
+              : undefined}
+          >
             <div className="health-signal__header">
               <div className={`health-signal__dot health-signal__dot--${signals.workout.status}`} />
               <span className="health-signal__label">Workout</span>
@@ -950,7 +1010,17 @@ export function HealthPage() {
       </section>
 
       {/* ═══ Weekly Patterns ═══ */}
-      <section className="health-patterns-section" id="health-patterns">
+      <section
+        className="health-patterns-section"
+        id="health-patterns"
+        style={homeFocusHighlight === "patterns"
+          ? {
+              borderColor: "rgba(217, 153, 58, 0.4)",
+              boxShadow: "0 0 0 1px rgba(217, 153, 58, 0.25)",
+              background: "rgba(217, 153, 58, 0.04)",
+            }
+          : undefined}
+      >
         <div className="health-section-label">7-day patterns</div>
         <div className="health-patterns">
           <div className="health-pattern">

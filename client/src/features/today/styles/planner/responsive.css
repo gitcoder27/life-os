@@ -1,0 +1,356 @@
+/* ── Responsive ──────────────────────────────────────── */
+
+@media (max-width: 960px) {
+  .today-columns {
+    grid-template-columns: 1fr;
+  }
+
+  .today-sidebar {
+    order: -1;
+  }
+
+  .today-hero {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.85rem;
+    text-align: center;
+  }
+
+  .today-hero__left {
+    align-items: center;
+  }
+
+  .today-hero__score {
+    justify-content: center;
+  }
+
+  .today-hero__right {
+    margin-left: 0;
+    display: flex;
+    justify-content: center;
+  }
+
+  .today-health-stats {
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  .today-score-strip {
+    flex-wrap: wrap;
+  }
+
+  .today-score-strip__nudge {
+    flex-basis: 100%;
+    text-align: center;
+  }
+
+  .planner__body {
+    grid-template-columns: 1fr;
+  }
+
+  .planner__timeline-area {
+    grid-template-columns: 44px 1fr;
+  }
+
+  .planner__gutter {
+    padding-right: 8px;
+  }
+
+  .planner__gutter-hour {
+    right: 8px;
+    font-size: 0.58rem;
+  }
+
+  .planner__now-line {
+    left: 0;
+  }
+
+  .planner__header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .planner-date-nav {
+    width: 100%;
+    flex-direction: column;
+    align-items: flex-start;
+    border-radius: var(--r);
+    padding: 0.6rem 0.75rem;
+    gap: 0.5rem;
+  }
+
+  .planner-date-nav__copy {
+    width: 100%;
+    align-items: flex-start;
+    padding-inline: 0;
+    text-align: left;
+  }
+
+  .planner__hours-card {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .planner__cleanup-banner {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .planner__hours-controls {
+    width: 100%;
+  }
+
+  .planner__sidebar-pane {
+    position: static;
+  }
+
+  /* Mobile: unplanned panel becomes fixed bottom bar */
+  .unplanned-lane {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 50;
+    max-height: 48px;
+    padding: 0.6rem 1rem;
+    border-radius: var(--r-lg) var(--r-lg) 0 0;
+    border: 1px solid var(--border-active);
+    border-bottom: none;
+    background: var(--panel-elevated);
+    box-shadow: 0 -8px 32px rgba(0,0,0,0.3);
+    overflow: hidden;
+    transition: max-height 0.3s var(--ease);
+  }
+
+  .unplanned-lane__header {
+    border-bottom: none;
+    padding-bottom: 0;
+    cursor: pointer;
+  }
+
+  .unplanned-lane__list,
+  .unplanned-lane__batch,
+  .unplanned-lane__helper,
+  .unplanned-lane__empty {
+    display: none;
+  }
+
+  .unplanned-lane--expanded {
+    max-height: 65vh;
+    overflow-y: auto;
+  }
+
+  .unplanned-lane--expanded .unplanned-lane__list,
+  .unplanned-lane--expanded .unplanned-lane__batch,
+  .unplanned-lane--expanded .unplanned-lane__helper,
+  .unplanned-lane--expanded .unplanned-lane__empty {
+    display: flex;
+  }
+
+  .unplanned-lane--expanded .unplanned-lane__header {
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 0.35rem;
+  }
+
+  .planner__timeline-pane {
+    padding-bottom: 64px;
+  }
+
+  .today-top-bar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .mode-toggle {
+    align-self: flex-start;
+  }
+
+  .recovery-lane__header {
+    flex-direction: column;
+  }
+}
+
+@media (max-width: 640px) {
+  .today-health-stats {
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 0.35rem;
+  }
+
+  .today-hero__buckets {
+    display: none;
+  }
+
+  .today-score-strip__buckets {
+    display: none;
+  }
+
+  .today-hero__greeting {
+    font-size: 1.3rem;
+    white-space: normal;
+  }
+
+  .planner__timeline-area {
+    grid-template-columns: 40px 1fr;
+  }
+
+  .planner__gutter-hour {
+    right: 6px;
+    font-size: 0.55rem;
+  }
+
+  .planner__now-line {
+    left: 0;
+  }
+
+  .planner__hours-controls {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .planner__cleanup-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .planner__hours-field {
+    min-width: 0;
+  }
+
+  .planner__hours-actions {
+    width: 100%;
+  }
+
+  .planner__hours-actions .button {
+    flex: 1;
+  }
+
+  /* On mobile, blocks still use absolute positioning */
+
+  .planner-gap {
+    padding: 0.8rem 0.85rem;
+  }
+
+  .planner-gap__copy {
+    max-width: none;
+  }
+
+  .planner-block__header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.3rem;
+  }
+
+  .planner-block__actions {
+    opacity: 1;
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .planner-block__picker-shortcuts,
+  .unplanned-lane__batch-actions,
+  .unplanned-lane__batch-controls {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .planner-block__task-actions {
+    opacity: 1;
+  }
+
+  .planner-block__task-handle {
+    color: var(--text-secondary);
+  }
+
+  .planner-gap__add-btn {
+    opacity: 1;
+  }
+
+  .execute-focus__header,
+  .execute-focus__card-head,
+  .execute-focus__task-row {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .execute-focus__metrics {
+    grid-template-columns: 1fr;
+  }
+
+  .execute-focus__task-actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .execute-focus__picker {
+    width: 100%;
+  }
+
+  .execute-focus__picker-menu {
+    position: static;
+    width: 100%;
+    margin-top: 0.35rem;
+    min-width: 0;
+  }
+
+  .planner-summary__alert {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .planner-block__task-picker {
+    padding-left: 1rem;
+  }
+
+  .unplanned-task {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .unplanned-task__actions {
+    width: 100%;
+  }
+
+  .unplanned-task__assign-btn {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .block-target-picker__menu {
+    left: 0.75rem !important;
+    right: 0.75rem;
+    top: auto !important;
+    bottom: 1rem;
+    min-width: 0 !important;
+    width: auto;
+    max-height: min(20rem, calc(100vh - 6rem));
+  }
+
+  .unplanned-task__picker {
+    margin-top: 0;
+  }
+
+  .unplanned-lane__batch-controls .button,
+  .planner-block__picker-actions .button {
+    width: 100%;
+  }
+}
+
+/* ── Touch: always show interactive elements ────────── */
+
+@media (hover: none) {
+  .planner-block__actions {
+    opacity: 1;
+  }
+
+  .planner-block__task-actions {
+    opacity: 1;
+  }
+
+  .planner-block__task-handle {
+    color: var(--text-secondary);
+  }
+
+  .planner-gap__add-btn {
+    opacity: 1;
+  }
+}
+

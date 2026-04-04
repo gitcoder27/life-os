@@ -7,7 +7,82 @@ import {
 import type { LinkedGoal } from "./goals";
 import type { TaskItem } from "./planning";
 
-type HomeOverviewResponse = {
+export type HomeDestination =
+  | {
+      kind: "today_planning";
+      date: string;
+    }
+  | {
+      kind: "today_execute";
+      priorityId?: string | null;
+      taskId?: string | null;
+    }
+  | {
+      kind: "today_overdue";
+      taskId?: string | null;
+    }
+  | {
+      kind: "inbox_triage";
+    }
+  | {
+      kind: "habit_focus";
+      habitId?: string | null;
+      surface: "due_today" | "weekly_challenge";
+    }
+  | {
+      kind: "health_focus";
+      surface: "water" | "meals" | "workout" | "patterns";
+    }
+  | {
+      kind: "finance_bills";
+      adminItemId?: string | null;
+      section: "due_now" | "pending_bills";
+    }
+  | {
+      kind: "goal_plan";
+      goalId?: string | null;
+      mode: "overview" | "plan";
+    }
+  | {
+      kind: "review";
+      cadence: "daily" | "weekly" | "monthly";
+      date: string;
+    };
+
+export type HomeAction =
+  | {
+      type: "open_review";
+      route: string;
+    }
+  | {
+      type: "open_route";
+      route: string;
+    }
+  | {
+      type: "open_destination";
+      destination: HomeDestination;
+    };
+
+export type HomeAttentionItem = {
+  id: string;
+  title: string;
+  kind: "task" | "habit" | "routine" | "finance" | "admin" | "review" | "notification";
+  tone: "info" | "warning" | "urgent";
+  detail?: string;
+  dismissible?: boolean;
+  action: HomeAction;
+};
+
+export type HomeGuidanceRecommendation = {
+  id: string;
+  kind: "habit" | "priority" | "task" | "review" | "health";
+  title: string;
+  detail: string;
+  impactLabel: string;
+  action: HomeAction;
+};
+
+export type HomeOverviewResponse = {
   date: string;
   generatedAt: string;
   greeting: string;
@@ -82,22 +157,7 @@ type HomeOverviewResponse = {
       originType: TaskItem["originType"];
     }>;
   };
-  attentionItems: Array<{
-    id: string;
-    title: string;
-    kind: "task" | "habit" | "routine" | "finance" | "admin" | "review" | "notification";
-    tone: "info" | "warning" | "urgent";
-    detail?: string;
-    action:
-      | {
-          type: "open_review";
-          route: string;
-        }
-      | {
-          type: "open_route";
-          route: string;
-        };
-  }>;
+  attentionItems: HomeAttentionItem[];
   notifications: Array<{
     id: string;
     title: string;
@@ -121,16 +181,7 @@ type HomeOverviewResponse = {
       status: "on_track" | "due_today" | "behind";
       message: string;
     } | null;
-    recommendations: Array<{
-      id: string;
-      kind: "habit" | "priority" | "task" | "review" | "health";
-      title: string;
-      detail: string;
-      impactLabel: string;
-      action:
-        | { type: "open_review"; route: string }
-        | { type: "open_route"; route: string };
-    }>;
+    recommendations: HomeGuidanceRecommendation[];
   };
 };
 

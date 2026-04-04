@@ -2,6 +2,7 @@ import type {
   HabitRiskState,
   HomeGuidance,
   HomeGuidanceRecommendation,
+  IsoDateString,
   WeeklyHabitChallenge,
 } from "@life-os/contracts";
 
@@ -27,6 +28,20 @@ interface GuidanceTask {
   status: "pending" | "completed" | "dropped";
 }
 
+interface GuidancePlanning {
+  date: IsoDateString;
+  hasPlannerBlocks: boolean;
+  pendingPriorityCount: number;
+  openTaskCount: number;
+}
+
+interface GuidanceAccountability {
+  staleInboxCount: number;
+  staleInboxTaskId: string | null;
+  overdueTaskCount: number;
+  overdueTaskId: string | null;
+}
+
 interface GuidanceInput {
   score: {
     label: "Strong Day" | "Solid Day" | "Recovering Day" | "Off-Track Day";
@@ -42,6 +57,8 @@ interface GuidanceInput {
   habits: GuidanceHabit[];
   priorities: GuidancePriority[];
   tasks: GuidanceTask[];
+  planning: GuidancePlanning;
+  accountability: GuidanceAccountability;
   weeklyChallenge: WeeklyHabitChallenge | null;
   dailyReviewAvailable: boolean;
   dailyReviewRoute: string | null;
@@ -87,6 +104,31 @@ function buildRecoveryGuidance(input: GuidanceInput): HomeGuidance["recovery"] {
   return null;
 }
 
+function buildReviewAction(route: string): HomeGuidanceRecommendation["action"] {
+  const [pathname, searchString = ""] = route.split("?");
+  const cadence = pathname.split("/").filter(Boolean)[1];
+  const date = new URLSearchParams(searchString).get("date");
+
+  if (
+    (cadence === "daily" || cadence === "weekly" || cadence === "monthly") &&
+    date
+  ) {
+    return {
+      type: "open_destination" as const,
+      destination: {
+        kind: "review" as const,
+        cadence: cadence as "daily" | "weekly" | "monthly",
+        date: date as IsoDateString,
+      },
+    };
+  }
+
+  return {
+    type: "open_review" as const,
+    route,
+  };
+}
+
 function buildRecommendations(input: GuidanceInput): HomeGuidanceRecommendation[] {
   const recommendations: HomeGuidanceRecommendation[] = [];
   const seenIds = new Set<string>();
@@ -100,16 +142,62 @@ function buildRecommendations(input: GuidanceInput): HomeGuidanceRecommendation[
     recommendations.push(recommendation);
   }
 
-  if (input.weeklyChallenge?.status === "due_today") {
+  const hasPlanningGap =
+    !input.planning.hasPlannerBlocks &&
+    (input.planning.pendingPriorityCount > 0 || input.planning.openTaskCount > 0);
+
+  if (hasPlanningGap) {
     addRecommendation({
-      id: `weekly-challenge:${input.weeklyChallenge.habitId}`,
-      kind: "habit",
-      title: `Keep ${input.weeklyChallenge.title} alive`,
-      detail: input.weeklyChallenge.message,
-      impactLabel: "Protect weekly focus",
+      id: `planning-gap:${input.planning.date}`,
+      kind: "priority",
+      title:
+        input.planning.pendingPriorityCount > 0
+          ? "Turn Today into a real plan"
+          : "Set the day up before it drifts",
+      detail:
+        input.planning.pendingPriorityCount > 0
+          ? `${input.planning.pendingPriorityCount} priority slot${input.planning.pendingPriorityCount === 1 ? "" : "s"} and ${input.planning.openTaskCount} open task${input.planning.openTaskCount === 1 ? "" : "s"} still need a plan.`
+          : `${input.planning.openTaskCount} open task${input.planning.openTaskCount === 1 ? "" : "s"} are waiting without a clear plan yet.`,
+      impactLabel: "Set the operating system",
       action: {
-        type: "open_route",
-        route: "/habits",
+        type: "open_destination",
+        destination: {
+          kind: "today_planning",
+          date: input.planning.date,
+        },
+      },
+    });
+  }
+
+  if (input.accountability.staleInboxCount > 0) {
+    addRecommendation({
+      id: `inbox-triage:${input.accountability.staleInboxTaskId ?? "queue"}`,
+      kind: "task",
+      title: "Clear the inbox drag",
+      detail: `${input.accountability.staleInboxCount} inbox item${input.accountability.staleInboxCount === 1 ? "" : "s"} are aging and still need triage.`,
+      impactLabel: "Get capture under control",
+      action: {
+        type: "open_destination",
+        destination: {
+          kind: "inbox_triage",
+        },
+      },
+    });
+  }
+
+  if (input.accountability.overdueTaskCount > 0) {
+    addRecommendation({
+      id: `overdue-recovery:${input.accountability.overdueTaskId ?? "queue"}`,
+      kind: "task",
+      title: "Recover overdue work",
+      detail: `${input.accountability.overdueTaskCount} overdue task${input.accountability.overdueTaskCount === 1 ? "" : "s"} are still pulling attention off the day.`,
+      impactLabel: "Stabilize execution",
+      action: {
+        type: "open_destination",
+        destination: {
+          kind: "today_overdue",
+          taskId: input.accountability.overdueTaskId,
+        },
       },
     });
   }
@@ -125,8 +213,12 @@ function buildRecommendations(input: GuidanceInput): HomeGuidanceRecommendation[
       detail: atRiskHabit.risk.message ?? "This habit is due today and needs attention now.",
       impactLabel: "Protect streak",
       action: {
-        type: "open_route",
-        route: "/habits",
+        type: "open_destination",
+        destination: {
+          kind: "habit_focus",
+          habitId: atRiskHabit.id,
+          surface: "due_today",
+        },
       },
     });
   }
@@ -140,8 +232,11 @@ function buildRecommendations(input: GuidanceInput): HomeGuidanceRecommendation[
       detail: "Your top priority is still open. Re-enter Today and clear the next concrete step.",
       impactLabel: "Protect top focus",
       action: {
-        type: "open_route",
-        route: "/today",
+        type: "open_destination",
+        destination: {
+          kind: "today_execute",
+          priorityId: topPriority.id,
+        },
       },
     });
   }
@@ -155,8 +250,11 @@ function buildRecommendations(input: GuidanceInput): HomeGuidanceRecommendation[
       detail: "One open day-task is still dragging the lane.",
       impactLabel: "Clear task lane",
       action: {
-        type: "open_route",
-        route: "/today",
+        type: "open_destination",
+        destination: {
+          kind: "today_execute",
+          taskId: openTask.id,
+        },
       },
     });
   }
@@ -168,10 +266,7 @@ function buildRecommendations(input: GuidanceInput): HomeGuidanceRecommendation[
       title: "Close the day cleanly",
       detail: "Daily review is still open. Finish it to seed tomorrow instead of carrying clutter.",
       impactLabel: "Seed tomorrow",
-      action: {
-        type: "open_review",
-        route: input.dailyReviewRoute,
-      },
+      action: buildReviewAction(input.dailyReviewRoute),
     });
   }
 
@@ -187,8 +282,11 @@ function buildRecommendations(input: GuidanceInput): HomeGuidanceRecommendation[
       detail: `${input.health.waterMl}ml logged against a ${input.health.waterTargetMl}ml target so far.`,
       impactLabel: "Recover health basics",
       action: {
-        type: "open_route",
-        route: "/health",
+        type: "open_destination",
+        destination: {
+          kind: "health_focus",
+          surface: "water",
+        },
       },
     });
   }

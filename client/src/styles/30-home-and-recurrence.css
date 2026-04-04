@@ -1151,6 +1151,15 @@
   justify-content: space-between;
   gap: 1rem;
   width: 100%;
+}
+
+.habits-collapsible__toggle-button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex: 1;
+  min-width: 0;
   padding: 0.85rem 1rem;
   border: none;
   background: transparent;
@@ -1161,7 +1170,7 @@
   transition: background var(--dur-fast) var(--ease);
 }
 
-.habits-collapsible__toggle:hover {
+.habits-collapsible__toggle-button:hover {
   background: rgba(255,255,255,0.02);
 }
 
@@ -1181,6 +1190,8 @@
   display: flex;
   align-items: center;
   gap: 0.6rem;
+  flex-shrink: 0;
+  padding-right: 1rem;
 }
 
 .habits-collapsible__chevron {
@@ -1324,7 +1335,15 @@
   }
 
   .habits-collapsible__toggle {
+    gap: 0.75rem;
+  }
+
+  .habits-collapsible__toggle-button {
     padding: 0.7rem 0.75rem;
+  }
+
+  .habits-collapsible__right {
+    padding-right: 0.75rem;
   }
 
   .habits-collapsible__body {

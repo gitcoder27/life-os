@@ -1,4 +1,12 @@
 import { Link, useNavigate } from "react-router-dom";
+import type {
+  HomeAction,
+  HomeGuidanceRecommendation,
+} from "../../shared/lib/api";
+import {
+  resolveHomeActionTarget,
+  resolveHomeDestinationTarget,
+} from "../../shared/lib/homeNavigation";
 
 type Recovery = {
   tone: "steady" | "recovery";
@@ -16,14 +24,12 @@ type WeeklyChallenge = {
 };
 
 type Recommendation = {
-  id: string;
-  kind: string;
-  title: string;
-  detail: string;
-  impactLabel: string;
-  action:
-    | { type: "open_review"; route: string }
-    | { type: "open_route"; route: string };
+  id: HomeGuidanceRecommendation["id"];
+  kind: HomeGuidanceRecommendation["kind"];
+  title: HomeGuidanceRecommendation["title"];
+  detail: HomeGuidanceRecommendation["detail"];
+  impactLabel: HomeGuidanceRecommendation["impactLabel"];
+  action: HomeAction;
 };
 
 type GuidanceRailProps = {
@@ -71,6 +77,13 @@ export function GuidanceRail({
   const navigate = useNavigate();
   const hasContent = recovery || weeklyChallenge || recommendations.length > 0;
   if (!hasContent) return null;
+  const weeklyChallengeTarget = weeklyChallenge
+    ? resolveHomeDestinationTarget({
+        kind: "habit_focus",
+        habitId: weeklyChallenge.habitId,
+        surface: "weekly_challenge",
+      })
+    : null;
 
   return (
     <div className="guidance-section">
@@ -86,8 +99,12 @@ export function GuidanceRail({
         </div>
       ) : null}
 
-      {weeklyChallenge ? (
-        <Link to="/habits" className="guidance-challenge">
+      {weeklyChallenge && weeklyChallengeTarget ? (
+        <Link
+          to={weeklyChallengeTarget.to}
+          state={weeklyChallengeTarget.state}
+          className="guidance-challenge"
+        >
           <ChallengeRing
             completions={weeklyChallenge.weekCompletions}
             target={weeklyChallenge.weekTarget}
@@ -112,21 +129,28 @@ export function GuidanceRail({
 
       {recommendations.length > 0 ? (
         <div className="guidance-recs">
-          {recommendations.map((rec) => (
+          {recommendations.map((rec, index) => {
+            const target = resolveHomeActionTarget(rec.action);
+
+            return (
             <button
               key={rec.id}
-              className="guidance-rec"
+              className={`guidance-rec${index === 0 ? " guidance-rec--primary" : ""}`}
               type="button"
-              onClick={() => navigate(rec.action.route)}
+              onClick={() => navigate(target.to, target.state ? { state: target.state } : undefined)}
             >
               <span className={`guidance-rec__dot guidance-rec__dot--${rec.kind}`} />
               <div className="guidance-rec__body">
+                {index === 0 ? (
+                  <span className="guidance-rec__eyebrow">Next best move</span>
+                ) : null}
                 <span className="guidance-rec__title">{rec.title}</span>
                 <span className="guidance-rec__detail">{rec.detail}</span>
               </div>
               <span className="guidance-rec__impact">{rec.impactLabel}</span>
             </button>
-          ))}
+            );
+          })}
         </div>
       ) : null}
     </div>

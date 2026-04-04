@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type CSSProperties } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import {
   DndContext,
   DragOverlay,
@@ -92,6 +92,8 @@ export function DayPlanner({
   const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null);
   const [suppressedTaskId, setSuppressedTaskId] = useState<string | null>(null);
   const [disableDropAnimation, setDisableDropAnimation] = useState(false);
+  const nowLineRef = useRef<HTMLDivElement | null>(null);
+  const hasAutoCenteredNowRef = useRef(false);
 
   const orderedBlocks = useMemo(() => sortPlannerBlocksByTime(blocks), [blocks]);
   const blockIndexMap = useMemo(
@@ -129,6 +131,10 @@ export function DayPlanner({
   }, [visibleHours]);
 
   useEffect(() => {
+    hasAutoCenteredNowRef.current = false;
+  }, [date]);
+
+  useEffect(() => {
     if (draggedTaskId && !unplannedTasks.some((task) => task.id === draggedTaskId)) {
       setDraggedTaskId(null);
     }
@@ -153,6 +159,24 @@ export function DayPlanner({
       document.body.classList.remove(className);
     };
   }, [draggedTaskId]);
+
+  useLayoutEffect(() => {
+    if (!isLiveDate || timeline.nowLinePx === null || hasAutoCenteredNowRef.current) {
+      return;
+    }
+
+    const nowLineElement = nowLineRef.current;
+    if (!nowLineElement) {
+      return;
+    }
+
+    hasAutoCenteredNowRef.current = true;
+    nowLineElement.scrollIntoView({
+      block: "center",
+      inline: "nearest",
+      behavior: "auto",
+    });
+  }, [isLiveDate, timeline.nowLinePx]);
 
   function openBlockForm(initialValues?: {
     title?: string;
@@ -640,6 +664,7 @@ export function DayPlanner({
 
                   {isLiveDate && timeline.nowLinePx !== null ? (
                     <div
+                      ref={nowLineRef}
                       className="planner__now-line"
                       style={{ top: `${timeline.nowLinePx}px` }}
                       aria-hidden="true"

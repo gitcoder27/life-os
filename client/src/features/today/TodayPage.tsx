@@ -1,11 +1,15 @@
 import "./today.css";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useState, type CSSProperties } from "react";
-import { useSearchParams } from "react-router-dom";
+import {
+  useLocation,
+  useSearchParams,
+} from "react-router-dom";
 import {
   InlineErrorState,
   PageErrorState,
   PageLoadingState,
 } from "../../shared/ui/PageState";
+import { readHomeDestinationState } from "../../shared/lib/homeNavigation";
 import { CommandBar } from "./components/CommandBar";
 import { FocusStack } from "./components/FocusStack";
 import { ExecutionStream } from "./components/ExecutionStream";
@@ -27,6 +31,7 @@ const ISO_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const isPlannerAssignableTask = (task: { kind: string }) => task.kind === "task";
 
 export function TodayPage() {
+  const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
   const data = useTodayData();
   const [mode, setMode] = useState<"execute" | "plan">("execute");
@@ -35,7 +40,9 @@ export function TodayPage() {
   const [topRailHeight, setTopRailHeight] = useState(0);
   const [stickyTop, setStickyTop] = useState(0);
   const [topRailElement, setTopRailElement] = useState<HTMLDivElement | null>(null);
+  const requestedMode = searchParams.get("mode");
   const rawPlannerDate = searchParams.get("planDate");
+  const homeDestination = readHomeDestinationState(location.state);
   const plannerDate = rawPlannerDate && ISO_DATE_PATTERN.test(rawPlannerDate)
     ? rawPlannerDate
     : data.today;
@@ -102,10 +109,43 @@ export function TodayPage() {
     setTopRailElement(node);
   }, []);
 
+  const setTodayMode = useCallback((nextMode: "execute" | "plan") => {
+    setMode(nextMode);
+    setSearchParams((current) => {
+      const next = new URLSearchParams(current);
+      if (nextMode === "plan") {
+        next.set("mode", "plan");
+      } else {
+        next.delete("mode");
+      }
+      return next;
+    });
+  }, [setSearchParams]);
+
   useEffect(() => {
     const intervalId = window.setInterval(() => setPlannerNow(new Date()), 60_000);
     return () => window.clearInterval(intervalId);
   }, []);
+
+  useEffect(() => {
+    if (requestedMode === "execute" || requestedMode === "plan") {
+      setMode((current) => (current === requestedMode ? current : requestedMode));
+      return;
+    }
+
+    if (requestedMode !== null) {
+      setSearchParams((current) => {
+        const next = new URLSearchParams(current);
+        next.delete("mode");
+        return next;
+      }, { replace: true });
+      return;
+    }
+
+    if (homeDestination?.kind === "today_execute") {
+      setMode("execute");
+    }
+  }, [homeDestination?.kind, requestedMode, setSearchParams]);
 
   useLayoutEffect(() => {
     if (!topRailElement) {
@@ -273,7 +313,7 @@ export function TodayPage() {
       <div className="today-top-rail" ref={topRailRef}>
         <CommandBar
           mode={mode}
-          onModeChange={setMode}
+          onModeChange={setTodayMode}
           plannerBlockCount={data.plannerBlocks.length}
           now={plannerNow}
           pendingPriorityCount={pendingPriorityCount}
@@ -286,7 +326,7 @@ export function TodayPage() {
           onAddTask={() => setTodayTaskCaptureOpen(true)}
           execution={todayPlannerExecution}
           topPriorityTitle={priorityDraft.draft.find((p) => p.status === "pending")?.title}
-          onSwitchToPlanner={() => setMode("plan")}
+          onSwitchToPlanner={() => setTodayMode("plan")}
         />
 
         {allErrors ? (
@@ -303,7 +343,7 @@ export function TodayPage() {
               taskActions={taskActions}
               plannerBlocks={data.plannerBlocks}
               phase={phase}
-              onSwitchToPlanner={() => setMode("plan")}
+              onSwitchToPlanner={() => setTodayMode("plan")}
             />
 
             <RecoveryTray

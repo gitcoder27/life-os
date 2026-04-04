@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { buildHomeGuidance } from "../../src/modules/home/guidance.js";
 
 describe("home guidance builder", () => {
-  it("prioritizes challenge, streak protection, and priority work, then truncates to three", () => {
+  it("prioritizes planning gap, inbox cleanup, and overdue recovery before lower-salience guidance", () => {
     const guidance = buildHomeGuidance({
       score: {
         label: "Solid Day",
@@ -45,6 +45,23 @@ describe("home guidance builder", () => {
           status: "pending",
         },
       ],
+      planning: {
+        date: "2026-03-14",
+        hasPlannerBlocks: false,
+        pendingPriorityCount: 1,
+        openTaskCount: 1,
+      },
+      accountability: {
+        staleInboxCount: 2,
+        staleInboxTaskId: "task-stale-1",
+        overdueTaskCount: 1,
+        overdueTaskId: "task-overdue-1",
+      },
+      finance: {
+        dueAdminItemId: "admin-1",
+        dueTodayCount: 1,
+        pendingCount: 2,
+      },
       weeklyChallenge: {
         habitId: "habit-1",
         title: "Hydrate",
@@ -66,15 +83,22 @@ describe("home guidance builder", () => {
 
     expect(guidance.recommendations).toHaveLength(3);
     expect(guidance.recommendations.map((item) => item.id)).toEqual([
-      "weekly-challenge:habit-1",
-      "habit-risk:habit-1",
-      "priority:priority-1",
+      "planning-gap:2026-03-14",
+      "inbox-triage:task-stale-1",
+      "overdue-recovery:task-overdue-1",
     ]);
     expect(guidance.recommendations.map((item) => item.action.type)).toEqual([
-      "open_route",
-      "open_route",
-      "open_route",
+      "open_destination",
+      "open_destination",
+      "open_destination",
     ]);
+    expect(guidance.recommendations[0]?.action).toEqual({
+      type: "open_destination",
+      destination: {
+        kind: "today_planning",
+        date: "2026-03-14",
+      },
+    });
   });
 
   it("returns recovery framing when the day is off track", () => {
@@ -90,6 +114,23 @@ describe("home guidance builder", () => {
       habits: [],
       priorities: [],
       tasks: [],
+      planning: {
+        date: "2026-03-14",
+        hasPlannerBlocks: false,
+        pendingPriorityCount: 0,
+        openTaskCount: 0,
+      },
+      accountability: {
+        staleInboxCount: 0,
+        staleInboxTaskId: null,
+        overdueTaskCount: 0,
+        overdueTaskId: null,
+      },
+      finance: {
+        dueAdminItemId: null,
+        dueTodayCount: 0,
+        pendingCount: 0,
+      },
       weeklyChallenge: null,
       dailyReviewAvailable: false,
       dailyReviewRoute: null,
@@ -106,5 +147,55 @@ describe("home guidance builder", () => {
         title: "Reset the day with one useful move",
       }),
     );
+  });
+
+  it("maps daily review actions into semantic review destinations", () => {
+    const guidance = buildHomeGuidance({
+      score: {
+        label: "Strong Day",
+        value: 86,
+        topReasons: [],
+      },
+      momentum: {
+        strongDayStreak: 2,
+      },
+      habits: [],
+      priorities: [],
+      tasks: [],
+      planning: {
+        date: "2026-03-14",
+        hasPlannerBlocks: true,
+        pendingPriorityCount: 0,
+        openTaskCount: 0,
+      },
+      accountability: {
+        staleInboxCount: 0,
+        staleInboxTaskId: null,
+        overdueTaskCount: 0,
+        overdueTaskId: null,
+      },
+      finance: {
+        dueAdminItemId: null,
+        dueTodayCount: 0,
+        pendingCount: 0,
+      },
+      weeklyChallenge: null,
+      dailyReviewAvailable: true,
+      dailyReviewRoute: "/reviews/daily?date=2026-03-14",
+      currentHour: 21,
+      health: {
+        waterMl: 2500,
+        waterTargetMl: 2500,
+      },
+    });
+
+    expect(guidance.recommendations[0]?.action).toEqual({
+      type: "open_destination",
+      destination: {
+        kind: "review",
+        cadence: "daily",
+        date: "2026-03-14",
+      },
+    });
   });
 });

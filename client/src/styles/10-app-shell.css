@@ -1,7 +1,7 @@
 /* ── Shell ──────────────────────────────────── */
 
 .shell {
-  --shell-sidebar-width: 240px;
+  --shell-sidebar-width: 224px;
   display: grid;
   grid-template-columns: var(--shell-sidebar-width) minmax(0, 1fr);
   min-height: 100vh;
@@ -268,8 +268,7 @@
   border-color: rgba(15, 13, 8, 0.12);
 }
 
-.shell-sidebar__action-text,
-.shell-sidebar__action-kbd {
+.shell-sidebar__action-text {
   display: block;
   min-width: 0;
   overflow: hidden;
@@ -282,11 +281,6 @@
 
 .shell-sidebar__action-text {
   overflow: hidden;
-}
-
-.shell-sidebar__action-kbd {
-  margin-left: auto;
-  font-size: 0.7rem;
 }
 
 .account-chip__text {
@@ -384,8 +378,7 @@
   pointer-events: none;
 }
 
-.shell--sidebar-collapsed .shell-sidebar__action-text,
-.shell--sidebar-collapsed .shell-sidebar__action-kbd {
+.shell--sidebar-collapsed .shell-sidebar__action-text {
   display: none;
 }
 
