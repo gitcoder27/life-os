@@ -414,25 +414,17 @@ body.planner-dragging-cursor * {
 /* Global now-line across the timeline track */
 .planner__now-line {
   position: absolute;
-  left: 48px;
+  left: 0;
   right: 0;
   height: 2px;
-  z-index: 5;
-  background: linear-gradient(90deg, var(--accent) 0%, rgba(217,153,58,0.15) 100%);
+  z-index: 0;
+  background: linear-gradient(90deg, rgba(217,153,58,0.92) 0%, rgba(217,153,58,0.24) 26%, rgba(217,153,58,0.08) 100%);
+  box-shadow: 0 0 10px rgba(217,153,58,0.12);
   pointer-events: none;
 }
 
 .planner__now-line::before {
-  content: '';
-  position: absolute;
-  left: -5px;
-  top: -4px;
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  background: var(--accent);
-  box-shadow: 0 0 10px rgba(217,153,58,0.5);
-  animation: nowDotPulse 3s ease-in-out infinite;
+  content: none;
 }
 
 @keyframes nowDotPulse {
@@ -2604,7 +2596,7 @@ body.planner-dragging-cursor * {
   }
 
   .planner__now-line {
-    left: 44px;
+    left: 0;
   }
 
   .planner__header {
@@ -2741,7 +2733,7 @@ body.planner-dragging-cursor * {
   }
 
   .planner__now-line {
-    left: 40px;
+    left: 0;
   }
 
   .planner__hours-controls {
