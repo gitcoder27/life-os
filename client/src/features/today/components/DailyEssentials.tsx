@@ -310,7 +310,12 @@ function FinanceRow({
   onToggle: () => void;
 }) {
   const today = getTodayDate();
-  const financeQuery = useFinanceDataQuery(today);
+  const financeQuery = useFinanceDataQuery(today, {
+    includeRecurringExpenses: false,
+    includeCategories: false,
+    includeMonthPlan: false,
+    includeInsights: false,
+  });
   const data = financeQuery.data;
 
   if (!data) {

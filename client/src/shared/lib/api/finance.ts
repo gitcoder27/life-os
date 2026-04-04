@@ -263,12 +263,60 @@ const invalidateFinanceCollections = (queryClient: ReturnType<typeof useQueryCli
   void queryClient.invalidateQueries({ queryKey: ["finance"] });
 };
 
-export const useFinanceDataQuery = (month: string) => {
+type FinanceDataQueryOptions = {
+  enabled?: boolean;
+  includeSummary?: boolean;
+  includeExpenses?: boolean;
+  includeRecurringExpenses?: boolean;
+  includeCategories?: boolean;
+  includeMonthPlan?: boolean;
+  includeInsights?: boolean;
+};
+
+type FinanceDataQueryResult = {
+  summary: FinanceSummaryResponse | null;
+  expenses: ExpensesResponse | null;
+  recurringExpenses: RecurringExpensesResponse | null;
+  categories: FinanceCategoriesResponse | null;
+  monthPlan: FinanceMonthPlanResponse | null;
+  insights: FinanceInsightsResponse | null;
+  sectionErrors: {
+    expenses: ReturnType<typeof toSectionError> | null;
+    recurringExpenses: ReturnType<typeof toSectionError> | null;
+    categories: ReturnType<typeof toSectionError> | null;
+    monthPlan: ReturnType<typeof toSectionError> | null;
+    insights: ReturnType<typeof toSectionError> | null;
+  };
+};
+
+const normalizeFinanceMonthInput = (value: string) =>
+  /^\d{4}-\d{2}$/.test(value) ? value : getMonthString(value);
+
+export const useFinanceDataQuery = (
+  monthOrDate: string,
+  options: FinanceDataQueryOptions = {},
+) => {
+  const month = normalizeFinanceMonthInput(monthOrDate);
   const monthStart = getMonthStartDate(`${month}-01`);
   const monthEnd = getMonthEndDate(`${month}-01`);
+  const includeSummary = options.includeSummary ?? true;
+  const includeExpenses = options.includeExpenses ?? true;
+  const includeRecurringExpenses = options.includeRecurringExpenses ?? true;
+  const includeCategories = options.includeCategories ?? true;
+  const includeMonthPlan = options.includeMonthPlan ?? true;
+  const includeInsights = options.includeInsights ?? true;
+  const sectionKey = [
+    includeSummary ? "summary" : "no-summary",
+    includeExpenses ? "expenses" : "no-expenses",
+    includeRecurringExpenses ? "recurring" : "no-recurring",
+    includeCategories ? "categories" : "no-categories",
+    includeMonthPlan ? "month-plan" : "no-month-plan",
+    includeInsights ? "insights" : "no-insights",
+  ].join(":");
 
-  return useQuery({
-    queryKey: queryKeys.finance(month),
+  return useQuery<FinanceDataQueryResult>({
+    queryKey: [...queryKeys.finance(month), sectionKey],
+    enabled: options.enabled,
     queryFn: async () => {
       const [
         summaryResult,
@@ -279,57 +327,78 @@ export const useFinanceDataQuery = (month: string) => {
         insightsResult,
       ] =
         await Promise.allSettled([
-          apiRequest<FinanceSummaryResponse>("/api/finance/summary", {
-            query: { month },
-          }),
-          apiRequest<ExpensesResponse>("/api/finance/expenses", {
-            query: { from: monthStart, to: monthEnd },
-          }),
-          apiRequest<RecurringExpensesResponse>("/api/finance/recurring-expenses"),
-          apiRequest<FinanceCategoriesResponse>("/api/finance/categories"),
-          apiRequest<FinanceMonthPlanResponse>("/api/finance/month-plan", {
-            query: { month },
-          }),
-          apiRequest<FinanceInsightsResponse>("/api/finance/insights", {
-            query: { month },
-          }),
+          includeSummary
+            ? apiRequest<FinanceSummaryResponse>("/api/finance/summary", {
+              query: { month },
+            })
+            : Promise.resolve(null),
+          includeExpenses
+            ? apiRequest<ExpensesResponse>("/api/finance/expenses", {
+              query: { from: monthStart, to: monthEnd },
+            })
+            : Promise.resolve(null),
+          includeRecurringExpenses
+            ? apiRequest<RecurringExpensesResponse>("/api/finance/recurring-expenses")
+            : Promise.resolve(null),
+          includeCategories
+            ? apiRequest<FinanceCategoriesResponse>("/api/finance/categories")
+            : Promise.resolve(null),
+          includeMonthPlan
+            ? apiRequest<FinanceMonthPlanResponse>("/api/finance/month-plan", {
+              query: { month },
+            })
+            : Promise.resolve(null),
+          includeInsights
+            ? apiRequest<FinanceInsightsResponse>("/api/finance/insights", {
+              query: { month },
+            })
+            : Promise.resolve(null),
         ]);
 
       return {
-        summary: unwrapRequiredResult(summaryResult, "Finance summary could not load."),
-        expenses: expensesResult.status === "fulfilled" ? expensesResult.value : null,
+        summary:
+          includeSummary
+            ? unwrapRequiredResult(summaryResult, "Finance summary could not load.")
+            : null,
+        expenses:
+          includeExpenses && expensesResult.status === "fulfilled"
+            ? expensesResult.value
+            : null,
         recurringExpenses:
-          recurringExpensesResult.status === "fulfilled"
+          includeRecurringExpenses && recurringExpensesResult.status === "fulfilled"
             ? recurringExpensesResult.value
             : null,
-        categories: categoriesResult.status === "fulfilled" ? categoriesResult.value : null,
+        categories:
+          includeCategories && categoriesResult.status === "fulfilled"
+            ? categoriesResult.value
+            : null,
         monthPlan:
-          monthPlanResult.status === "fulfilled"
+          includeMonthPlan && monthPlanResult.status === "fulfilled"
             ? monthPlanResult.value
             : null,
         insights:
-          insightsResult.status === "fulfilled"
+          includeInsights && insightsResult.status === "fulfilled"
             ? insightsResult.value
             : null,
         sectionErrors: {
           expenses:
-            expensesResult.status === "rejected"
+            includeExpenses && expensesResult.status === "rejected"
               ? toSectionError(expensesResult.reason, "Expenses could not load.")
               : null,
           recurringExpenses:
-            recurringExpensesResult.status === "rejected"
+            includeRecurringExpenses && recurringExpensesResult.status === "rejected"
               ? toSectionError(recurringExpensesResult.reason, "Recurring bills could not load.")
               : null,
           categories:
-            categoriesResult.status === "rejected"
+            includeCategories && categoriesResult.status === "rejected"
               ? toSectionError(categoriesResult.reason, "Categories could not load.")
               : null,
           monthPlan:
-            monthPlanResult.status === "rejected"
+            includeMonthPlan && monthPlanResult.status === "rejected"
               ? toSectionError(monthPlanResult.reason, "Monthly plan could not load.")
               : null,
           insights:
-            insightsResult.status === "rejected"
+            includeInsights && insightsResult.status === "rejected"
               ? toSectionError(insightsResult.reason, "Goal and review insights could not load.")
               : null,
         },
