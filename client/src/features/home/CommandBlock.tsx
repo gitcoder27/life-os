@@ -3,12 +3,6 @@ import type { LinkedGoal } from "../../shared/lib/api";
 
 type TimePhase = "morning" | "midday" | "evening";
 
-type Recovery = {
-  tone: "steady" | "recovery";
-  title: string;
-  detail: string;
-};
-
 type CommandBlockProps = {
   topPriority: {
     slot: number;
@@ -20,9 +14,7 @@ type CommandBlockProps = {
     title: string;
     timeLabel: string;
   } | null;
-  recovery: Recovery | null;
   phase: TimePhase;
-  topScoreReason: string | null;
 };
 
 function phaseGreeting(phase: TimePhase, hasPriority: boolean) {
@@ -44,9 +36,7 @@ export function CommandBlock({
   topPriority,
   openTaskCount,
   nextTimedTask,
-  recovery,
   phase,
-  topScoreReason,
 }: CommandBlockProps) {
   const headline = topPriority
     ? topPriority.title
@@ -56,23 +46,10 @@ export function CommandBlock({
         ? "Ready to close the day"
         : "All clear";
 
-  const eyebrow = recovery
-    ? recovery.title
-    : phaseGreeting(phase, Boolean(topPriority));
-
-  const subtitle = recovery
-    ? recovery.detail
-    : topScoreReason ?? null;
+  const eyebrow = phaseGreeting(phase, Boolean(topPriority));
 
   return (
     <div className="command-block">
-      {recovery ? (
-        <div className={`command-block__recovery ${recovery.tone === "recovery" ? "command-block__recovery--warn" : ""}`}>
-          <span className="command-block__recovery-dot" />
-          <span>{recovery.detail}</span>
-        </div>
-      ) : null}
-
       <div className="command-block__eyebrow">{eyebrow}</div>
       <h2 className="command-block__headline">{headline}</h2>
 
@@ -81,10 +58,6 @@ export function CommandBlock({
           <span className={`command-block__goal-dot command-block__goal-dot--${topPriority.goal.domain}`} />
           {topPriority.goal.title}
         </span>
-      ) : null}
-
-      {!recovery && subtitle ? (
-        <p className="command-block__subtitle">{subtitle}</p>
       ) : null}
 
       <div className="command-block__meta">

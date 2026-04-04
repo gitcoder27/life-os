@@ -92,10 +92,11 @@ export function GuidanceRail({
           className={`guidance-strip${recovery.tone === "recovery" ? " guidance-strip--recovery" : ""}`}
         >
           <span className="guidance-strip__dot" />
-          <div className="guidance-strip__body">
-            <span className="guidance-strip__title">{recovery.title}</span>
-            <span className="guidance-strip__detail">{recovery.detail}</span>
-          </div>
+          <span className="guidance-strip__text">
+            <strong>{recovery.title}</strong>
+            {" \u2014 "}
+            {recovery.detail}
+          </span>
         </div>
       ) : null}
 
@@ -131,23 +132,23 @@ export function GuidanceRail({
         <div className="guidance-recs">
           {recommendations.map((rec, index) => {
             const target = resolveHomeActionTarget(rec.action);
+            const isPrimary = index === 0;
 
             return (
             <button
               key={rec.id}
-              className={`guidance-rec${index === 0 ? " guidance-rec--primary" : ""}`}
+              className={`guidance-rec${isPrimary ? " guidance-rec--primary" : ""}`}
               type="button"
               onClick={() => navigate(target.to, target.state ? { state: target.state } : undefined)}
             >
               <span className={`guidance-rec__dot guidance-rec__dot--${rec.kind}`} />
-              <div className="guidance-rec__body">
-                {index === 0 ? (
+              <span className="guidance-rec__title">
+                {isPrimary ? (
                   <span className="guidance-rec__eyebrow">Next best move</span>
                 ) : null}
-                <span className="guidance-rec__title">{rec.title}</span>
-                <span className="guidance-rec__detail">{rec.detail}</span>
-              </div>
-              <span className="guidance-rec__impact">{rec.impactLabel}</span>
+                {rec.title}
+              </span>
+              <span className="guidance-rec__tag">{rec.impactLabel}</span>
             </button>
             );
           })}

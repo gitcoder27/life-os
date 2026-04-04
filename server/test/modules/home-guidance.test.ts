@@ -144,7 +144,7 @@ describe("home guidance builder", () => {
     expect(guidance.recovery).toEqual(
       expect.objectContaining({
         tone: "recovery",
-        title: "Reset the day with one useful move",
+        title: "One move to reset",
       }),
     );
   });

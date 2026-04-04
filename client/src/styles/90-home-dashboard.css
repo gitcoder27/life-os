@@ -339,34 +339,8 @@
 .command-block {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: 0.35rem;
   animation: scaleIn 0.45s var(--ease) 0.08s both;
-}
-
-.command-block__recovery {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.4rem 0;
-  font-size: var(--fs-small);
-  color: var(--text-secondary);
-  margin-bottom: 0.25rem;
-}
-
-.command-block__recovery--warn {
-  color: var(--negative);
-}
-
-.command-block__recovery-dot {
-  flex-shrink: 0;
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--accent);
-}
-
-.command-block__recovery--warn .command-block__recovery-dot {
-  background: var(--negative);
 }
 
 .command-block__eyebrow {
@@ -406,19 +380,11 @@
 .command-block__goal-dot--growth { background: #b07cd8; }
 .command-block__goal-dot--finance { background: var(--accent-bright); }
 
-.command-block__subtitle {
-  font-size: var(--fs-small);
-  color: var(--text-secondary);
-  margin: 0;
-  line-height: 1.4;
-}
-
 .command-block__meta {
   display: flex;
   flex-wrap: wrap;
   gap: 0.75rem;
-  padding-top: 0.35rem;
-  margin-top: 0.15rem;
+  padding-top: 0.2rem;
 }
 
 .command-block__meta-item {
@@ -432,7 +398,7 @@
 }
 
 .command-block__actions {
-  margin-top: 0.6rem;
+  margin-top: 0.5rem;
 }
 
 .command-block__cta {
@@ -461,14 +427,17 @@
 .guidance-section {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: 0.4rem;
 }
 
 .guidance-strip {
   display: flex;
-  align-items: flex-start;
-  gap: 0.6rem;
-  padding: 0.55rem 0;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.35rem 0;
+  font-size: var(--fs-small);
+  color: var(--text-secondary);
+  line-height: 1.35;
 }
 
 .guidance-strip--recovery {
@@ -476,9 +445,8 @@
 }
 
 .guidance-strip__dot {
-  width: 0.5rem;
-  height: 0.5rem;
-  margin-top: 0.25rem;
+  width: 6px;
+  height: 6px;
   border-radius: 999px;
   flex-shrink: 0;
   background: var(--accent);
@@ -488,29 +456,20 @@
   background: var(--negative);
 }
 
-.guidance-strip__body {
-  display: flex;
-  flex-direction: column;
-  gap: 0.1rem;
+.guidance-strip__text {
+  min-width: 0;
 }
 
-.guidance-strip__title {
-  font-size: var(--fs-small);
-  font-weight: 700;
+.guidance-strip__text strong {
   color: var(--text);
-}
-
-.guidance-strip__detail {
-  font-size: var(--fs-small);
-  color: var(--text-secondary);
-  line-height: 1.45;
+  font-weight: 650;
 }
 
 .guidance-challenge {
   display: flex;
   align-items: center;
   gap: 0.9rem;
-  padding: 0.6rem 0;
+  padding: 0.5rem 0;
   text-decoration: none;
   color: inherit;
   transition: opacity var(--dur) var(--ease);
@@ -526,8 +485,7 @@
   min-width: 0;
 }
 
-.guidance-challenge__label,
-.guidance-rec__eyebrow {
+.guidance-challenge__label {
   font-size: var(--fs-micro);
   font-weight: 700;
   letter-spacing: 0.06em;
@@ -572,16 +530,15 @@
 .guidance-recs {
   display: flex;
   flex-direction: column;
-  gap: 0.15rem;
+  gap: 2px;
 }
 
 .guidance-rec {
-  display: grid;
-  grid-template-columns: auto 1fr auto;
-  gap: 0.65rem;
-  align-items: start;
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
   width: 100%;
-  padding: 0.65rem 0.5rem;
+  padding: 0.45rem 0.5rem;
   border-radius: var(--r-xs);
   background: transparent;
   color: inherit;
@@ -590,17 +547,17 @@
 }
 
 .guidance-rec:hover {
-  background: rgba(255, 255, 255, 0.025);
+  background: rgba(255, 255, 255, 0.03);
 }
 
 .guidance-rec--primary {
   background: rgba(255, 255, 255, 0.02);
+  padding: 0.5rem 0.5rem;
 }
 
 .guidance-rec__dot {
-  width: 0.5rem;
-  height: 0.5rem;
-  margin-top: 0.3rem;
+  width: 6px;
+  height: 6px;
   border-radius: 999px;
   background: var(--accent);
   flex-shrink: 0;
@@ -612,32 +569,33 @@
 .guidance-rec__dot--review { background: #b07cd8; }
 .guidance-rec__dot--health { background: #5db8b0; }
 
-.guidance-rec__body {
-  display: flex;
-  flex-direction: column;
-  gap: 0.12rem;
-  min-width: 0;
+.guidance-rec__eyebrow {
+  display: block;
+  font-size: var(--fs-micro);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--accent-bright);
+  line-height: 1;
+  margin-bottom: 0.15rem;
 }
 
 .guidance-rec__title {
+  flex: 1;
+  min-width: 0;
   font-size: var(--fs-body);
-  font-weight: 700;
+  font-weight: 600;
   line-height: 1.3;
 }
 
-.guidance-rec__detail {
-  font-size: var(--fs-small);
-  color: var(--text-secondary);
-  line-height: 1.45;
-}
-
-.guidance-rec__impact {
+.guidance-rec__tag {
   font-size: var(--fs-micro);
   font-weight: 700;
   color: var(--text-tertiary);
   text-transform: uppercase;
   letter-spacing: 0.04em;
   white-space: nowrap;
+  flex-shrink: 0;
 }
 
 /* ── At Risk Lane ───────────────────────────── */
@@ -1388,7 +1346,7 @@
   }
 
   .guidance-rec {
-    grid-template-columns: 1fr;
+    flex-wrap: wrap;
   }
 
   .secondary-context__footer {

@@ -58,7 +58,6 @@ export function HomePage() {
 
   const home = homeQuery.data;
   const score = scoreQuery.data ?? home.dailyScore;
-  const topReasonLabel = scoreQuery.data?.topReasons[0]?.label ?? null;
 
   // Derive action data
   const allTasks = home.tasks;
@@ -103,9 +102,7 @@ export function HomePage() {
                 ? { title: nextTimedTask.title, timeLabel: formatTimeLabel(nextTimedTask.dueAt) }
                 : null
             }
-            recovery={null}
             phase={home.phase}
-            topScoreReason={topReasonLabel}
           />
 
           <GuidanceRail

@@ -78,7 +78,7 @@ function buildRecoveryGuidance(input: GuidanceInput): HomeGuidance["recovery"] {
     return {
       tone: input.score.label === "Recovering Day" || input.score.label === "Off-Track Day" ? "recovery" : "steady",
       title: "Protect the streak",
-      detail: `${atRiskHabit.title} is due today and a ${atRiskHabit.streakCount}-day streak is on the line.`,
+      detail: `${atRiskHabit.title} — ${atRiskHabit.streakCount}d streak on the line`,
     };
   }
 
@@ -86,18 +86,18 @@ function buildRecoveryGuidance(input: GuidanceInput): HomeGuidance["recovery"] {
     const topReason = input.score.topReasons[0];
     return {
       tone: "recovery",
-      title: input.score.label === "Off-Track Day" ? "Reset the day with one useful move" : "Keep the recovery simple",
+      title: input.score.label === "Off-Track Day" ? "One move to reset" : "Keep it simple",
       detail: topReason
-        ? `${topReason.label} is the biggest score swing still available.`
-        : "A small reset now is worth more than chasing a perfect day later.",
+        ? `Biggest swing: ${topReason.label}`
+        : "One small reset beats chasing perfection.",
     };
   }
 
   if (input.momentum.strongDayStreak >= 2 && input.score.value < 70) {
     return {
       tone: "recovery",
-      title: "Protect the strong-day run",
-      detail: `Momentum is still alive at ${input.momentum.strongDayStreak} strong days. One clean action keeps it recoverable.`,
+      title: "Protect the run",
+      detail: `${input.momentum.strongDayStreak} strong days alive — one action keeps it.`,
     };
   }
 
@@ -152,13 +152,13 @@ function buildRecommendations(input: GuidanceInput): HomeGuidanceRecommendation[
       kind: "priority",
       title:
         input.planning.pendingPriorityCount > 0
-          ? "Turn Today into a real plan"
-          : "Set the day up before it drifts",
+          ? "Plan the day"
+          : "Set up before it drifts",
       detail:
         input.planning.pendingPriorityCount > 0
-          ? `${input.planning.pendingPriorityCount} priority slot${input.planning.pendingPriorityCount === 1 ? "" : "s"} and ${input.planning.openTaskCount} open task${input.planning.openTaskCount === 1 ? "" : "s"} still need a plan.`
-          : `${input.planning.openTaskCount} open task${input.planning.openTaskCount === 1 ? "" : "s"} are waiting without a clear plan yet.`,
-      impactLabel: "Set the operating system",
+          ? `${input.planning.pendingPriorityCount} priorities, ${input.planning.openTaskCount} tasks unplanned`
+          : `${input.planning.openTaskCount} task${input.planning.openTaskCount === 1 ? "" : "s"} without a plan`,
+      impactLabel: "Plan",
       action: {
         type: "open_destination",
         destination: {
@@ -173,9 +173,9 @@ function buildRecommendations(input: GuidanceInput): HomeGuidanceRecommendation[
     addRecommendation({
       id: `inbox-triage:${input.accountability.staleInboxTaskId ?? "queue"}`,
       kind: "task",
-      title: "Clear the inbox drag",
-      detail: `${input.accountability.staleInboxCount} inbox item${input.accountability.staleInboxCount === 1 ? "" : "s"} are aging and still need triage.`,
-      impactLabel: "Get capture under control",
+      title: "Clear inbox",
+      detail: `${input.accountability.staleInboxCount} item${input.accountability.staleInboxCount === 1 ? "" : "s"} aging`,
+      impactLabel: "Triage",
       action: {
         type: "open_destination",
         destination: {
@@ -190,8 +190,8 @@ function buildRecommendations(input: GuidanceInput): HomeGuidanceRecommendation[
       id: `overdue-recovery:${input.accountability.overdueTaskId ?? "queue"}`,
       kind: "task",
       title: "Recover overdue work",
-      detail: `${input.accountability.overdueTaskCount} overdue task${input.accountability.overdueTaskCount === 1 ? "" : "s"} are still pulling attention off the day.`,
-      impactLabel: "Stabilize execution",
+      detail: `${input.accountability.overdueTaskCount} task${input.accountability.overdueTaskCount === 1 ? "" : "s"} overdue`,
+      impactLabel: "Recover",
       action: {
         type: "open_destination",
         destination: {
@@ -210,8 +210,8 @@ function buildRecommendations(input: GuidanceInput): HomeGuidanceRecommendation[
       id: `habit-risk:${atRiskHabit.id}`,
       kind: "habit",
       title: `Protect ${atRiskHabit.title}`,
-      detail: atRiskHabit.risk.message ?? "This habit is due today and needs attention now.",
-      impactLabel: "Protect streak",
+      detail: atRiskHabit.risk.message ?? "Due today, streak at risk",
+      impactLabel: "Streak",
       action: {
         type: "open_destination",
         destination: {
@@ -228,9 +228,9 @@ function buildRecommendations(input: GuidanceInput): HomeGuidanceRecommendation[
     addRecommendation({
       id: `priority:${topPriority.id}`,
       kind: "priority",
-      title: `Move Priority 1: ${topPriority.title}`,
-      detail: "Your top priority is still open. Re-enter Today and clear the next concrete step.",
-      impactLabel: "Protect top focus",
+      title: `Move P1: ${topPriority.title}`,
+      detail: "Top priority still open",
+      impactLabel: "Focus",
       action: {
         type: "open_destination",
         destination: {
@@ -247,8 +247,8 @@ function buildRecommendations(input: GuidanceInput): HomeGuidanceRecommendation[
       id: `task:${openTask.id}`,
       kind: "task",
       title: `Close ${openTask.title}`,
-      detail: "One open day-task is still dragging the lane.",
-      impactLabel: "Clear task lane",
+      detail: "Open task in the lane",
+      impactLabel: "Clear",
       action: {
         type: "open_destination",
         destination: {
@@ -264,8 +264,8 @@ function buildRecommendations(input: GuidanceInput): HomeGuidanceRecommendation[
       id: "review:daily",
       kind: "review",
       title: "Close the day cleanly",
-      detail: "Daily review is still open. Finish it to seed tomorrow instead of carrying clutter.",
-      impactLabel: "Seed tomorrow",
+      detail: "Seeds tomorrow",
+      impactLabel: "Review",
       action: buildReviewAction(input.dailyReviewRoute),
     });
   }
@@ -278,9 +278,9 @@ function buildRecommendations(input: GuidanceInput): HomeGuidanceRecommendation[
     addRecommendation({
       id: "health:water",
       kind: "health",
-      title: "Recover the basics",
-      detail: `${input.health.waterMl}ml logged against a ${input.health.waterTargetMl}ml target so far.`,
-      impactLabel: "Recover health basics",
+      title: "Log water",
+      detail: `${input.health.waterMl}ml of ${input.health.waterTargetMl}ml`,
+      impactLabel: "Health",
       action: {
         type: "open_destination",
         destination: {
