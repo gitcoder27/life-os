@@ -249,6 +249,78 @@ describe("scoring service", () => {
     });
   });
 
+  it("does not award full meal points when today's intended meal target is not met", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-03-14T20:00:00.000Z"));
+
+    try {
+      const prisma = {
+        planningCycle: {
+          upsert: vi
+            .fn()
+            .mockResolvedValueOnce({
+              id: "day",
+              priorities: [],
+              dailyReview: null,
+              dailyScore: null,
+            })
+            .mockResolvedValueOnce({
+              id: "tomorrow",
+              priorities: [],
+              dailyReview: null,
+              dailyScore: null,
+            })
+            .mockResolvedValueOnce({
+              id: "week",
+              priorities: [],
+            })
+            .mockResolvedValueOnce({
+              id: "month",
+              priorities: [],
+            })
+            .mockResolvedValueOnce({
+              id: "next-month",
+              priorities: [],
+            }),
+        },
+        userPreference: {
+          findUnique: vi.fn().mockResolvedValue({
+            timezone: "UTC",
+            weekStartsOn: 1,
+            dailyWaterTargetMl: 2500,
+          }),
+        },
+        task: { findMany: vi.fn().mockResolvedValue([]) },
+        habit: { findMany: vi.fn().mockResolvedValue([]) },
+        habitCheckin: { findMany: vi.fn().mockResolvedValue([]) },
+        routine: { findMany: vi.fn().mockResolvedValue([]) },
+        routineItemCheckin: { findMany: vi.fn().mockResolvedValue([]) },
+        waterLog: {
+          findMany: vi.fn().mockResolvedValue([{ amountMl: 2500 }]),
+        },
+        mealLog: {
+          findMany: vi.fn().mockResolvedValue([
+            { loggingQuality: "MEANINGFUL" },
+            { loggingQuality: "MEANINGFUL" },
+          ]),
+        },
+        workoutDay: { findUnique: vi.fn().mockResolvedValue(null) },
+        expense: { findMany: vi.fn().mockResolvedValue([]) },
+        adminItem: { findMany: vi.fn().mockResolvedValue([]) },
+      } as any;
+
+      const score = await calculateDailyScore(prisma, "user-1", new Date("2026-03-14T00:00:00.000Z"));
+      const healthBucket = score.buckets.find((bucket) => bucket.key === "health_basics");
+
+      expect(healthBucket).toMatchObject({
+        earnedPoints: 12,
+        applicablePoints: 15,
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("awards partial habit score for multi-per-day habits until the target is met", async () => {
     const prisma = {
       planningCycle: {

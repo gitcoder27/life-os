@@ -15,6 +15,10 @@ import type {
   WorkoutDayItem,
 } from "@life-os/contracts";
 
+import {
+  getMealTargetCountForHour,
+  scoreMealConsistency,
+} from "../../lib/health/meals.js";
 import { getUserLocalDate } from "../../lib/time/user-time.js";
 
 type SummaryBuilderInput = {
@@ -146,22 +150,6 @@ const buildWaterSignal = (
   };
 };
 
-const getMealTargetCount = (hour: number) => {
-  if (hour < 9) {
-    return 0;
-  }
-
-  if (hour < 13) {
-    return 1;
-  }
-
-  if (hour < 17) {
-    return 2;
-  }
-
-  return 3;
-};
-
 const getNextSuggestedMealSlot = (hour: number, mealCount: number): MealSlot | null => {
   if (mealCount >= 3) {
     return null;
@@ -187,7 +175,7 @@ const buildMealSignal = (
   currentHour: number,
 ): HealthMealSignal => {
   const mealCount = mealLogs.length;
-  const targetCount = getMealTargetCount(currentHour);
+  const targetCount = getMealTargetCountForHour(currentHour);
   const progressPct = clampPercent((Math.min(mealCount, 3) / 3) * 100);
   const nextSuggestedSlot = getNextSuggestedMealSlot(currentHour, mealCount);
 
@@ -253,17 +241,11 @@ const buildHealthScore = (
   waterMl: number,
   waterTargetMl: number,
   mealLogs: MealLogItem[],
+  currentHour: number,
   workoutDay: WorkoutDayItem | null,
 ): HealthScoreSnapshot => {
   const waterEarned = 8 * Math.min(1, waterTargetMl > 0 ? waterMl / waterTargetMl : 0);
-  const mealCredits = mealLogs.reduce((sum, meal) => {
-    if (meal.loggingQuality === "partial") {
-      return sum + 0.5;
-    }
-
-    return sum + 1;
-  }, 0);
-  const mealEarned = 7 * Math.min(1, mealCredits / 2);
+  const mealScore = scoreMealConsistency(mealLogs, getMealTargetCountForHour(currentHour));
   const workoutApplicable = workoutDay && workoutDay.planType !== "none" ? 10 : 0;
 
   let workoutEarned = 0;
@@ -278,8 +260,8 @@ const buildHealthScore = (
     }
   }
 
-  const earnedPoints = roundToOneDecimal(waterEarned + mealEarned + workoutEarned);
-  const possiblePoints = 8 + 7 + workoutApplicable;
+  const earnedPoints = roundToOneDecimal(waterEarned + mealScore.earnedPoints + workoutEarned);
+  const possiblePoints = 8 + mealScore.applicablePoints + workoutApplicable;
   const value = possiblePoints > 0 ? Math.round((earnedPoints / possiblePoints) * 100) : 0;
 
   return {
@@ -534,6 +516,7 @@ export function buildHealthSummaryEnhancements(input: SummaryBuilderInput) {
     input.currentDayWaterMl,
     input.waterTargetMl,
     input.currentDayMealLogs,
+    input.currentHour,
     input.currentWorkout,
   );
   const timeline = buildTimeline(input);

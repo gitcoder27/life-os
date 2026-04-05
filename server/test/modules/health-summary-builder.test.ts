@@ -220,4 +220,49 @@ describe("health summary builder", () => {
     expect(summary.guidance.focus.tone).toBe("positive");
     expect(summary.guidance.focus.title).toBe("Health basics are steady");
   });
+
+  it("keeps the score below strong when the evening meal target is still short", () => {
+    const summary = buildHealthSummaryEnhancements({
+      currentIsoDate: "2026-04-02",
+      currentHour: 20,
+      timezone: "UTC",
+      waterTargetMl: 2500,
+      currentDayWaterMl: 2500,
+      currentDayWaterLogs: [],
+      currentDayMealLogs: [
+        {
+          id: "meal-1",
+          occurredAt: "2026-04-02T08:00:00.000Z",
+          mealSlot: "breakfast",
+          mealTemplateId: null,
+          description: "Eggs",
+          loggingQuality: "meaningful",
+          createdAt: "2026-04-02T08:00:00.000Z",
+        },
+        {
+          id: "meal-2",
+          occurredAt: "2026-04-02T13:00:00.000Z",
+          mealSlot: "lunch",
+          mealTemplateId: null,
+          description: "Rice bowl",
+          loggingQuality: "meaningful",
+          createdAt: "2026-04-02T13:00:00.000Z",
+        },
+      ],
+      currentWorkout: null,
+      latestWeight: null,
+      rangeWaterLogs: [],
+      rangeMealLogs: [],
+      rangeWorkoutDays: [],
+      rangeWeightHistory: [],
+    });
+
+    expect(summary.currentDay.signals.meals.status).toBe("behind");
+    expect(summary.currentDay.score).toMatchObject({
+      value: 80,
+      label: "steady",
+      earnedPoints: 12,
+      possiblePoints: 15,
+    });
+  });
 });

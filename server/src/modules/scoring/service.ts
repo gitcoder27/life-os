@@ -1,5 +1,9 @@
 import type { Prisma, PrismaClient } from "@prisma/client";
 
+import {
+  getMealTargetCountForHour,
+  scoreMealConsistency,
+} from "../../lib/health/meals.js";
 import { filterDueHabits, getHabitCompletionCountForIsoDate } from "../../lib/habits/schedule.js";
 import {
   addDays,
@@ -10,7 +14,13 @@ import {
   parseIsoDate,
 } from "../../lib/time/cycle.js";
 import { toIsoDateString } from "../../lib/time/date.js";
-import { getDayWindowUtc, getTimeWindowUtc, getUserLocalDate, normalizeTimezone } from "../../lib/time/user-time.js";
+import {
+  getDayWindowUtc,
+  getTimeWindowUtc,
+  getUserLocalDate,
+  getUserLocalHour,
+  normalizeTimezone,
+} from "../../lib/time/user-time.js";
 import { goalSummaryInclude } from "../planning/planning-record-shapes.js";
 
 type ScoreLabel = "Strong Day" | "Solid Day" | "Recovering Day" | "Off-Track Day";
@@ -522,14 +532,12 @@ export async function calculateDailyScore(
   const waterTarget = context.preferences?.dailyWaterTargetMl ?? 2500;
   const waterMl = context.waterLogs.reduce((sum, log) => sum + log.amountMl, 0);
   const waterEarned = 8 * Math.min(1, waterTarget > 0 ? waterMl / waterTarget : 0);
-  const mealCredits = context.mealLogs.reduce((sum, meal) => {
-    if (meal.loggingQuality === "PARTIAL") {
-      return sum + 0.5;
-    }
-
-    return sum + 1;
-  }, 0);
-  const mealEarned = 7 * Math.min(1, mealCredits / 2);
+  const todayIsoDate = getUserLocalDate(new Date(), context.preferences?.timezone);
+  const mealTargetCount =
+    context.targetIsoDate === todayIsoDate
+      ? getMealTargetCountForHour(getUserLocalHour(new Date(), context.preferences?.timezone))
+      : 3;
+  const mealScore = scoreMealConsistency(context.mealLogs, mealTargetCount);
   const workoutApplicable = context.workoutDay && context.workoutDay.planType !== "NONE" ? 10 : 0;
   const workoutEarned =
     workoutApplicable === 0
@@ -543,8 +551,8 @@ export async function calculateDailyScore(
   const healthBucket = buildBucket(
     "health_basics",
     "Health Basics",
-    waterEarned + mealEarned + workoutEarned,
-    8 + 7 + workoutApplicable,
+    waterEarned + mealScore.earnedPoints + workoutEarned,
+    8 + mealScore.applicablePoints + workoutApplicable,
     "Water target, meal logging quality, and workout or recovery adherence.",
   );
 
