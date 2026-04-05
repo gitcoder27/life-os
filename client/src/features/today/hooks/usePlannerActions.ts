@@ -52,8 +52,15 @@ export function usePlannerActions(date: string) {
     return updateBlock.mutateAsync({ blockId, ...updates });
   }
 
-  function removeBlock(blockId: string) {
-    deleteBlock.mutate(blockId);
+  async function removeBlock(block: DayPlannerBlockItem) {
+    if (block.tasks.length > 0) {
+      await replaceBlockTasks.mutateAsync({
+        blockId: block.id,
+        taskIds: [],
+      });
+    }
+
+    await deleteBlock.mutateAsync(block.id);
   }
 
   function reorder(blockIds: string[]) {

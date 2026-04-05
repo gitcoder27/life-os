@@ -134,6 +134,12 @@ export function getUserLocalHour(date: Date, timezone?: string | null) {
   return getLocalDateTimeParts(date, normalizeTimezone(timezone)).hour;
 }
 
+export function getUserLocalTime(date: Date, timezone?: string | null) {
+  const localDateTime = getLocalDateTimeParts(date, normalizeTimezone(timezone));
+
+  return `${String(localDateTime.hour).padStart(2, "0")}:${String(localDateTime.minute).padStart(2, "0")}`;
+}
+
 export function getUserLocalWeekday(date: Date, timezone?: string | null) {
   return getLocalDateTimeParts(date, normalizeTimezone(timezone)).weekday;
 }

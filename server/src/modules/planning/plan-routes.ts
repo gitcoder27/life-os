@@ -51,6 +51,7 @@ import {
   normalizePlannerBlockTaskSortOrders,
   replaceCyclePriorities,
   replacePlannerBlockTasks,
+  seedPlannerBlocksFromMostRecentDay,
 } from "./planning-repository.js";
 import {
   createDayPlannerBlockSchema,
@@ -83,12 +84,19 @@ export const registerPlanningPlanRoutes: FastifyPluginAsync = async (app) => {
     const parsedDate = parseOrThrow(isoDateSchema, date);
     const cycleStartDate = parseIsoDate(parsedDate);
     const goalContext = await resolveGoalContext(app, user.id, parsedDate);
+    const timezone = await getUserTimezone(app, user.id);
     await materializeRecurringTasksInRange(app.prisma, user.id, cycleStartDate, cycleStartDate);
     const cycle = await ensurePlanningCycle(app, {
       userId: user.id,
       cycleType: "DAY",
       cycleStartDate,
       cycleEndDate: cycleStartDate,
+    });
+    await seedPlannerBlocksFromMostRecentDay(app.prisma, {
+      userId: user.id,
+      date: parsedDate,
+      planningCycleId: cycle.id,
+      timezone,
     });
     const [tasks, activeGoals, plannerBlocks] = await Promise.all([
       app.prisma.task.findMany({

@@ -52,8 +52,20 @@ type PlannerLinkRecord = {
   updatedAt: Date;
 };
 
+type PlanningCycleRecord = {
+  id: string;
+  userId: string;
+  cycleType: "DAY";
+  cycleStartDate: Date;
+  cycleEndDate: Date;
+  theme: null;
+  priorities: [];
+};
+
 const DAY_ISO = "2026-03-14";
 const DAY_START = new Date("2026-03-14T00:00:00.000Z");
+const NEXT_DAY_ISO = "2026-03-15";
+const NEXT_DAY_START = new Date("2026-03-15T00:00:00.000Z");
 const TASK_ONE_ID = "11111111-1111-4111-8111-111111111111";
 const TASK_TWO_ID = "22222222-2222-4222-8222-222222222222";
 
@@ -85,10 +97,12 @@ describe("day planner planning routes", () => {
   let app: Awaited<ReturnType<typeof Fastify>> | undefined;
   let prisma: Record<string, unknown>;
   let tasksById: Map<string, TaskRecord>;
+  let planningCyclesByDate: Map<string, PlanningCycleRecord>;
   let plannerBlocks: PlannerBlockRecord[];
   let plannerLinks: PlannerLinkRecord[];
   let blockCounter: number;
   let linkCounter: number;
+  let cycleCounter: number;
 
   const authenticatedUser = {
     id: "user-1",
@@ -105,6 +119,35 @@ describe("day planner planning routes", () => {
     return { ...task };
   }
 
+  function getCycleDateKey(date: Date) {
+    return date.toISOString();
+  }
+
+  function getPlanningCycleById(planningCycleId: string) {
+    return [...planningCyclesByDate.values()].find((entry) => entry.id === planningCycleId) ?? null;
+  }
+
+  function ensurePlanningCycleRecord(cycleStartDate: Date) {
+    const key = getCycleDateKey(cycleStartDate);
+    const existing = planningCyclesByDate.get(key);
+    if (existing) {
+      return existing;
+    }
+
+    const created: PlanningCycleRecord = {
+      id: `cycle-${cycleCounter++}`,
+      userId: "user-1",
+      cycleType: "DAY",
+      cycleStartDate,
+      cycleEndDate: cycleStartDate,
+      theme: null,
+      priorities: [],
+    };
+    planningCyclesByDate.set(key, created);
+
+    return created;
+  }
+
   function getHydratedBlock(blockId: string) {
     const block = plannerBlocks.find((entry) => entry.id === blockId);
     if (!block) {
@@ -119,12 +162,14 @@ describe("day planner planning routes", () => {
         task: getHydratedTask(entry.taskId),
       }));
 
+    const planningCycle = getPlanningCycleById(block.planningCycleId);
+    if (!planningCycle) {
+      throw new Error(`Missing planning cycle ${block.planningCycleId}`);
+    }
+
     return {
       ...block,
-      planningCycle: {
-        id: block.planningCycleId,
-        cycleStartDate: DAY_START,
-      },
+      planningCycle,
       taskLinks,
     };
   }
@@ -140,10 +185,13 @@ describe("day planner planning routes", () => {
       [TASK_ONE_ID, buildTask(TASK_ONE_ID, "Write report")],
       [TASK_TWO_ID, buildTask(TASK_TWO_ID, "Prepare slides")],
     ]);
+    planningCyclesByDate = new Map();
     plannerBlocks = [];
     plannerLinks = [];
     blockCounter = 1;
     linkCounter = 1;
+    cycleCounter = 1;
+    ensurePlanningCycleRecord(DAY_START);
 
     prisma.$transaction = vi.fn(async (callback: (tx: Record<string, unknown>) => Promise<unknown>) => {
       return callback(prisma);
@@ -152,14 +200,49 @@ describe("day planner planning routes", () => {
       findUnique: vi.fn().mockResolvedValue({ timezone: "UTC", weekStartsOn: 1 }),
     } as any;
     prisma.planningCycle = {
-      upsert: vi.fn().mockResolvedValue({
-        id: "cycle-1",
-        userId: "user-1",
-        cycleType: "DAY",
-        cycleStartDate: DAY_START,
-        cycleEndDate: DAY_START,
-        theme: null,
-        priorities: [],
+      upsert: vi.fn().mockImplementation(async ({ where, create }: any) => {
+        const cycleStartDate =
+          where?.userId_cycleType_cycleStartDate?.cycleStartDate ?? create.cycleStartDate;
+
+        return ensurePlanningCycleRecord(cycleStartDate);
+      }),
+      findFirst: vi.fn().mockImplementation(async ({ where, orderBy, select }: any) => {
+        let cycles = [...planningCyclesByDate.values()].filter((entry) => {
+          if (where?.userId && entry.userId !== where.userId) {
+            return false;
+          }
+
+          if (where?.cycleType && entry.cycleType !== where.cycleType) {
+            return false;
+          }
+
+          if (where?.cycleStartDate?.lt && !(entry.cycleStartDate < where.cycleStartDate.lt)) {
+            return false;
+          }
+
+          if (where?.plannerBlocks?.some) {
+            return plannerBlocks.some((block) => block.planningCycleId === entry.id);
+          }
+
+          return true;
+        });
+
+        if (orderBy?.cycleStartDate === "desc") {
+          cycles = cycles.sort(
+            (left, right) => right.cycleStartDate.getTime() - left.cycleStartDate.getTime(),
+          );
+        }
+
+        const cycle = cycles[0];
+        if (!cycle) {
+          return null;
+        }
+
+        if (select?.id) {
+          return { id: cycle.id };
+        }
+
+        return cycle;
       }),
     } as any;
     prisma.goal = {
@@ -230,7 +313,13 @@ describe("day planner planning routes", () => {
       }),
     } as any;
     prisma.dayPlannerBlock = {
-      count: vi.fn().mockImplementation(async () => plannerBlocks.length),
+      count: vi.fn().mockImplementation(async ({ where }: any = {}) => {
+        if (!where?.planningCycleId) {
+          return plannerBlocks.length;
+        }
+
+        return plannerBlocks.filter((entry) => entry.planningCycleId === where.planningCycleId).length;
+      }),
       create: vi.fn().mockImplementation(async ({ data }: any) => {
         const createdBlock: PlannerBlockRecord = {
           id: `00000000-0000-4000-8000-${String(blockCounter++).padStart(12, "0")}`,
@@ -252,7 +341,13 @@ describe("day planner planning routes", () => {
           .sort((left, right) => left.sortOrder - right.sortOrder);
 
         if (args?.select) {
-          return blocks.map((entry) => ({ id: entry.id, sortOrder: entry.sortOrder }));
+          return blocks.map((entry) => ({
+            id: args.select.id ? entry.id : undefined,
+            title: args.select.title ? entry.title : undefined,
+            startsAt: args.select.startsAt ? entry.startsAt : undefined,
+            endsAt: args.select.endsAt ? entry.endsAt : undefined,
+            sortOrder: args.select.sortOrder ? entry.sortOrder : undefined,
+          }));
         }
 
         return blocks
@@ -261,6 +356,11 @@ describe("day planner planning routes", () => {
       }),
       findFirst: vi.fn().mockImplementation(async ({ where }: any) => {
         const block = plannerBlocks.find((entry) => {
+          const planningCycle = getPlanningCycleById(entry.planningCycleId);
+          if (!planningCycle) {
+            return false;
+          }
+
           if (typeof where?.id === "string" && entry.id !== where.id) {
             return false;
           }
@@ -273,8 +373,18 @@ describe("day planner planning routes", () => {
             return false;
           }
 
-          if (where?.planningCycle?.cycleStartDate) {
-            return where.planningCycle.cycleStartDate.getTime() === DAY_START.getTime();
+          if (
+            where?.planningCycle?.cycleStartDate &&
+            planningCycle.cycleStartDate.getTime() !== where.planningCycle.cycleStartDate.getTime()
+          ) {
+            return false;
+          }
+
+          if (
+            where?.planningCycle?.cycleType &&
+            planningCycle.cycleType !== where.planningCycle.cycleType
+          ) {
+            return false;
           }
 
           if (where?.startsAt?.lt && !(entry.startsAt < where.startsAt.lt)) {
@@ -559,5 +669,65 @@ describe("day planner planning routes", () => {
         tasks: [],
       }),
     ]);
+  });
+
+  it("seeds a new day with the most recent planner block structure without carrying tasks", async () => {
+    const previousCycle = ensurePlanningCycleRecord(DAY_START);
+    plannerBlocks.push({
+      id: "seed-block-1",
+      planningCycleId: previousCycle.id,
+      title: "Morning routine",
+      startsAt: new Date("2026-03-14T07:00:00.000Z"),
+      endsAt: new Date("2026-03-14T08:30:00.000Z"),
+      sortOrder: 1,
+      createdAt: new Date("2026-03-14T06:00:00.000Z"),
+      updatedAt: new Date("2026-03-14T06:00:00.000Z"),
+    });
+    plannerBlocks.push({
+      id: "seed-block-2",
+      planningCycleId: previousCycle.id,
+      title: "Deep work",
+      startsAt: new Date("2026-03-14T10:00:00.000Z"),
+      endsAt: new Date("2026-03-14T12:00:00.000Z"),
+      sortOrder: 2,
+      createdAt: new Date("2026-03-14T06:05:00.000Z"),
+      updatedAt: new Date("2026-03-14T06:05:00.000Z"),
+    });
+    plannerLinks.push({
+      id: "seed-link-1",
+      blockId: "seed-block-1",
+      taskId: TASK_ONE_ID,
+      sortOrder: 1,
+      createdAt: new Date("2026-03-14T06:10:00.000Z"),
+      updatedAt: new Date("2026-03-14T06:10:00.000Z"),
+    });
+
+    const dayPlan = await app!.inject({
+      method: "GET",
+      url: `/api/planning/days/${NEXT_DAY_ISO}`,
+    });
+
+    expect(dayPlan.statusCode).toBe(200);
+    const parsedBody = JSON.parse(dayPlan.body);
+
+    expect(parsedBody.tasks).toEqual([]);
+    expect(parsedBody.plannerBlocks).toEqual([
+      expect.objectContaining({
+        title: "Morning routine",
+        startsAt: "2026-03-15T07:00:00.000Z",
+        endsAt: "2026-03-15T08:30:00.000Z",
+        tasks: [],
+      }),
+      expect.objectContaining({
+        title: "Deep work",
+        startsAt: "2026-03-15T10:00:00.000Z",
+        endsAt: "2026-03-15T12:00:00.000Z",
+        tasks: [],
+      }),
+    ]);
+
+    const nextDayCycle = ensurePlanningCycleRecord(NEXT_DAY_START);
+    expect(plannerBlocks.filter((entry) => entry.planningCycleId === nextDayCycle.id)).toHaveLength(2);
+    expect(plannerLinks.filter((entry) => entry.blockId.startsWith("seed-block"))).toHaveLength(1);
   });
 });

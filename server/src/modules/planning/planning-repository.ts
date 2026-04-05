@@ -13,6 +13,7 @@ import { AppError } from "../../lib/errors/app-error.js";
 import { upsertRecurrenceRuleRecord } from "../../lib/recurrence/store.js";
 import { parseIsoDate } from "../../lib/time/cycle.js";
 import { toIsoDateString } from "../../lib/time/date.js";
+import { getUtcDateForLocalTime, getUserLocalTime } from "../../lib/time/user-time.js";
 import {
   ensureGoalConfigSeeded,
   normalizeGoalDomainInputs,
@@ -211,6 +212,102 @@ export async function loadPlannerBlocks(prisma: any, planningCycleId: string) {
   });
 
   return blocks.map(serializeDayPlannerBlock);
+}
+
+export async function seedPlannerBlocksFromMostRecentDay(
+  prisma: any,
+  input: {
+    userId: string;
+    date: IsoDateString;
+    planningCycleId: string;
+    timezone?: string | null;
+  },
+) {
+  const existingBlocksCount = await prisma.dayPlannerBlock.count({
+    where: {
+      planningCycleId: input.planningCycleId,
+    },
+  });
+
+  if (existingBlocksCount > 0) {
+    return false;
+  }
+
+  const sourceCycle = await prisma.planningCycle.findFirst({
+    where: {
+      userId: input.userId,
+      cycleType: "DAY",
+      cycleStartDate: {
+        lt: parseIsoDate(input.date),
+      },
+      plannerBlocks: {
+        some: {},
+      },
+    },
+    orderBy: {
+      cycleStartDate: "desc",
+    },
+    select: {
+      id: true,
+    },
+  });
+
+  if (!sourceCycle) {
+    return false;
+  }
+
+  const sourceBlocks = await prisma.dayPlannerBlock.findMany({
+    where: {
+      planningCycleId: sourceCycle.id,
+    },
+    orderBy: {
+      sortOrder: "asc",
+    },
+    select: {
+      title: true,
+      startsAt: true,
+      endsAt: true,
+      sortOrder: true,
+    },
+  });
+
+  if (sourceBlocks.length === 0) {
+    return false;
+  }
+
+  await prisma.$transaction(async (tx: any) => {
+    const targetBlockCount = await tx.dayPlannerBlock.count({
+      where: {
+        planningCycleId: input.planningCycleId,
+      },
+    });
+
+    if (targetBlockCount > 0) {
+      return;
+    }
+
+    for (const [index, block] of sourceBlocks.entries()) {
+      await tx.dayPlannerBlock.create({
+        data: {
+          planningCycleId: input.planningCycleId,
+          title: block.title,
+          startsAt: getUtcDateForLocalTime(
+            input.date,
+            getUserLocalTime(block.startsAt, input.timezone),
+            input.timezone,
+          ),
+          endsAt: getUtcDateForLocalTime(
+            input.date,
+            getUserLocalTime(block.endsAt, input.timezone),
+            input.timezone,
+          ),
+          sortOrder: index + 1,
+        },
+      });
+    }
+  });
+
+  return true;
 }
 
 export async function findOwnedDayPlannerBlock(

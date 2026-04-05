@@ -1,4 +1,5 @@
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   DndContext,
   PointerSensor,
@@ -31,6 +32,17 @@ import {
 } from "../helpers/planner-blocks";
 import { getPlannerBlockDropId, PLANNER_BLOCK_DROP_TYPE } from "../helpers/planner-drag";
 import { CheckIcon, GripIcon } from "../helpers/icons";
+
+const OVERFLOW_VIEWPORT_MARGIN_PX = 12;
+const OVERFLOW_MENU_GAP_PX = 8;
+const OVERFLOW_MENU_MIN_WIDTH_PX = 220;
+
+type OverflowMenuPosition = {
+  top: number;
+  left: number;
+  minWidth: number;
+  placement: "top" | "bottom";
+};
 
 export function PlannerBlock({
   block,
@@ -80,7 +92,7 @@ export function PlannerBlock({
     startsAt?: string;
     endsAt?: string;
   }) => Promise<unknown> | void;
-  onDeleteBlock: () => void;
+  onDeleteBlock: () => Promise<unknown> | void;
   onRemoveTask: (taskId: string) => void;
   onReorderTasks: (taskIds: string[]) => void;
   onNudgeDuration: (direction: -1 | 1) => void;
@@ -111,11 +123,18 @@ export function PlannerBlock({
   const [movingTaskId, setMovingTaskId] = useState<string | null>(null);
   const [selectedTaskIds, setSelectedTaskIds] = useState<string[]>([]);
   const [showOverflow, setShowOverflow] = useState(false);
+  const [overflowMenuPosition, setOverflowMenuPosition] = useState<OverflowMenuPosition>({
+    top: OVERFLOW_VIEWPORT_MARGIN_PX,
+    left: OVERFLOW_VIEWPORT_MARGIN_PX,
+    minWidth: OVERFLOW_MENU_MIN_WIDTH_PX,
+    placement: "bottom",
+  });
   const [resizeDraft, setResizeDraft] = useState<{
     endMinutes: number;
     endsAt: string;
   } | null>(null);
-  const overflowRef = useRef<HTMLDivElement>(null);
+  const overflowTriggerRef = useRef<HTMLButtonElement>(null);
+  const overflowMenuRef = useRef<HTMLDivElement>(null);
   const resizeDraftRef = useRef<{
     endMinutes: number;
     endsAt: string;
@@ -286,14 +305,90 @@ export function PlannerBlock({
   }, [block.endsAt]);
 
   useEffect(() => {
-    if (!showOverflow) return;
-    function handler(e: MouseEvent) {
-      if (overflowRef.current && !overflowRef.current.contains(e.target as Node)) {
+    if (!showOverflow) {
+      return;
+    }
+
+    const handleMouseDown = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (
+        overflowTriggerRef.current?.contains(target) ||
+        overflowMenuRef.current?.contains(target)
+      ) {
+        return;
+      }
+
+      setShowOverflow(false);
+    };
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
         setShowOverflow(false);
       }
+    };
+
+    document.addEventListener("mousedown", handleMouseDown);
+    document.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.removeEventListener("mousedown", handleMouseDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [showOverflow]);
+
+  useLayoutEffect(() => {
+    if (!showOverflow) {
+      return;
     }
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
+
+    const updateOverflowMenuPosition = () => {
+      const trigger = overflowTriggerRef.current;
+      const menu = overflowMenuRef.current;
+      if (!trigger || !menu) {
+        return;
+      }
+
+      const triggerRect = trigger.getBoundingClientRect();
+      const menuRect = menu.getBoundingClientRect();
+      const safeWidth = Math.min(
+        Math.max(menuRect.width, OVERFLOW_MENU_MIN_WIDTH_PX),
+        window.innerWidth - OVERFLOW_VIEWPORT_MARGIN_PX * 2,
+      );
+      const maxLeft = window.innerWidth - safeWidth - OVERFLOW_VIEWPORT_MARGIN_PX;
+      const left = Math.max(
+        OVERFLOW_VIEWPORT_MARGIN_PX,
+        Math.min(triggerRect.right - safeWidth, maxLeft),
+      );
+      const spaceBelow = window.innerHeight - triggerRect.bottom - OVERFLOW_VIEWPORT_MARGIN_PX;
+      const spaceAbove = triggerRect.top - OVERFLOW_VIEWPORT_MARGIN_PX;
+      const shouldFlipUp =
+        spaceBelow < Math.min(menuRect.height, 280) && spaceAbove > spaceBelow;
+      const top = shouldFlipUp
+        ? Math.max(
+            OVERFLOW_VIEWPORT_MARGIN_PX,
+            triggerRect.top - menuRect.height - OVERFLOW_MENU_GAP_PX,
+          )
+        : Math.min(
+            triggerRect.bottom + OVERFLOW_MENU_GAP_PX,
+            window.innerHeight - menuRect.height - OVERFLOW_VIEWPORT_MARGIN_PX,
+          );
+
+      setOverflowMenuPosition({
+        top,
+        left,
+        minWidth: safeWidth,
+        placement: shouldFlipUp ? "top" : "bottom",
+      });
+    };
+
+    updateOverflowMenuPosition();
+    window.addEventListener("resize", updateOverflowMenuPosition);
+    document.addEventListener("scroll", updateOverflowMenuPosition, true);
+
+    return () => {
+      window.removeEventListener("resize", updateOverflowMenuPosition);
+      document.removeEventListener("scroll", updateOverflowMenuPosition, true);
+    };
   }, [showOverflow]);
 
   function handleSaveEdit() {
@@ -370,6 +465,20 @@ export function PlannerBlock({
 
     const reordered = arrayMove(taskIds, oldIndex, newIndex);
     onReorderTasks(reordered);
+  }
+
+  async function handleDeleteBlock() {
+    const confirmed = window.confirm(
+      sortedTasks.length > 0
+        ? "Remove this time block? Any tasks in it will move back to unplanned."
+        : "Remove this time block?",
+    );
+    if (!confirmed) {
+      return;
+    }
+
+    setShowOverflow(false);
+    await Promise.resolve(onDeleteBlock());
   }
 
   return (
@@ -505,93 +614,115 @@ export function PlannerBlock({
                   >
                     +
                   </button>
-                  <div className="planner-block__overflow" ref={overflowRef}>
+                  <div className="planner-block__overflow">
                     <button
+                      ref={overflowTriggerRef}
                       className="planner-block__action-icon planner-block__overflow-trigger"
                       type="button"
                       onClick={() => setShowOverflow((current) => !current)}
                       aria-label="More actions"
                       title="More"
+                      aria-expanded={showOverflow}
+                      aria-haspopup="menu"
                     >
                       ···
                     </button>
-                    {showOverflow ? (
-                      <div className="planner-block__overflow-menu">
-                        <button
-                          className="planner-block__overflow-item"
-                          type="button"
-                          onClick={() => { onNudgeDuration(-1); setShowOverflow(false); }}
-                          disabled={isPending || Boolean(shortenValidation.error)}
-                        >
-                          Shorten 15m
-                        </button>
-                        <button
-                          className="planner-block__overflow-item"
-                          type="button"
-                          onClick={() => { onNudgeDuration(1); setShowOverflow(false); }}
-                          disabled={isPending || Boolean(extendValidation.error)}
-                        >
-                          Extend 15m
-                        </button>
-                        <div className="planner-block__overflow-divider" />
-                        <button
-                          className="planner-block__overflow-item"
-                          type="button"
-                          onClick={() => { onMoveBlock(-1); setShowOverflow(false); }}
-                          disabled={!canMoveUp || isPending}
-                        >
-                          Move up
-                        </button>
-                        <button
-                          className="planner-block__overflow-item"
-                          type="button"
-                          onClick={() => { onMoveBlock(1); setShowOverflow(false); }}
-                          disabled={!canMoveDown || isPending}
-                        >
-                          Move down
-                        </button>
-                        <div className="planner-block__overflow-divider" />
-                        <button
-                          className="planner-block__overflow-item"
-                          type="button"
-                          onClick={() => { onDuplicateBlock(); setShowOverflow(false); }}
-                          disabled={!canDuplicate || isPending}
-                        >
-                          Duplicate
-                        </button>
-                        <button
-                          className="planner-block__overflow-item"
-                          type="button"
-                          onClick={() => { onSplitBlock(); setShowOverflow(false); }}
-                          disabled={!canSplit || isPending}
-                        >
-                          Split in two
-                        </button>
-                        {canCarryPending && nextBlock ? (
-                          <button
-                            className="planner-block__overflow-item"
-                            type="button"
-                            onClick={() => { onCarryPendingToNext(); setShowOverflow(false); }}
-                            disabled={isPending}
+                    {showOverflow
+                      ? createPortal(
+                          <div
+                            ref={overflowMenuRef}
+                            className={`planner-block__overflow-menu planner-block__overflow-menu--${overflowMenuPosition.placement}`}
+                            style={{
+                              top: `${overflowMenuPosition.top}px`,
+                              left: `${overflowMenuPosition.left}px`,
+                              minWidth: `${overflowMenuPosition.minWidth}px`,
+                            }}
+                            role="menu"
+                            aria-label="Block actions"
                           >
-                            Carry open to {nextBlock.title || formatTimeLabel(nextBlock.startsAt)}
-                          </button>
-                        ) : null}
-                        {isEmpty ? (
-                          <>
-                            <div className="planner-block__overflow-divider" />
                             <button
                               className="planner-block__overflow-item planner-block__overflow-item--danger"
                               type="button"
-                              onClick={() => { onDeleteBlock(); setShowOverflow(false); }}
+                              onClick={() => {
+                                void handleDeleteBlock();
+                              }}
                               disabled={isPending}
+                              role="menuitem"
                             >
-                              Delete block
+                              Remove time block
                             </button>
-                          </>
-                        ) : null}
-                      </div>
-                    ) : null}
+                            <div className="planner-block__overflow-divider" />
+                            <button
+                              className="planner-block__overflow-item"
+                              type="button"
+                              onClick={() => { onNudgeDuration(-1); setShowOverflow(false); }}
+                              disabled={isPending || Boolean(shortenValidation.error)}
+                              role="menuitem"
+                            >
+                              Shorten 15m
+                            </button>
+                            <button
+                              className="planner-block__overflow-item"
+                              type="button"
+                              onClick={() => { onNudgeDuration(1); setShowOverflow(false); }}
+                              disabled={isPending || Boolean(extendValidation.error)}
+                              role="menuitem"
+                            >
+                              Extend 15m
+                            </button>
+                            <div className="planner-block__overflow-divider" />
+                            <button
+                              className="planner-block__overflow-item"
+                              type="button"
+                              onClick={() => { onMoveBlock(-1); setShowOverflow(false); }}
+                              disabled={!canMoveUp || isPending}
+                              role="menuitem"
+                            >
+                              Move up
+                            </button>
+                            <button
+                              className="planner-block__overflow-item"
+                              type="button"
+                              onClick={() => { onMoveBlock(1); setShowOverflow(false); }}
+                              disabled={!canMoveDown || isPending}
+                              role="menuitem"
+                            >
+                              Move down
+                            </button>
+                            <div className="planner-block__overflow-divider" />
+                            <button
+                              className="planner-block__overflow-item"
+                              type="button"
+                              onClick={() => { onDuplicateBlock(); setShowOverflow(false); }}
+                              disabled={!canDuplicate || isPending}
+                              role="menuitem"
+                            >
+                              Duplicate
+                            </button>
+                            <button
+                              className="planner-block__overflow-item"
+                              type="button"
+                              onClick={() => { onSplitBlock(); setShowOverflow(false); }}
+                              disabled={!canSplit || isPending}
+                              role="menuitem"
+                            >
+                              Split in two
+                            </button>
+                            {canCarryPending && nextBlock ? (
+                              <button
+                                className="planner-block__overflow-item"
+                                type="button"
+                                onClick={() => { onCarryPendingToNext(); setShowOverflow(false); }}
+                                disabled={isPending}
+                                role="menuitem"
+                              >
+                                Carry open to {nextBlock.title || formatTimeLabel(nextBlock.startsAt)}
+                              </button>
+                            ) : null}
+                          </div>,
+                          document.body,
+                        )
+                      : null}
                   </div>
                 </>
               ) : null}

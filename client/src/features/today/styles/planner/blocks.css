@@ -245,9 +245,7 @@
 }
 
 .planner-block__overflow-menu {
-  position: absolute;
-  top: calc(100% + 6px);
-  right: 0;
+  position: fixed;
   min-width: 11rem;
   padding: 0.35rem;
   border-radius: var(--r);
@@ -257,6 +255,14 @@
   box-shadow: 0 16px 48px rgba(0,0,0,0.35), 0 0 0 1px rgba(255,255,255,0.03);
   z-index: 30;
   animation: scaleIn var(--dur-fast) var(--ease) both;
+}
+
+.planner-block__overflow-menu--top {
+  transform-origin: bottom right;
+}
+
+.planner-block__overflow-menu--bottom {
+  transform-origin: top right;
 }
 
 .planner-block__overflow-item {
@@ -289,6 +295,10 @@
 .planner-block__overflow-item--danger:hover {
   color: var(--negative);
   background: rgba(201,85,76,0.1);
+}
+
+.planner-block__overflow-item--danger {
+  color: rgba(241, 151, 144, 0.95);
 }
 
 .planner-block__overflow-divider {
@@ -1001,4 +1011,3 @@
   color: var(--accent);
   opacity: 0.9;
 }
-
