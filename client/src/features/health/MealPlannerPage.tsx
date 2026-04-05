@@ -755,9 +755,15 @@ function TemplatePicker({
     );
   }, [templates, search]);
 
-  return (
+  return createPortal(
     <div className="mp-picker-overlay" onClick={onClose}>
-      <div className="mp-picker" onClick={(e) => e.stopPropagation()}>
+      <div
+        className="mp-picker"
+        onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Recipe picker"
+      >
         <div className="mp-picker__header">
           <input
             ref={inputRef}
@@ -812,7 +818,8 @@ function TemplatePicker({
           )}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 
@@ -836,11 +843,14 @@ function PlannedEntryEditor({
   );
   const [note, setNote] = useState(entry.note ?? "");
 
-  return (
+  return createPortal(
     <div className="mp-picker-overlay" onClick={onClose}>
       <div
         className="mp-picker mp-picker--editor"
         onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Edit planned meal"
       >
         <div className="mp-template-creator">
           <div className="mp-template-creator__header">
@@ -903,7 +913,8 @@ function PlannedEntryEditor({
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 
@@ -1214,6 +1225,129 @@ function WeekNotesPanel({
 }
 
 /* ═══════════════════════════════════════════════
+   Editable List — shared by ingredients & instructions
+   ═══════════════════════════════════════════════ */
+
+function EditableList({
+  items,
+  onChange,
+  placeholder,
+}: {
+  items: string[];
+  onChange: (items: string[]) => void;
+  placeholder: string;
+}) {
+  const [draft, setDraft] = useState("");
+  const [editingIndex, setEditingIndex] = useState<number | null>(null);
+  const [editValue, setEditValue] = useState("");
+  const addRef = useRef<HTMLInputElement>(null);
+
+  function handleAdd() {
+    const value = draft.trim();
+    if (!value) return;
+    onChange([...items, value]);
+    setDraft("");
+    addRef.current?.focus();
+  }
+
+  function handleRemove(index: number) {
+    onChange(items.filter((_, i) => i !== index));
+    if (editingIndex === index) {
+      setEditingIndex(null);
+    }
+  }
+
+  function handleEditStart(index: number) {
+    setEditingIndex(index);
+    setEditValue(items[index]);
+  }
+
+  function handleEditSave(index: number) {
+    const value = editValue.trim();
+    if (!value) {
+      handleRemove(index);
+    } else {
+      onChange(items.map((item, i) => (i === index ? value : item)));
+    }
+    setEditingIndex(null);
+  }
+
+  function handleEditKeyDown(e: React.KeyboardEvent, index: number) {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      handleEditSave(index);
+    } else if (e.key === "Escape") {
+      setEditingIndex(null);
+    }
+  }
+
+  return (
+    <div className="rc-editable-list">
+      {items.length > 0 && (
+        <ul className="rc-editable-list__items">
+          {items.map((item, i) => (
+            <li key={i} className="rc-editable-list__item">
+              <span className="rc-editable-list__num">{i + 1}</span>
+              {editingIndex === i ? (
+                <input
+                  type="text"
+                  className="rc-editable-list__edit-input"
+                  value={editValue}
+                  onChange={(e) => setEditValue(e.target.value)}
+                  onKeyDown={(e) => handleEditKeyDown(e, i)}
+                  onBlur={() => handleEditSave(i)}
+                  autoFocus
+                />
+              ) : (
+                <span
+                  className="rc-editable-list__text"
+                  onClick={() => handleEditStart(i)}
+                >
+                  {item}
+                </span>
+              )}
+              <button
+                type="button"
+                className="rc-editable-list__remove"
+                onClick={() => handleRemove(i)}
+                aria-label={`Remove item ${i + 1}`}
+              >
+                &times;
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      <div className="rc-editable-list__add">
+        <input
+          ref={addRef}
+          type="text"
+          className="rc-editable-list__add-input"
+          placeholder={placeholder}
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              handleAdd();
+            }
+          }}
+        />
+        {draft.trim() && (
+          <button
+            type="button"
+            className="rc-editable-list__add-btn"
+            onClick={handleAdd}
+          >
+            Add
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════
    Recipe Composer
    ═══════════════════════════════════════════════ */
 
@@ -1246,11 +1380,15 @@ function RecipeComposer({
   const [cookMin, setCookMin] = useState(
     initialTemplate?.cookMinutes ? String(initialTemplate.cookMinutes) : ""
   );
-  const [ingredientText, setIngredientText] = useState(() =>
-    buildIngredientText(initialTemplate?.ingredients ?? [])
+  const [ingredients, setIngredients] = useState<string[]>(() =>
+    (initialTemplate?.ingredients ?? []).map((ing) => {
+      const amount = ing.quantity ? `${ing.quantity}` : "";
+      const unit = ing.unit ? ` ${ing.unit}` : "";
+      return `${amount}${unit}${amount || unit ? " " : ""}${ing.name}`.trim();
+    })
   );
-  const [instructionText, setInstructionText] = useState(() =>
-    (initialTemplate?.instructions ?? []).join("\n")
+  const [instructions, setInstructions] = useState<string[]>(
+    () => initialTemplate?.instructions ?? []
   );
   const [tagText, setTagText] = useState(() =>
     (initialTemplate?.tags ?? []).join(", ")
@@ -1260,8 +1398,7 @@ function RecipeComposer({
   const isPending = createMutation.isPending || updateMutation.isPending;
 
   function parseIngredients(): MealTemplateIngredient[] {
-    return ingredientText
-      .split("\n")
+    return ingredients
       .map((line) => line.trim())
       .filter(Boolean)
       .map((line) => ({
@@ -1271,13 +1408,6 @@ function RecipeComposer({
         section: null,
         note: null,
       }));
-  }
-
-  function parseInstructions() {
-    return instructionText
-      .split("\n")
-      .map((line) => line.trim())
-      .filter(Boolean);
   }
 
   function parseTags() {
@@ -1297,7 +1427,7 @@ function RecipeComposer({
       prepMinutes: prepMin ? Number(prepMin) : null,
       cookMinutes: cookMin ? Number(cookMin) : null,
       ingredients: parseIngredients(),
-      instructions: parseInstructions(),
+      instructions: instructions.filter(Boolean),
       tags: parseTags(),
       notes: notes.trim() || null,
     };
@@ -1321,15 +1451,18 @@ function RecipeComposer({
       .then((response) => onSaved(response.mealTemplate));
   }
 
-  return (
+  return createPortal(
     <div className="mp-picker-overlay" onClick={onCancel}>
       <div
         className="mp-picker mp-picker--editor"
         onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-label={mode === "edit" ? "Edit recipe" : "New recipe"}
       >
-        <div className="mp-template-creator">
-          <div className="mp-template-creator__header">
-            <h4 className="mp-template-creator__title">
+        <div className="rc-form">
+          <div className="rc-form__header">
+            <h4 className="rc-form__title">
               {mode === "edit" ? "Edit recipe" : "New recipe"}
             </h4>
             <button
@@ -1341,88 +1474,114 @@ function RecipeComposer({
               &times;
             </button>
           </div>
-          <div className="mp-template-creator__fields">
-            <input
-              type="text"
-              className="mp-input"
-              placeholder="Recipe name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-            />
-            <div className="mp-template-creator__row">
-              <select
-                className="mp-select"
-                value={slot}
-                onChange={(e) => setSlot(e.target.value as MealSlot | "")}
-              >
-                <option value="">Any slot</option>
-                {MEAL_SLOTS.map((s) => (
-                  <option key={s} value={s}>
-                    {formatMealSlotLabel(s)}
-                  </option>
-                ))}
-              </select>
+          <div className="rc-form__body">
+            <div className="rc-field">
+              <label className="rc-field__label">Recipe name</label>
               <input
-                type="number"
-                className="mp-input mp-input--narrow"
-                placeholder="Servings"
-                value={servings}
-                onChange={(e) => setServings(e.target.value)}
+                type="text"
+                className="rc-field__input"
+                placeholder="e.g. Overnight Oats"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
               />
             </div>
-            <div className="mp-template-creator__row">
+            <div className="rc-form__row">
+              <div className="rc-field rc-field--flex">
+                <label className="rc-field__label">Meal slot</label>
+                <select
+                  className="rc-field__select"
+                  value={slot}
+                  onChange={(e) => setSlot(e.target.value as MealSlot | "")}
+                >
+                  <option value="">Any slot</option>
+                  {MEAL_SLOTS.map((s) => (
+                    <option key={s} value={s}>
+                      {formatMealSlotLabel(s)}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="rc-field rc-field--flex">
+                <label className="rc-field__label">Servings</label>
+                <input
+                  type="number"
+                  className="rc-field__input"
+                  placeholder="—"
+                  value={servings}
+                  onChange={(e) => setServings(e.target.value)}
+                />
+              </div>
+            </div>
+            <div className="rc-form__row">
+              <div className="rc-field rc-field--flex">
+                <label className="rc-field__label">Prep (min)</label>
+                <input
+                  type="number"
+                  className="rc-field__input"
+                  placeholder="—"
+                  value={prepMin}
+                  onChange={(e) => setPrepMin(e.target.value)}
+                />
+              </div>
+              <div className="rc-field rc-field--flex">
+                <label className="rc-field__label">Cook (min)</label>
+                <input
+                  type="number"
+                  className="rc-field__input"
+                  placeholder="—"
+                  value={cookMin}
+                  onChange={(e) => setCookMin(e.target.value)}
+                />
+              </div>
+            </div>
+            <div className="rc-field">
+              <label className="rc-field__label">Description</label>
               <input
-                type="number"
-                className="mp-input mp-input--narrow"
-                placeholder="Prep (min)"
-                value={prepMin}
-                onChange={(e) => setPrepMin(e.target.value)}
-              />
-              <input
-                type="number"
-                className="mp-input mp-input--narrow"
-                placeholder="Cook (min)"
-                value={cookMin}
-                onChange={(e) => setCookMin(e.target.value)}
+                type="text"
+                className="rc-field__input"
+                placeholder="Short description"
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
               />
             </div>
-            <input
-              type="text"
-              className="mp-input"
-              placeholder="Short description"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-            />
-            <textarea
-              className="mp-textarea mp-textarea--compact"
-              placeholder="Ingredients (one per line)"
-              value={ingredientText}
-              onChange={(e) => setIngredientText(e.target.value)}
-              rows={4}
-            />
-            <textarea
-              className="mp-textarea mp-textarea--compact"
-              placeholder="Instructions (one per line)"
-              value={instructionText}
-              onChange={(e) => setInstructionText(e.target.value)}
-              rows={4}
-            />
-            <input
-              type="text"
-              className="mp-input"
-              placeholder="Tags (comma separated)"
-              value={tagText}
-              onChange={(e) => setTagText(e.target.value)}
-            />
-            <textarea
-              className="mp-textarea mp-textarea--compact"
-              placeholder="Recipe notes"
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              rows={3}
-            />
+            <div className="rc-field">
+              <label className="rc-field__label">Ingredients</label>
+              <EditableList
+                items={ingredients}
+                onChange={setIngredients}
+                placeholder="Add ingredient…"
+              />
+            </div>
+            <div className="rc-field">
+              <label className="rc-field__label">Instructions</label>
+              <EditableList
+                items={instructions}
+                onChange={setInstructions}
+                placeholder="Add step…"
+              />
+            </div>
+            <div className="rc-field">
+              <label className="rc-field__label">Tags</label>
+              <input
+                type="text"
+                className="rc-field__input"
+                placeholder="Comma separated, e.g. healthy, quick"
+                value={tagText}
+                onChange={(e) => setTagText(e.target.value)}
+              />
+            </div>
+            <div className="rc-field">
+              <label className="rc-field__label">Notes</label>
+              <textarea
+                className="rc-field__textarea"
+                placeholder="Any extra notes…"
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                rows={3}
+              />
+            </div>
           </div>
-          <div className="mp-template-creator__actions">
+          <div className="rc-form__actions">
             <button
               type="button"
               className="button button--ghost button--small"
@@ -1438,8 +1597,8 @@ function RecipeComposer({
             >
               {isPending
                 ? mode === "edit"
-                  ? "Saving..."
-                  : "Creating..."
+                  ? "Saving…"
+                  : "Creating…"
                 : mode === "edit"
                   ? "Save recipe"
                   : "Create recipe"}
@@ -1447,7 +1606,8 @@ function RecipeComposer({
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 

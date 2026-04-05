@@ -1310,19 +1310,20 @@ body.mp-dragging-cursor * {
 .mp-picker-overlay {
   position: fixed;
   inset: 0;
-  z-index: 90;
+  z-index: 95;
   background: rgba(0, 0, 0, 0.55);
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 2rem;
+  overflow: hidden;
+  padding: 1.5rem;
   animation: fadeIn 0.2s var(--ease);
 }
 
 .mp-picker {
   width: 100%;
   max-width: 28rem;
-  max-height: 70vh;
+  max-height: calc(100vh - 3rem);
   border-radius: var(--r-lg);
   border: 1px solid var(--border-active);
   background: var(--panel);
@@ -1335,7 +1336,7 @@ body.mp-dragging-cursor * {
 
 .mp-picker--editor {
   max-width: 34rem;
-  max-height: 85vh;
+  max-height: calc(100vh - 3rem);
 }
 
 .mp-picker__header {
@@ -1443,10 +1444,12 @@ body.mp-dragging-cursor * {
 /* ── Template Creator / Editor ───────────── */
 
 .mp-template-creator {
-  padding: 0.85rem;
+  padding: 0.95rem;
   display: flex;
   flex-direction: column;
   gap: 0.55rem;
+  min-height: 0;
+  overflow-y: auto;
 }
 
 .mp-template-creator__header {
@@ -1477,7 +1480,24 @@ body.mp-dragging-cursor * {
 .mp-template-creator__actions {
   display: flex;
   justify-content: flex-end;
+  align-items: center;
+  flex-wrap: wrap;
   gap: 0.35rem;
+  margin:
+    0.15rem
+    -0.95rem
+    -0.95rem;
+  padding:
+    0.85rem
+    0.95rem
+    calc(0.95rem + env(safe-area-inset-bottom, 0px));
+  border-top: 1px solid var(--border);
+  background:
+    linear-gradient(180deg, rgba(17, 16, 13, 0), rgba(17, 16, 13, 0.94) 28%),
+    var(--panel);
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
 }
 
 .mp-entry-editor__recipe {
@@ -1606,5 +1626,296 @@ body.mp-dragging-cursor * {
 
   .mp-rcard__grip {
     opacity: 0.4;
+  }
+}
+
+/* ══════════════════════════════════════════════════
+   Recipe Composer — Redesigned Form
+   ══════════════════════════════════════════════════ */
+
+.rc-form {
+  padding: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.rc-form__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding-bottom: 0.6rem;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 0.25rem;
+}
+
+.rc-form__title {
+  font-family: var(--font-display);
+  font-size: 1.05rem;
+  font-weight: 600;
+  margin: 0;
+  color: var(--text);
+}
+
+.rc-form__body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  overflow-y: auto;
+  max-height: calc(85vh - 8rem);
+  padding-right: 0.25rem;
+}
+
+.rc-form__body::-webkit-scrollbar {
+  width: 4px;
+}
+
+.rc-form__body::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: var(--r-pill);
+}
+
+.rc-form__row {
+  display: flex;
+  gap: 0.65rem;
+}
+
+.rc-form__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  padding-top: 0.6rem;
+  border-top: 1px solid var(--border);
+  margin-top: 0.25rem;
+}
+
+/* ── Field with label ─────────────────────── */
+
+.rc-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.rc-field--flex {
+  flex: 1;
+  min-width: 0;
+}
+
+.rc-field__label {
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-tertiary);
+  padding-left: 0.1rem;
+}
+
+.rc-field__input {
+  width: 100%;
+  padding: 0.55rem 0.7rem;
+  border-radius: var(--r-xs);
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-body);
+  font-size: var(--fs-body);
+  transition: border-color var(--dur) var(--ease), box-shadow var(--dur) var(--ease);
+  outline: none;
+}
+
+.rc-field__input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(217, 153, 58, 0.12);
+}
+
+.rc-field__input::placeholder {
+  color: var(--text-tertiary);
+  font-weight: 400;
+}
+
+.rc-field__select {
+  width: 100%;
+  padding: 0.55rem 0.7rem;
+  border-radius: var(--r-xs);
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-body);
+  font-size: var(--fs-body);
+  cursor: pointer;
+  outline: none;
+  transition: border-color var(--dur) var(--ease), box-shadow var(--dur) var(--ease);
+}
+
+.rc-field__select:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(217, 153, 58, 0.12);
+}
+
+.rc-field__textarea {
+  width: 100%;
+  padding: 0.55rem 0.7rem;
+  border-radius: var(--r-xs);
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-body);
+  font-size: var(--fs-body);
+  line-height: 1.55;
+  resize: vertical;
+  min-height: 3rem;
+  outline: none;
+  transition: border-color var(--dur) var(--ease), box-shadow var(--dur) var(--ease);
+}
+
+.rc-field__textarea:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(217, 153, 58, 0.12);
+}
+
+.rc-field__textarea::placeholder {
+  color: var(--text-tertiary);
+  font-weight: 400;
+}
+
+/* ── Editable List ────────────────────────── */
+
+.rc-editable-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--r-xs);
+  background: var(--bg);
+  overflow: hidden;
+}
+
+.rc-editable-list__items {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.rc-editable-list__item {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0.45rem 0.7rem;
+  border-bottom: 1px solid var(--border);
+  transition: background var(--dur) var(--ease);
+}
+
+.rc-editable-list__item:hover {
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.rc-editable-list__num {
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--text-tertiary);
+  width: 1.3rem;
+  flex-shrink: 0;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.rc-editable-list__text {
+  flex: 1;
+  font-size: var(--fs-body);
+  color: var(--text);
+  min-width: 0;
+  cursor: text;
+  padding: 0.1rem 0;
+}
+
+.rc-editable-list__edit-input {
+  flex: 1;
+  font-size: var(--fs-body);
+  font-family: var(--font-body);
+  color: var(--text);
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--accent);
+  outline: none;
+  padding: 0.1rem 0;
+  min-width: 0;
+}
+
+.rc-editable-list__remove {
+  width: 1.3rem;
+  height: 1.3rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--r-xs);
+  flex-shrink: 0;
+  font-size: 0.85rem;
+  color: var(--text-tertiary);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  opacity: 0;
+  transition: all var(--dur) var(--ease);
+}
+
+.rc-editable-list__item:hover .rc-editable-list__remove {
+  opacity: 1;
+}
+
+.rc-editable-list__remove:hover {
+  color: var(--negative);
+  background: var(--negative-soft);
+}
+
+.rc-editable-list__add {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.4rem 0.55rem 0.4rem 0.7rem;
+}
+
+.rc-editable-list__add-input {
+  flex: 1;
+  font-size: var(--fs-body);
+  font-family: var(--font-body);
+  color: var(--text);
+  background: transparent;
+  border: none;
+  outline: none;
+  padding: 0.15rem 0;
+  min-width: 0;
+}
+
+.rc-editable-list__add-input::placeholder {
+  color: var(--text-tertiary);
+  font-style: italic;
+}
+
+.rc-editable-list__add-btn {
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--accent);
+  background: var(--accent-soft);
+  border: none;
+  border-radius: var(--r-xs);
+  padding: 0.25rem 0.55rem;
+  cursor: pointer;
+  transition: all var(--dur) var(--ease);
+  white-space: nowrap;
+}
+
+.rc-editable-list__add-btn:hover {
+  background: var(--accent-glow);
+}
+
+/* Touch devices: always show remove buttons */
+@media (hover: none) {
+  .rc-editable-list__remove {
+    opacity: 1;
   }
 }
