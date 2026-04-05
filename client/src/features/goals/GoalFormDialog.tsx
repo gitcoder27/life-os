@@ -41,6 +41,10 @@ export function goalToFormData(goal: GoalOverviewItem): GoalFormData {
   };
 }
 
+function hasAdvancedDetails(form: GoalFormData) {
+  return Boolean(form.horizonId || form.why.trim() || form.targetDate || form.notes.trim());
+}
+
 export function GoalFormDialog({
   form,
   editing,
@@ -72,6 +76,12 @@ export function GoalFormDialog({
 
   const activeDomains = domains.filter((d) => !d.isArchived);
   const activeHorizons = horizons.filter((h) => !h.isArchived);
+  const fallbackDomain = activeDomains.find((domain) => domain.id === form.domainId) ?? activeDomains[0] ?? null;
+  const effectiveDomainId = form.domainId || fallbackDomain?.id || "";
+  const [advancedOpen, setAdvancedOpen] = useState(
+    editing || !fallbackDomain || hasAdvancedDetails(form),
+  );
+  const canSubmit = Boolean(form.title.trim() && effectiveDomainId);
 
   return (
     <div className="ghq-form" ref={formRef}>
@@ -93,69 +103,96 @@ export function GoalFormDialog({
         />
       </label>
 
-      <div className="ghq-form__row">
-        <label className="field">
-          <span>Domain</span>
-          <select
-            value={form.domainId}
-            onChange={(e) => onChangeForm((p) => ({ ...p, domainId: e.target.value }))}
-          >
-            <option value="">Select domain</option>
-            {activeDomains.map((d) => (
-              <option key={d.id} value={d.id}>{d.name}</option>
-            ))}
-          </select>
-        </label>
+      {!editing && (
+        <div className="ghq-form__quick-note">
+          <p>
+            Capture the goal first. You can add planning structure and context now or refine it later.
+          </p>
+          {fallbackDomain ? (
+            <span className="tag tag--neutral">Default domain: {fallbackDomain.name}</span>
+          ) : (
+            <span className="tag tag--warning">Create a domain in Settings before saving goals.</span>
+          )}
+        </div>
+      )}
 
-        <label className="field">
-          <span>Horizon</span>
-          <select
-            value={form.horizonId}
-            onChange={(e) => onChangeForm((p) => ({ ...p, horizonId: e.target.value }))}
-          >
-            <option value="">No horizon</option>
-            {activeHorizons.map((h) => (
-              <option key={h.id} value={h.id}>{h.name}</option>
-            ))}
-          </select>
-        </label>
-      </div>
+      {!editing && (
+        <button
+          className="button button--ghost button--small ghq-form__details-toggle"
+          type="button"
+          onClick={() => setAdvancedOpen((current) => !current)}
+        >
+          {advancedOpen ? "Hide details" : "Add details"}
+        </button>
+      )}
 
-      <label className="field">
-        <span>Why this goal matters (optional)</span>
-        <textarea
-          rows={2}
-          value={form.why}
-          placeholder="What is the deeper motivation?"
-          onChange={(e) => onChangeForm((p) => ({ ...p, why: e.target.value }))}
-        />
-      </label>
+      {(editing || advancedOpen) && (
+        <div className="ghq-form__advanced">
+          <div className="ghq-form__row">
+            <label className="field">
+              <span>Domain</span>
+              <select
+                value={form.domainId}
+                onChange={(e) => onChangeForm((p) => ({ ...p, domainId: e.target.value }))}
+              >
+                <option value="">Select domain</option>
+                {activeDomains.map((d) => (
+                  <option key={d.id} value={d.id}>{d.name}</option>
+                ))}
+              </select>
+            </label>
 
-      <label className="field">
-        <span>Target date (optional)</span>
-        <input
-          type="date"
-          value={form.targetDate}
-          onChange={(e) => onChangeForm((p) => ({ ...p, targetDate: e.target.value }))}
-        />
-      </label>
+            <label className="field">
+              <span>Horizon</span>
+              <select
+                value={form.horizonId}
+                onChange={(e) => onChangeForm((p) => ({ ...p, horizonId: e.target.value }))}
+              >
+                <option value="">No horizon</option>
+                {activeHorizons.map((h) => (
+                  <option key={h.id} value={h.id}>{h.name}</option>
+                ))}
+              </select>
+            </label>
+          </div>
 
-      <label className="field">
-        <span>Notes (optional)</span>
-        <textarea
-          rows={2}
-          value={form.notes}
-          placeholder="Context or reference links"
-          onChange={(e) => onChangeForm((p) => ({ ...p, notes: e.target.value }))}
-        />
-      </label>
+          <label className="field">
+            <span>Why this goal matters (optional)</span>
+            <textarea
+              rows={2}
+              value={form.why}
+              placeholder="What is the deeper motivation?"
+              onChange={(e) => onChangeForm((p) => ({ ...p, why: e.target.value }))}
+            />
+          </label>
+
+          <label className="field">
+            <span>Target date (optional)</span>
+            <input
+              type="date"
+              value={form.targetDate}
+              onChange={(e) => onChangeForm((p) => ({ ...p, targetDate: e.target.value }))}
+            />
+          </label>
+
+          <label className="field">
+            <span>Notes (optional)</span>
+            <textarea
+              rows={2}
+              value={form.notes}
+              placeholder="Context or reference links"
+              onChange={(e) => onChangeForm((p) => ({ ...p, notes: e.target.value }))}
+            />
+          </label>
+        </div>
+      )}
 
       <div className="button-row">
         <button
           className="button button--primary button--small"
           type="button"
           onClick={onSubmit}
-          disabled={isPending || !form.title.trim() || !form.domainId}
+          disabled={isPending || !canSubmit}
         >
           {editing ? "Update goal" : "Create goal"}
         </button>

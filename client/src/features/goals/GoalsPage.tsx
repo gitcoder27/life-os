@@ -52,6 +52,7 @@ export function GoalsPage() {
   const createGoalMutation = useCreateGoalMutation();
   const updateGoalMutation = useUpdateGoalMutation();
   const homeDestination = readHomeDestinationState(location.state);
+  const defaultDomainId = (workspaceQuery.data?.domains ?? []).find((domain) => !domain.isArchived)?.id ?? "";
 
   useEffect(() => {
     if (homeDestination?.kind !== "goal_plan") {
@@ -113,12 +114,13 @@ export function GoalsPage() {
   }
 
   async function handleGoalSubmit() {
-    if (!goalForm.title.trim() || !goalForm.domainId) return;
+    const domainId = goalForm.domainId || defaultDomainId;
+    if (!goalForm.title.trim() || !domainId) return;
     if (editingGoalId) {
       await updateGoalMutation.mutateAsync({
         goalId: editingGoalId,
         title: goalForm.title.trim(),
-        domainId: goalForm.domainId,
+        domainId,
         horizonId: goalForm.horizonId || null,
         parentGoalId: goalForm.parentGoalId || null,
         why: goalForm.why.trim() || null,
@@ -128,7 +130,7 @@ export function GoalsPage() {
     } else {
       await createGoalMutation.mutateAsync({
         title: goalForm.title.trim(),
-        domainId: goalForm.domainId,
+        domainId,
         horizonId: goalForm.horizonId || null,
         parentGoalId: goalForm.parentGoalId || null,
         why: goalForm.why.trim() || null,
@@ -142,10 +144,11 @@ export function GoalsPage() {
   }
 
   async function handleChildGoalSubmit() {
-    if (!childForm.title.trim() || !childForm.domainId) return;
+    const domainId = childForm.domainId || defaultDomainId;
+    if (!childForm.title.trim() || !domainId) return;
     await createGoalMutation.mutateAsync({
       title: childForm.title.trim(),
-      domainId: childForm.domainId,
+      domainId,
       horizonId: childForm.horizonId || null,
       parentGoalId: childForm.parentGoalId || null,
       why: childForm.why.trim() || null,

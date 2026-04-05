@@ -505,6 +505,37 @@
   background: var(--panel-elevated);
 }
 
+.ghq-form__quick-note {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  padding: 0.65rem 0.8rem;
+  border-radius: var(--r-xs);
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.ghq-form__quick-note p {
+  margin: 0;
+  color: var(--text-secondary);
+  line-height: 1.5;
+  flex: 1;
+  min-width: 14rem;
+}
+
+.ghq-form__details-toggle {
+  align-self: flex-start;
+}
+
+.ghq-form__advanced {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding-top: 0.15rem;
+}
+
 .ghq-form__parent-context {
   display: flex;
   align-items: center;
