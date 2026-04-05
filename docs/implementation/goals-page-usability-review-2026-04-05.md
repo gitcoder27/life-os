@@ -236,8 +236,8 @@ If this screen is meant to become a world-class life-planning surface, the clear
 - [x] Decide and document the final responsibility split between Overview and Plan.
 - [x] Remove duplicate planning entry points so one primary planning workflow is obvious.
 - [x] Redesign goal capture to support title-first quick add with optional advanced details.
-- [ ] Add search to the Goals page.
-- [ ] Add sort modes for urgency, drift risk, recent activity, and target date.
+- [x] Add search to the Goals page.
+- [x] Add sort modes for urgency, drift risk, recent activity, and target date.
 - [ ] Add one-click quick actions for Month, Week, Today, Break down, and Edit.
 - [ ] Improve the detail surface so missing structure becomes an explicit next action.
 - [ ] Add a sequential review flow so a user can move through multiple goals without returning to the grid each time.

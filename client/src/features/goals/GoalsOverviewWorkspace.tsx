@@ -29,6 +29,8 @@ const statusLabels: Record<string, string> = {
   archived: "Archived",
 };
 
+type GoalSortMode = "domain" | "urgent" | "at_risk" | "recent_activity" | "target_date";
+
 type DomainGroup = {
   domain: GoalDomainItem;
   goals: GoalOverviewItem[];
@@ -89,6 +91,93 @@ function getFirstLinkedGoalId(items: Array<{ goalId: string | null; goal?: { id:
   return undefined;
 }
 
+function parseDateValue(value: string | null) {
+  if (!value) return Number.POSITIVE_INFINITY;
+  return new Date(`${value}T12:00:00`).getTime();
+}
+
+function parseDateTimeValue(value: string | null) {
+  if (!value) return Number.NEGATIVE_INFINITY;
+  return new Date(value).getTime();
+}
+
+function getUrgencyScore(goal: GoalOverviewItem, today: string) {
+  let score = 0;
+  const todayTime = parseDateValue(today);
+  const targetTime = parseDateValue(goal.targetDate);
+
+  if (goal.health === "stalled") score += 240;
+  else if (goal.health === "drifting") score += 140;
+
+  if (Number.isFinite(targetTime)) {
+    const daysUntilTarget = Math.floor((targetTime - todayTime) / 86_400_000);
+    if (daysUntilTarget < 0) score += 220;
+    else if (daysUntilTarget <= 7) score += 180;
+    else if (daysUntilTarget <= 30) score += 110;
+    else if (daysUntilTarget <= 90) score += 45;
+  }
+
+  score += Math.min(goal.milestoneCounts.overdue * 35, 140);
+  score += Math.min(goal.linkedSummary.pendingTasks * 6, 48);
+
+  if (goal.linkedSummary.currentWeekPriorities === 0) score += 26;
+  if (!goal.lastActivityAt) score += 18;
+
+  return score;
+}
+
+function compareGoals(left: GoalOverviewItem, right: GoalOverviewItem, sortMode: GoalSortMode, today: string) {
+  if (sortMode === "urgent") {
+    return (
+      getUrgencyScore(right, today) - getUrgencyScore(left, today) ||
+      parseDateValue(left.targetDate) - parseDateValue(right.targetDate) ||
+      left.sortOrder - right.sortOrder
+    );
+  }
+
+  if (sortMode === "at_risk") {
+    const riskRank = (health: GoalOverviewItem["health"]) => {
+      if (health === "stalled") return 0;
+      if (health === "drifting") return 1;
+      if (health === "on_track") return 2;
+      if (health === "achieved") return 3;
+      return 4;
+    };
+
+    return (
+      riskRank(left.health) - riskRank(right.health) ||
+      getUrgencyScore(right, today) - getUrgencyScore(left, today) ||
+      left.sortOrder - right.sortOrder
+    );
+  }
+
+  if (sortMode === "recent_activity") {
+    return (
+      parseDateTimeValue(right.lastActivityAt) - parseDateTimeValue(left.lastActivityAt) ||
+      getUrgencyScore(right, today) - getUrgencyScore(left, today) ||
+      left.sortOrder - right.sortOrder
+    );
+  }
+
+  if (sortMode === "target_date") {
+    return (
+      parseDateValue(left.targetDate) - parseDateValue(right.targetDate) ||
+      getUrgencyScore(right, today) - getUrgencyScore(left, today) ||
+      left.sortOrder - right.sortOrder
+    );
+  }
+
+  return left.sortOrder - right.sortOrder || left.createdAt.localeCompare(right.createdAt);
+}
+
+function getSortLabel(sortMode: GoalSortMode) {
+  if (sortMode === "urgent") return "Most urgent";
+  if (sortMode === "at_risk") return "Needs attention";
+  if (sortMode === "recent_activity") return "Recent activity";
+  if (sortMode === "target_date") return "Target date";
+  return "Domain";
+}
+
 /* ── Overview Filters ── */
 
 function OverviewFilters({
@@ -97,18 +186,28 @@ function OverviewFilters({
   activeDomainId,
   activeHorizonId,
   activeStatus,
+  searchQuery,
+  sortMode,
+  resultCount,
   onChangeDomain,
   onChangeHorizon,
   onChangeStatus,
+  onChangeSearch,
+  onChangeSort,
 }: {
   domains: GoalDomainItem[];
   horizons: GoalHorizonItem[];
   activeDomainId: string | undefined;
   activeHorizonId: string | undefined;
   activeStatus: GoalStatus | undefined;
+  searchQuery: string;
+  sortMode: GoalSortMode;
+  resultCount: number;
   onChangeDomain: (id: string | undefined) => void;
   onChangeHorizon: (id: string | undefined) => void;
   onChangeStatus: (status: GoalStatus | undefined) => void;
+  onChangeSearch: (value: string) => void;
+  onChangeSort: (sortMode: GoalSortMode) => void;
 }) {
   return (
     <div className="ghq-filters">
@@ -133,6 +232,25 @@ function OverviewFilters({
         ))}
       </div>
       <div className="ghq-filters__row ghq-filters__row--secondary">
+        <div className="ghq-filter-search">
+          <input
+            className="ghq-filter-search__input"
+            type="search"
+            value={searchQuery}
+            placeholder="Search goals, notes, domains, or horizons"
+            onChange={(e) => onChangeSearch(e.target.value)}
+          />
+          {searchQuery ? (
+            <button
+              className="ghq-filter-search__clear"
+              type="button"
+              onClick={() => onChangeSearch("")}
+              aria-label="Clear search"
+            >
+              Clear
+            </button>
+          ) : null}
+        </div>
         <select
           className="ghq-filter-select"
           value={activeHorizonId ?? ""}
@@ -153,6 +271,26 @@ function OverviewFilters({
           <option value="completed">Completed</option>
           <option value="archived">Archived</option>
         </select>
+        <select
+          className="ghq-filter-select"
+          value={sortMode}
+          onChange={(e) => onChangeSort(e.target.value as GoalSortMode)}
+        >
+          <option value="domain">Sort: Domain</option>
+          <option value="urgent">Sort: Most urgent</option>
+          <option value="at_risk">Sort: Needs attention</option>
+          <option value="recent_activity">Sort: Recent activity</option>
+          <option value="target_date">Sort: Target date</option>
+        </select>
+      </div>
+      <div className="ghq-filters__row ghq-filters__row--summary">
+        <span className="ghq-results-pill">
+          {resultCount} {resultCount === 1 ? "goal" : "goals"}
+        </span>
+        {searchQuery ? (
+          <span className="ghq-results-pill ghq-results-pill--subtle">Query: {searchQuery}</span>
+        ) : null}
+        <span className="ghq-results-pill ghq-results-pill--subtle">Order: {getSortLabel(sortMode)}</span>
       </div>
     </div>
   );
@@ -196,11 +334,14 @@ export function GoalsOverviewWorkspace({
   const [filterDomainId, setFilterDomainId] = useState<string | undefined>();
   const [filterHorizonId, setFilterHorizonId] = useState<string | undefined>();
   const [filterStatus, setFilterStatus] = useState<GoalStatus | undefined>();
+  const [searchQuery, setSearchQuery] = useState("");
+  const [sortMode, setSortMode] = useState<GoalSortMode>("domain");
   const updateGoalMutation = useUpdateGoalMutation();
 
   // Filter goals
   const filteredGoals = useMemo(() => {
     let result = goals;
+    const normalizedQuery = searchQuery.trim().toLowerCase();
     if (filterDomainId) result = result.filter((g) => g.domainId === filterDomainId);
     if (filterHorizonId) result = result.filter((g) => g.horizonId === filterHorizonId);
     if (filterStatus) {
@@ -208,11 +349,28 @@ export function GoalsOverviewWorkspace({
     } else {
       result = result.filter((g) => g.status === "active");
     }
-    return result;
-  }, [goals, filterDomainId, filterHorizonId, filterStatus]);
+    if (normalizedQuery) {
+      result = result.filter((goal) => {
+        const haystack = [
+          goal.title,
+          goal.domain,
+          goal.horizonName ?? "",
+          goal.why ?? "",
+          goal.notes ?? "",
+          goal.nextBestAction ?? "",
+        ].join(" ").toLowerCase();
 
-  const inactiveGoals = filteredGoals.filter((g) => g.status !== "active");
-  const displayGoals = filterStatus ? filteredGoals : filteredGoals.filter((g) => g.status === "active");
+        return haystack.includes(normalizedQuery);
+      });
+    }
+    return result;
+  }, [filterDomainId, filterHorizonId, filterStatus, goals, searchQuery]);
+
+  const inactiveGoals = filterStatus ? [] : filteredGoals.filter((g) => g.status !== "active");
+  const displayGoals = useMemo(
+    () => [...filteredGoals].sort((left, right) => compareGoals(left, right, sortMode, today)),
+    [filteredGoals, sortMode, today],
+  );
   const domainGroups = groupGoalsByDomain(displayGoals, domains);
 
   const weeklyPriorities = weekPlan?.priorities ?? [];
@@ -232,35 +390,53 @@ export function GoalsOverviewWorkspace({
         activeDomainId={filterDomainId}
         activeHorizonId={filterHorizonId}
         activeStatus={filterStatus}
+        searchQuery={searchQuery}
+        sortMode={sortMode}
+        resultCount={displayGoals.length}
         onChangeDomain={setFilterDomainId}
         onChangeHorizon={setFilterHorizonId}
         onChangeStatus={setFilterStatus}
+        onChangeSearch={setSearchQuery}
+        onChangeSort={setSortMode}
       />
 
-      <SectionCard
-        title="Planning flow"
-        subtitle="Overview is for review. Plan is where editing happens."
-      >
-        <div className="ghq-overview-note">
-          <p>
-            Scan your goals and current direction here. Use Plan to edit hierarchy,
-            connect goals to Month and Week, and shape supporting goals in one place.
-          </p>
-          <button
-            className="button button--primary button--small"
-            type="button"
-            onClick={() => onSwitchToPlan(selectedGoalId ?? weeklyPlanGoalId ?? monthlyPlanGoalId)}
-          >
-            Open Plan workspace
-          </button>
-        </div>
-      </SectionCard>
+      <div className="ghq-overview-flowbar">
+        <p className="ghq-overview-flowbar__copy">
+          Overview is for review. Use Plan to edit hierarchy, month, and week alignment.
+        </p>
+        <button
+          className="button button--primary button--small"
+          type="button"
+          onClick={() => onSwitchToPlan(selectedGoalId ?? weeklyPlanGoalId ?? monthlyPlanGoalId)}
+        >
+          Open Plan
+        </button>
+      </div>
 
       {/* Main layout */}
       <div className="ghq-overview__body">
         <div className="ghq-overview__list">
           {/* Domain-grouped goals */}
-          {domainGroups.length > 0 ? (
+          {displayGoals.length > 0 && sortMode !== "domain" ? (
+            <section className="ghq-domain-section">
+              <div className="ghq-domain-section__header">
+                <h2 className="ghq-domain-section__title">Ranked results</h2>
+                <span className="ghq-domain-section__count">{getSortLabel(sortMode)}</span>
+              </div>
+              <div className="ghq-domain-section__cards">
+                {displayGoals.map((goal) => (
+                  <GoalCard
+                    key={goal.id}
+                    goal={goal}
+                    selected={selectedGoalId === goal.id}
+                    onSelect={() => onSelectGoal(goal.id)}
+                    onEditGoal={() => onEditGoal(goal)}
+                    onOpenInPlan={() => onSwitchToPlan(goal.id)}
+                  />
+                ))}
+              </div>
+            </section>
+          ) : domainGroups.length > 0 ? (
             <div className="ghq-domain-sections stagger">
               {domainGroups.map((group) => (
                 <section key={group.domain.id} className="ghq-domain-section">
@@ -292,14 +468,14 @@ export function GoalsOverviewWorkspace({
             </div>
           ) : !showGoalForm ? (
             <EmptyState
-              title={filterDomainId || filterHorizonId || filterStatus ? "No matching goals" : "No active goals"}
+              title={filterDomainId || filterHorizonId || filterStatus || searchQuery ? "No matching goals" : "No active goals"}
               description={
-                filterDomainId || filterHorizonId || filterStatus
-                  ? "Try adjusting the filters above."
+                filterDomainId || filterHorizonId || filterStatus || searchQuery
+                  ? "Try adjusting the search or filters above."
                   : "Create your first goal to start planning with purpose."
               }
-              actionLabel={filterDomainId || filterHorizonId || filterStatus ? undefined : "+ Create your first goal"}
-              onAction={filterDomainId || filterHorizonId || filterStatus ? undefined : onOpenCreateGoal}
+              actionLabel={filterDomainId || filterHorizonId || filterStatus || searchQuery ? undefined : "+ Create your first goal"}
+              onAction={filterDomainId || filterHorizonId || filterStatus || searchQuery ? undefined : onOpenCreateGoal}
             />
           ) : null}
 

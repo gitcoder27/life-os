@@ -104,6 +104,11 @@
 
 .ghq-filters__row--secondary {
   gap: 0.5rem;
+  align-items: stretch;
+}
+
+.ghq-filters__row--summary {
+  gap: 0.5rem;
 }
 
 .ghq-filter-pill {
@@ -137,13 +142,60 @@
   font-size: 0.85em;
 }
 
+.ghq-filter-search {
+  position: relative;
+  display: flex;
+  align-items: center;
+  min-width: min(32rem, 100%);
+  flex: 1 1 22rem;
+  min-height: 2.7rem;
+  border-radius: var(--r-xs);
+  border: 1px solid var(--border);
+  background: var(--panel);
+  transition: border-color var(--dur-fast) var(--ease), box-shadow var(--dur-fast) var(--ease);
+}
+
+.ghq-filter-search:focus-within {
+  border-color: var(--border-focus);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.ghq-filter-search__input {
+  width: 100%;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: var(--fs-small);
+  padding: 0.7rem 0.85rem;
+}
+
+.ghq-filter-search__input:focus {
+  outline: none;
+}
+
+.ghq-filter-search__input::placeholder {
+  color: var(--text-tertiary);
+}
+
+.ghq-filter-search__clear {
+  border: none;
+  background: none;
+  color: var(--accent);
+  font-size: var(--fs-micro);
+  font-weight: 700;
+  padding: 0 0.75rem 0 0.2rem;
+  cursor: pointer;
+}
+
 .ghq-filter-select {
-  padding: 0.3rem 0.6rem;
+  min-height: 2.7rem;
+  padding: 0.7rem 2.15rem 0.7rem 0.85rem;
   border-radius: var(--r-xs);
   border: 1px solid var(--border);
   background: var(--panel);
   color: var(--text-secondary);
   font-size: var(--fs-small);
+  line-height: 1.2;
   cursor: pointer;
   transition: border-color var(--dur-fast) var(--ease);
 }
@@ -152,6 +204,43 @@
   outline: none;
   border-color: var(--border-focus);
   box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.ghq-results-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.28rem 0.6rem;
+  border-radius: var(--r-pill);
+  background: rgba(217, 153, 58, 0.08);
+  color: var(--accent);
+  font-size: var(--fs-micro);
+  font-weight: 700;
+  letter-spacing: 0.03em;
+}
+
+.ghq-results-pill--subtle {
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
+.ghq-overview-flowbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.9rem 1rem;
+  border-radius: var(--r);
+  border: 1px solid var(--border);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.015));
+}
+
+.ghq-overview-flowbar__copy {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: var(--fs-small);
+  line-height: 1.5;
 }
 
 /* ── Overview Workspace ── */
@@ -462,21 +551,6 @@
   gap: 0.5rem;
   align-items: center;
   flex-wrap: wrap;
-}
-
-.ghq-overview-note {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-  flex-wrap: wrap;
-}
-
-.ghq-overview-note p {
-  margin: 0;
-  max-width: 48rem;
-  color: var(--text-secondary);
-  line-height: 1.6;
 }
 
 /* ── Planning Grid ── */
