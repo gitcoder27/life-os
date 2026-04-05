@@ -143,10 +143,12 @@ export function GoalInspectorPanel({
   goalId,
   onClose,
   onEditGoal,
+  onOpenInPlan,
 }: {
   goalId: string;
   onClose: () => void;
   onEditGoal: (goal: GoalDetailItem) => void;
+  onOpenInPlan: (goalId: string) => void;
 }) {
   const detailQuery = useGoalDetailQuery(goalId);
 
@@ -187,6 +189,14 @@ export function GoalInspectorPanel({
       <div className="ap-inspector__header">
         <span className="ap-inspector__header-label">Inspector</span>
         <div className="ap-inspector__header-actions">
+          <button
+            className="ap-inspector__action-btn"
+            type="button"
+            title="Open in Plan"
+            onClick={() => onOpenInPlan(goal.id)}
+          >
+            ◫
+          </button>
           <button
             className="ap-inspector__action-btn"
             type="button"

@@ -439,6 +439,14 @@
   font-weight: 500;
 }
 
+.ghq-goal-chip--button {
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  text-align: left;
+}
+
 .ghq-goal-chip__dot {
   width: 6px;
   height: 6px;
@@ -454,6 +462,21 @@
   gap: 0.5rem;
   align-items: center;
   flex-wrap: wrap;
+}
+
+.ghq-overview-note {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.ghq-overview-note p {
+  margin: 0;
+  max-width: 48rem;
+  color: var(--text-secondary);
+  line-height: 1.6;
 }
 
 /* ── Planning Grid ── */

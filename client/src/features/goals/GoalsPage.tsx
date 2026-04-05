@@ -5,9 +5,7 @@ import {
 import { useLocation } from "react-router-dom";
 
 import {
-  getMonthStartDate,
   getTodayDate,
-  getWeekStartDate,
   useCreateGoalMutation,
   useGoalsWorkspaceQuery,
   useUpdateGoalMutation,
@@ -32,8 +30,6 @@ import { GoalsPlanWorkspace } from "./GoalsPlanWorkspace";
 export function GoalsPage() {
   const location = useLocation();
   const today = getTodayDate();
-  const weekStart = getWeekStartDate(today);
-  const monthStart = getMonthStartDate(today);
 
   // Mode state
   const [mode, setMode] = useState<GoalsMode>("overview");
@@ -211,8 +207,6 @@ export function GoalsPage() {
           horizons={horizons}
           weekPlan={weekPlan}
           monthPlan={monthPlan}
-          weekStart={weekStart}
-          monthStart={monthStart}
           today={today}
           selectedGoalId={selectedGoalId}
           onSelectGoal={handleSelectGoal}

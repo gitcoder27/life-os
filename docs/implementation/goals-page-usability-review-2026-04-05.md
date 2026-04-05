@@ -233,8 +233,8 @@ If this screen is meant to become a world-class life-planning surface, the clear
 ## Checklist
 
 - [x] Wire a single working edit-goal flow from cards, overview inspector, and plan inspector.
-- [ ] Decide and document the final responsibility split between Overview and Plan.
-- [ ] Remove duplicate planning entry points so one primary planning workflow is obvious.
+- [x] Decide and document the final responsibility split between Overview and Plan.
+- [x] Remove duplicate planning entry points so one primary planning workflow is obvious.
 - [ ] Redesign goal capture to support title-first quick add with optional advanced details.
 - [ ] Add search to the Goals page.
 - [ ] Add sort modes for urgency, drift risk, recent activity, and target date.

@@ -11,8 +11,6 @@ import type {
 import {
   formatMonthLabel,
   useUpdateGoalMutation,
-  useUpdateMonthFocusMutation,
-  useUpdateWeekPrioritiesMutation,
 } from "../../shared/lib/api";
 import {
   EmptyState,
@@ -21,10 +19,6 @@ import {
 import { SectionCard } from "../../shared/ui/SectionCard";
 import { GoalCard } from "./GoalCard";
 import { GoalInspectorPanel } from "./GoalInspectorPanel";
-import {
-  SortablePlanningEditor,
-  type RankedPlanningDraft,
-} from "./SortablePlanningEditor";
 
 /* ── Helpers ── */
 
@@ -34,44 +28,6 @@ const statusLabels: Record<string, string> = {
   completed: "Completed",
   archived: "Archived",
 };
-
-const planningSlots: Array<1 | 2 | 3> = [1, 2, 3];
-
-let planningDraftKeyCounter = 0;
-
-function nextPlanningDraftKey() {
-  planningDraftKeyCounter += 1;
-  return `planning-draft-${planningDraftKeyCounter}`;
-}
-
-function createPlanningDraft(): RankedPlanningDraft {
-  return {
-    sortKey: nextPlanningDraftKey(),
-    title: "",
-    goalId: "",
-  };
-}
-
-function toRankedPlanningDrafts<T extends { id: string; slot: 1 | 2 | 3; title: string; goalId: string | null }>(
-  items: T[],
-): RankedPlanningDraft[] {
-  return [...items]
-    .sort((left, right) => left.slot - right.slot)
-    .map((item) => ({
-      id: item.id,
-      sortKey: item.id,
-      title: item.title,
-      goalId: item.goalId ?? "",
-    }));
-}
-
-function buildPlanningSnapshot(drafts: RankedPlanningDraft[]) {
-  return drafts.map((draft) => ({
-    id: draft.id,
-    title: draft.title.trim(),
-    goalId: draft.goalId || null,
-  }));
-}
 
 type DomainGroup = {
   domain: GoalDomainItem;
@@ -122,6 +78,15 @@ const domainEmojis: Record<string, string> = {
 function getDomainEmoji(systemKey: string | null): string {
   if (!systemKey) return "✦";
   return domainEmojis[systemKey] ?? "✦";
+}
+
+function getFirstLinkedGoalId(items: Array<{ goalId: string | null; goal?: { id: string } | null }>): string | undefined {
+  for (const item of items) {
+    if (item.goalId) return item.goalId;
+    if (item.goal?.id) return item.goal.id;
+  }
+
+  return undefined;
 }
 
 /* ── Overview Filters ── */
@@ -201,8 +166,6 @@ export function GoalsOverviewWorkspace({
   horizons,
   weekPlan,
   monthPlan,
-  weekStart,
-  monthStart,
   today,
   selectedGoalId,
   onSelectGoal,
@@ -219,8 +182,6 @@ export function GoalsOverviewWorkspace({
   horizons: GoalHorizonItem[];
   weekPlan: WeekPlanResponse | null;
   monthPlan: MonthPlanResponse | null;
-  weekStart: string;
-  monthStart: string;
   today: string;
   selectedGoalId: string | null;
   onSelectGoal: (goalId: string) => void;
@@ -250,82 +211,17 @@ export function GoalsOverviewWorkspace({
     return result;
   }, [goals, filterDomainId, filterHorizonId, filterStatus]);
 
-  const activeGoals = goals.filter((g) => g.status === "active");
   const inactiveGoals = filteredGoals.filter((g) => g.status !== "active");
   const displayGoals = filterStatus ? filteredGoals : filteredGoals.filter((g) => g.status === "active");
   const domainGroups = groupGoalsByDomain(displayGoals, domains);
 
-  // Planning editors
-  const [editingWeek, setEditingWeek] = useState(false);
-  const [weekDrafts, setWeekDrafts] = useState<RankedPlanningDraft[]>([]);
-  const [editingMonth, setEditingMonth] = useState(false);
-  const [monthTheme, setMonthTheme] = useState("");
-  const [monthOutcomes, setMonthOutcomes] = useState<RankedPlanningDraft[]>([]);
-
-  const updateWeekMutation = useUpdateWeekPrioritiesMutation(weekStart);
-  const updateMonthMutation = useUpdateMonthFocusMutation(monthStart);
-
   const weeklyPriorities = weekPlan?.priorities ?? [];
-
-  function openEditWeek() {
-    setWeekDrafts(toRankedPlanningDrafts(weeklyPriorities));
-    setEditingWeek(true);
-  }
-
-  function cancelEditWeek() {
-    setWeekDrafts(toRankedPlanningDrafts(weeklyPriorities));
-    setEditingWeek(false);
-  }
-
-  async function handleWeekSave() {
-    const priorities = weekDrafts
-      .filter((d) => d.title.trim())
-      .map((d, i) => ({
-        id: d.id,
-        slot: planningSlots[i],
-        title: d.title.trim(),
-        goalId: d.goalId || null,
-      }));
-    await updateWeekMutation.mutateAsync({ priorities });
-    setEditingWeek(false);
-  }
-
-  function openEditMonth() {
-    setMonthTheme(monthPlan?.theme ?? "");
-    setMonthOutcomes(toRankedPlanningDrafts(monthPlan?.topOutcomes ?? []));
-    setEditingMonth(true);
-  }
-
-  function cancelEditMonth() {
-    setMonthTheme(monthPlan?.theme ?? "");
-    setMonthOutcomes(toRankedPlanningDrafts(monthPlan?.topOutcomes ?? []));
-    setEditingMonth(false);
-  }
-
-  async function handleMonthSave() {
-    const topOutcomes = monthOutcomes
-      .filter((o) => o.title.trim())
-      .map((o, i) => ({
-        id: o.id,
-        slot: planningSlots[i],
-        title: o.title.trim(),
-        goalId: o.goalId || null,
-      }));
-    await updateMonthMutation.mutateAsync({ theme: monthTheme.trim() || null, topOutcomes });
-    setEditingMonth(false);
-  }
+  const weeklyPlanGoalId = getFirstLinkedGoalId(weeklyPriorities);
+  const monthlyPlanGoalId = getFirstLinkedGoalId(monthPlan?.topOutcomes ?? []);
 
   async function handleGoalStatusChange(goalId: string, status: GoalStatus) {
     await updateGoalMutation.mutateAsync({ goalId, status });
   }
-
-  const weekDirty =
-    JSON.stringify(buildPlanningSnapshot(weekDrafts)) !==
-    JSON.stringify(buildPlanningSnapshot(toRankedPlanningDrafts(weeklyPriorities)));
-  const monthDirty =
-    monthTheme.trim() !== (monthPlan?.theme ?? "").trim() ||
-    JSON.stringify(buildPlanningSnapshot(monthOutcomes)) !==
-      JSON.stringify(buildPlanningSnapshot(toRankedPlanningDrafts(monthPlan?.topOutcomes ?? [])));
 
   return (
     <div className="ghq-overview">
@@ -340,6 +236,25 @@ export function GoalsOverviewWorkspace({
         onChangeHorizon={setFilterHorizonId}
         onChangeStatus={setFilterStatus}
       />
+
+      <SectionCard
+        title="Planning flow"
+        subtitle="Overview is for review. Plan is where editing happens."
+      >
+        <div className="ghq-overview-note">
+          <p>
+            Scan your goals and current direction here. Use Plan to edit hierarchy,
+            connect goals to Month and Week, and shape supporting goals in one place.
+          </p>
+          <button
+            className="button button--primary button--small"
+            type="button"
+            onClick={() => onSwitchToPlan(selectedGoalId ?? weeklyPlanGoalId ?? monthlyPlanGoalId)}
+          >
+            Open Plan workspace
+          </button>
+        </div>
+      </SectionCard>
 
       {/* Main layout */}
       <div className="ghq-overview__body">
@@ -432,9 +347,9 @@ export function GoalsOverviewWorkspace({
               <button
                 className="button button--ghost button--small"
                 type="button"
-                onClick={() => onSwitchToPlan()}
+                onClick={() => onSwitchToPlan(selectedGoalId ?? weeklyPlanGoalId ?? monthlyPlanGoalId)}
               >
-                Open Plan mode
+                Open Plan workspace
               </button>
             </div>
           )}
@@ -445,36 +360,6 @@ export function GoalsOverviewWorkspace({
             <SectionCard title="Weekly priorities" subtitle="This week">
               {sectionErrors.weekPlan ? (
                 <InlineErrorState message={sectionErrors.weekPlan.message} onRetry={onRefetch} />
-              ) : editingWeek ? (
-                <div className="stack-form">
-                  <SortablePlanningEditor
-                    drafts={weekDrafts}
-                    onChangeDrafts={setWeekDrafts}
-                    createDraft={createPlanningDraft}
-                    activeGoals={activeGoals}
-                    slotPrefix="W"
-                    itemLabel="priority"
-                    titlePlaceholder="Weekly priority"
-                    addLabel="+ Add priority"
-                    emptyMessage="No weekly priorities added yet."
-                    disabled={updateWeekMutation.isPending}
-                  />
-                  <div className="ghq-planning-actions">
-                    {weekDirty ? (
-                      <button
-                        className="button button--primary button--small"
-                        type="button"
-                        onClick={() => void handleWeekSave()}
-                        disabled={updateWeekMutation.isPending || weekDrafts.some((d) => !d.title.trim())}
-                      >
-                        {updateWeekMutation.isPending ? "Saving..." : "Save"}
-                      </button>
-                    ) : null}
-                    <button className="button button--ghost button--small" type="button" onClick={cancelEditWeek}>
-                      {weekDirty ? "Cancel" : "Done"}
-                    </button>
-                  </div>
-                </div>
               ) : (
                 <>
                   {weeklyPriorities.length > 0 ? (
@@ -487,21 +372,32 @@ export function GoalsOverviewWorkspace({
                               {item.title}
                             </span>
                             {item.goal ? (
-                              <span className="ghq-goal-chip">
+                              <button
+                                className="ghq-goal-chip ghq-goal-chip--button"
+                                type="button"
+                                onClick={() => onSwitchToPlan(item.goal!.id)}
+                              >
                                 <span className="ghq-goal-chip__dot" />
                                 {item.goal.title}
-                              </span>
+                              </button>
                             ) : null}
                           </span>
                         </li>
                       ))}
                     </ol>
                   ) : (
-                    <EmptyState title="No weekly priorities" description="Set this week's priorities to stay aligned." />
+                    <EmptyState title="No weekly priorities" description="Use Plan to connect this week's work to your goals." />
                   )}
-                  <button className="button button--ghost button--small" type="button" onClick={openEditWeek} style={{ marginTop: "0.5rem" }}>
-                    Edit weekly priorities
-                  </button>
+                  <div className="ghq-planning-actions">
+                    <p className="support-copy">Weekly planning is edited in Plan so hierarchy and priorities stay together.</p>
+                    <button
+                      className="button button--ghost button--small"
+                      type="button"
+                      onClick={() => onSwitchToPlan(weeklyPlanGoalId ?? selectedGoalId ?? undefined)}
+                    >
+                      Plan this week in Plan
+                    </button>
+                  </div>
                 </>
               )}
             </SectionCard>
@@ -513,40 +409,6 @@ export function GoalsOverviewWorkspace({
             >
               {sectionErrors.monthPlan ? (
                 <InlineErrorState message={sectionErrors.monthPlan.message} onRetry={onRefetch} />
-              ) : editingMonth ? (
-                <div className="stack-form">
-                  <label className="field">
-                    <span>Theme</span>
-                    <input type="text" value={monthTheme} placeholder="What is this month about?" onChange={(e) => setMonthTheme(e.target.value)} disabled={updateMonthMutation.isPending} />
-                  </label>
-                  <SortablePlanningEditor
-                    drafts={monthOutcomes}
-                    onChangeDrafts={setMonthOutcomes}
-                    createDraft={createPlanningDraft}
-                    activeGoals={activeGoals}
-                    slotPrefix="M"
-                    itemLabel="outcome"
-                    titlePlaceholder="Key outcome"
-                    addLabel="+ Add outcome"
-                    emptyMessage="No monthly outcomes added yet."
-                    disabled={updateMonthMutation.isPending}
-                  />
-                  <div className="ghq-planning-actions">
-                    {monthDirty ? (
-                      <button
-                        className="button button--primary button--small"
-                        type="button"
-                        onClick={() => void handleMonthSave()}
-                        disabled={updateMonthMutation.isPending || monthOutcomes.some((o) => !o.title.trim())}
-                      >
-                        {updateMonthMutation.isPending ? "Saving..." : "Save"}
-                      </button>
-                    ) : null}
-                    <button className="button button--ghost button--small" type="button" onClick={cancelEditMonth}>
-                      {monthDirty ? "Cancel" : "Done"}
-                    </button>
-                  </div>
-                </div>
               ) : (
                 <div style={{ display: "flex", flexDirection: "column", gap: "0.6rem" }}>
                   <div style={{ fontFamily: "var(--font-display)", fontSize: "1.25rem", fontWeight: 500 }}>
@@ -559,10 +421,14 @@ export function GoalsOverviewWorkspace({
                           <span style={{ display: "flex", flexDirection: "column", gap: "0.2rem" }}>
                             <span>{outcome.title}</span>
                             {outcome.goal ? (
-                              <span className="ghq-goal-chip">
+                              <button
+                                className="ghq-goal-chip ghq-goal-chip--button"
+                                type="button"
+                                onClick={() => onSwitchToPlan(outcome.goal!.id)}
+                              >
                                 <span className="ghq-goal-chip__dot" />
                                 {outcome.goal.title}
-                              </span>
+                              </button>
                             ) : null}
                           </span>
                           <span className={outcome.status === "completed" ? "tag tag--positive" : "tag tag--warning"}>
@@ -572,11 +438,19 @@ export function GoalsOverviewWorkspace({
                       ))}
                     </ol>
                   ) : (
-                    <p className="support-copy">No monthly outcomes defined yet.</p>
+                    <p className="support-copy">Use Plan to shape this month around your active goals.</p>
                   )}
-                  <button className="button button--ghost button--small" type="button" onClick={openEditMonth} style={{ alignSelf: "flex-start" }}>
-                    Edit monthly focus
-                  </button>
+                  <div className="ghq-planning-actions">
+                    <p className="support-copy">Monthly planning is edited in Plan so outcomes stay tied to the goal map.</p>
+                    <button
+                      className="button button--ghost button--small"
+                      type="button"
+                      onClick={() => onSwitchToPlan(monthlyPlanGoalId ?? selectedGoalId ?? undefined)}
+                      style={{ alignSelf: "flex-start" }}
+                    >
+                      Plan this month in Plan
+                    </button>
+                  </div>
                 </div>
               )}
             </SectionCard>
@@ -588,6 +462,7 @@ export function GoalsOverviewWorkspace({
             <GoalInspectorPanel
               goalId={selectedGoalId}
               onEditGoal={onEditGoal}
+              onOpenInPlan={onSwitchToPlan}
               onClose={onCloseSelectedGoal}
             />
           </div>
