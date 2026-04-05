@@ -252,6 +252,7 @@ function PlanInspector({
   weekPlan,
   monthPlan,
   onSelectGoal,
+  onEditGoal,
   onCreateChild,
 }: {
   goalId: string;
@@ -261,6 +262,7 @@ function PlanInspector({
   weekPlan: WeekPlanResponse | null;
   monthPlan: MonthPlanResponse | null;
   onSelectGoal: (goalId: string) => void;
+  onEditGoal: (goal: GoalOverviewItem) => void;
   onCreateChild: (parentGoal: GoalOverviewItem) => void;
 }) {
   const detailQuery = useGoalDetailQuery(goalId);
@@ -312,6 +314,16 @@ function PlanInspector({
         )}
 
         <h2 className="ghq-inspector__title">{goal.title}</h2>
+
+        <div className="ghq-inspector__header-actions">
+          <button
+            className="button button--ghost button--small"
+            type="button"
+            onClick={() => onEditGoal(goal)}
+          >
+            Edit goal
+          </button>
+        </div>
 
         <div className="ghq-inspector__meta">
           {domain && (
@@ -589,6 +601,7 @@ export function GoalsPlanWorkspace({
   onSelectGoal,
   onClearSelectedGoal,
   onOpenCreateGoal,
+  onEditGoal,
   onStartCreateChild,
   showChildForm,
   childFormParent,
@@ -608,6 +621,7 @@ export function GoalsPlanWorkspace({
   onSelectGoal: (goalId: string) => void;
   onClearSelectedGoal: () => void;
   onOpenCreateGoal: () => void;
+  onEditGoal: (goal: GoalOverviewItem) => void;
   onStartCreateChild: (parentGoal: GoalOverviewItem) => void;
   showChildForm: boolean;
   childFormParent: GoalOverviewItem | null;
@@ -1391,6 +1405,7 @@ export function GoalsPlanWorkspace({
       weekPlan={weekPlan}
       monthPlan={monthPlan}
       onSelectGoal={onSelectGoal}
+      onEditGoal={onEditGoal}
       onCreateChild={onStartCreateChild}
     />
   ) : (

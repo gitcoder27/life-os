@@ -208,6 +208,7 @@ export function GoalsOverviewWorkspace({
   onSelectGoal,
   onSwitchToPlan,
   onOpenCreateGoal,
+  onEditGoal,
   showGoalForm,
   onCloseSelectedGoal,
   onRefetch,
@@ -225,6 +226,7 @@ export function GoalsOverviewWorkspace({
   onSelectGoal: (goalId: string) => void;
   onSwitchToPlan: (goalId?: string) => void;
   onOpenCreateGoal: () => void;
+  onEditGoal: (goal: GoalOverviewItem) => void;
   showGoalForm: boolean;
   onCloseSelectedGoal: () => void;
   onRefetch: () => void;
@@ -365,6 +367,7 @@ export function GoalsOverviewWorkspace({
                         goal={goal}
                         selected={selectedGoalId === goal.id}
                         onSelect={() => onSelectGoal(goal.id)}
+                        onEditGoal={() => onEditGoal(goal)}
                         onOpenInPlan={() => onSwitchToPlan(goal.id)}
                       />
                     ))}
@@ -584,6 +587,7 @@ export function GoalsOverviewWorkspace({
           <div className="goals-workspace__detail">
             <GoalInspectorPanel
               goalId={selectedGoalId}
+              onEditGoal={onEditGoal}
               onClose={onCloseSelectedGoal}
             />
           </div>

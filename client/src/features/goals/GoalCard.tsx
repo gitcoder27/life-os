@@ -35,11 +35,13 @@ export function GoalCard({
   goal,
   selected,
   onSelect,
+  onEditGoal,
   onOpenInPlan,
 }: {
   goal: GoalOverviewItem;
   selected: boolean;
   onSelect: () => void;
+  onEditGoal?: () => void;
   onOpenInPlan?: () => void;
 }) {
   const milestoneName = getNextMilestoneName(goal);
@@ -141,18 +143,33 @@ export function GoalCard({
         </div>
       )}
 
-      {/* Plan mode link */}
-      {onOpenInPlan && (
-        <button
-          className="ap-goal-card__plan-link"
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            onOpenInPlan();
-          }}
-        >
-          View in Plan →
-        </button>
+      {(onEditGoal || onOpenInPlan) && (
+        <div className="ap-goal-card__actions">
+          {onEditGoal ? (
+            <button
+              className="ap-goal-card__action"
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onEditGoal();
+              }}
+            >
+              Edit goal
+            </button>
+          ) : null}
+          {onOpenInPlan ? (
+            <button
+              className="ap-goal-card__action ap-goal-card__action--primary"
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onOpenInPlan();
+              }}
+            >
+              View in Plan →
+            </button>
+          ) : null}
+        </div>
       )}
     </div>
   );

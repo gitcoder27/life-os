@@ -142,9 +142,11 @@ function InspectorExecutionBridge({
 export function GoalInspectorPanel({
   goalId,
   onClose,
+  onEditGoal,
 }: {
   goalId: string;
   onClose: () => void;
+  onEditGoal: (goal: GoalDetailItem) => void;
 }) {
   const detailQuery = useGoalDetailQuery(goalId);
 
@@ -185,7 +187,12 @@ export function GoalInspectorPanel({
       <div className="ap-inspector__header">
         <span className="ap-inspector__header-label">Inspector</span>
         <div className="ap-inspector__header-actions">
-          <button className="ap-inspector__action-btn" type="button" title="Edit goal">
+          <button
+            className="ap-inspector__action-btn"
+            type="button"
+            title="Edit goal"
+            onClick={() => onEditGoal(goal)}
+          >
             ✎
           </button>
           <button className="ap-inspector__close" type="button" onClick={onClose} aria-label="Close">✕</button>

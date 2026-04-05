@@ -108,6 +108,9 @@ export function GoalsPage() {
   }
 
   function openEditGoal(goal: GoalOverviewItem) {
+    setShowChildForm(false);
+    setChildFormParent(null);
+    setChildForm(emptyGoalForm());
     setEditingGoalId(goal.id);
     setGoalForm(goalToFormData(goal));
     setShowGoalForm(true);
@@ -215,6 +218,7 @@ export function GoalsPage() {
           onSelectGoal={handleSelectGoal}
           onSwitchToPlan={handleSwitchToPlan}
           onOpenCreateGoal={openCreateGoal}
+          onEditGoal={openEditGoal}
           showGoalForm={showGoalForm}
           onCloseSelectedGoal={() => setSelectedGoalId(null)}
           onRefetch={() => void workspaceQuery.refetch()}
@@ -232,6 +236,7 @@ export function GoalsPage() {
           onSelectGoal={handleSelectGoal}
           onClearSelectedGoal={() => setSelectedGoalId(null)}
           onOpenCreateGoal={openCreateGoal}
+          onEditGoal={openEditGoal}
           onStartCreateChild={handleCreateChildFromPlan}
           showChildForm={showChildForm}
           childFormParent={childFormParent}
