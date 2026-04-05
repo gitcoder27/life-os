@@ -703,93 +703,56 @@ export function HealthPage() {
     <div className="health-page">
       <HealthSubNav />
 
-      {/* ═══ Health Pulse Hero ═══ */}
-      <section className="health-pulse" id="health-pulse">
-        <div className="health-pulse__eyebrow">
-          <span>Health basics</span>
-          <span className="health-pulse__phase">{PHASE_LABEL[phase] ?? phase}</span>
-        </div>
-
-        <div className="health-pulse__body">
-          <div className="health-pulse__coaching">
-            <h1 className="health-pulse__focus">{guidance.focus.title}</h1>
-            <p className="health-pulse__detail">{guidance.focus.detail}</p>
-            {guidance.focus.intent !== "review_patterns" && (
-              <button
-                className="health-pulse__cta"
-                type="button"
-                onClick={() => handleIntent(guidance.focus.intent)}
-              >
-                {guidance.focus.actionLabel}
-              </button>
-            )}
+      {/* ═══ Health Status Matrix ═══ */}
+      <section className="health-matrix" id="health-pulse">
+        <div className="health-matrix__header">
+          <div className="health-matrix__title-group">
+            <span className="health-matrix__title">Health basics</span>
+            <span className="health-matrix__phase">{PHASE_LABEL[phase] ?? phase}</span>
           </div>
-
-          <div className="health-pulse__score">
-            <ScoreRing value={score.value} label={score.label} />
+          <div className={`health-matrix__score health-matrix__score--${score.label}`}>
+            <span className="health-matrix__score-value">{score.value}</span>
+            <span className="health-matrix__score-label">{SCORE_LABEL[score.label] ?? score.label}</span>
           </div>
         </div>
 
-        {/* Signal indicators */}
-        <div className="health-pulse__signals">
-          {/* Water signal */}
-          <div
-            className="health-signal"
-            style={homeFocusHighlight === "water"
-              ? {
-                  borderColor: "rgba(217, 153, 58, 0.4)",
-                  boxShadow: "0 0 0 1px rgba(217, 153, 58, 0.25)",
-                  background: "rgba(217, 153, 58, 0.06)",
-                }
-              : undefined}
-          >
-            <div className="health-signal__header">
-              <div className={`health-signal__dot health-signal__dot--${signals.water.status === "behind" ? "behind" : "water"}`} />
-              <span className="health-signal__label">Water</span>
-            </div>
-            <div className="health-signal__value">
+        <div className="health-matrix__signals">
+          {/* Water */}
+          <div className={`health-matrix__signal${homeFocusHighlight === "water" ? " health-matrix__signal--highlight" : ""}`}>
+            <div className={`health-matrix__dot health-matrix__dot--${signals.water.status === "behind" ? "behind" : "water"}`} />
+            <span className="health-matrix__signal-label">Water</span>
+            <span className="health-matrix__signal-value">
               {(waterMl / 1000).toFixed(1)}L / {(waterTargetMl / 1000).toFixed(1)}L
-            </div>
-            <div className="health-signal__bar">
+            </span>
+            <div className="health-matrix__bar">
               <div
-                className={`health-signal__bar-fill health-signal__bar-fill--${signals.water.status === "complete" ? "complete" : "water"}`}
+                className={`health-matrix__bar-fill health-matrix__bar-fill--${signals.water.status === "complete" ? "complete" : "water"}`}
                 style={{ width: `${signals.water.progressPct}%` }}
               />
             </div>
-            <span className={`health-signal__status health-signal__status--${signals.water.status}`}>
+            <span className={`health-matrix__signal-status health-matrix__signal-status--${signals.water.status}`}>
               {signals.water.status === "complete"
                 ? "Target hit"
                 : signals.water.status === "on_track"
                   ? "On pace"
-                  : `${waterPaceShortfallMl}ml behind pace`}
+                  : `${waterPaceShortfallMl}ml behind`}
             </span>
           </div>
 
-          {/* Meals signal */}
-          <div
-            className="health-signal"
-            style={homeFocusHighlight === "meals"
-              ? {
-                  borderColor: "rgba(217, 153, 58, 0.4)",
-                  boxShadow: "0 0 0 1px rgba(217, 153, 58, 0.25)",
-                  background: "rgba(217, 153, 58, 0.06)",
-                }
-              : undefined}
-          >
-            <div className="health-signal__header">
-              <div className={`health-signal__dot health-signal__dot--${signals.meals.status === "behind" ? "behind" : "meals"}`} />
-              <span className="health-signal__label">Meals</span>
-            </div>
-            <div className="health-signal__value">
+          {/* Meals */}
+          <div className={`health-matrix__signal${homeFocusHighlight === "meals" ? " health-matrix__signal--highlight" : ""}`}>
+            <div className={`health-matrix__dot health-matrix__dot--${signals.meals.status === "behind" ? "behind" : "meals"}`} />
+            <span className="health-matrix__signal-label">Meals</span>
+            <span className="health-matrix__signal-value">
               {currentDay.mealCount} / {signals.meals.targetCount || 3} logged
-            </div>
-            <div className="health-signal__bar">
+            </span>
+            <div className="health-matrix__bar">
               <div
-                className={`health-signal__bar-fill health-signal__bar-fill--${signals.meals.status === "complete" ? "complete" : "meals"}`}
+                className={`health-matrix__bar-fill health-matrix__bar-fill--${signals.meals.status === "complete" ? "complete" : "meals"}`}
                 style={{ width: `${signals.meals.progressPct}%` }}
               />
             </div>
-            <span className={`health-signal__status health-signal__status--${signals.meals.status}`}>
+            <span className={`health-matrix__signal-status health-matrix__signal-status--${signals.meals.status}`}>
               {signals.meals.status === "complete"
                 ? "All logged"
                 : signals.meals.nextSuggestedSlot
@@ -800,28 +763,31 @@ export function HealthPage() {
             </span>
           </div>
 
-          {/* Workout signal */}
-          <div
-            className="health-signal"
-            style={homeFocusHighlight === "workout"
-              ? {
-                  borderColor: "rgba(217, 153, 58, 0.4)",
-                  boxShadow: "0 0 0 1px rgba(217, 153, 58, 0.25)",
-                  background: "rgba(217, 153, 58, 0.06)",
-                }
-              : undefined}
-          >
-            <div className="health-signal__header">
-              <div className={`health-signal__dot health-signal__dot--${signals.workout.status}`} />
-              <span className="health-signal__label">Workout</span>
-            </div>
-            <div className="health-signal__value">
-              {signals.workout.label}
-            </div>
-            <span className={`health-signal__status health-signal__status--${signals.workout.status}`}>
+          {/* Workout */}
+          <div className={`health-matrix__signal health-matrix__signal--no-bar${homeFocusHighlight === "workout" ? " health-matrix__signal--highlight" : ""}`}>
+            <div className={`health-matrix__dot health-matrix__dot--${signals.workout.status}`} />
+            <span className="health-matrix__signal-label">Workout</span>
+            <span className="health-matrix__signal-value health-matrix__signal-value--wide">{signals.workout.label}</span>
+            <span className={`health-matrix__signal-status health-matrix__signal-status--${signals.workout.status}`}>
               {signals.workout.status === "complete" ? "Done" : signals.workout.status === "recovery" ? "Recovery" : signals.workout.status === "missed" ? "Missed" : "Open"}
             </span>
           </div>
+        </div>
+
+        <div className="health-matrix__focus">
+          <div className="health-matrix__focus-content">
+            <span className="health-matrix__focus-title">{guidance.focus.title}</span>
+            <span className="health-matrix__focus-detail">{guidance.focus.detail}</span>
+          </div>
+          {guidance.focus.intent !== "review_patterns" && (
+            <button
+              className="health-matrix__cta"
+              type="button"
+              onClick={() => handleIntent(guidance.focus.intent)}
+            >
+              {guidance.focus.actionLabel}
+            </button>
+          )}
         </div>
       </section>
 
