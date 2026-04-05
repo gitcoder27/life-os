@@ -651,7 +651,7 @@ export type MealPlanWeekResponse = {
   mealTemplates: MealTemplateItem[];
 };
 
-type SaveMealPlanWeekPayload = {
+export type SaveMealPlanWeekPayload = {
   notes?: string | null;
   entries: Array<{
     id?: string;
@@ -694,7 +694,13 @@ export const useMealPlanWeekQuery = (startDate: string) =>
     retry: false,
   });
 
-export const useSaveMealPlanWeekMutation = (startDate: string) => {
+export const useSaveMealPlanWeekMutation = (
+  startDate: string,
+  options?: {
+    successMessage?: string;
+    errorMessage?: string;
+  },
+) => {
   const queryClient = useQueryClient();
 
   return useMutation({
@@ -702,10 +708,10 @@ export const useSaveMealPlanWeekMutation = (startDate: string) => {
       apiRequest<MealPlanWeekResponse>(`/api/health/meal-plans/weeks/${startDate}`, {
         method: "PUT",
         body: payload,
-      }),
+    }),
     meta: {
-      successMessage: "Meal plan saved.",
-      errorMessage: "Meal plan save failed.",
+      successMessage: options?.successMessage ?? "Meal plan saved.",
+      errorMessage: options?.errorMessage ?? "Meal plan save failed.",
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["mealPlanWeek"] });

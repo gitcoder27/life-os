@@ -1,5 +1,18 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { NavLink } from "react-router-dom";
+import { createPortal } from "react-dom";
+import {
+  DndContext,
+  DragOverlay,
+  type Modifier,
+  PointerSensor,
+  pointerWithin,
+  useDraggable,
+  useDroppable,
+  useSensor,
+  useSensors,
+} from "@dnd-kit/core";
+import type { DragEndEvent, DragStartEvent } from "@dnd-kit/core";
 
 import {
   formatMealSlotLabel,
@@ -15,20 +28,18 @@ import {
   useUpdateMealTemplateMutation,
 } from "../../shared/lib/api";
 import type {
-  MealPlanEntryItem,
   MealPlanGroceryItem,
-  MealPlanWeekResponse,
-  MealPrepSessionItem,
+  SaveMealPlanWeekPayload,
   MealTemplateIngredient,
   MealTemplateItem,
 } from "../../shared/lib/api";
 import {
   PageLoadingState,
-  PageErrorState,
-  EmptyState,
 } from "../../shared/ui/PageState";
 
-/* ── Constants ── */
+/* ═══════════════════════════════════════════════
+   Constants & Types
+   ═══════════════════════════════════════════════ */
 
 type MealSlot = "breakfast" | "lunch" | "dinner" | "snack";
 
@@ -36,10 +47,19 @@ const MEAL_SLOTS: MealSlot[] = ["breakfast", "lunch", "dinner", "snack"];
 
 const SLOT_ICONS: Record<MealSlot, string> = {
   breakfast: "\u2600",
-  lunch: "\u2614",
+  lunch: "\u25D1",
   dinner: "\u263D",
   snack: "\u2726",
 };
+
+const CATEGORIES: { key: MealSlot; label: string }[] = [
+  { key: "breakfast", label: "Breakfast" },
+  { key: "lunch", label: "Lunch" },
+  { key: "dinner", label: "Dinner" },
+  { key: "snack", label: "Snacks" },
+];
+
+const MEAL_PLAN_AUTOSAVE_DELAY_MS = 800;
 
 type DraftEntry = {
   id?: string;
@@ -74,7 +94,9 @@ type DraftGroceryItem = {
   sortOrder: number;
 };
 
-/* ── Helpers ── */
+/* ═══════════════════════════════════════════════
+   Helpers
+   ═══════════════════════════════════════════════ */
 
 function getWeekDates(startDate: string): string[] {
   const dates: string[] = [];
@@ -109,7 +131,70 @@ function shiftWeek(startDate: string, direction: number): string {
   return getWeekStartDate(toIsoDate(d));
 }
 
-/* ── Sub-navigation ── */
+function buildIngredientText(ingredients: MealTemplateIngredient[]) {
+  return ingredients
+    .map((ingredient) => {
+      const amount = ingredient.quantity ? `${ingredient.quantity}` : "";
+      const unit = ingredient.unit ? ` ${ingredient.unit}` : "";
+      return `${amount}${unit}${amount || unit ? " " : ""}${ingredient.name}`.trim();
+    })
+    .join("\n");
+}
+
+function buildMealPlanSavePayload({
+  notes,
+  entries,
+  prepSessions,
+  manualGroceries,
+  groceryItems,
+}: {
+  notes: string;
+  entries: DraftEntry[];
+  prepSessions: DraftPrepSession[];
+  manualGroceries: DraftGroceryItem[];
+  groceryItems: MealPlanGroceryItem[];
+}): SaveMealPlanWeekPayload {
+  return {
+    notes: notes || null,
+    entries: entries.map((entry, index) => ({
+      id: entry.id,
+      date: entry.date,
+      mealSlot: entry.mealSlot,
+      mealTemplateId: entry.mealTemplateId,
+      servings: entry.servings,
+      note: entry.note,
+      sortOrder: index,
+    })),
+    prepSessions: prepSessions.map((session, index) => ({
+      id: session.id,
+      scheduledForDate: session.scheduledForDate,
+      title: session.title,
+      notes: session.notes,
+      sortOrder: index,
+    })),
+    manualGroceryItems: manualGroceries.map((item, index) => ({
+      id: item.id?.startsWith("manual-") ? undefined : item.id,
+      name: item.name,
+      quantity: item.quantity,
+      unit: item.unit,
+      section: item.section,
+      note: item.note,
+      isChecked: item.isChecked,
+      sortOrder: index,
+    })),
+    plannedGroceryItems: groceryItems
+      .filter((item) => item.sourceType === "planned")
+      .map((item) => ({
+        name: item.name,
+        unit: item.unit,
+        isChecked: item.isChecked,
+      })),
+  };
+}
+
+/* ═══════════════════════════════════════════════
+   Sub-navigation
+   ═══════════════════════════════════════════════ */
 
 function HealthSubNav() {
   return (
@@ -135,7 +220,512 @@ function HealthSubNav() {
   );
 }
 
-/* ── Template Picker ── */
+/* ═══════════════════════════════════════════════
+   Draggable Recipe Card (horizontal layout)
+   ═══════════════════════════════════════════════ */
+
+function DraggableRecipeCard({
+  template,
+  isSelected,
+  onSelect,
+}: {
+  template: MealTemplateItem;
+  isSelected: boolean;
+  onSelect: () => void;
+}) {
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
+    id: `recipe-${template.id}`,
+    data: { type: "recipe", template },
+  });
+
+  const timeInfo = [
+    template.prepMinutes ? `${template.prepMinutes}m` : "",
+    template.cookMinutes ? `${template.cookMinutes}m` : "",
+  ]
+    .filter(Boolean)
+    .join("+");
+
+  return (
+    <div
+      ref={setNodeRef}
+      className={`mp-rcard${isDragging ? " mp-rcard--dragging" : ""}${isSelected ? " mp-rcard--selected" : ""}`}
+      onClick={onSelect}
+      {...attributes}
+      {...listeners}
+    >
+      <div className="mp-rcard__grip" aria-hidden="true">
+        <span />
+        <span />
+        <span />
+        <span />
+        <span />
+        <span />
+      </div>
+      <div className="mp-rcard__body">
+        <span className="mp-rcard__name">{template.name}</span>
+        <span className="mp-rcard__meta">
+          {timeInfo}
+          {timeInfo && template.ingredients.length > 0 ? " \u00B7 " : ""}
+          {template.ingredients.length > 0
+            ? `${template.ingredients.length} ingr.`
+            : ""}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════
+   Recipe Drag Overlay
+   ═══════════════════════════════════════════════ */
+
+function RecipeDragOverlay({ template }: { template: MealTemplateItem }) {
+  return (
+    <div className="mp-drag-overlay">
+      <span className="mp-drag-overlay__icon">
+        {template.mealSlot ? SLOT_ICONS[template.mealSlot as MealSlot] : "\u2726"}
+      </span>
+      <span className="mp-drag-overlay__name">{template.name}</span>
+    </div>
+  );
+}
+
+const snapRecipeOverlayToCursor: Modifier = ({
+  activatorEvent,
+  activeNodeRect,
+  overlayNodeRect,
+  transform,
+}) => {
+  const pointerEvent = activatorEvent as
+    | { clientX: number; clientY: number }
+    | null;
+
+  if (
+    !pointerEvent ||
+    typeof pointerEvent.clientX !== "number" ||
+    typeof pointerEvent.clientY !== "number" ||
+    !activeNodeRect ||
+    !overlayNodeRect
+  ) {
+    return transform;
+  }
+
+  return {
+    ...transform,
+    x:
+      transform.x +
+      (pointerEvent.clientX -
+        activeNodeRect.left -
+        overlayNodeRect.width / 2),
+    y:
+      transform.y +
+      (pointerEvent.clientY -
+        activeNodeRect.top -
+        overlayNodeRect.height / 2),
+  };
+};
+
+/* ═══════════════════════════════════════════════
+   Recipe Library Bar (horizontal, full-width)
+   ═══════════════════════════════════════════════ */
+
+function RecipeLibraryBar({
+  templates,
+  isDragActive,
+  onCreateRecipe,
+  onEditRecipe,
+}: {
+  templates: MealTemplateItem[];
+  isDragActive: boolean;
+  onCreateRecipe: () => void;
+  onEditRecipe: (template: MealTemplateItem) => void;
+}) {
+  const [activeCategory, setActiveCategory] = useState<string>("all");
+  const [search, setSearch] = useState("");
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [expanded, setExpanded] = useState(true);
+
+  const filtered = useMemo(() => {
+    let result = templates;
+    if (activeCategory !== "all") {
+      result = result.filter(
+        (t) => (t.mealSlot || "other") === activeCategory
+      );
+    }
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      result = result.filter(
+        (t) =>
+          t.name.toLowerCase().includes(q) ||
+          (t.tags && t.tags.some((tag) => tag.toLowerCase().includes(q)))
+      );
+    }
+    return result;
+  }, [templates, activeCategory, search]);
+
+  const categoryCounts = useMemo(() => {
+    const counts: Record<string, number> = { all: templates.length };
+    for (const cat of CATEGORIES) {
+      counts[cat.key] = templates.filter(
+        (t) => t.mealSlot === cat.key
+      ).length;
+    }
+    counts.other = templates.filter((t) => !t.mealSlot).length;
+    return counts;
+  }, [templates]);
+
+  const selected = templates.find((t) => t.id === selectedId);
+
+  return (
+    <section
+      className={`mp-library${isDragActive ? " mp-library--drag-active" : ""}`}
+    >
+      <div className="mp-library__top">
+        <button
+          type="button"
+          className="mp-library__toggle"
+          onClick={() => setExpanded(!expanded)}
+        >
+          <span className="mp-library__title">Recipes</span>
+          <span className="mp-library__title-count">{templates.length}</span>
+          <span
+            className={`mp-library__chevron${expanded ? " mp-library__chevron--open" : ""}`}
+          >
+            &#9662;
+          </span>
+        </button>
+
+        {expanded && (
+          <div className="mp-library__filters">
+            <button
+              type="button"
+              className={`mp-library__pill${activeCategory === "all" ? " mp-library__pill--active" : ""}`}
+              onClick={() => setActiveCategory("all")}
+            >
+              All
+            </button>
+            {CATEGORIES.map((cat) => (
+              <button
+                key={cat.key}
+                type="button"
+                className={`mp-library__pill${activeCategory === cat.key ? " mp-library__pill--active" : ""}`}
+                onClick={() => setActiveCategory(cat.key)}
+              >
+                <span className="mp-library__pill-icon">
+                  {SLOT_ICONS[cat.key]}
+                </span>
+                {cat.label}
+                {categoryCounts[cat.key] > 0 && (
+                  <span className="mp-library__pill-count">
+                    {categoryCounts[cat.key]}
+                  </span>
+                )}
+              </button>
+            ))}
+            {categoryCounts.other > 0 && (
+              <button
+                type="button"
+                className={`mp-library__pill${activeCategory === "other" ? " mp-library__pill--active" : ""}`}
+                onClick={() => setActiveCategory("other")}
+              >
+                Other
+                <span className="mp-library__pill-count">
+                  {categoryCounts.other}
+                </span>
+              </button>
+            )}
+          </div>
+        )}
+
+        <div className="mp-library__actions">
+          {expanded && (
+            <input
+              type="text"
+              className="mp-input mp-library__search"
+              placeholder="Search..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+          )}
+          <button
+            type="button"
+            className="button button--primary button--small mp-library__new-btn"
+            onClick={onCreateRecipe}
+          >
+            <span className="mp-library__new-btn-icon" aria-hidden="true">
+              +
+            </span>
+            <span className="mp-library__new-btn-label">New</span>
+          </button>
+        </div>
+      </div>
+
+      {expanded && (
+        <>
+          {filtered.length === 0 ? (
+            <div className="mp-library__empty">
+              {templates.length === 0 ? (
+                <>
+                  <span className="mp-library__empty-icon">{"\u2726"}</span>
+                  <p>Create your first recipe to start meal planning</p>
+                </>
+              ) : (
+                <p>No recipes match your filter</p>
+              )}
+            </div>
+          ) : (
+            <>
+              <span className="mp-library__drag-hint">
+                Drag up to calendar {"\u2191"}
+              </span>
+              <div className="mp-library__cards">
+                {filtered.map((t) => (
+                  <DraggableRecipeCard
+                    key={t.id}
+                    template={t}
+                    isSelected={selectedId === t.id}
+                    onSelect={() =>
+                      setSelectedId(selectedId === t.id ? null : t.id)
+                    }
+                  />
+                ))}
+              </div>
+            </>
+          )}
+
+          {selected && (
+            <div className="mp-library__detail">
+              <div className="mp-library__detail-main">
+                <div className="mp-library__detail-header">
+                  <h4 className="mp-library__detail-name">{selected.name}</h4>
+                  <div className="mp-library__detail-chips">
+                    {selected.servings && (
+                      <span className="mp-library__detail-chip">
+                        {selected.servings} servings
+                      </span>
+                    )}
+                    {selected.prepMinutes && (
+                      <span className="mp-library__detail-chip">
+                        {selected.prepMinutes}m prep
+                      </span>
+                    )}
+                    {selected.cookMinutes && (
+                      <span className="mp-library__detail-chip">
+                        {selected.cookMinutes}m cook
+                      </span>
+                    )}
+                  </div>
+                </div>
+                {selected.description && (
+                  <p className="mp-library__detail-desc">
+                    {selected.description}
+                  </p>
+                )}
+              </div>
+              <div className="mp-library__detail-cols">
+                {selected.ingredients.length > 0 && (
+                  <div className="mp-library__detail-section">
+                    <span className="mp-library__detail-label">
+                      Ingredients
+                    </span>
+                    <ul className="mp-library__detail-list">
+                      {selected.ingredients.map((ing, i) => (
+                        <li key={i}>
+                          {ing.quantity ? `${ing.quantity}` : ""}
+                          {ing.unit ? ` ${ing.unit}` : ""}{" "}
+                          {ing.name}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                {selected.instructions.length > 0 && (
+                  <div className="mp-library__detail-section">
+                    <span className="mp-library__detail-label">
+                      Instructions
+                    </span>
+                    <ol className="mp-library__detail-steps">
+                      {selected.instructions.map((step, i) => (
+                        <li key={i}>{step}</li>
+                      ))}
+                    </ol>
+                  </div>
+                )}
+                {selected.tags.length > 0 && (
+                  <div className="mp-library__detail-section">
+                    <span className="mp-library__detail-label">Tags</span>
+                    <div className="mp-library__detail-tags">
+                      {selected.tags.map((tag) => (
+                        <span key={tag} className="mp-library__detail-tag">
+                          {tag}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+              <button
+                type="button"
+                className="button button--ghost button--small mp-library__detail-edit"
+                onClick={() => onEditRecipe(selected)}
+              >
+                Edit recipe
+              </button>
+            </div>
+          )}
+        </>
+      )}
+    </section>
+  );
+}
+
+/* ═══════════════════════════════════════════════
+   Droppable Meal Slot
+   ═══════════════════════════════════════════════ */
+
+function DroppableMealSlot({
+  date,
+  slot,
+  entry,
+  isToday,
+  isDragActive,
+  onAssign,
+  onEdit,
+  onRemove,
+}: {
+  date: string;
+  slot: MealSlot;
+  entry: DraftEntry | undefined;
+  isToday: boolean;
+  isDragActive: boolean;
+  onAssign: (date: string, slot: MealSlot) => void;
+  onEdit: (date: string, slot: MealSlot) => void;
+  onRemove: (date: string, slot: MealSlot) => void;
+}) {
+  const { setNodeRef, isOver } = useDroppable({
+    id: `slot-${date}-${slot}`,
+    data: { type: "meal-slot", date, slot },
+  });
+
+  if (entry) {
+    return (
+      <div
+        ref={setNodeRef}
+        className={`mp-slot mp-slot--filled${entry.isLogged ? " mp-slot--logged" : ""}${isOver ? " mp-slot--drop-replace" : ""}`}
+      >
+        <button
+          type="button"
+          className="mp-slot__main"
+          onClick={() => onEdit(date, slot)}
+          aria-label={`Edit ${entry.mealTemplateName}`}
+        >
+          <div className="mp-slot__content">
+            <span className="mp-slot__name">{entry.mealTemplateName}</span>
+            {entry.servings ? (
+              <span className="mp-slot__servings">{entry.servings}x</span>
+            ) : null}
+          </div>
+        </button>
+        <button
+          type="button"
+          className="mp-slot__remove"
+          onClick={(event) => {
+            event.stopPropagation();
+            onRemove(date, slot);
+          }}
+          aria-label={`Remove ${entry.mealTemplateName}`}
+        >
+          &times;
+        </button>
+        {entry.isLogged && (
+          <span className="mp-slot__logged-dot" title="Logged" />
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div
+      ref={setNodeRef}
+      className={`mp-slot mp-slot--empty${isToday ? " mp-slot--today" : ""}${isDragActive ? " mp-slot--drop-ready" : ""}${isOver ? " mp-slot--drop-over" : ""}`}
+      onClick={() => !isDragActive && onAssign(date, slot)}
+      role="button"
+      tabIndex={0}
+      aria-label={`Assign ${formatMealSlotLabel(slot)} for ${formatShortDate(date)}`}
+    >
+      {isOver ? (
+        <span className="mp-slot__drop-label">Drop here</span>
+      ) : isDragActive ? (
+        <span className="mp-slot__drop-label">{formatMealSlotLabel(slot)}</span>
+      ) : (
+        <span className="mp-slot__add">+</span>
+      )}
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════
+   Day Column
+   ═══════════════════════════════════════════════ */
+
+function DayColumn({
+  date,
+  isToday,
+  entries,
+  isDragActive,
+  onAssign,
+  onEdit,
+  onRemove,
+}: {
+  date: string;
+  isToday: boolean;
+  entries: Map<MealSlot, DraftEntry>;
+  isDragActive: boolean;
+  onAssign: (date: string, slot: MealSlot) => void;
+  onEdit: (date: string, slot: MealSlot) => void;
+  onRemove: (date: string, slot: MealSlot) => void;
+}) {
+  const filledCount = entries.size;
+  return (
+    <div className={`mp-day${isToday ? " mp-day--today" : ""}`}>
+      <div className="mp-day__header">
+        <div className="mp-day__header-left">
+          <span className="mp-day__weekday">{formatDayLabel(date)}</span>
+          <span className="mp-day__date">{formatDayNumber(date)}</span>
+        </div>
+        {filledCount > 0 && (
+          <span className="mp-day__count">{filledCount} meal{filledCount > 1 ? "s" : ""}</span>
+        )}
+      </div>
+      <div className="mp-day__slots">
+        {MEAL_SLOTS.map((slot) => (
+          <div key={slot} className="mp-day__slot-row">
+            <span
+              className="mp-day__slot-label"
+              title={formatMealSlotLabel(slot)}
+            >
+              {SLOT_ICONS[slot]}
+            </span>
+            <DroppableMealSlot
+              date={date}
+              slot={slot}
+              entry={entries.get(slot)}
+              isToday={isToday}
+              isDragActive={isDragActive}
+              onAssign={onAssign}
+              onEdit={onEdit}
+              onRemove={onRemove}
+            />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════
+   Template Picker (click-to-assign)
+   ═══════════════════════════════════════════════ */
 
 function TemplatePicker({
   templates,
@@ -226,115 +816,9 @@ function TemplatePicker({
   );
 }
 
-/* ── Meal Slot Cell ── */
-
-function MealSlotCell({
-  date,
-  slot,
-  entry,
-  isToday,
-  onAssign,
-  onEdit,
-  onRemove,
-}: {
-  date: string;
-  slot: MealSlot;
-  entry: DraftEntry | undefined;
-  isToday: boolean;
-  onAssign: (date: string, slot: MealSlot) => void;
-  onEdit: (date: string, slot: MealSlot) => void;
-  onRemove: (date: string, slot: MealSlot) => void;
-}) {
-  if (entry) {
-    return (
-      <div className={`mp-slot mp-slot--filled${entry.isLogged ? " mp-slot--logged" : ""}`}>
-        <button
-          type="button"
-          className="mp-slot__main"
-          onClick={() => onEdit(date, slot)}
-          aria-label={`Edit ${entry.mealTemplateName}`}
-        >
-          <div className="mp-slot__content">
-            <span className="mp-slot__name">{entry.mealTemplateName}</span>
-            {entry.servings ? (
-              <span className="mp-slot__servings">{entry.servings}x</span>
-            ) : null}
-          </div>
-        </button>
-        <button
-          type="button"
-          className="mp-slot__remove"
-          onClick={(event) => {
-            event.stopPropagation();
-            onRemove(date, slot);
-          }}
-          aria-label={`Remove ${entry.mealTemplateName}`}
-        >
-          &times;
-        </button>
-        {entry.isLogged && <span className="mp-slot__logged-dot" title="Logged" />}
-      </div>
-    );
-  }
-
-  return (
-    <button
-      type="button"
-      className={`mp-slot mp-slot--empty${isToday ? " mp-slot--today" : ""}`}
-      onClick={() => onAssign(date, slot)}
-      aria-label={`Assign ${formatMealSlotLabel(slot)} for ${formatShortDate(date)}`}
-    >
-      <span className="mp-slot__add">+</span>
-    </button>
-  );
-}
-
-/* ── Day Column ── */
-
-function DayColumn({
-  date,
-  isToday,
-  entries,
-  onAssign,
-  onEdit,
-  onRemove,
-}: {
-  date: string;
-  isToday: boolean;
-  entries: Map<MealSlot, DraftEntry>;
-  onAssign: (date: string, slot: MealSlot) => void;
-  onEdit: (date: string, slot: MealSlot) => void;
-  onRemove: (date: string, slot: MealSlot) => void;
-}) {
-  return (
-    <div className={`mp-day${isToday ? " mp-day--today" : ""}`}>
-      <div className="mp-day__header">
-        <span className="mp-day__weekday">{formatDayLabel(date)}</span>
-        <span className="mp-day__date">{formatDayNumber(date)}</span>
-      </div>
-      <div className="mp-day__slots">
-        {MEAL_SLOTS.map((slot) => (
-          <div key={slot} className="mp-day__slot-row">
-            <span className="mp-day__slot-icon" title={formatMealSlotLabel(slot)}>
-              {SLOT_ICONS[slot]}
-            </span>
-            <MealSlotCell
-              date={date}
-              slot={slot}
-              entry={entries.get(slot)}
-              isToday={isToday}
-              onAssign={onAssign}
-              onEdit={onEdit}
-              onRemove={onRemove}
-            />
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-/* ── Planned Entry Editor ── */
+/* ═══════════════════════════════════════════════
+   Planned Entry Editor
+   ═══════════════════════════════════════════════ */
 
 function PlannedEntryEditor({
   entry,
@@ -347,12 +831,17 @@ function PlannedEntryEditor({
   onChangeRecipe: () => void;
   onClose: () => void;
 }) {
-  const [servings, setServings] = useState(entry.servings ? String(entry.servings) : "");
+  const [servings, setServings] = useState(
+    entry.servings ? String(entry.servings) : ""
+  );
   const [note, setNote] = useState(entry.note ?? "");
 
   return (
     <div className="mp-picker-overlay" onClick={onClose}>
-      <div className="mp-picker mp-picker--editor" onClick={(e) => e.stopPropagation()}>
+      <div
+        className="mp-picker mp-picker--editor"
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className="mp-template-creator">
           <div className="mp-template-creator__header">
             <h4 className="mp-template-creator__title">Edit planned meal</h4>
@@ -365,7 +854,9 @@ function PlannedEntryEditor({
               &times;
             </button>
           </div>
-          <div className="mp-entry-editor__recipe">{entry.mealTemplateName}</div>
+          <div className="mp-entry-editor__recipe">
+            {entry.mealTemplateName}
+          </div>
           <div className="mp-template-creator__fields">
             <input
               type="number"
@@ -400,10 +891,12 @@ function PlannedEntryEditor({
             <button
               type="button"
               className="button button--primary button--small"
-              onClick={() => onSave({
-                servings: servings ? Number(servings) : null,
-                note: note.trim() || null,
-              })}
+              onClick={() =>
+                onSave({
+                  servings: servings ? Number(servings) : null,
+                  note: note.trim() || null,
+                })
+              }
             >
               Save meal
             </button>
@@ -414,7 +907,9 @@ function PlannedEntryEditor({
   );
 }
 
-/* ── Prep Sessions Panel ── */
+/* ═══════════════════════════════════════════════
+   Prep Sessions Panel
+   ═══════════════════════════════════════════════ */
 
 function PrepPanel({
   sessions,
@@ -443,11 +938,6 @@ function PrepPanel({
     setNotes("");
     setAdding(false);
   }
-
-  const statusLabel = (s: DraftPrepSession) => {
-    if (!s.taskStatus) return null;
-    return s.taskStatus;
-  };
 
   return (
     <div className="mp-panel">
@@ -518,11 +1008,9 @@ function PrepPanel({
                 )}
               </div>
               <div className="mp-prep-item__actions">
-                {statusLabel(s) && (
-                  <span
-                    className={`mp-badge mp-badge--${s.taskStatus}`}
-                  >
-                    {statusLabel(s)}
+                {s.taskStatus && (
+                  <span className={`mp-badge mp-badge--${s.taskStatus}`}>
+                    {s.taskStatus}
                   </span>
                 )}
                 <button
@@ -542,7 +1030,9 @@ function PrepPanel({
   );
 }
 
-/* ── Grocery List Panel ── */
+/* ═══════════════════════════════════════════════
+   Grocery List Panel
+   ═══════════════════════════════════════════════ */
 
 function GroceryPanel({
   items,
@@ -552,7 +1042,12 @@ function GroceryPanel({
 }: {
   items: MealPlanGroceryItem[];
   onToggle: (id: string) => void;
-  onAddManual: (item: { name: string; quantity: number | null; unit: string | null; section: string | null }) => void;
+  onAddManual: (item: {
+    name: string;
+    quantity: number | null;
+    unit: string | null;
+    section: string | null;
+  }) => void;
   onRemoveManual: (id: string) => void;
 }) {
   const [adding, setAdding] = useState(false);
@@ -668,7 +1163,8 @@ function GroceryPanel({
                     <span className="mp-grocery-item__name">{item.name}</span>
                     {(item.quantity || item.unit) && (
                       <span className="mp-grocery-item__qty">
-                        {item.quantity}{item.unit ? ` ${item.unit}` : ""}
+                        {item.quantity}
+                        {item.unit ? ` ${item.unit}` : ""}
                       </span>
                     )}
                     {item.sourceType === "manual" && (
@@ -692,7 +1188,9 @@ function GroceryPanel({
   );
 }
 
-/* ── Week Notes Panel ── */
+/* ═══════════════════════════════════════════════
+   Week Notes Panel
+   ═══════════════════════════════════════════════ */
 
 function WeekNotesPanel({
   notes,
@@ -702,7 +1200,7 @@ function WeekNotesPanel({
   onChange: (value: string) => void;
 }) {
   return (
-    <div className="mp-panel mp-panel--notes">
+    <div className="mp-panel">
       <h3 className="mp-panel__title">Week notes</h3>
       <textarea
         className="mp-textarea"
@@ -715,17 +1213,9 @@ function WeekNotesPanel({
   );
 }
 
-/* ── Recipe Composer ── */
-
-function buildIngredientText(ingredients: MealTemplateIngredient[]) {
-  return ingredients
-    .map((ingredient) => {
-      const amount = ingredient.quantity ? `${ingredient.quantity}` : "";
-      const unit = ingredient.unit ? ` ${ingredient.unit}` : "";
-      return `${amount}${unit}${amount || unit ? " " : ""}${ingredient.name}`.trim();
-    })
-    .join("\n");
-}
+/* ═══════════════════════════════════════════════
+   Recipe Composer
+   ═══════════════════════════════════════════════ */
 
 function RecipeComposer({
   mode,
@@ -741,14 +1231,30 @@ function RecipeComposer({
   const createMutation = useCreateMealTemplateMutation();
   const updateMutation = useUpdateMealTemplateMutation();
   const [name, setName] = useState(initialTemplate?.name ?? "");
-  const [slot, setSlot] = useState<MealSlot | "">(initialTemplate?.mealSlot ?? "");
-  const [description, setDescription] = useState(initialTemplate?.description ?? "");
-  const [servings, setServings] = useState(initialTemplate?.servings ? String(initialTemplate.servings) : "");
-  const [prepMin, setPrepMin] = useState(initialTemplate?.prepMinutes ? String(initialTemplate.prepMinutes) : "");
-  const [cookMin, setCookMin] = useState(initialTemplate?.cookMinutes ? String(initialTemplate.cookMinutes) : "");
-  const [ingredientText, setIngredientText] = useState(() => buildIngredientText(initialTemplate?.ingredients ?? []));
-  const [instructionText, setInstructionText] = useState(() => (initialTemplate?.instructions ?? []).join("\n"));
-  const [tagText, setTagText] = useState(() => (initialTemplate?.tags ?? []).join(", "));
+  const [slot, setSlot] = useState<MealSlot | "">(
+    initialTemplate?.mealSlot ?? ""
+  );
+  const [description, setDescription] = useState(
+    initialTemplate?.description ?? ""
+  );
+  const [servings, setServings] = useState(
+    initialTemplate?.servings ? String(initialTemplate.servings) : ""
+  );
+  const [prepMin, setPrepMin] = useState(
+    initialTemplate?.prepMinutes ? String(initialTemplate.prepMinutes) : ""
+  );
+  const [cookMin, setCookMin] = useState(
+    initialTemplate?.cookMinutes ? String(initialTemplate.cookMinutes) : ""
+  );
+  const [ingredientText, setIngredientText] = useState(() =>
+    buildIngredientText(initialTemplate?.ingredients ?? [])
+  );
+  const [instructionText, setInstructionText] = useState(() =>
+    (initialTemplate?.instructions ?? []).join("\n")
+  );
+  const [tagText, setTagText] = useState(() =>
+    (initialTemplate?.tags ?? []).join(", ")
+  );
   const [notes, setNotes] = useState(initialTemplate?.notes ?? "");
 
   const isPending = createMutation.isPending || updateMutation.isPending;
@@ -758,7 +1264,13 @@ function RecipeComposer({
       .split("\n")
       .map((line) => line.trim())
       .filter(Boolean)
-      .map((line) => ({ name: line, quantity: null, unit: null, section: null, note: null }));
+      .map((line) => ({
+        name: line,
+        quantity: null,
+        unit: null,
+        section: null,
+        note: null,
+      }));
   }
 
   function parseInstructions() {
@@ -811,7 +1323,10 @@ function RecipeComposer({
 
   return (
     <div className="mp-picker-overlay" onClick={onCancel}>
-      <div className="mp-picker mp-picker--editor" onClick={(e) => e.stopPropagation()}>
+      <div
+        className="mp-picker mp-picker--editor"
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className="mp-template-creator">
           <div className="mp-template-creator__header">
             <h4 className="mp-template-creator__title">
@@ -922,152 +1437,16 @@ function RecipeComposer({
               disabled={!name.trim() || isPending}
             >
               {isPending
-                ? mode === "edit" ? "Saving..." : "Creating..."
-                : mode === "edit" ? "Save recipe" : "Create recipe"}
+                ? mode === "edit"
+                  ? "Saving..."
+                  : "Creating..."
+                : mode === "edit"
+                  ? "Save recipe"
+                  : "Create recipe"}
             </button>
           </div>
         </div>
       </div>
-    </div>
-  );
-}
-
-/* ── Template Library Panel ── */
-
-function TemplateLibrary({
-  templates,
-  onCreateRecipe,
-  onEditRecipe,
-}: {
-  templates: MealTemplateItem[];
-  onCreateRecipe: () => void;
-  onEditRecipe: (template: MealTemplateItem) => void;
-}) {
-  const [expanded, setExpanded] = useState(false);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const selected = templates.find((t) => t.id === selectedId);
-
-  return (
-    <div className="mp-panel">
-      <div className="mp-panel__header">
-        <button
-          type="button"
-          className="mp-panel__title mp-panel__title--toggle"
-          onClick={() => setExpanded(!expanded)}
-        >
-          Recipe library
-          <span className={`mp-panel__chevron${expanded ? " mp-panel__chevron--open" : ""}`}>
-            &#9662;
-          </span>
-          <span className="mp-panel__count">{templates.length}</span>
-        </button>
-        {expanded && (
-          <button
-            type="button"
-            className="button button--ghost button--small"
-            onClick={onCreateRecipe}
-          >
-            + New
-          </button>
-        )}
-      </div>
-      {expanded && (
-        <>
-          {templates.length === 0 ? (
-            <EmptyState
-              title="No recipes yet"
-              description="Create your first recipe to start meal planning."
-              actionLabel="Create recipe"
-              onAction={onCreateRecipe}
-            />
-          ) : (
-            <div className="mp-template-grid">
-              {templates.map((t) => (
-                <button
-                  key={t.id}
-                  type="button"
-                  className={`mp-template-card${selectedId === t.id ? " mp-template-card--selected" : ""}`}
-                  onClick={() => setSelectedId(selectedId === t.id ? null : t.id)}
-                >
-                  <span className="mp-template-card__name">{t.name}</span>
-                  <span className="mp-template-card__meta">
-                    {t.mealSlot ? formatMealSlotLabel(t.mealSlot) : "Any slot"}
-                    {t.ingredients.length > 0 &&
-                      ` \u00B7 ${t.ingredients.length} ingredients`}
-                  </span>
-                </button>
-              ))}
-            </div>
-          )}
-          {selected && (
-            <div className="mp-template-detail">
-              <div className="mp-template-detail__header">
-                <h4 className="mp-template-detail__name">{selected.name}</h4>
-                <button
-                  type="button"
-                  className="button button--ghost button--small"
-                  onClick={() => onEditRecipe(selected)}
-                >
-                  Edit
-                </button>
-              </div>
-              {selected.description && (
-                <p className="mp-template-detail__desc">{selected.description}</p>
-              )}
-              <div className="mp-template-detail__meta-row">
-                {selected.servings && (
-                  <span className="mp-template-detail__chip">
-                    {selected.servings} servings
-                  </span>
-                )}
-                {selected.prepMinutes && (
-                  <span className="mp-template-detail__chip">
-                    {selected.prepMinutes}m prep
-                  </span>
-                )}
-                {selected.cookMinutes && (
-                  <span className="mp-template-detail__chip">
-                    {selected.cookMinutes}m cook
-                  </span>
-                )}
-              </div>
-              {selected.ingredients.length > 0 && (
-                <div className="mp-template-detail__section">
-                  <span className="mp-template-detail__label">Ingredients</span>
-                  <ul className="mp-template-detail__list">
-                    {selected.ingredients.map((ing, i) => (
-                      <li key={i}>
-                        {ing.quantity ? `${ing.quantity}` : ""}
-                        {ing.unit ? ` ${ing.unit}` : ""}{" "}
-                        {ing.name}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-              {selected.instructions.length > 0 && (
-                <div className="mp-template-detail__section">
-                  <span className="mp-template-detail__label">Instructions</span>
-                  <ol className="mp-template-detail__steps">
-                    {selected.instructions.map((step, i) => (
-                      <li key={i}>{step}</li>
-                    ))}
-                  </ol>
-                </div>
-              )}
-              {selected.tags.length > 0 && (
-                <div className="mp-template-detail__tags">
-                  {selected.tags.map((tag) => (
-                    <span key={tag} className="mp-template-detail__tag">
-                      {tag}
-                    </span>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-        </>
-      )}
     </div>
   );
 }
@@ -1086,68 +1465,132 @@ export function MealPlannerPage() {
   /* ── Server data ── */
   const weekQuery = useMealPlanWeekQuery(weekStart);
   const templatesQuery = useMealTemplatesQuery();
-  const saveMutation = useSaveMealPlanWeekMutation(weekStart);
+  const saveMutation = useSaveMealPlanWeekMutation(weekStart, {
+    successMessage: "",
+  });
 
   /* ── Draft state ── */
   const [entries, setEntries] = useState<DraftEntry[]>([]);
   const [prepSessions, setPrepSessions] = useState<DraftPrepSession[]>([]);
   const [groceryItems, setGroceryItems] = useState<MealPlanGroceryItem[]>([]);
-  const [manualGroceries, setManualGroceries] = useState<DraftGroceryItem[]>([]);
+  const [manualGroceries, setManualGroceries] = useState<DraftGroceryItem[]>(
+    []
+  );
   const [weekNotes, setWeekNotes] = useState("");
-  const [isDirty, setIsDirty] = useState(false);
-  const [pickerTarget, setPickerTarget] = useState<{ date: string; slot: MealSlot } | null>(null);
-  const [editingEntryTarget, setEditingEntryTarget] = useState<{ date: string; slot: MealSlot } | null>(null);
+  const [pickerTarget, setPickerTarget] = useState<{
+    date: string;
+    slot: MealSlot;
+  } | null>(null);
+  const [editingEntryTarget, setEditingEntryTarget] = useState<{
+    date: string;
+    slot: MealSlot;
+  } | null>(null);
   const [recipeComposerState, setRecipeComposerState] = useState<
     | { mode: "create"; target?: { date: string; slot: MealSlot } | null }
     | { mode: "edit"; template: MealTemplateItem }
     | null
   >(null);
+  const hasHydratedWeekRef = useRef(false);
+  const lastSavedPayloadRef = useRef<string | null>(null);
+  const lastAttemptedPayloadRef = useRef<string | null>(null);
+
+  /* ── Drag & drop ── */
+  const [activeDragTemplate, setActiveDragTemplate] =
+    useState<MealTemplateItem | null>(null);
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: { distance: 5 },
+    })
+  );
+
+  function handleDragStart(event: DragStartEvent) {
+    const template = event.active.data.current?.template as
+      | MealTemplateItem
+      | undefined;
+    if (template) setActiveDragTemplate(template);
+  }
+
+  function handleDragEnd(event: DragEndEvent) {
+    setActiveDragTemplate(null);
+    const { active, over } = event;
+    if (!over) return;
+
+    const template = active.data.current?.template as
+      | MealTemplateItem
+      | undefined;
+    const slotData = over.data.current as
+      | { type: string; date: string; slot: MealSlot }
+      | undefined;
+
+    if (template && slotData?.type === "meal-slot") {
+      assignTemplateToSlot(template, slotData.date, slotData.slot);
+    }
+  }
+
+  function handleDragCancel() {
+    setActiveDragTemplate(null);
+  }
+
+  useEffect(() => {
+    hasHydratedWeekRef.current = false;
+    lastSavedPayloadRef.current = null;
+    lastAttemptedPayloadRef.current = null;
+  }, [weekStart]);
 
   /* ── Hydrate draft from server ── */
   useEffect(() => {
     if (!weekQuery.data) return;
     const data = weekQuery.data;
-    setEntries(
-      data.entries.map((e) => ({
-        id: e.id,
-        date: e.date,
-        mealSlot: e.mealSlot,
-        mealTemplateId: e.mealTemplateId,
-        mealTemplateName: e.mealTemplateName,
-        servings: e.servings,
-        note: e.note,
-        sortOrder: e.sortOrder,
-        isLogged: e.isLogged,
-      }))
-    );
-    setPrepSessions(
-      data.prepSessions.map((p) => ({
-        id: p.id,
-        scheduledForDate: p.scheduledForDate,
-        title: p.title,
-        notes: p.notes,
-        taskId: p.taskId,
-        taskStatus: p.taskStatus,
-        sortOrder: p.sortOrder,
-      }))
-    );
-    setGroceryItems(data.groceryItems);
-    setManualGroceries(
-      data.groceryItems
-        .filter((g) => g.sourceType === "manual")
-        .map((g) => ({
-          id: g.id,
-          name: g.name,
-          quantity: g.quantity,
-          unit: g.unit,
-          section: g.section,
-          note: g.note,
-          isChecked: g.isChecked,
-          sortOrder: g.sortOrder,
-        }))
-    );
-    setWeekNotes(data.notes || "");
-    setIsDirty(false);
+    const nextEntries = data.entries.map((entry) => ({
+      id: entry.id,
+      date: entry.date,
+      mealSlot: entry.mealSlot,
+      mealTemplateId: entry.mealTemplateId,
+      mealTemplateName: entry.mealTemplateName,
+      servings: entry.servings,
+      note: entry.note,
+      sortOrder: entry.sortOrder,
+      isLogged: entry.isLogged,
+    }));
+    const nextPrepSessions = data.prepSessions.map((session) => ({
+      id: session.id,
+      scheduledForDate: session.scheduledForDate,
+      title: session.title,
+      notes: session.notes,
+      taskId: session.taskId,
+      taskStatus: session.taskStatus,
+      sortOrder: session.sortOrder,
+    }));
+    const nextGroceryItems = data.groceryItems;
+    const nextManualGroceries = data.groceryItems
+      .filter((item) => item.sourceType === "manual")
+      .map((item) => ({
+        id: item.id,
+        name: item.name,
+        quantity: item.quantity,
+        unit: item.unit,
+        section: item.section,
+        note: item.note,
+        isChecked: item.isChecked,
+        sortOrder: item.sortOrder,
+      }));
+    const nextWeekNotes = data.notes || "";
+    const hydratedPayload = buildMealPlanSavePayload({
+      notes: nextWeekNotes,
+      entries: nextEntries,
+      prepSessions: nextPrepSessions,
+      manualGroceries: nextManualGroceries,
+      groceryItems: nextGroceryItems,
+    });
+
+    setEntries(nextEntries);
+    setPrepSessions(nextPrepSessions);
+    setGroceryItems(nextGroceryItems);
+    setManualGroceries(nextManualGroceries);
+    setWeekNotes(nextWeekNotes);
+    lastSavedPayloadRef.current = JSON.stringify(hydratedPayload);
+    lastAttemptedPayloadRef.current = lastSavedPayloadRef.current;
+    hasHydratedWeekRef.current = true;
   }, [weekQuery.data]);
 
   /* ── Entry helpers ── */
@@ -1174,22 +1617,43 @@ export function MealPlannerPage() {
 
   /* ── Template list ── */
   const templates = useMemo(
-    () => [
-      ...(weekQuery.data?.mealTemplates || []),
-      ...(templatesQuery.data?.mealTemplates || []),
-    ].filter((t, i, arr) => arr.findIndex((x) => x.id === t.id) === i),
+    () =>
+      [
+        ...(weekQuery.data?.mealTemplates || []),
+        ...(templatesQuery.data?.mealTemplates || []),
+      ].filter((t, i, arr) => arr.findIndex((x) => x.id === t.id) === i),
     [weekQuery.data?.mealTemplates, templatesQuery.data?.mealTemplates]
+  );
+  const savePayload = useMemo(
+    () =>
+      buildMealPlanSavePayload({
+        notes: weekNotes,
+        entries,
+        prepSessions,
+        manualGroceries,
+        groceryItems,
+      }),
+    [entries, groceryItems, manualGroceries, prepSessions, weekNotes]
+  );
+  const serializedSavePayload = useMemo(
+    () => JSON.stringify(savePayload),
+    [savePayload]
   );
 
   /* ── Actions ── */
 
-  function assignTemplateToSlot(template: MealTemplateItem, date: string, slot: MealSlot) {
+  function assignTemplateToSlot(
+    template: MealTemplateItem,
+    date: string,
+    slot: MealSlot
+  ) {
     setEntries((prev) => {
-      const existing = prev.find((entry) => entry.date === date && entry.mealSlot === slot);
+      const existing = prev.find(
+        (entry) => entry.date === date && entry.mealSlot === slot
+      );
       const filtered = prev.filter(
         (entry) => !(entry.date === date && entry.mealSlot === slot)
       );
-
       return [
         ...filtered,
         {
@@ -1205,7 +1669,6 @@ export function MealPlannerPage() {
         },
       ];
     });
-    setIsDirty(true);
   }
 
   function handleAssignSlot(date: string, slot: MealSlot) {
@@ -1222,29 +1685,26 @@ export function MealPlannerPage() {
     setEntries((prev) =>
       prev.filter((e) => !(e.date === date && e.mealSlot === slot))
     );
-    setIsDirty(true);
   }
 
   function handleEditEntry(date: string, slot: MealSlot) {
     setEditingEntryTarget({ date, slot });
   }
 
-  function handleUpdateEntry(updates: { servings: number | null; note: string | null }) {
+  function handleUpdateEntry(updates: {
+    servings: number | null;
+    note: string | null;
+  }) {
     if (!editingEntryTarget) return;
-
     setEntries((prev) =>
       prev.map((entry) =>
-        entry.date === editingEntryTarget.date && entry.mealSlot === editingEntryTarget.slot
-          ? {
-              ...entry,
-              servings: updates.servings,
-              note: updates.note,
-            }
-          : entry,
-      ),
+        entry.date === editingEntryTarget.date &&
+        entry.mealSlot === editingEntryTarget.slot
+          ? { ...entry, servings: updates.servings, note: updates.note }
+          : entry
+      )
     );
     setEditingEntryTarget(null);
-    setIsDirty(true);
   }
 
   function handleChangeEntryRecipe() {
@@ -1258,12 +1718,10 @@ export function MealPlannerPage() {
       ...prev,
       { ...session, sortOrder: prev.length },
     ]);
-    setIsDirty(true);
   }
 
   function handleRemovePrep(index: number) {
     setPrepSessions((prev) => prev.filter((_, i) => i !== index));
-    setIsDirty(true);
   }
 
   function handleToggleGrocery(id: string) {
@@ -1273,7 +1731,6 @@ export function MealPlannerPage() {
     setManualGroceries((prev) =>
       prev.map((g) => (g.id === id ? { ...g, isChecked: !g.isChecked } : g))
     );
-    setIsDirty(true);
   }
 
   function handleAddManualGrocery(item: {
@@ -1304,59 +1761,15 @@ export function MealPlannerPage() {
         updatedAt: new Date().toISOString(),
       },
     ]);
-    setIsDirty(true);
   }
 
   function handleRemoveManualGrocery(id: string) {
     setManualGroceries((prev) => prev.filter((g) => g.id !== id));
     setGroceryItems((prev) => prev.filter((g) => g.id !== id));
-    setIsDirty(true);
   }
 
   function handleNotesChange(value: string) {
     setWeekNotes(value);
-    setIsDirty(true);
-  }
-
-  /* ── Save ── */
-
-  function handleSave() {
-    void saveMutation.mutateAsync({
-      notes: weekNotes || null,
-      entries: entries.map((e, i) => ({
-        id: e.id,
-        date: e.date,
-        mealSlot: e.mealSlot,
-        mealTemplateId: e.mealTemplateId,
-        servings: e.servings,
-        note: e.note,
-        sortOrder: i,
-      })),
-      prepSessions: prepSessions.map((p, i) => ({
-        id: p.id,
-        scheduledForDate: p.scheduledForDate,
-        title: p.title,
-        notes: p.notes,
-        sortOrder: i,
-      })),
-      manualGroceryItems: manualGroceries.map((g, i) => ({
-        id: g.id?.startsWith("manual-") ? undefined : g.id,
-        name: g.name,
-        quantity: g.quantity,
-        unit: g.unit,
-        section: g.section,
-        note: g.note,
-        isChecked: g.isChecked,
-        sortOrder: i,
-      })),
-      plannedGroceryItems: groceryItems
-        .filter((g) => g.sourceType === "planned")
-        .map((g) => ({
-          name: g.name,
-          unit: g.unit,
-          isChecked: g.isChecked,
-        })),
-    });
   }
 
   /* ── Week navigation ── */
@@ -1364,25 +1777,69 @@ export function MealPlannerPage() {
   function goToPreviousWeek() {
     setWeekStart(shiftWeek(weekStart, -1));
   }
-
   function goToNextWeek() {
     setWeekStart(shiftWeek(weekStart, 1));
   }
-
   function goToCurrentWeek() {
     setWeekStart(getWeekStartDate(today));
   }
 
   const isCurrentWeek = weekStart === getWeekStartDate(today);
 
-  /* ── Summary stats ── */
+  /* ── Computed ── */
   const summary = weekQuery.data?.summary;
   const mealCount = entries.length;
   const prepCount = prepSessions.length;
   const groceryCount = groceryItems.length;
   const editingEntry = editingEntryTarget
-    ? entryMap.get(`${editingEntryTarget.date}:${editingEntryTarget.slot}`)
+    ? entryMap.get(
+        `${editingEntryTarget.date}:${editingEntryTarget.slot}`
+      )
     : undefined;
+  const isDragActive = activeDragTemplate !== null;
+
+  useEffect(() => {
+    const className = "mp-dragging-cursor";
+    document.body.classList.toggle(className, isDragActive);
+
+    return () => {
+      document.body.classList.remove(className);
+    };
+  }, [isDragActive]);
+
+  useEffect(() => {
+    if (!hasHydratedWeekRef.current) {
+      return;
+    }
+
+    if (serializedSavePayload === lastSavedPayloadRef.current) {
+      lastAttemptedPayloadRef.current = serializedSavePayload;
+      return;
+    }
+
+    if (
+      saveMutation.isPending ||
+      serializedSavePayload === lastAttemptedPayloadRef.current
+    ) {
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      const payloadSnapshot = serializedSavePayload;
+      lastAttemptedPayloadRef.current = payloadSnapshot;
+
+      void saveMutation
+        .mutateAsync(savePayload)
+        .then(() => {
+          lastSavedPayloadRef.current = payloadSnapshot;
+        })
+        .catch(() => {});
+    }, MEAL_PLAN_AUTOSAVE_DELAY_MS);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [saveMutation, saveMutation.isPending, savePayload, serializedSavePayload]);
 
   /* ── Render ── */
 
@@ -1402,181 +1859,205 @@ export function MealPlannerPage() {
     return (
       <div className="mp-page">
         <HealthSubNav />
-        <PageErrorState
+        <PageLoadingState
           title="Meal planner could not load"
-          message="There was an issue loading your meal plan. Please try again."
-          onRetry={() => weekQuery.refetch()}
+          description="There was an issue loading your meal plan. Please try again."
         />
       </div>
     );
   }
 
   return (
-    <div className="mp-page">
-      <HealthSubNav />
+    <DndContext
+      sensors={sensors}
+      collisionDetection={pointerWithin}
+      onDragStart={handleDragStart}
+      onDragCancel={handleDragCancel}
+      onDragEnd={handleDragEnd}
+    >
+      <div className="mp-page">
+        <HealthSubNav />
 
-      {/* ── Week Header ── */}
-      <header className="mp-header">
-        <div className="mp-header__top">
-          <div className="mp-header__nav">
-            <button
-              type="button"
-              className="mp-header__arrow"
-              onClick={goToPreviousWeek}
-              aria-label="Previous week"
-            >
-              &#8249;
-            </button>
-            <h1 className="mp-header__range">
-              {formatWeekRange(weekStart, weekEnd)}
-            </h1>
-            <button
-              type="button"
-              className="mp-header__arrow"
-              onClick={goToNextWeek}
-              aria-label="Next week"
-            >
-              &#8250;
-            </button>
-            {!isCurrentWeek && (
+        {/* ── Week Header ── */}
+        <header className="mp-header">
+          <div className="mp-header__top">
+            <div className="mp-header__nav">
               <button
                 type="button"
-                className="mp-header__today-btn"
-                onClick={goToCurrentWeek}
+                className="mp-header__arrow"
+                onClick={goToPreviousWeek}
+                aria-label="Previous week"
               >
-                This week
+                &#8249;
               </button>
-            )}
-          </div>
-          <div className="mp-header__actions">
-            {isDirty && (
-              <span className="mp-header__dirty-indicator">Unsaved changes</span>
-            )}
-            <button
-              type="button"
-              className="button button--primary button--small"
-              onClick={handleSave}
-              disabled={saveMutation.isPending || !isDirty}
-            >
-              {saveMutation.isPending ? "Saving..." : "Save plan"}
-            </button>
-          </div>
-        </div>
-        <div className="mp-header__stats">
-          <span className="mp-header__stat">
-            <span className="mp-header__stat-value">{mealCount}</span>
-            <span className="mp-header__stat-label">meals</span>
-          </span>
-          <span className="mp-header__stat-divider" />
-          <span className="mp-header__stat">
-            <span className="mp-header__stat-value">{prepCount}</span>
-            <span className="mp-header__stat-label">prep sessions</span>
-          </span>
-          <span className="mp-header__stat-divider" />
-          <span className="mp-header__stat">
-            <span className="mp-header__stat-value">{groceryCount}</span>
-            <span className="mp-header__stat-label">grocery items</span>
-          </span>
-          {summary && summary.totalPlannedMeals > 0 && (
-            <>
-              <span className="mp-header__stat-divider" />
-              <span className="mp-header__stat">
-                <span className="mp-header__stat-value">
-                  {Math.round((summary.loggedPlannedMeals / summary.totalPlannedMeals) * 100)}%
+              <h1 className="mp-header__range">
+                {formatWeekRange(weekStart, weekEnd)}
+              </h1>
+              <button
+                type="button"
+                className="mp-header__arrow"
+                onClick={goToNextWeek}
+                aria-label="Next week"
+              >
+                &#8250;
+              </button>
+              {!isCurrentWeek && (
+                <button
+                  type="button"
+                  className="mp-header__today-btn"
+                  onClick={goToCurrentWeek}
+                >
+                  This week
+                </button>
+              )}
+            </div>
+            <div className="mp-header__meta">
+              <div className="mp-header__stats">
+                <span className="mp-header__stat">
+                  <span className="mp-header__stat-value">{mealCount}</span>
+                  <span className="mp-header__stat-label">meals</span>
                 </span>
-                <span className="mp-header__stat-label">executed</span>
-              </span>
-            </>
-          )}
-        </div>
-      </header>
+                <span className="mp-header__stat-divider" />
+                <span className="mp-header__stat">
+                  <span className="mp-header__stat-value">{prepCount}</span>
+                  <span className="mp-header__stat-label">prep sessions</span>
+                </span>
+                <span className="mp-header__stat-divider" />
+                <span className="mp-header__stat">
+                  <span className="mp-header__stat-value">{groceryCount}</span>
+                  <span className="mp-header__stat-label">grocery items</span>
+                </span>
+                {summary && summary.totalPlannedMeals > 0 && (
+                  <>
+                    <span className="mp-header__stat-divider" />
+                    <span className="mp-header__stat">
+                      <span className="mp-header__stat-value">
+                        {Math.round(
+                          (summary.loggedPlannedMeals /
+                            summary.totalPlannedMeals) *
+                            100
+                        )}
+                        %
+                      </span>
+                      <span className="mp-header__stat-label">executed</span>
+                    </span>
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
+        </header>
 
-      {/* ── Weekly Planning Board ── */}
-      <section className="mp-board" aria-label="Weekly meal plan">
-        <div className="mp-board__slot-labels">
-          <span className="mp-board__slot-label-spacer" />
-          {MEAL_SLOTS.map((slot) => (
-            <span key={slot} className="mp-board__slot-label">
-              {SLOT_ICONS[slot]}
-            </span>
-          ))}
-        </div>
-        <div className="mp-board__grid">
-          {weekDates.map((date) => (
-            <DayColumn
-              key={date}
-              date={date}
-              isToday={date === today}
-              entries={getEntriesForDay(date)}
-              onAssign={handleAssignSlot}
-              onEdit={handleEditEntry}
-              onRemove={handleRemoveEntry}
-            />
-          ))}
-        </div>
-      </section>
+        {/* ── Weekly Calendar (full width) ── */}
+        <section
+          className={`mp-calendar${isDragActive ? " mp-calendar--drag-active" : ""}`}
+          aria-label="Weekly meal plan"
+        >
+          <div className="mp-board__grid">
+            {weekDates.map((date) => (
+              <DayColumn
+                key={date}
+                date={date}
+                isToday={date === today}
+                entries={getEntriesForDay(date)}
+                isDragActive={isDragActive}
+                onAssign={handleAssignSlot}
+                onEdit={handleEditEntry}
+                onRemove={handleRemoveEntry}
+              />
+            ))}
+          </div>
+        </section>
 
-      {/* ── Secondary Panels ── */}
-      <div className="mp-panels">
-        <PrepPanel
-          sessions={prepSessions}
-          weekDates={weekDates}
-          onAdd={handleAddPrep}
-          onRemove={handleRemovePrep}
-        />
-        <GroceryPanel
-          items={groceryItems}
-          onToggle={handleToggleGrocery}
-          onAddManual={handleAddManualGrocery}
-          onRemoveManual={handleRemoveManualGrocery}
-        />
-      </div>
-
-      <div className="mp-panels">
-        <WeekNotesPanel notes={weekNotes} onChange={handleNotesChange} />
-        <TemplateLibrary
+        {/* ── Recipe Library Bar ── */}
+        <RecipeLibraryBar
           templates={templates}
-          onCreateRecipe={() => setRecipeComposerState({ mode: "create" })}
-          onEditRecipe={(template) => setRecipeComposerState({ mode: "edit", template })}
+          isDragActive={isDragActive}
+          onCreateRecipe={() =>
+            setRecipeComposerState({ mode: "create" })
+          }
+          onEditRecipe={(template) =>
+            setRecipeComposerState({ mode: "edit", template })
+          }
         />
-      </div>
 
-      {/* ── Template Picker Overlay ── */}
-      {pickerTarget && (
-        <TemplatePicker
-          templates={templates}
-          onSelect={handleTemplateSelected}
-          onClose={() => setPickerTarget(null)}
-          onCreateNew={() => {
-            const target = pickerTarget;
-            setPickerTarget(null);
-            setRecipeComposerState({ mode: "create", target });
-          }}
-        />
-      )}
-      {editingEntry && (
-        <PlannedEntryEditor
-          entry={editingEntry}
-          onSave={handleUpdateEntry}
-          onChangeRecipe={handleChangeEntryRecipe}
-          onClose={() => setEditingEntryTarget(null)}
-        />
-      )}
-      {recipeComposerState && (
-        <RecipeComposer
-          mode={recipeComposerState.mode}
-          initialTemplate={recipeComposerState.mode === "edit" ? recipeComposerState.template : undefined}
-          onSaved={(template) => {
-            void templatesQuery.refetch();
-            void weekQuery.refetch();
-            if (recipeComposerState.mode === "create" && recipeComposerState.target) {
-              assignTemplateToSlot(template, recipeComposerState.target.date, recipeComposerState.target.slot);
+        {/* ── Bottom Panels ── */}
+        <div className="mp-bottom-panels">
+          <PrepPanel
+            sessions={prepSessions}
+            weekDates={weekDates}
+            onAdd={handleAddPrep}
+            onRemove={handleRemovePrep}
+          />
+          <GroceryPanel
+            items={groceryItems}
+            onToggle={handleToggleGrocery}
+            onAddManual={handleAddManualGrocery}
+            onRemoveManual={handleRemoveManualGrocery}
+          />
+          <WeekNotesPanel notes={weekNotes} onChange={handleNotesChange} />
+        </div>
+
+        {/* ── Overlays ── */}
+        {pickerTarget && (
+          <TemplatePicker
+            templates={templates}
+            onSelect={handleTemplateSelected}
+            onClose={() => setPickerTarget(null)}
+            onCreateNew={() => {
+              const target = pickerTarget;
+              setPickerTarget(null);
+              setRecipeComposerState({ mode: "create", target });
+            }}
+          />
+        )}
+        {editingEntry && (
+          <PlannedEntryEditor
+            entry={editingEntry}
+            onSave={handleUpdateEntry}
+            onChangeRecipe={handleChangeEntryRecipe}
+            onClose={() => setEditingEntryTarget(null)}
+          />
+        )}
+        {recipeComposerState && (
+          <RecipeComposer
+            mode={recipeComposerState.mode}
+            initialTemplate={
+              recipeComposerState.mode === "edit"
+                ? recipeComposerState.template
+                : undefined
             }
-            setRecipeComposerState(null);
-          }}
-          onCancel={() => setRecipeComposerState(null)}
-        />
+            onSaved={(template) => {
+              void templatesQuery.refetch();
+              void weekQuery.refetch();
+              if (
+                recipeComposerState.mode === "create" &&
+                recipeComposerState.target
+              ) {
+                assignTemplateToSlot(
+                  template,
+                  recipeComposerState.target.date,
+                  recipeComposerState.target.slot
+                );
+              }
+              setRecipeComposerState(null);
+            }}
+            onCancel={() => setRecipeComposerState(null)}
+          />
+        )}
+      </div>
+
+      {createPortal(
+        <DragOverlay
+          dropAnimation={null}
+          modifiers={[snapRecipeOverlayToCursor]}
+        >
+          {activeDragTemplate ? (
+            <RecipeDragOverlay template={activeDragTemplate} />
+          ) : null}
+        </DragOverlay>,
+        document.body
       )}
-    </div>
+    </DndContext>
   );
 }

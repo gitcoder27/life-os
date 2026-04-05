@@ -117,6 +117,7 @@ export type {
   HealthTimelineItem,
   MealPlanEntryItem,
   MealPlanGroceryItem,
+  SaveMealPlanWeekPayload,
   MealPlanWeekResponse,
   MealPrepSessionItem,
   MealTemplateIngredient,
