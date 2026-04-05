@@ -617,7 +617,7 @@ export function GoalsPlanWorkspace({
   onCancelChildForm: () => void;
   createIsPending: boolean;
 }) {
-  const [planView, setPlanView] = useState<PlanSubview>("outline");
+  const [planView, setPlanView] = useState<PlanSubview>("graph");
   const [isGraphExpanded, setIsGraphExpanded] = useState(false);
   const [isGraphInspectorVisible, setIsGraphInspectorVisible] = useState(true);
   const [isGraphFocusMode, setIsGraphFocusMode] = useState(false);
@@ -1431,6 +1431,13 @@ export function GoalsPlanWorkspace({
       {/* Subview toggle */}
       <div className="ghq-plan-subview">
         <button
+          className={`ghq-plan-subview__btn ghq-plan-subview__btn--graph${planView === "graph" ? " ghq-plan-subview__btn--active" : ""}`}
+          type="button"
+          onClick={() => setPlanView("graph")}
+        >
+          Graph
+        </button>
+        <button
           className={`ghq-plan-subview__btn${planView === "outline" ? " ghq-plan-subview__btn--active" : ""}`}
           type="button"
           onClick={() => {
@@ -1439,13 +1446,6 @@ export function GoalsPlanWorkspace({
           }}
         >
           Outline
-        </button>
-        <button
-          className={`ghq-plan-subview__btn ghq-plan-subview__btn--graph${planView === "graph" ? " ghq-plan-subview__btn--active" : ""}`}
-          type="button"
-          onClick={() => setPlanView("graph")}
-        >
-          Graph
         </button>
       </div>
 
