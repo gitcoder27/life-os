@@ -4,6 +4,7 @@ This folder holds the active operating docs for running and supporting Life OS.
 
 Current docs:
 
+- `application-gap-analysis-2026-04-07.md`: cross-app review of the current design, workflow, and systems gaps, with emphasis on finance and workflow coherence
 - `production-deployment.md`: the full production deployment guide
 - `production-deployment-quick-reference.md`: the short deployment checklist
 - `postgres-backup-strategy.md`: backup recommendation and recovery baseline for the PostgreSQL database

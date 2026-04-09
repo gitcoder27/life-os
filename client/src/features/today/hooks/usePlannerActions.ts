@@ -42,7 +42,7 @@ export function usePlannerActions(date: string) {
     endsAt: string;
     taskIds?: string[];
   }) {
-    createBlock.mutate(payload);
+    return createBlock.mutateAsync(payload);
   }
 
   function editBlock(

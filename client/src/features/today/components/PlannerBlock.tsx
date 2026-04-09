@@ -77,6 +77,7 @@ export function PlannerBlock({
   readOnly,
   isPending,
   activeUnplannedTaskId,
+  editRequestKey,
 }: {
   block: DayPlannerBlockItem;
   existingBlocks: DayPlannerBlockItem[];
@@ -114,6 +115,7 @@ export function PlannerBlock({
   readOnly: boolean;
   isPending: boolean;
   activeUnplannedTaskId: string | null;
+  editRequestKey?: string | null;
 }) {
   const [editing, setEditing] = useState(false);
   const [editTitle, setEditTitle] = useState(block.title ?? "");
@@ -303,6 +305,16 @@ export function PlannerBlock({
       setResizeDraft(null);
     }
   }, [block.endsAt]);
+
+  useEffect(() => {
+    if (!editRequestKey || readOnly) {
+      return;
+    }
+
+    setShowAddTaskPicker(false);
+    setShowOverflow(false);
+    setEditing(true);
+  }, [editRequestKey, readOnly]);
 
   useEffect(() => {
     if (!showOverflow) {

@@ -226,11 +226,7 @@
   /* On mobile, blocks still use absolute positioning */
 
   .planner-gap {
-    padding: 0.8rem 0.85rem;
-  }
-
-  .planner-gap__copy {
-    max-width: none;
+    border-radius: var(--r-xs);
   }
 
   .planner-block__header {
@@ -260,8 +256,19 @@
     color: var(--text-secondary);
   }
 
-  .planner-gap__add-btn {
+  .planner-gap__slot {
+    padding: 0 0.2rem;
+  }
+
+  .planner-gap__slot-pill {
     opacity: 1;
+    transform: none;
+    max-width: min(100%, 11rem);
+  }
+
+  .planner-gap__slot-time {
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   .execute-focus__header,
@@ -349,7 +356,8 @@
     color: var(--text-secondary);
   }
 
-  .planner-gap__add-btn {
+  .planner-gap__slot-pill {
     opacity: 1;
+    transform: none;
   }
 }

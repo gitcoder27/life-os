@@ -12,8 +12,10 @@ import {
 import { createPortal } from "react-dom";
 import { formatTimeLabel, type DayPlannerBlockItem, type TaskItem } from "../../../shared/lib/api";
 import {
+  buildPlannerDateTime,
   addMinutes,
   getDuplicateBlockWindow,
+  getLocalTimezoneOffset,
   getPlannerBlockDate,
   getPlannerBlockTimezoneOffset,
   getSplitBlockTime,
@@ -55,6 +57,21 @@ type PlannerFormDraft = {
   endTime?: string;
 };
 
+type PlannerQuickEditRequest = {
+  blockId: string;
+  key: string;
+};
+
+type PlannerGapQuickAddSlot = {
+  id: string;
+  startTime: string;
+  endTime: string;
+  durationLabel: string;
+  label: string;
+  topPercent: number;
+  heightPercent: number;
+};
+
 export function DayPlanner({
   date,
   todayDate,
@@ -92,6 +109,7 @@ export function DayPlanner({
   const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null);
   const [suppressedTaskId, setSuppressedTaskId] = useState<string | null>(null);
   const [disableDropAnimation, setDisableDropAnimation] = useState(false);
+  const [quickEditRequest, setQuickEditRequest] = useState<PlannerQuickEditRequest | null>(null);
   const nowLineRef = useRef<HTMLDivElement | null>(null);
   const timelineTrackRef = useRef<HTMLDivElement | null>(null);
   const hasAutoCenteredNowRef = useRef(false);
@@ -134,6 +152,7 @@ export function DayPlanner({
 
   useEffect(() => {
     hasAutoCenteredNowRef.current = false;
+    setQuickEditRequest(null);
   }, [date]);
 
   useEffect(() => {
@@ -220,6 +239,28 @@ export function DayPlanner({
       key: nextDraftKey(),
       ...initialValues,
     });
+  }
+
+  async function handleQuickAddBlock(slot: PlannerGapQuickAddSlot) {
+    if (!isEditable || Boolean(formDraft)) {
+      return;
+    }
+
+    try {
+      const timezoneOffset = getLocalTimezoneOffset();
+      const response = await actions.addBlock({
+        title: null,
+        startsAt: buildPlannerDateTime(date, slot.startTime, timezoneOffset),
+        endsAt: buildPlannerDateTime(date, slot.endTime, timezoneOffset),
+      });
+
+      setQuickEditRequest({
+        blockId: response.plannerBlock.id,
+        key: nextDraftKey(),
+      });
+    } catch {
+      return;
+    }
   }
 
   function handleMoveBlock(index: number, direction: -1 | 1) {
@@ -586,7 +627,7 @@ export function DayPlanner({
                 existingBlocks={orderedBlocks}
                 initialValues={formDraft}
                 onSubmit={(payload) => {
-                  actions.addBlock(payload);
+                  void actions.addBlock(payload);
                   setFormDraft(null);
                 }}
                 onCancel={() => setFormDraft(null)}
@@ -637,16 +678,11 @@ export function DayPlanner({
                     segment.kind === "gap" ? (
                       <PlannerGapCard
                         key={segment.id}
+                        date={date}
                         segment={segment}
-                        isEditable={isEditable}
-                        onAddBlock={() =>
-                          openBlockForm({
-                            startTime: minutesToTimeString(segment.startMinutes),
-                            endTime: minutesToTimeString(
-                              Math.min(segment.startMinutes + 60, segment.endMinutes),
-                            ),
-                          })
-                        }
+                        isEditable={isEditable && !Boolean(formDraft)}
+                        isPending={actions.isPending}
+                        onQuickAddBlock={handleQuickAddBlock}
                       />
                     ) : (
                       <PlannerBlock
@@ -695,6 +731,9 @@ export function DayPlanner({
                         readOnly={!isEditable}
                         isPending={actions.isPending}
                         activeUnplannedTaskId={draggedTaskId}
+                        editRequestKey={
+                          quickEditRequest?.blockId === segment.block!.id ? quickEditRequest.key : null
+                        }
                       />
                     ),
                   )}
@@ -739,14 +778,25 @@ export function DayPlanner({
 }
 
 function PlannerGapCard({
+  date,
   segment,
   isEditable,
-  onAddBlock,
+  isPending,
+  onQuickAddBlock,
 }: {
+  date: string;
   segment: PlannerTimelineSegment;
   isEditable: boolean;
-  onAddBlock: () => void;
+  isPending: boolean;
+  onQuickAddBlock: (slot: PlannerGapQuickAddSlot) => void | Promise<void>;
 }) {
+  const timezoneOffset = getLocalTimezoneOffset();
+  const slots = useMemo(() => buildPlannerGapQuickAddSlots(segment, date, timezoneOffset), [
+    date,
+    segment,
+    timezoneOffset,
+  ]);
+
   return (
     <div
       className={`planner-gap planner-gap--${segment.status}`}
@@ -758,28 +808,68 @@ function PlannerGapCard({
         right: 0,
       }}
     >
-      <div className="planner-gap__info">
-        <span className="planner-gap__time">
-          {formatTimeLabel(segment.startsAt)} – {formatTimeLabel(segment.endsAt)}
-        </span>
-        <span className="planner-gap__duration">{segment.durationLabel}</span>
-        {segment.status === "current" ? (
-          <span className="planner-gap__free-label">Free now</span>
-        ) : null}
-      </div>
-      {isEditable && segment.status !== "past" ? (
-        <button
-          className="planner-gap__add-btn"
-          type="button"
-          onClick={onAddBlock}
-          aria-label="Add block here"
+      {slots.map((slot) => (
+        <div
+          key={slot.id}
+          className="planner-gap__slot"
+          style={{
+            top: `${slot.topPercent}%`,
+            height: `${slot.heightPercent}%`,
+          }}
         >
-          <span className="planner-gap__add-icon">+</span>
-          <span className="planner-gap__add-label">Add block</span>
-        </button>
-      ) : null}
+          <button
+            className="planner-gap__slot-button"
+            type="button"
+            onClick={() => {
+              void onQuickAddBlock(slot);
+            }}
+            disabled={!isEditable || isPending || segment.status === "past"}
+            aria-label={`Add block from ${slot.label}`}
+          >
+            <span className="planner-gap__slot-pill">
+              <span className="planner-gap__slot-icon">+</span>
+              <span className="planner-gap__slot-time">{slot.label}</span>
+              {slot.durationLabel !== "1h" ? (
+                <span className="planner-gap__slot-duration">{slot.durationLabel}</span>
+              ) : null}
+            </span>
+          </button>
+        </div>
+      ))}
     </div>
   );
+}
+
+function buildPlannerGapQuickAddSlots(
+  segment: PlannerTimelineSegment,
+  date: string,
+  timezoneOffset: string,
+): PlannerGapQuickAddSlot[] {
+  const totalDuration = Math.max(segment.durationMinutes, 1);
+  const slots: PlannerGapQuickAddSlot[] = [];
+  let slotStartMinutes = segment.startMinutes;
+
+  while (slotStartMinutes < segment.endMinutes) {
+    const slotEndMinutes = Math.min(slotStartMinutes + 60, segment.endMinutes);
+    const startTime = minutesToTimeString(slotStartMinutes);
+    const endTime = minutesToTimeString(slotEndMinutes);
+    const startsAt = buildPlannerDateTime(date, startTime, timezoneOffset);
+    const endsAt = buildPlannerDateTime(date, endTime, timezoneOffset);
+
+    slots.push({
+      id: `${segment.id}-${slotStartMinutes}`,
+      startTime,
+      endTime,
+      durationLabel: formatDurationMinutes(slotEndMinutes - slotStartMinutes),
+      label: `${formatTimeLabel(startsAt)} – ${formatTimeLabel(endsAt)}`,
+      topPercent: ((slotStartMinutes - segment.startMinutes) / totalDuration) * 100,
+      heightPercent: ((slotEndMinutes - slotStartMinutes) / totalDuration) * 100,
+    });
+
+    slotStartMinutes = slotEndMinutes;
+  }
+
+  return slots;
 }
 
 function PlannerTaskDragPreview({ task }: { task: TaskItem }) {

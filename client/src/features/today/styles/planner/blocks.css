@@ -903,111 +903,115 @@
 .planner-gap {
   /* position: absolute set via inline style */
   z-index: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.75rem;
-  padding: 0.35rem 0.5rem;
-  border-radius: var(--r-xs);
-  opacity: 0;
-  transition: opacity var(--dur) var(--ease), background var(--dur) var(--ease);
-}
-
-.planner-gap:hover {
-  opacity: 1;
-  background: rgba(255,255,255,0.015);
+  border-radius: var(--r-sm);
+  overflow: hidden;
 }
 
 .planner-gap--current {
-  opacity: 1;
-  background: transparent;
+  background: linear-gradient(180deg, rgba(217,153,58,0.025), transparent 60%);
 }
 
 .planner-gap--past {
+  opacity: 0.55;
+}
+
+.planner-gap__slot {
+  position: absolute;
+  left: 0;
+  right: 0;
+  padding: 0 0.35rem;
+}
+
+.planner-gap__slot::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0.85rem;
+  right: 0.85rem;
+  border-top: 1px dashed rgba(255,255,255,0.05);
+}
+
+.planner-gap__slot:first-child::before {
   opacity: 0;
-  pointer-events: none;
 }
 
-.planner-gap__info {
-  display: flex;
-  align-items: center;
-  gap: 0.35rem;
-}
-
-.planner-gap__time {
-  font-size: var(--fs-micro);
-  font-weight: 500;
-  color: rgba(190, 180, 160, 0.75);
-  white-space: nowrap;
-  opacity: 0.65;
-  font-variant-numeric: tabular-nums;
-}
-
-.planner-gap__duration {
-  font-size: var(--fs-micro);
-  color: rgba(190, 180, 160, 0.65);
-  font-weight: 600;
-}
-
-.planner-gap__free-label {
-  font-size: 0.6rem;
-  font-weight: 700;
-  color: var(--accent);
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  opacity: 0.8;
-}
-
-/* Add block button */
-.planner-gap__add-btn {
+.planner-gap__slot-button {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 0.25rem;
-  height: 1.4rem;
-  padding: 0 0.5rem;
-  border-radius: var(--r-pill);
-  border: 1px solid rgba(255,255,255,0.06);
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: none;
+  border-radius: var(--r-xs);
   background: transparent;
-  color: var(--text-tertiary);
-  font-size: 0.7rem;
   cursor: pointer;
-  transition: all var(--dur) var(--ease);
-  overflow: hidden;
+  transition: background var(--dur-fast) var(--ease);
+}
+
+.planner-gap__slot-button:hover,
+.planner-gap__slot-button:focus-visible {
+  background: rgba(255,255,255,0.02);
+}
+
+.planner-gap__slot-button:focus-visible {
+  outline: none;
+}
+
+.planner-gap__slot-button:disabled {
+  cursor: default;
+  pointer-events: none;
+}
+
+.planner-gap__slot-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.28rem 0.62rem;
+  border-radius: var(--r-pill);
+  border: 1px solid rgba(255,255,255,0.08);
+  background: rgba(20,18,14,0.84);
+  box-shadow: 0 16px 36px rgba(0,0,0,0.24);
+  color: rgba(236, 230, 220, 0.92);
   white-space: nowrap;
-}
-
-.planner-gap__add-btn:hover {
-  border-color: rgba(217,153,58,0.3);
-  color: var(--accent);
-  background: rgba(217,153,58,0.06);
-}
-
-.planner-gap__add-icon {
-  flex-shrink: 0;
-  font-size: 0.65rem;
-}
-
-.planner-gap__add-label {
-  max-width: 0;
-  overflow: hidden;
   opacity: 0;
-  margin-left: 0;
-  font-size: var(--fs-micro);
-  font-weight: 600;
-  transition: max-width var(--dur) var(--ease),
-              opacity var(--dur) var(--ease),
-              margin-left var(--dur) var(--ease);
+  transform: translateY(4px) scale(0.98);
+  transition:
+    opacity var(--dur-fast) var(--ease),
+    transform var(--dur-fast) var(--ease),
+    border-color var(--dur-fast) var(--ease),
+    background var(--dur-fast) var(--ease);
+  pointer-events: none;
 }
 
-.planner-gap__add-btn:hover .planner-gap__add-label {
-  max-width: 6rem;
+.planner-gap__slot-button:hover .planner-gap__slot-pill,
+.planner-gap__slot-button:focus-visible .planner-gap__slot-pill {
   opacity: 1;
-  margin-left: 0.15rem;
+  transform: translateY(0) scale(1);
+  border-color: rgba(217,153,58,0.26);
+  background: rgba(28,24,18,0.92);
 }
 
-.planner-gap--current .planner-gap__add-btn {
-  border-color: rgba(217,153,58,0.2);
+.planner-gap__slot-icon {
+  font-size: 0.72rem;
   color: var(--accent);
-  opacity: 0.9;
+  flex-shrink: 0;
+}
+
+.planner-gap__slot-time {
+  font-size: var(--fs-micro);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  font-variant-numeric: tabular-nums;
+}
+
+.planner-gap__slot-duration {
+  font-size: 0.58rem;
+  font-weight: 600;
+  color: rgba(190, 180, 160, 0.78);
+}
+
+.planner-gap--current .planner-gap__slot-button:hover,
+.planner-gap--current .planner-gap__slot-button:focus-visible {
+  background: rgba(217,153,58,0.035);
 }

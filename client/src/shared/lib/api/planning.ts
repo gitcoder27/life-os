@@ -367,7 +367,33 @@ export const useCreatePlannerBlockMutation = (date: string) => {
         body: payload,
       }),
     meta: { errorMessage: "Block creation failed." },
-    onSuccess: () => invalidateCoreData(queryClient, date),
+    onSuccess: (response) => {
+      queryClient.setQueryData<DayPlanResponse>(
+        queryKeys.dayPlan(date),
+        (current) => {
+          if (!current) {
+            return current;
+          }
+
+          const existingIndex = current.plannerBlocks.findIndex(
+            (block) => block.id === response.plannerBlock.id,
+          );
+          const plannerBlocks =
+            existingIndex >= 0
+              ? current.plannerBlocks.map((block) =>
+                  block.id === response.plannerBlock.id ? response.plannerBlock : block,
+                )
+              : [...current.plannerBlocks, response.plannerBlock];
+
+          return {
+            ...current,
+            generatedAt: response.generatedAt,
+            plannerBlocks,
+          };
+        },
+      );
+      invalidateCoreData(queryClient, date);
+    },
   });
 };
 
