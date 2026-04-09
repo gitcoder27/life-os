@@ -113,6 +113,7 @@ export function DayPlanner({
   const nowLineRef = useRef<HTMLDivElement | null>(null);
   const timelineTrackRef = useRef<HTMLDivElement | null>(null);
   const hasAutoCenteredNowRef = useRef(false);
+  const lastAutoCenteredDateRef = useRef(date);
   const [guideWidth, setGuideWidth] = useState<number | null>(null);
 
   const orderedBlocks = useMemo(() => sortPlannerBlocksByTime(blocks), [blocks]);
@@ -151,6 +152,11 @@ export function DayPlanner({
   }, [visibleHours]);
 
   useEffect(() => {
+    if (lastAutoCenteredDateRef.current === date) {
+      return;
+    }
+
+    lastAutoCenteredDateRef.current = date;
     hasAutoCenteredNowRef.current = false;
     setQuickEditRequest(null);
   }, [date]);
