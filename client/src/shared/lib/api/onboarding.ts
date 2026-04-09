@@ -76,6 +76,14 @@ type OnboardingCompleteRequest = {
     mealSlot?: "breakfast" | "lunch" | "dinner" | "snack" | null;
     description: string;
   }>;
+  firstRecurringBill?: {
+    title: string;
+    categoryName?: string | null;
+    defaultAmountMinor?: number | null;
+    cadence: "weekly" | "monthly";
+    nextDueOn: string;
+    remindDaysBefore?: number;
+  } | null;
   firstWeekStartDate: string;
   firstMonthStartDate?: string;
 };

@@ -210,7 +210,7 @@ export function SettingsPage() {
               <div>
                 <div className="settings-onboarding-cta__title">Starter setup available</div>
                 <div className="settings-onboarding-cta__copy">
-                  Import habits, routines, goals, and tracking defaults in one pass — or keep configuring things manually.
+                  Import habits, routines, goals, and baseline tracking defaults in one pass. Domain setup still lives on each domain page.
                 </div>
               </div>
             </div>
@@ -336,6 +336,20 @@ export function SettingsPage() {
                 }
               />
             </label>
+          </div>
+        </SectionCard>
+
+        <SectionCard title="Domain setup" subtitle="Global preferences stay here. Finance structure stays on Finance.">
+          <div className="button-row button-row--wrap">
+            <span className="support-copy">
+              Manage finance categories and recurring bills from the Finance page so the setup stays close to the workflow it powers.
+            </span>
+            <Link className="button button--ghost button--small" to="/finance?manage=categories">
+              Manage categories
+            </Link>
+            <Link className="button button--ghost button--small" to="/finance?manage=recurring">
+              Manage recurring bills
+            </Link>
           </div>
         </SectionCard>
 

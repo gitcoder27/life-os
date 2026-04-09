@@ -1207,57 +1207,182 @@
   background: linear-gradient(90deg, #c9554c, #d96b63);
 }
 
-/* ── Rules & Setup (collapsible) ──────────── */
+/* ── Finance Setup Entry ───────────────────── */
 
-.finance__setup {
-  border-top: 1px solid var(--border);
-  padding-top: 1.25rem;
-  animation: fadeIn var(--dur-slow) var(--ease);
+.finance__setup-entry {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+  padding: 1rem 1.05rem;
+  border-radius: var(--r);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.028), rgba(255, 255, 255, 0.018));
 }
 
-.setup-toggle {
+.setup-entry__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.setup-entry__intro {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  min-width: 0;
+}
+
+.setup-entry__title {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+}
+
+.setup-entry__copy {
+  margin: 0;
+  max-width: 48rem;
+  font-size: var(--fs-small);
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.setup-entry__actions {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
-  padding: 0.5rem 0;
-  background: none;
-  border: none;
-  color: var(--text-secondary);
-  font-size: var(--fs-small);
-  font-weight: 650;
-  cursor: pointer;
-  transition: color var(--dur) var(--ease);
-  width: 100%;
+  gap: 0.45rem;
+  flex-wrap: wrap;
+  justify-content: flex-end;
 }
 
-.setup-toggle:hover {
+.setup-entry__control-group {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.2rem;
+  border-radius: var(--r-sm);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.setup-entry__control {
+  min-width: 8.8rem;
+  padding: 0.42rem 0.8rem;
+  border: none;
+  border-radius: var(--r-xs);
+  background: transparent;
+  color: var(--text-tertiary);
+  font-size: var(--fs-small);
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--dur) var(--ease);
+}
+
+.setup-entry__control:hover {
+  color: var(--text-secondary);
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.setup-entry__control--active {
+  background: rgba(217, 153, 58, 0.14);
+  color: var(--text);
+  box-shadow: inset 0 0 0 1px rgba(217, 153, 58, 0.26);
+}
+
+.setup-entry__dismiss {
+  padding: 0.42rem 0.72rem;
+  border: 1px solid transparent;
+  border-radius: var(--r-xs);
+  background: transparent;
+  color: var(--text-tertiary);
+  font-size: var(--fs-small);
+  cursor: pointer;
+  transition: all var(--dur) var(--ease);
+}
+
+.setup-entry__dismiss:hover {
+  color: var(--text-secondary);
+  border-color: rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.setup-entry__stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.setup-entry__stat {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-width: 0;
+  padding: 0.8rem 0.85rem;
+  border-radius: var(--r-sm);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.018);
+}
+
+.setup-entry__stat-label {
+  font-size: var(--fs-micro);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+}
+
+.setup-entry__stat-value {
+  font-family: var(--font-display);
+  font-size: 1.05rem;
+  font-weight: 500;
+  letter-spacing: -0.02em;
   color: var(--text);
 }
 
-.setup-toggle__chevron {
+.setup-entry__stat-copy {
   font-size: var(--fs-micro);
-  transition: transform var(--dur) var(--ease);
   color: var(--text-tertiary);
+  line-height: 1.45;
 }
 
-.setup-toggle__chevron--open {
-  transform: rotate(90deg);
-}
-
-.setup-toggle__count {
-  font-size: var(--fs-micro);
-  font-weight: 700;
-  padding: 0.05rem 0.35rem;
-  border-radius: var(--r-xs);
-  background: rgba(255, 255, 255, 0.06);
-  color: var(--text-tertiary);
+.setup-entry__notice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.75rem 0.85rem;
+  border-radius: var(--r-sm);
+  border: 1px solid rgba(217, 153, 58, 0.16);
+  background: rgba(217, 153, 58, 0.05);
+  color: var(--text-secondary);
 }
 
 .setup-content {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 1rem;
-  margin-top: 0.75rem;
+}
+
+.finance-manage-card {
+  border-color: rgba(255, 255, 255, 0.06);
+  box-shadow: none;
+}
+
+.finance-manage-card--focused {
+  border-color: rgba(217, 153, 58, 0.28);
+  background:
+    linear-gradient(180deg, rgba(217, 153, 58, 0.075), rgba(255, 255, 255, 0.02));
+  box-shadow:
+    0 0 0 1px rgba(217, 153, 58, 0.16),
+    0 12px 28px rgba(0, 0, 0, 0.18);
+}
+
+.finance-manage-card--focused .section-card__title {
+  color: var(--text);
+}
+
+.finance-manage-card--focused .section-card__subtitle {
+  color: var(--accent-bright);
 }
 
 /* ── Inline Expense Form (redesigned) ────── */
@@ -1320,6 +1445,10 @@
     flex-direction: column;
   }
 
+  .setup-entry__stats {
+    grid-template-columns: 1fr;
+  }
+
   .setup-content {
     grid-template-columns: 1fr;
   }
@@ -1338,6 +1467,25 @@
   .finance__header-actions {
     width: 100%;
     justify-content: space-between;
+  }
+
+  .setup-entry__header,
+  .setup-entry__notice {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .setup-entry__actions {
+    justify-content: flex-start;
+  }
+
+  .setup-entry__control-group {
+    width: 100%;
+  }
+
+  .setup-entry__control {
+    flex: 1;
+    min-width: 0;
   }
 
   .money-now {

@@ -66,6 +66,15 @@ const onboardingMealTemplateSchema = z.object({
   description: z.string().min(1).max(500),
 });
 
+const onboardingRecurringBillSchema = z.object({
+  title: z.string().min(1).max(200),
+  categoryName: z.string().max(120).nullable().optional(),
+  defaultAmountMinor: z.number().int().positive().nullable().optional(),
+  cadence: z.enum(["weekly", "monthly"]),
+  nextDueOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  remindDaysBefore: z.number().int().min(0).max(365).optional(),
+});
+
 function normalizeClockTime(value: string | null | undefined) {
   if (value === null || value === undefined) {
     return value;
@@ -132,6 +141,7 @@ const onboardingCompletionSchema = z.object({
   routines: z.array(onboardingRoutineSchema).max(6),
   expenseCategories: z.array(onboardingExpenseCategorySchema).max(20),
   mealTemplates: z.array(onboardingMealTemplateSchema).max(20).optional(),
+  firstRecurringBill: onboardingRecurringBillSchema.nullable().optional(),
   firstWeekStartDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   firstMonthStartDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
 });
@@ -184,6 +194,10 @@ function getOnboardingDefaults() {
       { name: "Default dinner", mealSlot: "dinner" as const },
     ],
   };
+}
+
+function normalizeNameKey(value: string | null | undefined) {
+  return value?.trim().toLowerCase() ?? "";
 }
 
 export const registerOnboardingRoutes: FastifyPluginAsync = async (app) => {
@@ -379,6 +393,50 @@ export const registerOnboardingRoutes: FastifyPluginAsync = async (app) => {
         });
       }
 
+      if (payload.firstRecurringBill) {
+        const availableCategories = await tx.expenseCategory.findMany({
+          where: {
+            userId: user.id,
+            archivedAt: null,
+          },
+          select: {
+            id: true,
+            name: true,
+          },
+        });
+        const categoryId =
+          availableCategories.find(
+            (category) => normalizeNameKey(category.name) === normalizeNameKey(payload.firstRecurringBill?.categoryName),
+          )?.id ?? null;
+        const recurringExpense = await tx.recurringExpenseTemplate.create({
+          data: {
+            userId: user.id,
+            title: payload.firstRecurringBill.title.trim(),
+            expenseCategoryId: categoryId,
+            defaultAmountMinor: payload.firstRecurringBill.defaultAmountMinor ?? null,
+            currencyCode: payload.currencyCode,
+            recurrenceRule: payload.firstRecurringBill.cadence,
+            nextDueOn: parseIsoDate(payload.firstRecurringBill.nextDueOn as IsoDateString),
+            remindDaysBefore: payload.firstRecurringBill.remindDaysBefore ?? 3,
+            status: "ACTIVE",
+          },
+        });
+
+        await tx.adminItem.create({
+          data: {
+            userId: user.id,
+            title: payload.firstRecurringBill.title.trim(),
+            itemType: "BILL",
+            dueOn: parseIsoDate(payload.firstRecurringBill.nextDueOn as IsoDateString),
+            status: "PENDING",
+            recurringExpenseTemplateId: recurringExpense.id,
+            expenseCategoryId: categoryId,
+            amountMinor: payload.firstRecurringBill.defaultAmountMinor ?? null,
+            note: "Auto-generated from onboarding recurring bill setup",
+          },
+        });
+      }
+
       await tx.mealTemplate.deleteMany({
         where: {
           userId: user.id,
@@ -448,6 +506,7 @@ export const registerOnboardingRoutes: FastifyPluginAsync = async (app) => {
           routineCount: payload.routines.length,
           expenseCategoryCount: payload.expenseCategories.length,
           mealTemplateCount: payload.mealTemplates?.length ?? 0,
+          recurringBillSeeded: Boolean(payload.firstRecurringBill),
         },
       },
     });

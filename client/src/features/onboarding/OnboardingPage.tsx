@@ -5,6 +5,7 @@ import {
   getMonthStartDate,
   getTodayDate,
   getWeekStartDate,
+  parseAmountToMinor,
   splitEntries,
   useCompleteOnboardingMutation,
   useOnboardingStateQuery,
@@ -34,6 +35,10 @@ const onboardingSteps = [
     summary: "Set the defaults for water and expense tracking.",
   },
   {
+    title: "First recurring bill",
+    summary: "Optionally seed the first recurring bill so Finance starts with durable setup.",
+  },
+  {
     title: "Review rhythm",
     summary: "Choose when your review loop should reset and check in.",
   },
@@ -50,6 +55,12 @@ type OnboardingValues = {
   habits: string;
   waterTargetMl: string;
   expenseCategories: string;
+  firstRecurringBillEnabled: boolean;
+  firstRecurringBillTitle: string;
+  firstRecurringBillAmount: string;
+  firstRecurringBillDueOn: string;
+  firstRecurringBillCadence: "weekly" | "monthly";
+  firstRecurringBillCategory: string;
   dailyReviewTime: string;
   weekStartsOn: string;
 };
@@ -132,6 +143,12 @@ export function OnboardingPage() {
     habits: "",
     waterTargetMl: "",
     expenseCategories: "",
+    firstRecurringBillEnabled: false,
+    firstRecurringBillTitle: "",
+    firstRecurringBillAmount: "",
+    firstRecurringBillDueOn: "",
+    firstRecurringBillCadence: "monthly",
+    firstRecurringBillCategory: "",
     dailyReviewTime: "",
     weekStartsOn: "",
   });
@@ -139,6 +156,11 @@ export function OnboardingPage() {
   const defaults = onboardingQuery.data?.defaults;
   const timezone = defaults?.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone ?? "UTC";
   const mutationFieldErrors = readFieldErrors(completeOnboardingMutation.error);
+  const financeCategoryOptions = (
+    splitEntries(values.expenseCategories).length
+      ? splitEntries(values.expenseCategories)
+      : defaults?.expenseCategorySuggestions?.slice(0, 6) ?? ["Groceries", "Dining", "Transport", "Utilities"]
+  ).map((name) => name.trim()).filter(Boolean);
 
   function setValue<Key extends keyof OnboardingValues>(key: Key, value: OnboardingValues[Key]) {
     setValues((current) => ({
@@ -211,11 +233,18 @@ export function OnboardingPage() {
       targetPerDay: 1,
     }));
 
-    const expenseCategories = (
-      splitEntries(values.expenseCategories).length
-        ? splitEntries(values.expenseCategories)
-        : defaults?.expenseCategorySuggestions?.slice(0, 6) ?? ["Groceries", "Dining", "Transport", "Utilities"]
-    ).map((name) => ({ name }));
+    const expenseCategories = financeCategoryOptions.map((name) => ({ name }));
+    const firstRecurringBillTitle = values.firstRecurringBillTitle.trim();
+    const firstRecurringBill = values.firstRecurringBillEnabled && firstRecurringBillTitle && values.firstRecurringBillDueOn
+      ? {
+          title: firstRecurringBillTitle,
+          categoryName: values.firstRecurringBillCategory || financeCategoryOptions[0] || null,
+          defaultAmountMinor: parseAmountToMinor(values.firstRecurringBillAmount) ?? null,
+          cadence: values.firstRecurringBillCadence,
+          nextDueOn: values.firstRecurringBillDueOn,
+          remindDaysBefore: 3,
+        }
+      : null;
 
     const reviewTime = normalizeTimeInput(values.dailyReviewTime);
     const parsedWeekStartsOn = Number.parseInt(values.weekStartsOn || String(defaults?.weekStartsOn ?? 1), 10);
@@ -239,6 +268,7 @@ export function OnboardingPage() {
           mealSlot: meal.mealSlot,
           description: meal.name,
         })) ?? [],
+      firstRecurringBill,
       firstWeekStartDate: getWeekStartDate(today),
       firstMonthStartDate: getMonthStartDate(today),
     });
@@ -288,7 +318,7 @@ export function OnboardingPage() {
           <div className="page-eyebrow" style={{ marginBottom: "0.4rem" }}>How this works</div>
           <div style={{ color: "var(--text-secondary)", lineHeight: 1.6 }}>
             This optional wizard sets up your habits, routines, goals, and tracking defaults in one pass.
-            You can skip this entirely — everything here can be configured later from Settings and the Habits page.
+            You can skip this entirely. Settings owns app preferences. Finance setup lives on Finance, and habits setup lives on Habits.
             If you leave routines, habits, or categories blank, the app will create sensible starter defaults.
           </div>
         </div>
@@ -443,6 +473,104 @@ export function OnboardingPage() {
           ) : null}
 
           {activeStep === 5 ? (
+            <div className="stack-form" style={{ paddingTop: "0.5rem" }}>
+              <div
+                style={{
+                  padding: "0.95rem 1rem",
+                  borderRadius: "var(--r-md)",
+                  border: "1px solid var(--line, rgba(255,255,255,0.08))",
+                  background: "rgba(255,255,255,0.03)",
+                  display: "grid",
+                  gap: "0.75rem",
+                }}
+              >
+                <label style={{ display: "flex", alignItems: "center", gap: "0.65rem", color: "var(--text-primary)" }}>
+                  <input
+                    type="checkbox"
+                    checked={values.firstRecurringBillEnabled}
+                    onChange={(event) => {
+                      const enabled = event.target.checked;
+                      setValues((current) => ({
+                        ...current,
+                        firstRecurringBillEnabled: enabled,
+                        firstRecurringBillDueOn: enabled && !current.firstRecurringBillDueOn ? today : current.firstRecurringBillDueOn,
+                        firstRecurringBillCategory:
+                          enabled && !current.firstRecurringBillCategory
+                            ? (financeCategoryOptions[0] ?? "")
+                            : current.firstRecurringBillCategory,
+                      }));
+                    }}
+                  />
+                  <span>Seed my first recurring bill</span>
+                </label>
+                <p className="list__subtle" style={{ margin: 0 }}>
+                  This is optional. It gives Finance an obvious recurring structure from day one, and you can manage it later from the Finance page.
+                </p>
+              </div>
+
+              {values.firstRecurringBillEnabled ? (
+                <>
+                  <label className="field">
+                    <span>Bill title</span>
+                    <input
+                      placeholder="Rent, internet, insurance"
+                      type="text"
+                      value={values.firstRecurringBillTitle}
+                      onChange={(event) => setValue("firstRecurringBillTitle", event.target.value)}
+                    />
+                  </label>
+                  <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap" }}>
+                    <label className="field" style={{ flex: "1 1 11rem" }}>
+                      <span>Expected amount</span>
+                      <input
+                        placeholder="0.00"
+                        inputMode="decimal"
+                        type="text"
+                        value={values.firstRecurringBillAmount}
+                        onChange={(event) => setValue("firstRecurringBillAmount", event.target.value)}
+                      />
+                    </label>
+                    <label className="field" style={{ flex: "1 1 11rem" }}>
+                      <span>Next due date</span>
+                      <input
+                        type="date"
+                        value={values.firstRecurringBillDueOn}
+                        onChange={(event) => setValue("firstRecurringBillDueOn", event.target.value)}
+                      />
+                    </label>
+                  </div>
+                  <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap" }}>
+                    <label className="field" style={{ flex: "1 1 11rem" }}>
+                      <span>Cadence</span>
+                      <select
+                        value={values.firstRecurringBillCadence}
+                        onChange={(event) => setValue("firstRecurringBillCadence", event.target.value as "weekly" | "monthly")}
+                      >
+                        <option value="monthly">Monthly</option>
+                        <option value="weekly">Weekly</option>
+                      </select>
+                    </label>
+                    <label className="field" style={{ flex: "1 1 11rem" }}>
+                      <span>Category</span>
+                      <select
+                        value={values.firstRecurringBillCategory}
+                        onChange={(event) => setValue("firstRecurringBillCategory", event.target.value)}
+                      >
+                        <option value="">Choose later</option>
+                        {financeCategoryOptions.map((category) => (
+                          <option key={category} value={category}>
+                            {category}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  </div>
+                </>
+              ) : null}
+            </div>
+          ) : null}
+
+          {activeStep === 6 ? (
             <div className="stack-form" style={{ paddingTop: "0.5rem" }}>
               <label className="field">
                 <span>Daily review time</span>

@@ -93,6 +93,7 @@ type BillLinkForm = {
 };
 
 type ActivityFilter = "all" | "uncategorized" | "recurring" | "today";
+type ManageFocus = "categories" | "recurring";
 
 const emptyCategory: CategoryForm = { name: "", color: "" };
 const emptyRecurring: RecurringForm = {
@@ -187,6 +188,7 @@ export function FinancePage() {
 
   // Setup panel
   const [showSetup, setShowSetup] = useState(false);
+  const [setupFocus, setSetupFocus] = useState<ManageFocus>("recurring");
 
   // Reschedule state
   const [reschedulingBillId, setReschedulingBillId] = useState<string | null>(null);
@@ -206,6 +208,7 @@ export function FinancePage() {
   const monthPlan = financeData?.monthPlan?.monthPlan ?? null;
   const insights = financeData?.insights?.insights ?? null;
   const activeCategories = categories.filter((c) => !c.archivedAt);
+  const activeRecurringExpenses = recurringExpenses.filter((item) => item.status !== "archived");
   const categoryMap = new Map(categories.map((c) => [c.id, c]));
   const currency = summary?.currencyCode ?? "USD";
 
@@ -288,6 +291,13 @@ export function FinancePage() {
       });
     });
   }, [currentMonth, homeDestination, location.key]);
+
+  useEffect(() => {
+    const manageTarget = new URLSearchParams(location.search).get("manage");
+    if (manageTarget === "categories" || manageTarget === "recurring") {
+      openManagement(manageTarget);
+    }
+  }, [location.search]);
 
   if (financeQuery.isLoading && !financeQuery.data) {
     return (
@@ -472,6 +482,11 @@ export function FinancePage() {
       expenseId,
       expenseCategoryId: expenseCategoryId || null,
     });
+  }
+
+  function openManagement(focus: ManageFocus) {
+    setSetupFocus(focus);
+    setShowSetup(true);
   }
 
   // Category CRUD
@@ -697,9 +712,9 @@ export function FinancePage() {
           <button
             className="button button--ghost button--small"
             type="button"
-            onClick={() => setShowSetup(true)}
+            onClick={() => openManagement("recurring")}
           >
-            Manage recurring bills
+            Manage finance setup
           </button>
         </div>
       </div>
@@ -771,6 +786,310 @@ export function FinancePage() {
           </div>
         )}
       </div>
+
+      <section className="finance__setup-entry" aria-labelledby="finance-setup-title">
+        <div className="setup-entry__header">
+          <div className="setup-entry__intro">
+            <span className="section-label">Finance setup</span>
+            <h2 className="setup-entry__title" id="finance-setup-title">Keep recurring structure easy to find</h2>
+            <p className="setup-entry__copy">
+              Categories shape spend review. Recurring bills keep the bill lane populated. Manage both from here whenever Finance needs tuning.
+            </p>
+          </div>
+          <div className="setup-entry__actions">
+            <div className="setup-entry__control-group" role="tablist" aria-label="Finance setup panels">
+              <button
+                className={`setup-entry__control${showSetup && setupFocus === "categories" ? " setup-entry__control--active" : ""}`}
+                type="button"
+                role="tab"
+                aria-selected={showSetup && setupFocus === "categories"}
+                onClick={() => openManagement("categories")}
+              >
+                Categories
+              </button>
+              <button
+                className={`setup-entry__control${showSetup && setupFocus === "recurring" ? " setup-entry__control--active" : ""}`}
+                type="button"
+                role="tab"
+                aria-selected={showSetup && setupFocus === "recurring"}
+                onClick={() => openManagement("recurring")}
+              >
+                Recurring bills
+              </button>
+            </div>
+            {showSetup ? (
+              <button
+                className="setup-entry__dismiss"
+                type="button"
+                onClick={() => setShowSetup(false)}
+              >
+                Hide
+              </button>
+            ) : null}
+          </div>
+        </div>
+
+        <div className="setup-entry__stats">
+          <div className="setup-entry__stat">
+            <span className="setup-entry__stat-label">Categories</span>
+            <span className="setup-entry__stat-value">
+              {activeCategories.length > 0 ? `${activeCategories.length} active` : "Needs setup"}
+            </span>
+            <span className="setup-entry__stat-copy">
+              {activeCategories.length > 0
+                ? "Keep spend review and quick recategorization clean."
+                : "Create the first category so spending has a durable home."}
+            </span>
+          </div>
+          <div className="setup-entry__stat">
+            <span className="setup-entry__stat-label">Recurring bills</span>
+            <span className="setup-entry__stat-value">
+              {activeRecurringExpenses.length > 0 ? `${activeRecurringExpenses.length} active` : "Needs setup"}
+            </span>
+            <span className="setup-entry__stat-copy">
+              {activeRecurringExpenses.length > 0
+                ? "Templates keep due dates visible without manual re-entry."
+                : "Add the first recurring bill so Finance can surface upcoming obligations."}
+            </span>
+          </div>
+          <div className="setup-entry__stat">
+            <span className="setup-entry__stat-label">Bill workflow</span>
+            <span className="setup-entry__stat-value">
+              {unreconciledBills.length > 0 ? `${unreconciledBills.length} need cleanup` : "Ready"}
+            </span>
+            <span className="setup-entry__stat-copy">
+              {unreconciledBills.length > 0
+                ? "A few paid bills still need linked expense records."
+                : "Daily bill work and long-lived setup are separated cleanly."}
+            </span>
+          </div>
+        </div>
+
+        {(activeCategories.length === 0 || activeRecurringExpenses.length === 0) ? (
+          <div className="setup-entry__notice">
+            <span>
+              {activeCategories.length === 0 && activeRecurringExpenses.length === 0
+                ? "Finance is missing both categories and recurring bills."
+                : activeCategories.length === 0
+                  ? "Finance needs at least one category."
+                  : "Finance needs its first recurring bill."}
+            </span>
+            <button
+              className="button button--ghost button--small"
+              type="button"
+              onClick={() => openManagement(activeCategories.length === 0 ? "categories" : "recurring")}
+            >
+              Start setup
+            </button>
+          </div>
+        ) : null}
+
+        {showSetup ? (
+          <div className="setup-content">
+            <SectionCard
+              title="Categories"
+              subtitle={`${activeCategories.length} active`}
+              className={setupFocus === "categories" ? "finance-manage-card finance-manage-card--focused" : "finance-manage-card"}
+            >
+              <div id="finance-manage-categories">
+                {financeQuery.data.sectionErrors.categories ? (
+                  <InlineErrorState
+                    message={financeQuery.data.sectionErrors.categories.message}
+                    onRetry={() => void financeQuery.refetch()}
+                  />
+                ) : showCatForm ? (
+                  <div className="stack-form">
+                    <label className="field">
+                      <span>Name</span>
+                      <input type="text" value={catForm.name} placeholder="Category name" onChange={(e) => setCatForm((p) => ({ ...p, name: e.target.value }))} />
+                    </label>
+                    <label className="field">
+                      <span>Color (optional hex)</span>
+                      <input type="text" value={catForm.color} placeholder="#d9993a" maxLength={7} onChange={(e) => setCatForm((p) => ({ ...p, color: e.target.value }))} />
+                    </label>
+                    <div className="button-row">
+                      <button className="button button--primary button--small" type="button" onClick={() => void handleCategorySave()} disabled={createCategoryMutation.isPending || updateCategoryMutation.isPending}>
+                        {editingCatId ? "Update" : "Create"}
+                      </button>
+                      <button className="button button--ghost button--small" type="button" onClick={() => { setShowCatForm(false); setEditingCatId(null); }}>Cancel</button>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    {activeCategories.length > 0 ? (
+                      <div className="category-grid">
+                        {activeCategories.map((cat) => (
+                          <div key={cat.id} className="category-card category-card--interactive">
+                            {cat.color && (
+                              <span className="category-card__swatch" style={{ background: cat.color }} />
+                            )}
+                            <span className="category-card__label">{cat.name}</span>
+                            <span className="category-card__amount">
+                              {formatMinorCurrency(
+                                summary?.categoryTotals.find((ct) => ct.expenseCategoryId === cat.id)?.totalAmountMinor ?? 0,
+                                currency,
+                              )}
+                            </span>
+                            <div className="button-row button-row--tight" style={{ marginTop: "0.3rem", justifyContent: "center" }}>
+                              <button className="button button--ghost button--small" type="button" onClick={() => openEditCategory(cat)}>Edit</button>
+                              <button className="button button--ghost button--small" type="button" onClick={() => void handleCategoryArchive(cat.id, true)}>Archive</button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <EmptyState
+                        title="No categories yet"
+                        description="Create the first category so bills and expenses have a stable structure."
+                        actionLabel="Add category"
+                        onAction={openCreateCategory}
+                      />
+                    )}
+                    {activeCategories.length > 0 ? (
+                      <button className="button button--ghost button--small" type="button" onClick={openCreateCategory} style={{ marginTop: "0.6rem" }}>
+                        Add category
+                      </button>
+                    ) : null}
+                  </>
+                )}
+              </div>
+            </SectionCard>
+
+            <SectionCard
+              title="Recurring bills"
+              subtitle={`${activeRecurringExpenses.length} active`}
+              className={setupFocus === "recurring" ? "finance-manage-card finance-manage-card--focused" : "finance-manage-card"}
+            >
+              <div id="finance-manage-recurring">
+                {financeQuery.data.sectionErrors.recurringExpenses ? (
+                  <InlineErrorState
+                    message={financeQuery.data.sectionErrors.recurringExpenses.message}
+                    onRetry={() => void financeQuery.refetch()}
+                  />
+                ) : showRecForm ? (
+                  <div className="stack-form">
+                    <label className="field">
+                      <span>Title</span>
+                      <input type="text" value={recForm.title} placeholder="e.g. Rent, Spotify" onChange={(e) => setRecForm((p) => ({ ...p, title: e.target.value }))} />
+                    </label>
+                    <label className="field">
+                      <span>Category</span>
+                      <select value={recForm.expenseCategoryId} onChange={(e) => setRecForm((p) => ({ ...p, expenseCategoryId: e.target.value }))}>
+                        <option value="">None</option>
+                        {activeCategories.map((c) => (
+                          <option key={c.id} value={c.id}>{c.name}</option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="field">
+                      <span>Default amount</span>
+                      <input type="text" value={recForm.defaultAmount} placeholder="0.00" onChange={(e) => setRecForm((p) => ({ ...p, defaultAmount: e.target.value }))} />
+                    </label>
+                    <div className="manage-form__section">
+                      <span className="manage-form__section-label">Recurrence</span>
+                      <RecurrenceEditor
+                        value={recForm.recurrenceInput}
+                        onChange={(rule) => setRecForm((p) => ({
+                          ...p,
+                          recurrenceInput: rule,
+                          recurrenceRule: formatLegacyFinanceRecurrenceRule(rule),
+                          nextDueOn: rule.startsOn,
+                        }))}
+                        context="finance"
+                        startsOn={recForm.nextDueOn || today}
+                      />
+                    </div>
+                    <label className="field">
+                      <span>Next due date</span>
+                      <input
+                        type="date"
+                        value={recForm.nextDueOn}
+                        onChange={(e) => setRecForm((p) => {
+                          const nextDueOn = e.target.value;
+                          const recurrenceInput = p.recurrenceInput
+                            ? { ...p.recurrenceInput, startsOn: nextDueOn }
+                            : nextDueOn
+                              ? getDefaultRecurrenceRule("finance", nextDueOn)
+                              : p.recurrenceInput;
+                          return {
+                            ...p,
+                            nextDueOn,
+                            recurrenceInput,
+                            recurrenceRule: recurrenceInput ? formatLegacyFinanceRecurrenceRule(recurrenceInput) : p.recurrenceRule,
+                          };
+                        })}
+                      />
+                    </label>
+                    <label className="field">
+                      <span>Remind days before</span>
+                      <input type="number" min={0} value={recForm.remindDaysBefore} onChange={(e) => setRecForm((p) => ({ ...p, remindDaysBefore: e.target.value }))} />
+                    </label>
+                    <div className="button-row">
+                      <button className="button button--primary button--small" type="button" onClick={() => void handleRecurringSave()} disabled={createRecurringMutation.isPending || updateRecurringMutation.isPending}>
+                        {editingRecId ? "Update" : "Create"}
+                      </button>
+                      <button className="button button--ghost button--small" type="button" onClick={() => { setShowRecForm(false); setEditingRecId(null); }}>Cancel</button>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    {activeRecurringExpenses.length > 0 ? (
+                      <div>
+                        {activeRecurringExpenses.map((item) => (
+                          <div key={item.id} className="expense-row expense-row--interactive">
+                            <div className="expense-row__info">
+                              <div className="expense-row__title">{item.title}</div>
+                              <div className="expense-row__meta">
+                                {isRecurring(item.recurrence) ? (
+                                  <span className="expense-row__recurrence">
+                                    <span className="recurrence-badge recurrence-badge--compact" title={formatFullRecurrenceSummary(item.recurrence!.rule)}>↻</span>
+                                    {" "}{formatFullRecurrenceSummary(item.recurrence!.rule)}
+                                    {" · "}
+                                  </span>
+                                ) : null}
+                                Due in {formatDueLabel(item.nextDueOn)} &middot;{" "}
+                                <span className={`tag ${item.status === "active" ? "tag--positive" : item.status === "paused" ? "tag--warning" : "tag--neutral"}`}>
+                                  {item.status}
+                                </span>
+                              </div>
+                            </div>
+                            <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                              <span className="expense-row__amount">
+                                {formatMinorCurrency(item.defaultAmountMinor, item.currencyCode)}
+                              </span>
+                              <button className="button button--ghost button--small" type="button" onClick={() => openEditRecurring(item)}>Edit</button>
+                              {item.status === "active" ? (
+                                <button className="button button--ghost button--small" type="button" onClick={() => void handleRecurringStatusChange(item.id, "paused")}>Pause</button>
+                              ) : item.status === "paused" ? (
+                                <button className="button button--ghost button--small" type="button" onClick={() => void handleRecurringStatusChange(item.id, "active")}>Resume</button>
+                              ) : null}
+                              {item.status !== "archived" && (
+                                <button className="button button--ghost button--small" type="button" onClick={() => void handleRecurringStatusChange(item.id, "archived")}>Archive</button>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <EmptyState
+                        title="No recurring bills yet"
+                        description="Recurring bills power the daily bill lane. Add the first one so Finance can surface future due dates automatically."
+                        actionLabel="Add recurring bill"
+                        onAction={openCreateRecurring}
+                      />
+                    )}
+                    {activeRecurringExpenses.length > 0 ? (
+                      <button className="button button--ghost button--small" type="button" onClick={openCreateRecurring} style={{ marginTop: "0.5rem" }}>
+                        Add recurring bill
+                      </button>
+                    ) : null}
+                  </>
+                )}
+              </div>
+            </SectionCard>
+          </div>
+        ) : null}
+      </section>
 
       {showBillForm && (
         <div className="inline-editor" style={{ animation: "slideUp 0.25s var(--ease) both" }}>
@@ -1178,7 +1497,9 @@ export function FinancePage() {
             ) : (
               <EmptyState
                 title="No bills yet"
-                description="Add a one-off bill or manage recurring bills to build your payment workflow."
+                description="Add a one-off bill or set up recurring bills so Finance can keep future obligations visible."
+                actionLabel={activeRecurringExpenses.length === 0 ? "Add recurring bill" : "Open finance setup"}
+                onAction={() => openManagement(activeRecurringExpenses.length === 0 ? "recurring" : "categories")}
               />
             )}
           </div>
@@ -1380,202 +1701,6 @@ export function FinancePage() {
         </div>
       </div>
 
-      {/* ── Rules & Setup (collapsed) ── */}
-      <div className="finance__setup">
-        <button
-          className="setup-toggle"
-          type="button"
-          onClick={() => setShowSetup(!showSetup)}
-        >
-          <span className={`setup-toggle__chevron${showSetup ? " setup-toggle__chevron--open" : ""}`}>&#9654;</span>
-          Rules & Setup
-          <span className="setup-toggle__count">
-            {recurringExpenses.filter((r) => r.status !== "archived").length + activeCategories.length}
-          </span>
-        </button>
-
-        {showSetup && (
-          <div className="setup-content">
-            {/* Categories */}
-            <SectionCard title="Categories" subtitle={`${activeCategories.length} active`}>
-              {financeQuery.data.sectionErrors.categories ? (
-                <InlineErrorState
-                  message={financeQuery.data.sectionErrors.categories.message}
-                  onRetry={() => void financeQuery.refetch()}
-                />
-              ) : showCatForm ? (
-                <div className="stack-form">
-                  <label className="field">
-                    <span>Name</span>
-                    <input type="text" value={catForm.name} placeholder="Category name" onChange={(e) => setCatForm((p) => ({ ...p, name: e.target.value }))} />
-                  </label>
-                  <label className="field">
-                    <span>Color (optional hex)</span>
-                    <input type="text" value={catForm.color} placeholder="#d9993a" maxLength={7} onChange={(e) => setCatForm((p) => ({ ...p, color: e.target.value }))} />
-                  </label>
-                  <div className="button-row">
-                    <button className="button button--primary button--small" type="button" onClick={() => void handleCategorySave()} disabled={createCategoryMutation.isPending || updateCategoryMutation.isPending}>
-                      {editingCatId ? "Update" : "Create"}
-                    </button>
-                    <button className="button button--ghost button--small" type="button" onClick={() => { setShowCatForm(false); setEditingCatId(null); }}>Cancel</button>
-                  </div>
-                </div>
-              ) : (
-                <>
-                  {activeCategories.length > 0 ? (
-                    <div className="category-grid">
-                      {activeCategories.map((cat) => (
-                        <div key={cat.id} className="category-card category-card--interactive">
-                          {cat.color && (
-                            <span className="category-card__swatch" style={{ background: cat.color }} />
-                          )}
-                          <span className="category-card__label">{cat.name}</span>
-                          <span className="category-card__amount">
-                            {formatMinorCurrency(
-                              summary?.categoryTotals.find((ct) => ct.expenseCategoryId === cat.id)?.totalAmountMinor ?? 0,
-                              currency,
-                            )}
-                          </span>
-                          <div className="button-row button-row--tight" style={{ marginTop: "0.3rem", justifyContent: "center" }}>
-                            <button className="button button--ghost button--small" type="button" onClick={() => openEditCategory(cat)}>Edit</button>
-                            <button className="button button--ghost button--small" type="button" onClick={() => void handleCategoryArchive(cat.id, true)}>Archive</button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <EmptyState title="No categories" description="Add your first expense category." />
-                  )}
-                  <button className="button button--ghost button--small" type="button" onClick={openCreateCategory} style={{ marginTop: "0.6rem" }}>
-                    Add category
-                  </button>
-                </>
-              )}
-            </SectionCard>
-
-            {/* Recurring bills */}
-            <SectionCard title="Recurring bills" subtitle={`${recurringExpenses.filter((r) => r.status !== "archived").length} active`}>
-              {financeQuery.data.sectionErrors.recurringExpenses ? (
-                <InlineErrorState
-                  message={financeQuery.data.sectionErrors.recurringExpenses.message}
-                  onRetry={() => void financeQuery.refetch()}
-                />
-              ) : showRecForm ? (
-                <div className="stack-form">
-                  <label className="field">
-                    <span>Title</span>
-                    <input type="text" value={recForm.title} placeholder="e.g. Rent, Spotify" onChange={(e) => setRecForm((p) => ({ ...p, title: e.target.value }))} />
-                  </label>
-                  <label className="field">
-                    <span>Category</span>
-                    <select value={recForm.expenseCategoryId} onChange={(e) => setRecForm((p) => ({ ...p, expenseCategoryId: e.target.value }))}>
-                      <option value="">None</option>
-                      {activeCategories.map((c) => (
-                        <option key={c.id} value={c.id}>{c.name}</option>
-                      ))}
-                    </select>
-                  </label>
-                  <label className="field">
-                    <span>Default amount</span>
-                    <input type="text" value={recForm.defaultAmount} placeholder="0.00" onChange={(e) => setRecForm((p) => ({ ...p, defaultAmount: e.target.value }))} />
-                  </label>
-                  <div className="manage-form__section">
-                    <span className="manage-form__section-label">Recurrence</span>
-                    <RecurrenceEditor
-                      value={recForm.recurrenceInput}
-                      onChange={(rule) => setRecForm((p) => ({
-                        ...p,
-                        recurrenceInput: rule,
-                        recurrenceRule: formatLegacyFinanceRecurrenceRule(rule),
-                        nextDueOn: rule.startsOn,
-                      }))}
-                      context="finance"
-                      startsOn={recForm.nextDueOn || today}
-                    />
-                  </div>
-                  <label className="field">
-                    <span>Next due date</span>
-                    <input
-                      type="date"
-                      value={recForm.nextDueOn}
-                      onChange={(e) => setRecForm((p) => {
-                        const nextDueOn = e.target.value;
-                        const recurrenceInput = p.recurrenceInput
-                          ? { ...p.recurrenceInput, startsOn: nextDueOn }
-                          : nextDueOn
-                            ? getDefaultRecurrenceRule("finance", nextDueOn)
-                            : p.recurrenceInput;
-                        return {
-                          ...p,
-                          nextDueOn,
-                          recurrenceInput,
-                          recurrenceRule: recurrenceInput ? formatLegacyFinanceRecurrenceRule(recurrenceInput) : p.recurrenceRule,
-                        };
-                      })}
-                    />
-                  </label>
-                  <label className="field">
-                    <span>Remind days before</span>
-                    <input type="number" min={0} value={recForm.remindDaysBefore} onChange={(e) => setRecForm((p) => ({ ...p, remindDaysBefore: e.target.value }))} />
-                  </label>
-                  <div className="button-row">
-                    <button className="button button--primary button--small" type="button" onClick={() => void handleRecurringSave()} disabled={createRecurringMutation.isPending || updateRecurringMutation.isPending}>
-                      {editingRecId ? "Update" : "Create"}
-                    </button>
-                    <button className="button button--ghost button--small" type="button" onClick={() => { setShowRecForm(false); setEditingRecId(null); }}>Cancel</button>
-                  </div>
-                </div>
-              ) : (
-                <>
-                  {recurringExpenses.length > 0 ? (
-                    <div>
-                      {recurringExpenses.map((item) => (
-                        <div key={item.id} className="expense-row expense-row--interactive">
-                          <div className="expense-row__info">
-                            <div className="expense-row__title">{item.title}</div>
-                            <div className="expense-row__meta">
-                              {isRecurring(item.recurrence) ? (
-                                <span className="expense-row__recurrence">
-                                  <span className="recurrence-badge recurrence-badge--compact" title={formatFullRecurrenceSummary(item.recurrence!.rule)}>↻</span>
-                                  {" "}{formatFullRecurrenceSummary(item.recurrence!.rule)}
-                                  {" · "}
-                                </span>
-                              ) : null}
-                              Due in {formatDueLabel(item.nextDueOn)} &middot;{" "}
-                              <span className={`tag ${item.status === "active" ? "tag--positive" : item.status === "paused" ? "tag--warning" : "tag--neutral"}`}>
-                                {item.status}
-                              </span>
-                            </div>
-                          </div>
-                          <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                            <span className="expense-row__amount">
-                              {formatMinorCurrency(item.defaultAmountMinor, item.currencyCode)}
-                            </span>
-                            <button className="button button--ghost button--small" type="button" onClick={() => openEditRecurring(item)}>Edit</button>
-                            {item.status === "active" ? (
-                              <button className="button button--ghost button--small" type="button" onClick={() => void handleRecurringStatusChange(item.id, "paused")}>Pause</button>
-                            ) : item.status === "paused" ? (
-                              <button className="button button--ghost button--small" type="button" onClick={() => void handleRecurringStatusChange(item.id, "active")}>Resume</button>
-                            ) : null}
-                            {item.status !== "archived" && (
-                              <button className="button button--ghost button--small" type="button" onClick={() => void handleRecurringStatusChange(item.id, "archived")}>Archive</button>
-                            )}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <EmptyState title="No recurring bills" description="Recurring expense templates have not been set up yet." />
-                  )}
-                  <button className="button button--ghost button--small" type="button" onClick={openCreateRecurring} style={{ marginTop: "0.5rem" }}>
-                    Add recurring bill
-                  </button>
-                </>
-              )}
-            </SectionCard>
-          </div>
-        )}
-      </div>
     </div>
   );
 }

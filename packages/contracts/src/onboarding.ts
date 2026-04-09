@@ -46,6 +46,15 @@ export interface OnboardingMealTemplateInput {
   description: string;
 }
 
+export interface OnboardingRecurringBillInput {
+  title: string;
+  categoryName?: string | null;
+  defaultAmountMinor?: number | null;
+  cadence: "weekly" | "monthly";
+  nextDueOn: IsoDateString;
+  remindDaysBefore?: number;
+}
+
 export interface OnboardingDefaults {
   timezone: string;
   currencyCode: string;
@@ -88,6 +97,7 @@ export interface OnboardingCompleteRequest {
   routines: OnboardingRoutineInput[];
   expenseCategories: OnboardingExpenseCategoryInput[];
   mealTemplates?: OnboardingMealTemplateInput[];
+  firstRecurringBill?: OnboardingRecurringBillInput | null;
   firstWeekStartDate: IsoDateString;
   firstMonthStartDate?: IsoDateString;
 }
