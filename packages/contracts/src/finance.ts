@@ -243,6 +243,10 @@ export interface RescheduleFinanceBillRequest {
   dueOn: IsoDateString;
 }
 
+export interface LinkFinanceBillExpenseRequest {
+  expenseId: EntityId;
+}
+
 export interface FinanceBillMutationResponse extends ApiMeta {
   bill: FinanceBillItem;
   expense?: ExpenseItem | null;

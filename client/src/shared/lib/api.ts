@@ -131,6 +131,7 @@ export {
   useDeleteExpenseMutation,
   useDismissBillMutation,
   useFinanceDataQuery,
+  useLinkBillExpenseMutation,
   useMarkBillPaidMutation,
   usePayAndLogBillMutation,
   useRescheduleBillMutation,

@@ -18,6 +18,7 @@ import type {
   FinanceMonthPlanResponse,
   IsoDateString,
   IsoMonthString,
+  LinkFinanceBillExpenseRequest,
   RecurrenceInput,
   RecurringExpenseMutationResponse,
   RescheduleFinanceBillRequest,
@@ -214,6 +215,10 @@ const completeFinanceBillWithExpenseSchema = z.object({
 
 const rescheduleFinanceBillSchema = z.object({
   dueOn: isoDateSchema,
+});
+
+const linkFinanceBillExpenseSchema = z.object({
+  expenseId: z.string().uuid(),
 });
 
 const updateExpenseSchema = z
@@ -1695,6 +1700,45 @@ export const registerFinanceRoutes: FastifyPluginAsync = async (app) => {
           };
         }
 
+        if (!bill.linkedExpense && bill.completionMode === "MARK_PAID_ONLY") {
+          const expense = await tx.expense.create({
+            data: {
+              userId: user.id,
+              expenseCategoryId,
+              billId: bill.id,
+              amountMinor,
+              currencyCode,
+              spentOn: paidAt,
+              description: payload.description ?? bill.title,
+              source: bill.recurringExpenseTemplateId ? "TEMPLATE" : "MANUAL",
+              recurringExpenseTemplateId: bill.recurringExpenseTemplateId ?? null,
+            },
+          });
+
+          const updatedBill = await tx.adminItem.update({
+            where: {
+              id: bill.id,
+            },
+            data: {
+              completedAt: paidAt,
+              amountMinor: bill.amountMinor ?? amountMinor,
+              expenseCategoryId,
+            },
+            include: {
+              linkedExpense: {
+                select: {
+                  id: true,
+                },
+              },
+            },
+          });
+
+          return {
+            bill: updatedBill,
+            expense,
+          };
+        }
+
         throw new AppError({
           statusCode: 409,
           code: "CONFLICT",
@@ -1745,6 +1789,126 @@ export const registerFinanceRoutes: FastifyPluginAsync = async (app) => {
     const response: FinanceBillMutationResponse = withGeneratedAt({
       bill: serializeFinanceBill(result.bill),
       expense: result.expense ? serializeExpense(result.expense) : null,
+    });
+
+    return reply.send(response);
+  });
+
+  app.post("/bills/:billId/link-expense", async (request, reply) => {
+    const user = requireAuthenticatedUser(request);
+    const { billId } = request.params as { billId: string };
+    const payload = parseOrThrow(
+      linkFinanceBillExpenseSchema,
+      request.body as LinkFinanceBillExpenseRequest,
+    );
+
+    const result = await app.prisma.$transaction(async (tx) => {
+      const [bill, expense] = await Promise.all([
+        tx.adminItem.findFirst({
+          where: {
+            id: billId,
+            userId: user.id,
+            itemType: "BILL",
+          },
+          include: {
+            linkedExpense: {
+              select: {
+                id: true,
+              },
+            },
+          },
+        }),
+        tx.expense.findFirst({
+          where: {
+            id: payload.expenseId,
+            userId: user.id,
+          },
+        }),
+      ]);
+
+      if (!bill) {
+        throw new AppError({
+          statusCode: 404,
+          code: "NOT_FOUND",
+          message: "Bill not found",
+        });
+      }
+
+      if (!expense) {
+        throw new AppError({
+          statusCode: 404,
+          code: "NOT_FOUND",
+          message: "Expense not found",
+        });
+      }
+
+      if (bill.status !== "DONE") {
+        throw new AppError({
+          statusCode: 409,
+          code: "CONFLICT",
+          message: "Only paid bills can link an expense",
+        });
+      }
+
+      if (bill.linkedExpense?.id === expense.id) {
+        return {
+          bill,
+          expense,
+        };
+      }
+
+      if (bill.linkedExpense) {
+        throw new AppError({
+          statusCode: 409,
+          code: "CONFLICT",
+          message: "Bill already has a linked expense",
+        });
+      }
+
+      if (expense.billId && expense.billId !== bill.id) {
+        throw new AppError({
+          statusCode: 409,
+          code: "CONFLICT",
+          message: "Expense is already linked to another bill",
+        });
+      }
+
+      const updatedExpense = await tx.expense.update({
+        where: {
+          id: expense.id,
+        },
+        data: {
+          billId: bill.id,
+          recurringExpenseTemplateId: expense.recurringExpenseTemplateId ?? bill.recurringExpenseTemplateId ?? null,
+        },
+      });
+
+      const updatedBill = await tx.adminItem.update({
+        where: {
+          id: bill.id,
+        },
+        data: {
+          expenseCategoryId: bill.expenseCategoryId ?? updatedExpense.expenseCategoryId,
+          amountMinor: bill.amountMinor ?? updatedExpense.amountMinor,
+        },
+        include: {
+          linkedExpense: {
+            select: {
+              id: true,
+            },
+          },
+        },
+      });
+
+      return {
+        bill: updatedBill,
+        expense: updatedExpense,
+      };
+    });
+
+    const response: FinanceBillMutationResponse = withGeneratedAt({
+      bill: serializeFinanceBill(result.bill),
+      expense: serializeExpense(result.expense),
     });
 
     return reply.send(response);

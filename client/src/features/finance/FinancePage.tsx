@@ -23,6 +23,7 @@ import {
   useDeleteExpenseMutation,
   useDismissBillMutation,
   useFinanceDataQuery,
+  useLinkBillExpenseMutation,
   useMarkBillPaidMutation,
   usePayAndLogBillMutation,
   useRescheduleBillMutation,
@@ -87,6 +88,10 @@ type BillPaymentForm = {
   description: string;
 };
 
+type BillLinkForm = {
+  expenseId: string;
+};
+
 type ActivityFilter = "all" | "uncategorized" | "recurring" | "today";
 
 const emptyCategory: CategoryForm = { name: "", color: "" };
@@ -133,6 +138,7 @@ export function FinancePage() {
   const updateExpenseMutation = useUpdateExpenseMutation(today);
   const deleteExpenseMutation = useDeleteExpenseMutation(today);
   const payAndLogBillMutation = usePayAndLogBillMutation(today);
+  const linkBillExpenseMutation = useLinkBillExpenseMutation(today);
   const markBillPaidMutation = useMarkBillPaidMutation(today);
   const rescheduleBillMutation = useRescheduleBillMutation(today);
   const dismissBillMutation = useDismissBillMutation(today);
@@ -187,6 +193,8 @@ export function FinancePage() {
   const [rescheduleDate, setRescheduleDate] = useState("");
   const [payingBillId, setPayingBillId] = useState<string | null>(null);
   const [billPaymentForm, setBillPaymentForm] = useState<BillPaymentForm>(emptyBillPayment(today));
+  const [linkingBillId, setLinkingBillId] = useState<string | null>(null);
+  const [billLinkForm, setBillLinkForm] = useState<BillLinkForm>({ expenseId: "" });
 
   const financeData = financeQuery.data;
   const homeDestination = readHomeDestinationState(location.state);
@@ -373,7 +381,7 @@ export function FinancePage() {
       : null;
 
     setBillPaymentForm({
-      paidOn: today,
+      paidOn: bill.paidAt?.slice(0, 10) ?? today,
       amount: bill.amountMinor != null
         ? String(bill.amountMinor / 100)
         : recurringTemplate?.defaultAmountMinor
@@ -383,6 +391,38 @@ export function FinancePage() {
       categoryId: bill.expenseCategoryId ?? recurringTemplate?.expenseCategoryId ?? "",
     });
     setPayingBillId(bill.id);
+    setReschedulingBillId(null);
+    setLinkingBillId(null);
+  }
+
+  function getUnlinkedExpenseCandidates(bill: FinanceBillItem) {
+    return [...expenses]
+      .filter((expense) => !expense.billId)
+      .sort((left, right) => {
+        const leftScore =
+          (left.amountMinor === bill.amountMinor ? 2 : 0)
+          + (left.spentOn === (bill.paidAt?.slice(0, 10) ?? bill.dueOn) ? 2 : 0)
+          + (left.expenseCategoryId === bill.expenseCategoryId ? 1 : 0);
+        const rightScore =
+          (right.amountMinor === bill.amountMinor ? 2 : 0)
+          + (right.spentOn === (bill.paidAt?.slice(0, 10) ?? bill.dueOn) ? 2 : 0)
+          + (right.expenseCategoryId === bill.expenseCategoryId ? 1 : 0);
+
+        if (leftScore !== rightScore) {
+          return rightScore - leftScore;
+        }
+
+        return right.spentOn.localeCompare(left.spentOn) || right.createdAt.localeCompare(left.createdAt);
+      });
+  }
+
+  function openLinkExpense(bill: FinanceBillItem) {
+    const candidates = getUnlinkedExpenseCandidates(bill);
+    setBillLinkForm({
+      expenseId: candidates[0]?.id ?? "",
+    });
+    setLinkingBillId(bill.id);
+    setPayingBillId(null);
     setReschedulingBillId(null);
   }
 
@@ -405,6 +445,15 @@ export function FinancePage() {
       billId: bill.id,
       paidOn: today,
     });
+  }
+
+  async function handleLinkExpense(bill: FinanceBillItem) {
+    if (!billLinkForm.expenseId) return;
+    await linkBillExpenseMutation.mutateAsync({
+      billId: bill.id,
+      expenseId: billLinkForm.expenseId,
+    });
+    setLinkingBillId(null);
   }
 
   async function handleBillDrop(bill: FinanceBillItem) {
@@ -1004,6 +1053,26 @@ export function FinancePage() {
                             </button>
                           </>
                         ) : null}
+                        {bill.status === "done" && bill.reconciliationStatus === "paid_without_expense" ? (
+                          <>
+                            <button
+                              className="button button--primary button--small"
+                              type="button"
+                              disabled={payAndLogBillMutation.isPending}
+                              onClick={() => openBillPayment(bill)}
+                            >
+                              Log expense
+                            </button>
+                            <button
+                              className="button button--ghost button--small"
+                              type="button"
+                              disabled={linkBillExpenseMutation.isPending}
+                              onClick={() => openLinkExpense(bill)}
+                            >
+                              Link existing
+                            </button>
+                          </>
+                        ) : null}
                       </div>
                     </div>
                     {payingBillId === bill.id && (
@@ -1056,6 +1125,41 @@ export function FinancePage() {
                               {payAndLogBillMutation.isPending ? "Saving..." : "Pay and log expense"}
                             </button>
                             <button className="button button--ghost button--small" type="button" onClick={() => setPayingBillId(null)}>Cancel</button>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                    {linkingBillId === bill.id && (
+                      <div className="inline-editor" style={{ marginLeft: "1.5rem" }}>
+                        <div className="stack-form">
+                          <label className="field">
+                            <span>Link an existing expense</span>
+                            <select
+                              value={billLinkForm.expenseId}
+                              onChange={(e) => setBillLinkForm({ expenseId: e.target.value })}
+                            >
+                              {getUnlinkedExpenseCandidates(bill).length === 0 ? (
+                                <option value="">No unlinked expenses in this month</option>
+                              ) : null}
+                              {getUnlinkedExpenseCandidates(bill).map((expense) => (
+                                <option key={expense.id} value={expense.id}>
+                                  {`${formatShortDate(expense.spentOn)} · ${formatMinorCurrency(expense.amountMinor, expense.currencyCode)} · ${expense.description ?? "Expense"}`}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                          <div className="button-row button-row--tight">
+                            <button
+                              className="button button--primary button--small"
+                              type="button"
+                              disabled={linkBillExpenseMutation.isPending || !billLinkForm.expenseId}
+                              onClick={() => void handleLinkExpense(bill)}
+                            >
+                              {linkBillExpenseMutation.isPending ? "Linking..." : "Link expense"}
+                            </button>
+                            <button className="button button--ghost button--small" type="button" onClick={() => setLinkingBillId(null)}>
+                              Cancel
+                            </button>
                           </div>
                         </div>
                       </div>

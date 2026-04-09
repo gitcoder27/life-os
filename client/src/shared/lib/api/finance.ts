@@ -598,6 +598,29 @@ export const useMarkBillPaidMutation = (todayDate: string) => {
   });
 };
 
+export const useLinkBillExpenseMutation = (todayDate: string) => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      billId,
+      expenseId,
+    }: {
+      billId: string;
+      expenseId: string;
+    }) =>
+      apiRequest<FinanceBillMutationResponse>(`/api/finance/bills/${billId}/link-expense`, {
+        method: "POST",
+        body: { expenseId },
+      }),
+    meta: {
+      successMessage: "Expense linked to bill.",
+      errorMessage: "Expense link failed.",
+    },
+    onSuccess: () => invalidateCoreData(queryClient, todayDate),
+  });
+};
+
 export const useRescheduleBillMutation = (todayDate: string) => {
   const queryClient = useQueryClient();
 
