@@ -8,6 +8,7 @@ import { useLocation } from "react-router-dom";
 import {
   daysUntil,
   formatDueLabel,
+  type FinanceBillItem,
   formatMinorCurrency,
   formatMonthLabel,
   formatRelativeDate,
@@ -15,12 +16,16 @@ import {
   getMonthString,
   getTodayDate,
   parseAmountToMinor,
+  useCreateBillMutation,
   useCreateCategoryMutation,
   useCreateExpenseMutation,
   useCreateRecurringExpenseMutation,
   useDeleteExpenseMutation,
+  useDismissBillMutation,
   useFinanceDataQuery,
-  useUpdateAdminItemMutation,
+  useMarkBillPaidMutation,
+  usePayAndLogBillMutation,
+  useRescheduleBillMutation,
   useUpdateCategoryMutation,
   useUpdateExpenseMutation,
   useUpdateFinanceGoalMutation,
@@ -67,16 +72,22 @@ type ExpenseForm = {
   recurringExpenseTemplateId: string;
 };
 
-type ActivityFilter = "all" | "uncategorized" | "recurring" | "today";
-
-type FinanceBill = {
-  id: string;
+type BillForm = {
   title: string;
   dueOn: string;
-  amountMinor: number | null;
-  status: "pending" | "done" | "rescheduled" | "dropped";
-  recurringExpenseTemplateId: string | null;
+  amount: string;
+  categoryId: string;
+  note: string;
 };
+
+type BillPaymentForm = {
+  paidOn: string;
+  amount: string;
+  categoryId: string;
+  description: string;
+};
+
+type ActivityFilter = "all" | "uncategorized" | "recurring" | "today";
 
 const emptyCategory: CategoryForm = { name: "", color: "" };
 const emptyRecurring: RecurringForm = {
@@ -88,6 +99,19 @@ const emptyRecurring: RecurringForm = {
   nextDueOn: "",
   remindDaysBefore: "3",
 };
+const emptyBill: BillForm = {
+  title: "",
+  dueOn: "",
+  amount: "",
+  categoryId: "",
+  note: "",
+};
+const emptyBillPayment = (today: string): BillPaymentForm => ({
+  paidOn: today,
+  amount: "",
+  categoryId: "",
+  description: "",
+});
 
 function navigateMonth(month: string, delta: number): string {
   const [y, m] = month.split("-").map(Number);
@@ -104,16 +128,27 @@ export function FinancePage() {
   const isCurrentMonth = selectedMonth === currentMonth;
 
   const financeQuery = useFinanceDataQuery(selectedMonth);
+  const createBillMutation = useCreateBillMutation(today);
   const createExpenseMutation = useCreateExpenseMutation(today);
   const updateExpenseMutation = useUpdateExpenseMutation(today);
   const deleteExpenseMutation = useDeleteExpenseMutation(today);
-  const updateAdminItemMutation = useUpdateAdminItemMutation(today);
+  const payAndLogBillMutation = usePayAndLogBillMutation(today);
+  const markBillPaidMutation = useMarkBillPaidMutation(today);
+  const rescheduleBillMutation = useRescheduleBillMutation(today);
+  const dismissBillMutation = useDismissBillMutation(today);
   const updateFinanceGoalMutation = useUpdateFinanceGoalMutation(selectedMonth);
   const updateFinanceMonthPlanMutation = useUpdateFinanceMonthPlanMutation(selectedMonth);
   const createCategoryMutation = useCreateCategoryMutation();
   const updateCategoryMutation = useUpdateCategoryMutation();
   const createRecurringMutation = useCreateRecurringExpenseMutation();
   const updateRecurringMutation = useUpdateRecurringExpenseMutation();
+
+  // Bill form
+  const [showBillForm, setShowBillForm] = useState(false);
+  const [billForm, setBillForm] = useState<BillForm>({
+    ...emptyBill,
+    dueOn: today,
+  });
 
   // Expense form
   const [showExpenseForm, setShowExpenseForm] = useState(false);
@@ -150,9 +185,12 @@ export function FinancePage() {
   // Reschedule state
   const [reschedulingBillId, setReschedulingBillId] = useState<string | null>(null);
   const [rescheduleDate, setRescheduleDate] = useState("");
+  const [payingBillId, setPayingBillId] = useState<string | null>(null);
+  const [billPaymentForm, setBillPaymentForm] = useState<BillPaymentForm>(emptyBillPayment(today));
 
   const financeData = financeQuery.data;
   const homeDestination = readHomeDestinationState(location.state);
+  const bills = financeData?.bills?.bills ?? [];
   const summary = financeData?.summary;
   const expenses = financeData?.expenses?.expenses ?? [];
   const recurringExpenses = financeData?.recurringExpenses?.recurringExpenses ?? [];
@@ -166,14 +204,20 @@ export function FinancePage() {
   // ── Derived data ──
 
   // Bills: overdue, due today, due this week, upcoming
+  const openBills = bills
+    .filter((item) => item.status === "pending" || item.status === "rescheduled")
+    .sort((a, b) => a.dueOn.localeCompare(b.dueOn));
   const pendingBills = (summary?.upcomingBills ?? [])
-    .filter((item) => item.status === "pending")
+    .filter((item) => item.status === "pending" || item.status === "rescheduled")
     .sort((a, b) => a.dueOn.localeCompare(b.dueOn));
 
-  const overdueBills = pendingBills.filter((b) => daysUntil(b.dueOn) < 0);
-  const todayBills = pendingBills.filter((b) => daysUntil(b.dueOn) === 0);
-  const weekBills = pendingBills.filter((b) => { const d = daysUntil(b.dueOn); return d > 0 && d <= 7; });
+  const overdueBills = openBills.filter((b) => daysUntil(b.dueOn) < 0);
+  const todayBills = openBills.filter((b) => daysUntil(b.dueOn) === 0);
+  const weekBills = openBills.filter((b) => { const d = daysUntil(b.dueOn); return d > 0 && d <= 7; });
   const dueBills = [...overdueBills, ...todayBills, ...weekBills];
+  const completedBills = bills.filter((b) => b.status === "done");
+  const unreconciledBills = completedBills.filter((b) => b.reconciliationStatus === "paid_without_expense");
+  const workflowBills = [...openBills, ...completedBills];
 
   // Today's logged spending
   const todayExpenses = expenses.filter((e) => e.spentOn === today);
@@ -258,6 +302,30 @@ export function FinancePage() {
 
   // ── Handlers ──
 
+  function openCreateBill() {
+    setBillForm({
+      ...emptyBill,
+      dueOn: isCurrentMonth ? today : `${selectedMonth}-01`,
+    });
+    setShowBillForm(true);
+  }
+
+  async function handleAddBill() {
+    if (!billForm.title.trim() || !billForm.dueOn) return;
+    await createBillMutation.mutateAsync({
+      title: billForm.title.trim(),
+      dueOn: billForm.dueOn,
+      amountMinor: billForm.amount ? parseAmountToMinor(billForm.amount) : null,
+      expenseCategoryId: billForm.categoryId || null,
+      note: billForm.note || null,
+    });
+    setBillForm({
+      ...emptyBill,
+      dueOn: isCurrentMonth ? today : `${selectedMonth}-01`,
+    });
+    setShowBillForm(false);
+  }
+
   async function handleAddExpense() {
     const amountMinor = parseAmountToMinor(expenseForm.amount);
     if (!amountMinor) return;
@@ -299,36 +367,53 @@ export function FinancePage() {
     setEditingExpenseId(null);
   }
 
-  async function handleBillPaid(bill: FinanceBill) {
-    await updateAdminItemMutation.mutateAsync({ adminItemId: bill.id, status: "done" });
-  }
-
-  async function handleBillDrop(bill: FinanceBill) {
-    await updateAdminItemMutation.mutateAsync({ adminItemId: bill.id, status: "dropped" });
-  }
-
-  function openExpenseFromBill(bill: FinanceBill) {
+  function openBillPayment(bill: FinanceBillItem) {
     const recurringTemplate = bill.recurringExpenseTemplateId
       ? recurringExpenses.find((item) => item.id === bill.recurringExpenseTemplateId)
       : null;
 
-    setExpenseForm({
+    setBillPaymentForm({
+      paidOn: today,
       amount: bill.amountMinor != null
         ? String(bill.amountMinor / 100)
         : recurringTemplate?.defaultAmountMinor
           ? String(recurringTemplate.defaultAmountMinor / 100)
           : "",
       description: bill.title,
-      categoryId: recurringTemplate?.expenseCategoryId ?? "",
-      spentOn: today,
-      recurringExpenseTemplateId: bill.recurringExpenseTemplateId ?? "",
+      categoryId: bill.expenseCategoryId ?? recurringTemplate?.expenseCategoryId ?? "",
     });
-    setShowExpenseForm(true);
+    setPayingBillId(bill.id);
+    setReschedulingBillId(null);
+  }
+
+  async function handlePayAndLogBill(bill: FinanceBillItem) {
+    const amountMinor = billPaymentForm.amount ? parseAmountToMinor(billPaymentForm.amount) : null;
+    await payAndLogBillMutation.mutateAsync({
+      billId: bill.id,
+      paidOn: billPaymentForm.paidOn || today,
+      amountMinor,
+      description: billPaymentForm.description || bill.title,
+      expenseCategoryId: billPaymentForm.categoryId || null,
+      currencyCode: currency,
+    });
+    setPayingBillId(null);
+    setBillPaymentForm(emptyBillPayment(today));
+  }
+
+  async function handleMarkBillPaid(bill: FinanceBillItem) {
+    await markBillPaidMutation.mutateAsync({
+      billId: bill.id,
+      paidOn: today,
+    });
+  }
+
+  async function handleBillDrop(bill: FinanceBillItem) {
+    await dismissBillMutation.mutateAsync(bill.id);
   }
 
   async function handleBillReschedule(billId: string) {
     if (!rescheduleDate) return;
-    await updateAdminItemMutation.mutateAsync({ adminItemId: billId, status: "rescheduled", dueOn: rescheduleDate });
+    await rescheduleBillMutation.mutateAsync({ billId, dueOn: rescheduleDate });
     setReschedulingBillId(null);
     setRescheduleDate("");
   }
@@ -446,18 +531,52 @@ export function FinancePage() {
     await updateRecurringMutation.mutateAsync({ recurringExpenseId: id, status });
   }
 
-  function getBillRowClass(bill: FinanceBill) {
+  function getBillRowClass(bill: FinanceBillItem) {
+    if (bill.status === "done") {
+      return bill.reconciliationStatus === "paid_with_expense"
+        ? "bill-row bill-row--settled"
+        : "bill-row bill-row--unreconciled";
+    }
     const d = daysUntil(bill.dueOn);
     if (d < 0) return "bill-row bill-row--overdue";
     if (d === 0) return "bill-row bill-row--today";
     return "bill-row";
   }
 
-  function getBillDueText(bill: FinanceBill) {
+  function getBillDueText(bill: FinanceBillItem) {
+    if (bill.status === "done") {
+      return bill.paidAt
+        ? `Paid ${formatShortDate(bill.paidAt.slice(0, 10))}`
+        : "Paid";
+    }
+
+    if (bill.status === "dropped") {
+      return "Dismissed";
+    }
+
+    if (bill.status === "rescheduled") {
+      return `Rescheduled to ${formatShortDate(bill.dueOn)}`;
+    }
+
     const d = daysUntil(bill.dueOn);
     if (d < 0) return `Overdue by ${Math.abs(d)} day${Math.abs(d) === 1 ? "" : "s"}`;
     if (d === 0) return "Due today";
     return `Due ${formatShortDate(bill.dueOn)}`;
+  }
+
+  function getBillReconciliationLabel(bill: FinanceBillItem) {
+    switch (bill.reconciliationStatus) {
+      case "paid_with_expense":
+        return "Expense linked";
+      case "paid_without_expense":
+        return "Needs expense log";
+      case "rescheduled":
+        return "Open bill";
+      case "dropped":
+        return "Dismissed";
+      default:
+        return "Due";
+    }
   }
 
   async function handleMonthPlanSave(payload: Parameters<typeof updateFinanceMonthPlanMutation.mutateAsync>[0]) {
@@ -515,9 +634,23 @@ export function FinancePage() {
           <button
             className="button button--primary button--small"
             type="button"
+            onClick={openCreateBill}
+          >
+            Add bill
+          </button>
+          <button
+            className="button button--ghost button--small"
+            type="button"
             onClick={() => setShowExpenseForm(true)}
           >
             Log expense
+          </button>
+          <button
+            className="button button--ghost button--small"
+            type="button"
+            onClick={() => setShowSetup(true)}
+          >
+            Manage recurring bills
           </button>
         </div>
       </div>
@@ -546,7 +679,8 @@ export function FinancePage() {
                   : "All clear"}
           </span>
           <span className="money-now__detail">
-            {pendingBills.length} pending total
+            {openBills.length} open total
+            {unreconciledBills.length > 0 ? ` · ${unreconciledBills.length} need expense cleanup` : ""}
           </span>
         </div>
 
@@ -588,6 +722,73 @@ export function FinancePage() {
           </div>
         )}
       </div>
+
+      {showBillForm && (
+        <div className="inline-editor" style={{ animation: "slideUp 0.25s var(--ease) both" }}>
+          <div className="stack-form">
+            <div style={{ display: "flex", gap: "0.5rem" }}>
+              <label className="field" style={{ flex: 2 }}>
+                <span>Bill title</span>
+                <input
+                  type="text"
+                  value={billForm.title}
+                  autoFocus
+                  placeholder="Rent, internet, insurance..."
+                  onChange={(e) => setBillForm((form) => ({ ...form, title: e.target.value }))}
+                  onKeyDown={(e) => { if (e.key === "Enter") void handleAddBill(); if (e.key === "Escape") setShowBillForm(false); }}
+                />
+              </label>
+              <label className="field" style={{ flex: 1 }}>
+                <span>Due date</span>
+                <input
+                  type="date"
+                  value={billForm.dueOn}
+                  onChange={(e) => setBillForm((form) => ({ ...form, dueOn: e.target.value }))}
+                />
+              </label>
+            </div>
+            <div style={{ display: "flex", gap: "0.5rem" }}>
+              <label className="field" style={{ flex: 1 }}>
+                <span>Expected amount</span>
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  value={billForm.amount}
+                  placeholder="0.00"
+                  onChange={(e) => setBillForm((form) => ({ ...form, amount: e.target.value }))}
+                />
+              </label>
+              <label className="field" style={{ flex: 1 }}>
+                <span>Category</span>
+                <select
+                  value={billForm.categoryId}
+                  onChange={(e) => setBillForm((form) => ({ ...form, categoryId: e.target.value }))}
+                >
+                  <option value="">Choose later</option>
+                  {activeCategories.map((c) => (
+                    <option key={c.id} value={c.id}>{c.name}</option>
+                  ))}
+                </select>
+              </label>
+            </div>
+            <label className="field">
+              <span>Note</span>
+              <input
+                type="text"
+                value={billForm.note}
+                placeholder="Optional reminder or account detail"
+                onChange={(e) => setBillForm((form) => ({ ...form, note: e.target.value }))}
+              />
+            </label>
+            <div className="button-row button-row--tight">
+              <button className="button button--primary button--small" type="button" disabled={createBillMutation.isPending} onClick={() => void handleAddBill()}>
+                {createBillMutation.isPending ? "Saving..." : "Add bill"}
+              </button>
+              <button className="button button--ghost button--small" type="button" onClick={() => setShowBillForm(false)}>Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Inline Expense Form (appears below strip) ── */}
       {showExpenseForm && (
@@ -687,10 +888,18 @@ export function FinancePage() {
                         <button
                           className="button button--primary button--small"
                           type="button"
-                          disabled={updateAdminItemMutation.isPending}
-                          onClick={() => void handleBillPaid(bill)}
+                          disabled={payAndLogBillMutation.isPending}
+                          onClick={() => openBillPayment(bill)}
                         >
-                          Paid
+                          Pay and log
+                        </button>
+                        <button
+                          className="button button--ghost button--small"
+                          type="button"
+                          disabled={markBillPaidMutation.isPending}
+                          onClick={() => void handleMarkBillPaid(bill)}
+                        >
+                          Mark paid only
                         </button>
                         {reschedulingBillId === bill.id ? (
                           <div className="reschedule-input">
@@ -717,13 +926,6 @@ export function FinancePage() {
                         <button
                           className="button button--ghost button--small"
                           type="button"
-                          onClick={() => openExpenseFromBill(bill)}
-                        >
-                          Log expense
-                        </button>
-                        <button
-                          className="button button--ghost button--small"
-                          type="button"
                           onClick={() => void handleBillDrop(bill)}
                         >
                           Drop
@@ -735,6 +937,147 @@ export function FinancePage() {
               </div>
             </div>
           )}
+
+          <div className="activity-feed">
+            <div className="activity-feed__header">
+              <span className="section-label">Bill workflow</span>
+              <div className="activity-feed__filters">
+                <span className="bill-summary-chip">{openBills.length} open</span>
+                <span className="bill-summary-chip">{completedBills.length} paid</span>
+                <span className={`bill-summary-chip${unreconciledBills.length > 0 ? " bill-summary-chip--alert" : ""}`}>
+                  {unreconciledBills.length} unreconciled
+                </span>
+              </div>
+            </div>
+
+            {financeQuery.data.sectionErrors.bills ? (
+              <InlineErrorState
+                message={financeQuery.data.sectionErrors.bills.message}
+                onRetry={() => void financeQuery.refetch()}
+              />
+            ) : workflowBills.length > 0 ? (
+              <div className="due-now__list">
+                {workflowBills.map((bill) => (
+                  <div key={bill.id}>
+                    <div className={getBillRowClass(bill)}>
+                      <span className="bill-row__indicator" />
+                      <div className="bill-row__info">
+                        <span className="bill-row__title">{bill.title}</span>
+                        <span className="bill-row__due">{getBillDueText(bill)}</span>
+                      </div>
+                      <div className="bill-row__meta">
+                        <span className={`bill-status-pill bill-status-pill--${bill.reconciliationStatus}`}>
+                          {getBillReconciliationLabel(bill)}
+                        </span>
+                        {bill.completionMode === "mark_paid_only" ? (
+                          <span className="bill-status-pill">Secondary path</span>
+                        ) : null}
+                      </div>
+                      {bill.amountMinor != null ? (
+                        <span className="bill-row__amount">{formatMinorCurrency(bill.amountMinor, currency)}</span>
+                      ) : null}
+                      <div className="bill-row__actions">
+                        {(bill.status === "pending" || bill.status === "rescheduled") ? (
+                          <>
+                            <button
+                              className="button button--primary button--small"
+                              type="button"
+                              disabled={payAndLogBillMutation.isPending}
+                              onClick={() => openBillPayment(bill)}
+                            >
+                              Pay and log
+                            </button>
+                            <button
+                              className="button button--ghost button--small"
+                              type="button"
+                              disabled={markBillPaidMutation.isPending}
+                              onClick={() => void handleMarkBillPaid(bill)}
+                            >
+                              Mark paid only
+                            </button>
+                            <button
+                              className="button button--ghost button--small"
+                              type="button"
+                              onClick={() => { setReschedulingBillId(bill.id); setRescheduleDate(bill.dueOn); }}
+                            >
+                              Reschedule
+                            </button>
+                          </>
+                        ) : null}
+                      </div>
+                    </div>
+                    {payingBillId === bill.id && (
+                      <div className="inline-editor" style={{ marginLeft: "1.5rem" }}>
+                        <div className="stack-form">
+                          <div style={{ display: "flex", gap: "0.5rem" }}>
+                            <label className="field" style={{ flex: 1 }}>
+                              <span>Paid on</span>
+                              <input
+                                type="date"
+                                value={billPaymentForm.paidOn}
+                                onChange={(e) => setBillPaymentForm((form) => ({ ...form, paidOn: e.target.value }))}
+                              />
+                            </label>
+                            <label className="field" style={{ flex: 1 }}>
+                              <span>Amount</span>
+                              <input
+                                type="text"
+                                inputMode="decimal"
+                                value={billPaymentForm.amount}
+                                placeholder={bill.amountMinor != null ? String(bill.amountMinor / 100) : "0.00"}
+                                onChange={(e) => setBillPaymentForm((form) => ({ ...form, amount: e.target.value }))}
+                              />
+                            </label>
+                          </div>
+                          <div style={{ display: "flex", gap: "0.5rem" }}>
+                            <label className="field" style={{ flex: 1 }}>
+                              <span>Category</span>
+                              <select
+                                value={billPaymentForm.categoryId}
+                                onChange={(e) => setBillPaymentForm((form) => ({ ...form, categoryId: e.target.value }))}
+                              >
+                                <option value="">Uncategorized</option>
+                                {activeCategories.map((c) => (
+                                  <option key={c.id} value={c.id}>{c.name}</option>
+                                ))}
+                              </select>
+                            </label>
+                            <label className="field" style={{ flex: 2 }}>
+                              <span>Description</span>
+                              <input
+                                type="text"
+                                value={billPaymentForm.description}
+                                onChange={(e) => setBillPaymentForm((form) => ({ ...form, description: e.target.value }))}
+                              />
+                            </label>
+                          </div>
+                          <div className="button-row button-row--tight">
+                            <button className="button button--primary button--small" type="button" disabled={payAndLogBillMutation.isPending} onClick={() => void handlePayAndLogBill(bill)}>
+                              {payAndLogBillMutation.isPending ? "Saving..." : "Pay and log expense"}
+                            </button>
+                            <button className="button button--ghost button--small" type="button" onClick={() => setPayingBillId(null)}>Cancel</button>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                    {reschedulingBillId === bill.id && (
+                      <div className="confirm-bar" style={{ marginLeft: "1.5rem" }}>
+                        <span className="confirm-bar__text">Move this bill to</span>
+                        <input type="date" value={rescheduleDate} onChange={(e) => setRescheduleDate(e.target.value)} />
+                        <button className="button button--ghost button--small" type="button" onClick={() => void handleBillReschedule(bill.id)}>Save</button>
+                        <button className="button button--ghost button--small" type="button" onClick={() => setReschedulingBillId(null)}>Cancel</button>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <EmptyState
+                title="No bills yet"
+                description="Add a one-off bill or manage recurring bills to build your payment workflow."
+              />
+            )}
+          </div>
 
           {/* ── Recent Activity Feed ── */}
           <div className="activity-feed">

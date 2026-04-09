@@ -31,7 +31,7 @@ export function LedgerCard({
           {budgetLabel || "Tracking"}
         </span>
         <span className="ledger-meta__item">
-          {upcomingBills} pending bill{upcomingBills !== 1 ? "s" : ""} this month
+          {upcomingBills} open bill{upcomingBills !== 1 ? "s" : ""} this month
         </span>
       </div>
     </Link>

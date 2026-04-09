@@ -334,7 +334,7 @@ function FinanceRow({
   const todayExpenses = expenses?.expenses?.filter((e) => e.spentOn === today) ?? [];
   const hasLoggedToday = todayExpenses.length > 0;
   const todayTotal = todayExpenses.reduce((sum, e) => sum + e.amountMinor, 0);
-  const pendingBills = summary?.upcomingBills?.filter((b) => b.status === "pending") ?? [];
+  const pendingBills = summary?.upcomingBills?.filter((b) => b.status === "pending" || b.status === "rescheduled") ?? [];
   const overdueBills = pendingBills.filter((b) => b.dueOn <= today);
   const currencyCode = summary?.currencyCode ?? "USD";
 

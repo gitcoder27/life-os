@@ -94,7 +94,7 @@ export function EssentialsBand({
           <span className="essential__note">
             {finance.budgetLabel || "Tracking"}
             {finance.upcomingBills > 0
-              ? ` · ${finance.upcomingBills} pending bill${finance.upcomingBills !== 1 ? "s" : ""} this month`
+              ? ` · ${finance.upcomingBills} open bill${finance.upcomingBills !== 1 ? "s" : ""} this month`
               : ""}
           </span>
         </Link>

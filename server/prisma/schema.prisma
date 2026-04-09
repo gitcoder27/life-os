@@ -188,6 +188,11 @@ enum AdminItemStatus {
   DROPPED
 }
 
+enum BillCompletionMode {
+  PAY_AND_LOG
+  MARK_PAID_ONLY
+}
+
 enum FinanceGoalType {
   EMERGENCY_FUND
   DEBT_PAYOFF
@@ -729,6 +734,7 @@ model ExpenseCategory {
   archivedAt DateTime?
   user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   expenses   Expense[]
+  adminItems AdminItem[]
   financeMonthPlanWatches FinanceMonthPlanCategoryWatch[]
   recurringExpenseTemplates RecurringExpenseTemplate[]
   weeklyReviewSpendWatches WeeklyReview[] @relation("WeeklyReviewSpendCategory")
@@ -791,6 +797,7 @@ model Expense {
   id                         String                    @id @default(uuid())
   userId                     String
   expenseCategoryId          String?
+  billId                     String?                   @unique
   amountMinor                Int
   currencyCode               String
   spentOn                    DateTime
@@ -801,6 +808,7 @@ model Expense {
   updatedAt                  DateTime                  @updatedAt
   user                       User                      @relation(fields: [userId], references: [id], onDelete: Cascade)
   expenseCategory            ExpenseCategory?          @relation(fields: [expenseCategoryId], references: [id], onDelete: SetNull)
+  bill                       AdminItem?                @relation("BillLinkedExpense", fields: [billId], references: [id], onDelete: SetNull)
   recurringExpenseTemplate   RecurringExpenseTemplate? @relation(fields: [recurringExpenseTemplateId], references: [id], onDelete: SetNull)
 
   @@index([userId, spentOn])
@@ -845,13 +853,17 @@ model AdminItem {
   status                     AdminItemStatus           @default(PENDING)
   relatedTaskId              String?
   recurringExpenseTemplateId String?
+  expenseCategoryId          String?
   amountMinor                Int?
   note                       String?
   completedAt                DateTime?
+  completionMode             BillCompletionMode?
   createdAt                  DateTime                  @default(now())
   updatedAt                  DateTime                  @updatedAt
   user                       User                      @relation(fields: [userId], references: [id], onDelete: Cascade)
   relatedTask                Task?                     @relation("AdminItemTask", fields: [relatedTaskId], references: [id], onDelete: SetNull)
+  expenseCategory            ExpenseCategory?          @relation(fields: [expenseCategoryId], references: [id], onDelete: SetNull)
+  linkedExpense              Expense?                  @relation("BillLinkedExpense")
   recurringExpenseTemplate   RecurringExpenseTemplate? @relation(fields: [recurringExpenseTemplateId], references: [id], onDelete: SetNull)
 
   @@index([userId, dueOn, status])

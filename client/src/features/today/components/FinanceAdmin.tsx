@@ -27,7 +27,7 @@ export function FinanceAdmin() {
   const hasLoggedToday = todayExpenses.length > 0;
   const todayTotal = todayExpenses.reduce((sum, e) => sum + e.amountMinor, 0);
 
-  const pendingBills = summary?.upcomingBills?.filter((b) => b.status === "pending") ?? [];
+  const pendingBills = summary?.upcomingBills?.filter((b) => b.status === "pending" || b.status === "rescheduled") ?? [];
   const overdueBills = pendingBills.filter((b) => b.dueOn <= today);
   const upcomingBills = pendingBills.filter((b) => b.dueOn > today).slice(0, 3);
 

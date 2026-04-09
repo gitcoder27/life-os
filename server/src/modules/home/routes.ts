@@ -340,19 +340,25 @@ async function buildHomeOverview(
       app.prisma.adminItem.findMany({
         where: {
           userId,
+          itemType: "BILL",
           dueOn: targetDate,
-          status: "PENDING",
+          status: {
+            in: ["PENDING", "RESCHEDULED"],
+          },
         },
         orderBy: [{ dueOn: "asc" }],
       }),
       app.prisma.adminItem.findMany({
         where: {
           userId,
+          itemType: "BILL",
           dueOn: {
             gte: monthStartDate,
             lt: nextMonthStartDate,
           },
-          status: "PENDING",
+          status: {
+            in: ["PENDING", "RESCHEDULED"],
+          },
         },
         orderBy: [{ dueOn: "asc" }],
       }),
@@ -507,7 +513,7 @@ async function buildHomeOverview(
       title: item.title,
       kind: "admin",
       tone: "urgent",
-      detail: "Open Finance to handle the bill or admin item.",
+      detail: "Open Finance to handle the bill.",
       dismissible: true,
       action: {
         type: "open_destination",

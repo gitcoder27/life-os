@@ -33,14 +33,37 @@ type FinanceSummaryResponse = {
     color: string | null;
     totalAmountMinor: number;
   }>;
-  upcomingBills: Array<{
-    id: string;
-    title: string;
-    dueOn: string;
-    amountMinor: number | null;
-    status: "pending" | "done" | "rescheduled" | "dropped";
-    recurringExpenseTemplateId: string | null;
-  }>;
+  upcomingBills: FinanceBillItem[];
+};
+
+export type FinanceBillCompletionMode = "pay_and_log" | "mark_paid_only";
+export type FinanceBillReconciliationStatus =
+  | "due"
+  | "paid_with_expense"
+  | "paid_without_expense"
+  | "rescheduled"
+  | "dropped";
+export type FinanceBillItem = {
+  id: string;
+  title: string;
+  dueOn: string;
+  amountMinor: number | null;
+  status: "pending" | "done" | "rescheduled" | "dropped";
+  expenseCategoryId: string | null;
+  note: string | null;
+  paidAt: string | null;
+  linkedExpenseId: string | null;
+  completionMode: FinanceBillCompletionMode | null;
+  reconciliationStatus: FinanceBillReconciliationStatus;
+  recurringExpenseTemplateId: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type FinanceBillsResponse = {
+  generatedAt: string;
+  month: string;
+  bills: FinanceBillItem[];
 };
 
 export type FinancePaceStatus = "no_plan" | "on_pace" | "slightly_heavy" | "off_track";
@@ -178,6 +201,7 @@ type ExpensesResponse = {
     spentOn: string;
     description: string | null;
     source: "manual" | "quick_capture" | "template";
+    billId: string | null;
     recurringExpenseTemplateId: string | null;
     createdAt: string;
     updatedAt: string;
@@ -235,6 +259,12 @@ type RecurringExpenseMutationResponse = {
   recurringExpense: RecurringExpensesResponse["recurringExpenses"][number];
 };
 
+type FinanceBillMutationResponse = {
+  generatedAt: string;
+  bill: FinanceBillItem;
+  expense?: ExpensesResponse["expenses"][number] | null;
+};
+
 export type AdminItemStatus = "pending" | "done" | "rescheduled" | "dropped";
 
 export type AdminItemRecord = {
@@ -265,6 +295,7 @@ const invalidateFinanceCollections = (queryClient: ReturnType<typeof useQueryCli
 
 type FinanceDataQueryOptions = {
   enabled?: boolean;
+  includeBills?: boolean;
   includeSummary?: boolean;
   includeExpenses?: boolean;
   includeRecurringExpenses?: boolean;
@@ -274,6 +305,7 @@ type FinanceDataQueryOptions = {
 };
 
 type FinanceDataQueryResult = {
+  bills: FinanceBillsResponse | null;
   summary: FinanceSummaryResponse | null;
   expenses: ExpensesResponse | null;
   recurringExpenses: RecurringExpensesResponse | null;
@@ -281,6 +313,7 @@ type FinanceDataQueryResult = {
   monthPlan: FinanceMonthPlanResponse | null;
   insights: FinanceInsightsResponse | null;
   sectionErrors: {
+    bills: ReturnType<typeof toSectionError> | null;
     expenses: ReturnType<typeof toSectionError> | null;
     recurringExpenses: ReturnType<typeof toSectionError> | null;
     categories: ReturnType<typeof toSectionError> | null;
@@ -299,6 +332,7 @@ export const useFinanceDataQuery = (
   const month = normalizeFinanceMonthInput(monthOrDate);
   const monthStart = getMonthStartDate(`${month}-01`);
   const monthEnd = getMonthEndDate(`${month}-01`);
+  const includeBills = options.includeBills ?? true;
   const includeSummary = options.includeSummary ?? true;
   const includeExpenses = options.includeExpenses ?? true;
   const includeRecurringExpenses = options.includeRecurringExpenses ?? true;
@@ -306,6 +340,7 @@ export const useFinanceDataQuery = (
   const includeMonthPlan = options.includeMonthPlan ?? true;
   const includeInsights = options.includeInsights ?? true;
   const sectionKey = [
+    includeBills ? "bills" : "no-bills",
     includeSummary ? "summary" : "no-summary",
     includeExpenses ? "expenses" : "no-expenses",
     includeRecurringExpenses ? "recurring" : "no-recurring",
@@ -319,6 +354,7 @@ export const useFinanceDataQuery = (
     enabled: options.enabled,
     queryFn: async () => {
       const [
+        billsResult,
         summaryResult,
         expensesResult,
         recurringExpensesResult,
@@ -327,6 +363,11 @@ export const useFinanceDataQuery = (
         insightsResult,
       ] =
         await Promise.allSettled([
+          includeBills
+            ? apiRequest<FinanceBillsResponse>("/api/finance/bills", {
+              query: { month },
+            })
+            : Promise.resolve(null),
           includeSummary
             ? apiRequest<FinanceSummaryResponse>("/api/finance/summary", {
               query: { month },
@@ -356,6 +397,10 @@ export const useFinanceDataQuery = (
         ]);
 
       return {
+        bills:
+          includeBills && billsResult.status === "fulfilled"
+            ? billsResult.value
+            : null,
         summary:
           includeSummary
             ? unwrapRequiredResult(summaryResult, "Finance summary could not load.")
@@ -381,6 +426,10 @@ export const useFinanceDataQuery = (
             ? insightsResult.value
             : null,
         sectionErrors: {
+          bills:
+            includeBills && billsResult.status === "rejected"
+              ? toSectionError(billsResult.reason, "Bills could not load.")
+              : null,
           expenses:
             includeExpenses && expensesResult.status === "rejected"
               ? toSectionError(expensesResult.reason, "Expenses could not load.")
@@ -476,28 +525,113 @@ export const useDeleteExpenseMutation = (todayDate: string) => {
   });
 };
 
-export const useUpdateAdminItemMutation = (todayDate: string) => {
+export const useCreateBillMutation = (todayDate: string) => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (payload: {
+      title?: string;
+      dueOn?: string;
+      amountMinor?: number | null;
+      expenseCategoryId?: string | null;
+      note?: string | null;
+    }) =>
+      apiRequest<FinanceBillMutationResponse>("/api/finance/bills", {
+        method: "POST",
+        body: payload,
+      }),
+    meta: {
+      successMessage: "Bill added.",
+      errorMessage: "Bill creation failed.",
+    },
+    onSuccess: () => invalidateCoreData(queryClient, todayDate),
+  });
+};
+
+export const usePayAndLogBillMutation = (todayDate: string) => {
   const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: ({
-      adminItemId,
+      billId,
       ...payload
     }: {
-      adminItemId: string;
-      title?: string;
-      dueOn?: string;
-      status?: AdminItemStatus;
+      billId: string;
+      paidOn: string;
       amountMinor?: number | null;
-      note?: string | null;
+      currencyCode?: string;
+      description?: string | null;
+      expenseCategoryId?: string | null;
     }) =>
-      apiRequest<AdminItemMutationResponse>(`/api/admin/admin-items/${adminItemId}`, {
-        method: "PATCH",
+      apiRequest<FinanceBillMutationResponse>(`/api/finance/bills/${billId}/pay-and-log`, {
+        method: "POST",
         body: payload,
       }),
     meta: {
-      successMessage: "Bill updated.",
+      successMessage: "Bill paid and expense logged.",
+      errorMessage: "Bill payment failed.",
+    },
+    onSuccess: () => invalidateCoreData(queryClient, todayDate),
+  });
+};
+
+export const useMarkBillPaidMutation = (todayDate: string) => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      billId,
+      paidOn,
+    }: {
+      billId: string;
+      paidOn: string;
+    }) =>
+      apiRequest<FinanceBillMutationResponse>(`/api/finance/bills/${billId}/mark-paid`, {
+        method: "POST",
+        body: { paidOn },
+      }),
+    meta: {
+      successMessage: "Bill marked paid.",
       errorMessage: "Bill update failed.",
+    },
+    onSuccess: () => invalidateCoreData(queryClient, todayDate),
+  });
+};
+
+export const useRescheduleBillMutation = (todayDate: string) => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      billId,
+      dueOn,
+    }: {
+      billId: string;
+      dueOn: string;
+    }) =>
+      apiRequest<FinanceBillMutationResponse>(`/api/finance/bills/${billId}/reschedule`, {
+        method: "POST",
+        body: { dueOn },
+      }),
+    meta: {
+      successMessage: "Bill rescheduled.",
+      errorMessage: "Bill reschedule failed.",
+    },
+    onSuccess: () => invalidateCoreData(queryClient, todayDate),
+  });
+};
+
+export const useDismissBillMutation = (todayDate: string) => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (billId: string) =>
+      apiRequest<FinanceBillMutationResponse>(`/api/finance/bills/${billId}/dismiss`, {
+        method: "POST",
+      }),
+    meta: {
+      successMessage: "Bill dismissed.",
+      errorMessage: "Bill dismissal failed.",
     },
     onSuccess: () => invalidateCoreData(queryClient, todayDate),
   });

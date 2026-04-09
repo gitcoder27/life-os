@@ -1,10 +1,16 @@
 import type { FastifyPluginAsync } from "fastify";
 import type {
+  CompleteFinanceBillRequest,
+  CompleteFinanceBillWithExpenseRequest,
+  CreateFinanceBillRequest,
   CreateExpenseCategoryRequest,
   DeleteExpenseResponse,
   ExpenseCategoryItem,
   ExpenseCategoryMutationResponse,
   ExpensesResponse,
+  FinanceBillItem as ContractFinanceBillItem,
+  FinanceBillMutationResponse,
+  FinanceBillsResponse,
   FinanceCategoriesResponse,
   FinanceGoalMutationResponse,
   FinanceInsightsResponse,
@@ -14,6 +20,7 @@ import type {
   IsoMonthString,
   RecurrenceInput,
   RecurringExpenseMutationResponse,
+  RescheduleFinanceBillRequest,
   UpdateFinanceGoalRequest,
   UpdateFinanceMonthPlanRequest,
   UpdateExpenseCategoryRequest,
@@ -21,7 +28,6 @@ import type {
 } from "@life-os/contracts";
 import type {
   ExpenseCategory,
-  AdminItemStatus as PrismaAdminItemStatus,
   Expense,
   FinanceGoalType as PrismaFinanceGoalType,
   ExpenseSource as PrismaExpenseSource,
@@ -40,11 +46,15 @@ import { getWeekStartIsoDate, parseIsoDate } from "../../lib/time/cycle.js";
 import { toIsoDateString } from "../../lib/time/date.js";
 import { getUserLocalDate } from "../../lib/time/user-time.js";
 import { parseOrThrow } from "../../lib/validation/parse.js";
+import {
+  OPEN_BILL_STATUSES,
+  serializeFinanceBill,
+  toPrismaBillCompletionMode,
+} from "./service.js";
 import { getMonthlyReviewModel, getWeeklyReviewModel } from "../reviews/service.js";
 
 type ExpenseSource = "manual" | "quick_capture" | "template";
 type RecurringExpenseStatus = "active" | "paused" | "archived";
-type AdminItemStatus = "pending" | "done" | "rescheduled" | "dropped";
 
 interface ExpenseItem {
   id: string;
@@ -54,10 +64,13 @@ interface ExpenseItem {
   spentOn: IsoDateString;
   description: string | null;
   source: ExpenseSource;
+  billId: string | null;
   recurringExpenseTemplateId: string | null;
   createdAt: string;
   updatedAt: string;
 }
+
+type FinanceBillItem = ContractFinanceBillItem;
 
 interface FinanceSummaryResponse {
   generatedAt: string;
@@ -71,14 +84,7 @@ interface FinanceSummaryResponse {
     color: string | null;
     totalAmountMinor: number;
   }>;
-  upcomingBills: Array<{
-    id: string;
-    title: string;
-    dueOn: IsoDateString;
-    amountMinor: number | null;
-    status: AdminItemStatus;
-    recurringExpenseTemplateId: string | null;
-  }>;
+  upcomingBills: FinanceBillItem[];
 }
 
 interface CreateExpenseRequest {
@@ -183,6 +189,31 @@ const createExpenseSchema = z.object({
   description: z.string().max(4000).nullable().optional(),
   source: expenseSourceSchema.optional(),
   recurringExpenseTemplateId: z.string().uuid().nullable().optional(),
+});
+
+const createFinanceBillSchema = z.object({
+  title: z.string().min(1).max(200),
+  dueOn: isoDateSchema,
+  amountMinor: z.number().int().positive().nullable().optional(),
+  note: z.string().max(4000).nullable().optional(),
+  expenseCategoryId: z.string().uuid().nullable().optional(),
+  recurringExpenseTemplateId: z.string().uuid().nullable().optional(),
+});
+
+const completeFinanceBillSchema = z.object({
+  paidOn: isoDateSchema,
+});
+
+const completeFinanceBillWithExpenseSchema = z.object({
+  paidOn: isoDateSchema,
+  amountMinor: z.number().int().positive().nullable().optional(),
+  currencyCode: z.string().length(3).optional(),
+  description: z.string().max(4000).nullable().optional(),
+  expenseCategoryId: z.string().uuid().nullable().optional(),
+});
+
+const rescheduleFinanceBillSchema = z.object({
+  dueOn: isoDateSchema,
 });
 
 const updateExpenseSchema = z
@@ -359,21 +390,6 @@ function fromPrismaRecurringExpenseStatus(
   throw new Error(`Unsupported recurring expense status: ${status satisfies never}`);
 }
 
-function fromPrismaAdminItemStatus(status: PrismaAdminItemStatus): AdminItemStatus {
-  switch (status) {
-    case "PENDING":
-      return "pending";
-    case "DONE":
-      return "done";
-    case "RESCHEDULED":
-      return "rescheduled";
-    case "DROPPED":
-      return "dropped";
-  }
-
-  throw new Error(`Unsupported admin item status: ${status satisfies never}`);
-}
-
 function toPrismaFinanceGoalType(
   goalType: NonNullable<UpdateFinanceGoalRequest["goalType"]>,
 ): PrismaFinanceGoalType {
@@ -438,6 +454,7 @@ function serializeExpense(expense: Expense): ExpenseItem {
     spentOn: toIsoDateString(expense.spentOn),
     description: expense.description,
     source: fromPrismaExpenseSource(expense.source),
+    billId: expense.billId,
     recurringExpenseTemplateId: expense.recurringExpenseTemplateId,
     createdAt: expense.createdAt.toISOString(),
     updatedAt: expense.updatedAt.toISOString(),
@@ -638,6 +655,96 @@ async function findOwnedRecurringExpenseTemplate(
   return recurringExpense;
 }
 
+async function findOwnedFinanceBill(
+  app: Parameters<FastifyPluginAsync>[0],
+  userId: string,
+  billId: string,
+) {
+  const bill = await app.prisma.adminItem.findFirst({
+    where: {
+      id: billId,
+      userId,
+      itemType: "BILL",
+    },
+    include: {
+      linkedExpense: {
+        select: {
+          id: true,
+        },
+      },
+    },
+  });
+
+  if (!bill) {
+    throw new AppError({
+      statusCode: 404,
+      code: "NOT_FOUND",
+      message: "Bill not found",
+    });
+  }
+
+  return bill;
+}
+
+function getOpenBillStatusFilter() {
+  return {
+    in: [...OPEN_BILL_STATUSES] as Array<(typeof OPEN_BILL_STATUSES)[number]>,
+  };
+}
+
+async function listFinanceBillsForMonth(
+  app: Parameters<FastifyPluginAsync>[0],
+  userId: string,
+  month: IsoMonthString,
+  options: { includeOverdueOpenBills?: boolean } = {},
+) {
+  const { monthStart, nextMonthStart } = getMonthBounds(month);
+
+  return app.prisma.adminItem.findMany({
+    where: {
+      userId,
+      itemType: "BILL",
+      OR: [
+        {
+          dueOn: {
+            gte: monthStart,
+            lt: nextMonthStart,
+          },
+        },
+        ...(options.includeOverdueOpenBills
+          ? [
+              {
+                dueOn: {
+                  lt: monthStart,
+                },
+                status: getOpenBillStatusFilter(),
+              },
+            ]
+          : []),
+      ],
+    },
+    include: {
+      linkedExpense: {
+        select: {
+          id: true,
+        },
+      },
+    },
+    orderBy: [{ dueOn: "asc" }, { createdAt: "asc" }],
+  });
+}
+
+function resolveBillPaidAt(paidOn: IsoDateString) {
+  return parseIsoDate(paidOn);
+}
+
+function resolveBillExpenseAmount(
+  billAmountMinor: number | null,
+  requestedAmountMinor: number | null | undefined,
+) {
+  return requestedAmountMinor ?? billAmountMinor ?? null;
+}
+
 async function findOwnedExpense(
   app: Parameters<FastifyPluginAsync>[0],
   userId: string,
@@ -717,7 +824,15 @@ async function buildFinanceMonthPlan(
           gte: monthStart,
           lt: nextMonthStart,
         },
-        status: "PENDING",
+        itemType: "BILL",
+        status: getOpenBillStatusFilter(),
+      },
+      include: {
+        linkedExpense: {
+          select: {
+            id: true,
+          },
+        },
       },
       orderBy: {
         dueOn: "asc",
@@ -729,7 +844,15 @@ async function buildFinanceMonthPlan(
         dueOn: {
           lt: monthStart,
         },
-        status: "PENDING",
+        itemType: "BILL",
+        status: getOpenBillStatusFilter(),
+      },
+      include: {
+        linkedExpense: {
+          select: {
+            id: true,
+          },
+        },
       },
       orderBy: {
         dueOn: "asc",
@@ -782,15 +905,7 @@ async function buildFinanceMonthPlan(
   };
 
   for (const bill of allPendingBills) {
-    const dueOnIso = toIsoDateString(bill.dueOn);
-    const timelineBill: FinanceMonthPlanResponse["monthPlan"]["billTimeline"]["today"][number] = {
-      id: bill.id,
-      title: bill.title,
-      dueOn: dueOnIso,
-      amountMinor: bill.amountMinor,
-      status: fromPrismaAdminItemStatus(bill.status),
-      recurringExpenseTemplateId: bill.recurringExpenseTemplateId,
-    };
+    const timelineBill = serializeFinanceBill(bill);
     const dayDiff = diffInDays(today, bill.dueOn);
 
     if (dayDiff <= 0) {
@@ -1350,7 +1465,15 @@ export const registerFinanceRoutes: FastifyPluginAsync = async (app) => {
             gte: monthStart,
             lt: nextMonthStart,
           },
-          status: "PENDING",
+          itemType: "BILL",
+          status: getOpenBillStatusFilter(),
+        },
+        include: {
+          linkedExpense: {
+            select: {
+              id: true,
+            },
+          },
         },
         orderBy: {
           dueOn: "asc",
@@ -1364,7 +1487,15 @@ export const registerFinanceRoutes: FastifyPluginAsync = async (app) => {
           dueOn: {
             lt: monthStart,
           },
-          status: "PENDING",
+          itemType: "BILL",
+          status: getOpenBillStatusFilter(),
+        },
+        include: {
+          linkedExpense: {
+            select: {
+              id: true,
+            },
+          },
         },
         orderBy: {
           dueOn: "asc",
@@ -1422,14 +1553,373 @@ export const registerFinanceRoutes: FastifyPluginAsync = async (app) => {
       categoryTotals: Array.from(categoryTotalsMap.values()).sort(
         (left, right) => right.totalAmountMinor - left.totalAmountMinor,
       ),
-      upcomingBills: allPendingBills.map((bill) => ({
-        id: bill.id,
-        title: bill.title,
-        dueOn: toIsoDateString(bill.dueOn),
-        amountMinor: bill.amountMinor,
-        status: fromPrismaAdminItemStatus(bill.status),
-        recurringExpenseTemplateId: bill.recurringExpenseTemplateId,
-      })),
+      upcomingBills: allPendingBills.map(serializeFinanceBill),
+    });
+
+    return reply.send(response);
+  });
+
+  app.get("/bills", async (request, reply) => {
+    const user = requireAuthenticatedUser(request);
+    const query = parseOrThrow(
+      z.object({
+        month: isoMonthSchema,
+      }),
+      request.query,
+    );
+    const { timezone } = await getUserFinanceContext(app, user.id);
+    const currentMonth = getIsoMonthString(parseIsoDate(getUserLocalDate(new Date(), timezone)));
+    const bills = await listFinanceBillsForMonth(app, user.id, query.month, {
+      includeOverdueOpenBills: query.month === currentMonth,
+    });
+
+    const response: FinanceBillsResponse = withGeneratedAt({
+      month: query.month,
+      bills: bills.map(serializeFinanceBill),
+    });
+
+    return reply.send(response);
+  });
+
+  app.post("/bills", async (request, reply) => {
+    const user = requireAuthenticatedUser(request);
+    const payload = parseOrThrow(
+      createFinanceBillSchema,
+      request.body as CreateFinanceBillRequest,
+    );
+
+    const recurringExpenseTemplate = payload.recurringExpenseTemplateId
+      ? await findOwnedRecurringExpenseTemplate(app, user.id, payload.recurringExpenseTemplateId)
+      : null;
+    const expenseCategoryId = payload.expenseCategoryId ?? recurringExpenseTemplate?.expenseCategoryId ?? null;
+
+    await assertOwnedExpenseCategory(app, user.id, expenseCategoryId);
+
+    const bill = await app.prisma.adminItem.create({
+      data: {
+        userId: user.id,
+        title: payload.title.trim(),
+        itemType: "BILL",
+        dueOn: parseIsoDate(payload.dueOn),
+        status: "PENDING",
+        recurringExpenseTemplateId: payload.recurringExpenseTemplateId ?? null,
+        expenseCategoryId,
+        amountMinor: payload.amountMinor ?? recurringExpenseTemplate?.defaultAmountMinor ?? null,
+        note: payload.note ?? null,
+      },
+      include: {
+        linkedExpense: {
+          select: {
+            id: true,
+          },
+        },
+      },
+    });
+
+    const response: FinanceBillMutationResponse = withGeneratedAt({
+      bill: serializeFinanceBill(bill),
+      expense: null,
+    });
+
+    return reply.status(201).send(response);
+  });
+
+  app.post("/bills/:billId/pay-and-log", async (request, reply) => {
+    const user = requireAuthenticatedUser(request);
+    const { billId } = request.params as { billId: string };
+    const payload = parseOrThrow(
+      completeFinanceBillWithExpenseSchema,
+      request.body as CompleteFinanceBillWithExpenseRequest,
+    );
+
+    const existingBill = await findOwnedFinanceBill(app, user.id, billId);
+    const expenseCategoryId = payload.expenseCategoryId ?? existingBill.expenseCategoryId ?? null;
+
+    await assertOwnedExpenseCategory(app, user.id, expenseCategoryId);
+
+    const amountMinor = resolveBillExpenseAmount(existingBill.amountMinor, payload.amountMinor);
+    if (!amountMinor) {
+      throw new AppError({
+        statusCode: 400,
+        code: "BAD_REQUEST",
+        message: "Amount is required to log payment for this bill",
+      });
+    }
+
+    const currencyCode = payload.currencyCode ?? (await getUserCurrencyCode(app, user.id));
+    const paidAt = resolveBillPaidAt(payload.paidOn);
+
+    const result = await app.prisma.$transaction(async (tx) => {
+      const bill = await tx.adminItem.findFirst({
+        where: {
+          id: billId,
+          userId: user.id,
+          itemType: "BILL",
+        },
+        include: {
+          linkedExpense: {
+            select: {
+              id: true,
+            },
+          },
+        },
+      });
+
+      if (!bill) {
+        throw new AppError({
+          statusCode: 404,
+          code: "NOT_FOUND",
+          message: "Bill not found",
+        });
+      }
+
+      if (bill.status === "DROPPED") {
+        throw new AppError({
+          statusCode: 409,
+          code: "CONFLICT",
+          message: "Dropped bills cannot be paid",
+        });
+      }
+
+      if (bill.status === "DONE") {
+        if (bill.linkedExpense && bill.completionMode === "PAY_AND_LOG") {
+          const expense = await tx.expense.findUnique({
+            where: {
+              billId: bill.id,
+            },
+          });
+
+          return {
+            bill,
+            expense,
+          };
+        }
+
+        throw new AppError({
+          statusCode: 409,
+          code: "CONFLICT",
+          message: "Bill has already been completed",
+        });
+      }
+
+      const expense = await tx.expense.create({
+        data: {
+          userId: user.id,
+          expenseCategoryId,
+          billId: bill.id,
+          amountMinor,
+          currencyCode,
+          spentOn: paidAt,
+          description: payload.description ?? bill.title,
+          source: bill.recurringExpenseTemplateId ? "TEMPLATE" : "MANUAL",
+          recurringExpenseTemplateId: bill.recurringExpenseTemplateId ?? null,
+        },
+      });
+
+      const updatedBill = await tx.adminItem.update({
+        where: {
+          id: bill.id,
+        },
+        data: {
+          status: "DONE",
+          completedAt: paidAt,
+          completionMode: toPrismaBillCompletionMode("pay_and_log"),
+          amountMinor: bill.amountMinor ?? amountMinor,
+          expenseCategoryId,
+        },
+        include: {
+          linkedExpense: {
+            select: {
+              id: true,
+            },
+          },
+        },
+      });
+
+      return {
+        bill: updatedBill,
+        expense,
+      };
+    });
+
+    const response: FinanceBillMutationResponse = withGeneratedAt({
+      bill: serializeFinanceBill(result.bill),
+      expense: result.expense ? serializeExpense(result.expense) : null,
+    });
+
+    return reply.send(response);
+  });
+
+  app.post("/bills/:billId/mark-paid", async (request, reply) => {
+    const user = requireAuthenticatedUser(request);
+    const { billId } = request.params as { billId: string };
+    const payload = parseOrThrow(
+      completeFinanceBillSchema,
+      request.body as CompleteFinanceBillRequest,
+    );
+
+    await findOwnedFinanceBill(app, user.id, billId);
+
+    const bill = await app.prisma.$transaction(async (tx) => {
+      const currentBill = await tx.adminItem.findFirst({
+        where: {
+          id: billId,
+          userId: user.id,
+          itemType: "BILL",
+        },
+        include: {
+          linkedExpense: {
+            select: {
+              id: true,
+            },
+          },
+        },
+      });
+
+      if (!currentBill) {
+        throw new AppError({
+          statusCode: 404,
+          code: "NOT_FOUND",
+          message: "Bill not found",
+        });
+      }
+
+      if (currentBill.status === "DROPPED") {
+        throw new AppError({
+          statusCode: 409,
+          code: "CONFLICT",
+          message: "Dropped bills cannot be marked paid",
+        });
+      }
+
+      if (currentBill.status === "DONE") {
+        if (!currentBill.linkedExpense && currentBill.completionMode === "MARK_PAID_ONLY") {
+          return currentBill;
+        }
+
+        throw new AppError({
+          statusCode: 409,
+          code: "CONFLICT",
+          message: "Bill has already been completed",
+        });
+      }
+
+      return tx.adminItem.update({
+        where: {
+          id: currentBill.id,
+        },
+        data: {
+          status: "DONE",
+          completedAt: resolveBillPaidAt(payload.paidOn),
+          completionMode: toPrismaBillCompletionMode("mark_paid_only"),
+        },
+        include: {
+          linkedExpense: {
+            select: {
+              id: true,
+            },
+          },
+        },
+      });
+    });
+
+    const response: FinanceBillMutationResponse = withGeneratedAt({
+      bill: serializeFinanceBill(bill),
+      expense: null,
+    });
+
+    return reply.send(response);
+  });
+
+  app.post("/bills/:billId/reschedule", async (request, reply) => {
+    const user = requireAuthenticatedUser(request);
+    const { billId } = request.params as { billId: string };
+    const payload = parseOrThrow(
+      rescheduleFinanceBillSchema,
+      request.body as RescheduleFinanceBillRequest,
+    );
+
+    const currentBill = await findOwnedFinanceBill(app, user.id, billId);
+
+    if (currentBill.status === "DONE" || currentBill.status === "DROPPED") {
+      throw new AppError({
+        statusCode: 409,
+        code: "CONFLICT",
+        message: "Completed or dismissed bills cannot be rescheduled",
+      });
+    }
+
+    const nextDueOn = parseIsoDate(payload.dueOn);
+    const bill = await app.prisma.adminItem.update({
+      where: {
+        id: currentBill.id,
+      },
+      data: {
+        dueOn: nextDueOn,
+        status: "RESCHEDULED",
+        completedAt: null,
+        completionMode: null,
+      },
+      include: {
+        linkedExpense: {
+          select: {
+            id: true,
+          },
+        },
+      },
+    });
+
+    const response: FinanceBillMutationResponse = withGeneratedAt({
+      bill: serializeFinanceBill(bill),
+      expense: null,
+    });
+
+    return reply.send(response);
+  });
+
+  app.post("/bills/:billId/dismiss", async (request, reply) => {
+    const user = requireAuthenticatedUser(request);
+    const { billId } = request.params as { billId: string };
+    const currentBill = await findOwnedFinanceBill(app, user.id, billId);
+
+    if (currentBill.status === "DONE") {
+      throw new AppError({
+        statusCode: 409,
+        code: "CONFLICT",
+        message: "Paid bills cannot be dismissed",
+      });
+    }
+
+    if (currentBill.status === "DROPPED") {
+      const response: FinanceBillMutationResponse = withGeneratedAt({
+        bill: serializeFinanceBill(currentBill),
+        expense: null,
+      });
+
+      return reply.send(response);
+    }
+
+    const bill = await app.prisma.adminItem.update({
+      where: {
+        id: currentBill.id,
+      },
+      data: {
+        status: "DROPPED",
+        completedAt: null,
+        completionMode: null,
+      },
+      include: {
+        linkedExpense: {
+          select: {
+            id: true,
+          },
+        },
+      },
+    });
+
+    const response: FinanceBillMutationResponse = withGeneratedAt({
+      bill: serializeFinanceBill(bill),
+      expense: null,
     });
 
     return reply.send(response);

@@ -244,6 +244,16 @@
   background: rgba(217, 153, 58, 0.06);
 }
 
+.bill-row--settled {
+  border-color: rgba(93, 184, 106, 0.18);
+  background: rgba(93, 184, 106, 0.04);
+}
+
+.bill-row--unreconciled {
+  border-color: rgba(217, 153, 58, 0.2);
+  background: rgba(217, 153, 58, 0.05);
+}
+
 .bill-row__indicator {
   flex-shrink: 0;
   width: 8px;
@@ -293,6 +303,47 @@
   font-size: var(--fs-body);
   white-space: nowrap;
   color: var(--text-secondary);
+}
+
+.bill-row__meta {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+}
+
+.bill-status-pill,
+.bill-summary-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  padding: 0.18rem 0.55rem;
+  border-radius: var(--r-pill);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+  font-size: var(--fs-micro);
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.bill-status-pill--paid_with_expense {
+  border-color: rgba(93, 184, 106, 0.18);
+  color: var(--positive);
+}
+
+.bill-status-pill--paid_without_expense,
+.bill-summary-chip--alert {
+  border-color: rgba(217, 153, 58, 0.24);
+  color: var(--accent-bright);
+}
+
+.bill-status-pill--due,
+.bill-status-pill--rescheduled {
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+.bill-status-pill--dropped {
+  color: var(--text-tertiary);
 }
 
 .bill-row__actions {

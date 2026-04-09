@@ -256,7 +256,10 @@ async function generateRuleNotificationsForTargetUser(
     prisma.adminItem.findMany({
       where: {
         userId: user.id,
-        status: "PENDING",
+        itemType: "BILL",
+        status: {
+          in: ["PENDING", "RESCHEDULED"],
+        },
         dueOn: {
           gte: today,
           lt: addDays(today, 4),

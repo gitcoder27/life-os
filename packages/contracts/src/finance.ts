@@ -4,6 +4,13 @@ import type { RecurrenceDefinition, RecurrenceInput } from "./recurrence.js";
 export type ExpenseSource = "manual" | "quick_capture" | "template";
 export type RecurringExpenseStatus = "active" | "paused" | "archived";
 export type AdminItemStatus = "pending" | "done" | "rescheduled" | "dropped";
+export type FinanceBillCompletionMode = "pay_and_log" | "mark_paid_only";
+export type FinanceBillReconciliationStatus =
+  | "due"
+  | "paid_with_expense"
+  | "paid_without_expense"
+  | "rescheduled"
+  | "dropped";
 export type FinancePaceStatus = "no_plan" | "on_pace" | "slightly_heavy" | "off_track";
 export type FinanceWatchStatus = "within_limit" | "near_limit" | "over_limit";
 export type FinanceGoalType = "emergency_fund" | "debt_payoff" | "travel" | "large_purchase" | "other";
@@ -17,6 +24,7 @@ export interface ExpenseItem {
   spentOn: IsoDateString;
   description: string | null;
   source: ExpenseSource;
+  billId: EntityId | null;
   recurringExpenseTemplateId: EntityId | null;
   createdAt: string;
   updatedAt: string;
@@ -29,13 +37,21 @@ export interface FinanceCategoryTotal {
   totalAmountMinor: number;
 }
 
-export interface UpcomingBillItem {
+export interface FinanceBillItem {
   id: EntityId;
   title: string;
   dueOn: IsoDateString;
   amountMinor: number | null;
   status: AdminItemStatus;
+  expenseCategoryId: EntityId | null;
+  note: string | null;
+  paidAt: string | null;
+  linkedExpenseId: EntityId | null;
+  completionMode: FinanceBillCompletionMode | null;
+  reconciliationStatus: FinanceBillReconciliationStatus;
   recurringExpenseTemplateId: EntityId | null;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface FinanceSummaryResponse extends ApiMeta {
@@ -44,7 +60,7 @@ export interface FinanceSummaryResponse extends ApiMeta {
   totalSpentMinor: number;
   previousMonthTotalSpentMinor?: number;
   categoryTotals: FinanceCategoryTotal[];
-  upcomingBills: UpcomingBillItem[];
+  upcomingBills: FinanceBillItem[];
 }
 
 export interface FinanceMonthPlanCategoryWatchItem {
@@ -57,9 +73,9 @@ export interface FinanceMonthPlanCategoryWatchItem {
 }
 
 export interface FinanceBillTimeline {
-  today: UpcomingBillItem[];
-  thisWeek: UpcomingBillItem[];
-  laterThisMonth: UpcomingBillItem[];
+  today: FinanceBillItem[];
+  thisWeek: FinanceBillItem[];
+  laterThisMonth: FinanceBillItem[];
 }
 
 export interface FinanceMonthPlanItem {
@@ -195,6 +211,41 @@ export interface UpdateExpenseRequest {
 
 export interface ExpenseMutationResponse extends ApiMeta {
   expense: ExpenseItem;
+}
+
+export interface FinanceBillsResponse extends ApiMeta {
+  month: IsoMonthString;
+  bills: FinanceBillItem[];
+}
+
+export interface CreateFinanceBillRequest {
+  title: string;
+  dueOn: IsoDateString;
+  amountMinor?: number | null;
+  note?: string | null;
+  expenseCategoryId?: EntityId | null;
+  recurringExpenseTemplateId?: EntityId | null;
+}
+
+export interface CompleteFinanceBillWithExpenseRequest {
+  paidOn: IsoDateString;
+  amountMinor?: number | null;
+  currencyCode?: string;
+  description?: string | null;
+  expenseCategoryId?: EntityId | null;
+}
+
+export interface CompleteFinanceBillRequest {
+  paidOn: IsoDateString;
+}
+
+export interface RescheduleFinanceBillRequest {
+  dueOn: IsoDateString;
+}
+
+export interface FinanceBillMutationResponse extends ApiMeta {
+  bill: FinanceBillItem;
+  expense?: ExpenseItem | null;
 }
 
 export interface ExpensesResponse extends ApiMeta {
