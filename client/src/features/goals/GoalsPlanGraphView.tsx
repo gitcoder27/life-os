@@ -1,12 +1,12 @@
-import { memo, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Background,
   Handle,
   Position,
   ReactFlow,
   ReactFlowProvider,
-  useReactFlow,
   useNodesInitialized,
+  useReactFlow,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import type { Edge, Node, NodeMouseHandler, NodeProps, Viewport } from "@xyflow/react";
@@ -15,14 +15,6 @@ import type {
   GoalHorizonItem,
   GoalOverviewItem,
 } from "../../shared/lib/api";
-import type {
-  PlanningDraft,
-  PlanningLane,
-  PlanningReplaceState,
-  PlanningSelection,
-  PlanningSlot,
-} from "./GoalsPlanTypes";
-import { planningSlots } from "./GoalsPlanTypes";
 
 const NODE_W = 244;
 const CONTENT_X = 80;
@@ -30,7 +22,6 @@ const CONTENT_Y = 72;
 const LEVEL_GAP = 168;
 const SIBLING_GAP = 36;
 const ROOT_GAP = 64;
-const SELECTED_PLANNER_CLEARANCE = 138;
 const GOAL_DRAG_MIME = "application/x-life-os-goal-id";
 
 const domainEmojis: Record<string, string> = {
@@ -46,47 +37,6 @@ const domainEmoji = (key: string | null) => {
   return domainEmojis[key] ?? "✦";
 };
 
-const getLaneLabel = (lane: PlanningLane) => {
-  if (lane === "month") return "Month";
-  if (lane === "week") return "Week";
-  return "Today";
-};
-
-const getLanePrefix = (lane: PlanningLane) => {
-  if (lane === "month") return "M";
-  if (lane === "week") return "W";
-  return "T";
-};
-
-type PlannerItem = {
-  id: string;
-  slot: PlanningSlot;
-  title: string;
-  goalId: string | null;
-};
-
-type PlannerLaneData = {
-  lane: PlanningLane;
-  items: PlannerItem[];
-  selectedPlanningSelection: PlanningSelection | null;
-  planningDraft: PlanningDraft | null;
-  planningReplaceState: PlanningReplaceState | null;
-  activeGoals: GoalOverviewItem[];
-  onSelectSlot: (lane: PlanningLane, slot: PlanningSlot) => void;
-  onDropGoalOnSlot: (lane: PlanningLane, slot: PlanningSlot, goalId: string) => void;
-  onPlanningDraftChange: (updates: Partial<PlanningDraft>) => void;
-  onSavePlanningDraft: () => void;
-  onCancelPlanningDraft: () => void;
-  onPlanningReplaceAction: (action: "replace" | "move") => void;
-  onCancelPlanningReplace: () => void;
-};
-
-type GoalPlannerData = {
-  showTodayLane: boolean;
-  onToggleTodayLane: () => void;
-  lanes: PlannerLaneData[];
-};
-
 type GoalNodeData = {
   goal: GoalOverviewItem;
   isSelected: boolean;
@@ -94,15 +44,13 @@ type GoalNodeData = {
   isDimmed: boolean;
   canExpand: boolean;
   isExpanded: boolean;
-  planner: GoalPlannerData | null;
+  isInMonthFocus: boolean;
+  isInWeekFocus: boolean;
   onSelect: (goalId: string) => void;
   onToggleExpanded: (goalId: string) => void;
   onOpenAddChild: (goalId: string) => void;
+  onOpenPlanning: (goalId: string) => void;
   onDropGoalOnGoal: (targetGoalId: string, draggedGoalId: string) => void;
-};
-
-type AddChildNodeData = {
-  onOpen: () => void;
 };
 
 type ChildDraftNodeData = {
@@ -127,204 +75,26 @@ type LayoutProps = {
   isFocusMode: boolean;
   childDraft: ChildDraft | null;
   childDraftIsPending: boolean;
-  monthItems: PlannerItem[];
-  weekItems: PlannerItem[];
-  todayItems: PlannerItem[];
-  selectedPlanningSelection: PlanningSelection | null;
-  planningDraft: PlanningDraft | null;
-  planningReplaceState: PlanningReplaceState | null;
-  showTodayLane: boolean;
+  monthFocusGoalIds: Set<string>;
+  weekFocusGoalIds: Set<string>;
   onSelectGoal: (goalId: string) => void;
   onToggleExpanded: (goalId: string) => void;
   onOpenAddChild: (goalId: string) => void;
+  onOpenPlanning: (goalId: string) => void;
   onDropGoalOnGoal: (targetGoalId: string, draggedGoalId: string) => void;
   onChildDraftChange: (title: string) => void;
   onSaveChildDraft: () => void;
   onCancelChildDraft: () => void;
-  onSelectPlanningSlot: (lane: PlanningLane, slot: PlanningSlot) => void;
-  onDropGoalOnSlot: (lane: PlanningLane, slot: PlanningSlot, goalId: string) => void;
-  onPlanningDraftChange: (updates: Partial<PlanningDraft>) => void;
-  onSavePlanningDraft: () => void;
-  onCancelPlanningDraft: () => void;
-  onPlanningReplaceAction: (action: "replace" | "move") => void;
-  onCancelPlanningReplace: () => void;
-  onToggleTodayLane: () => void;
 };
 
 type TreeChildItem =
   | { type: "goal"; goal: GoalOverviewItem }
-  | { type: "add"; parentGoalId: string }
   | { type: "draft"; parentGoalId: string };
 
 const sortGoals = (left: GoalOverviewItem, right: GoalOverviewItem) => {
   if (left.sortOrder !== right.sortOrder) return left.sortOrder - right.sortOrder;
   return left.createdAt.localeCompare(right.createdAt);
 };
-
-const PlannerLane = memo(function PlannerLane({ data }: { data: PlannerLaneData }) {
-  const [dragOverSlot, setDragOverSlot] = useState<PlanningSlot | null>(null);
-  const draft = data.planningDraft?.lane === data.lane ? data.planningDraft : null;
-  const replaceState = data.planningReplaceState?.lane === data.lane ? data.planningReplaceState : null;
-  const openSlot =
-    planningSlots.find((slot) => !data.items.some((item) => item.slot === slot)) ?? null;
-  const replaceGoal = replaceState
-    ? data.activeGoals.find((goal) => goal.id === replaceState.goalId) ?? null
-    : null;
-
-  return (
-    <section
-      className={`graph-planner__lane${draft ? " graph-planner__lane--draft" : ""}${replaceState ? " graph-planner__lane--replace" : ""}`}
-      onClick={(event) => event.stopPropagation()}
-    >
-      <div className="graph-planner__lane-header">
-        <span className="graph-planner__lane-label">{getLaneLabel(data.lane)}</span>
-        <span className="graph-planner__lane-count">{data.items.length}/3</span>
-      </div>
-
-      <div className="graph-planner__slot-row">
-        {planningSlots.map((slot) => {
-          const item = data.items.find((entry) => entry.slot === slot) ?? null;
-          const isSelected =
-            data.selectedPlanningSelection?.lane === data.lane &&
-            data.selectedPlanningSelection.slot === slot;
-          const isDraftSlot = draft?.slot === slot;
-          const isReplaceSlot = replaceState?.slot === slot;
-
-          return (
-            <button
-              key={`${data.lane}-${slot}`}
-              className={`graph-planner__slot${item ? " graph-planner__slot--filled" : " graph-planner__slot--empty"}${isSelected ? " graph-planner__slot--selected" : ""}${dragOverSlot === slot ? " graph-planner__slot--drag-over" : ""}${isDraftSlot ? " graph-planner__slot--draft" : ""}${isReplaceSlot ? " graph-planner__slot--replace" : ""}`}
-              type="button"
-              onClick={(event) => {
-                event.stopPropagation();
-                data.onSelectSlot(data.lane, slot);
-              }}
-              onDragOver={(event) => {
-                event.preventDefault();
-                setDragOverSlot(slot);
-              }}
-              onDragLeave={() => setDragOverSlot((current) => (current === slot ? null : current))}
-              onDrop={(event) => {
-                event.preventDefault();
-                setDragOverSlot(null);
-                const goalId = event.dataTransfer.getData(GOAL_DRAG_MIME);
-                if (goalId) {
-                  data.onDropGoalOnSlot(data.lane, slot, goalId);
-                }
-              }}
-            >
-              <span className="graph-planner__slot-badge">
-                {getLanePrefix(data.lane)}
-                {slot}
-              </span>
-              <span className="graph-planner__slot-text">
-                {item ? item.title : "Empty"}
-              </span>
-            </button>
-          );
-        })}
-      </div>
-
-      {draft ? (
-        <div className="graph-planner__editor">
-          <input
-            className="graph-planner__input"
-            type="text"
-            value={draft.title}
-            placeholder={`${getLaneLabel(data.lane)} item`}
-            onChange={(event) => data.onPlanningDraftChange({ title: event.target.value })}
-          />
-          <div className="graph-planner__editor-row">
-            <select
-              className="graph-planner__select"
-              value={draft.goalId}
-              onChange={(event) => data.onPlanningDraftChange({ goalId: event.target.value })}
-            >
-              {data.activeGoals.map((goal) => (
-                <option key={goal.id} value={goal.id}>
-                  {goal.title}
-                </option>
-              ))}
-            </select>
-            <div className="graph-planner__actions">
-              <button
-                className="button button--primary button--small"
-                type="button"
-                onClick={data.onSavePlanningDraft}
-                disabled={!draft.title.trim()}
-              >
-                Save
-              </button>
-              <button
-                className="button button--ghost button--small"
-                type="button"
-                onClick={data.onCancelPlanningDraft}
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
-
-      {replaceState ? (
-        <div className="graph-planner__replace">
-          <span className="graph-planner__replace-text">
-            Replace with {replaceGoal?.title ?? "selected goal"}?
-          </span>
-          <div className="graph-planner__actions">
-            <button
-              className="button button--primary button--small"
-              type="button"
-              onClick={() => data.onPlanningReplaceAction("replace")}
-            >
-              Replace
-            </button>
-            {openSlot ? (
-              <button
-                className="button button--ghost button--small"
-                type="button"
-                onClick={() => data.onPlanningReplaceAction("move")}
-              >
-                Move current
-              </button>
-            ) : null}
-            <button
-              className="button button--ghost button--small"
-              type="button"
-              onClick={data.onCancelPlanningReplace}
-            >
-              Cancel
-            </button>
-          </div>
-        </div>
-      ) : null}
-    </section>
-  );
-});
-
-const GoalInlinePlanner = memo(function GoalInlinePlanner({ planner }: { planner: GoalPlannerData }) {
-  return (
-    <div className="graph-planner" onClick={(event) => event.stopPropagation()}>
-      <div className="graph-planner__stem" aria-hidden="true" />
-      <div className="graph-planner__header">
-        <span className="graph-planner__eyebrow">Plan</span>
-        <button
-          className="graph-planner__toggle"
-          type="button"
-          onClick={planner.onToggleTodayLane}
-        >
-          {planner.showTodayLane ? "Hide Today" : "Show Today"}
-        </button>
-      </div>
-      <div className="graph-planner__lanes">
-        {planner.lanes.map((lane) => (
-          <PlannerLane key={lane.lane} data={lane} />
-        ))}
-      </div>
-    </div>
-  );
-});
 
 const GoalGraphNode = memo(function GoalGraphNode({ data }: NodeProps) {
   const d = data as unknown as GoalNodeData;
@@ -383,7 +153,12 @@ const GoalGraphNode = memo(function GoalGraphNode({ data }: NodeProps) {
         {d.goal.horizonName ? (
           <span className="graph-goal-node__badge">{d.goal.horizonName}</span>
         ) : null}
-        <span className="graph-goal-node__badge graph-goal-node__badge--drag">Drag to re-branch or plan</span>
+        {d.isInMonthFocus ? (
+          <span className="graph-goal-node__badge graph-goal-node__badge--focus">Month</span>
+        ) : null}
+        {d.isInWeekFocus ? (
+          <span className="graph-goal-node__badge graph-goal-node__badge--focus">Week</span>
+        ) : null}
       </div>
       {d.goal.progressPercent > 0 ? (
         <div className="graph-goal-node__bar">
@@ -393,39 +168,86 @@ const GoalGraphNode = memo(function GoalGraphNode({ data }: NodeProps) {
           />
         </div>
       ) : null}
-      {isDragOver ? (
-        <div className="graph-goal-node__drop-hint">Drop here to make this a child</div>
+      {d.isSelected ? (
+        <div className="graph-goal-node__footer">
+          <button
+            className="graph-goal-node__action"
+            type="button"
+            onClick={(event) => {
+              event.stopPropagation();
+              d.onOpenAddChild(d.goal.id);
+            }}
+          >
+            Add sub-goal
+          </button>
+          <button
+            className="graph-goal-node__action"
+            type="button"
+            onClick={(event) => {
+              event.stopPropagation();
+              d.onOpenPlanning(d.goal.id);
+            }}
+          >
+            Plan
+          </button>
+        </div>
       ) : null}
-      {d.planner ? <GoalInlinePlanner planner={d.planner} /> : null}
+      {isDragOver ? (
+        <div className="graph-goal-node__drop-hint">Drop here to re-parent</div>
+      ) : null}
       <Handle type="source" position={Position.Bottom} className="graph-handle--hidden" />
-    </div>
-  );
-});
-
-const AddChildNode = memo(function AddChildNode({ data }: NodeProps) {
-  const d = data as unknown as AddChildNodeData;
-
-  return (
-    <div className="graph-ghost nopan" onClick={d.onOpen}>
-      <Handle type="target" position={Position.Top} className="graph-handle--hidden" />
-      <span className="graph-ghost__plus">+</span>
-      <span className="graph-ghost__label">Add supporting goal</span>
     </div>
   );
 });
 
 const ChildDraftNode = memo(function ChildDraftNode({ data }: NodeProps) {
   const d = data as unknown as ChildDraftNodeData;
+  const focusTimeoutRef = useRef<number | null>(null);
+
+  const setInputRef = useCallback((node: HTMLInputElement | null) => {
+    if (!node) {
+      return;
+    }
+
+    if (focusTimeoutRef.current) {
+      window.clearTimeout(focusTimeoutRef.current);
+    }
+
+    focusTimeoutRef.current = window.setTimeout(() => {
+      node.focus();
+      node.select();
+    }, 0);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (focusTimeoutRef.current) {
+        window.clearTimeout(focusTimeoutRef.current);
+      }
+    };
+  }, []);
 
   return (
     <div className="graph-child-draft nopan">
       <Handle type="target" position={Position.Top} className="graph-handle--hidden" />
       <input
+        ref={setInputRef}
+        autoFocus
         className="graph-child-draft__input"
         type="text"
         value={d.title}
         placeholder="Supporting goal title"
         onChange={(event) => d.onChange(event.target.value)}
+        onKeyDown={(event) => {
+          if (event.key !== "Enter" || event.nativeEvent.isComposing) {
+            return;
+          }
+
+          event.preventDefault();
+          if (!d.isPending && d.title.trim()) {
+            d.onSave();
+          }
+        }}
       />
       <div className="graph-child-draft__actions">
         <button
@@ -452,7 +274,6 @@ const ChildDraftNode = memo(function ChildDraftNode({ data }: NodeProps) {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const nodeTypes: Record<string, any> = {
   goalNode: GoalGraphNode,
-  addChildNode: AddChildNode,
   childDraftNode: ChildDraftNode,
 };
 
@@ -535,70 +356,6 @@ const buildLayout = (props: LayoutProps) => {
   const activeGoals = props.goals.filter((goal) => goal.status === "active");
   const { goalMap, childrenByParent, roots, visibleIds } = buildVisibleTree(activeGoals, props.expandedGoalIds);
   const branchIds = buildBranchIds(props.selectedGoalId, goalMap, childrenByParent, visibleIds);
-  const activeGoalOptions = activeGoals;
-
-  const plannerForGoal = (goal: GoalOverviewItem): GoalPlannerData | null => {
-    if (props.selectedGoalId !== goal.id) {
-      return null;
-    }
-
-    const lanes: PlannerLaneData[] = [
-      {
-        lane: "month",
-        items: props.monthItems,
-        selectedPlanningSelection: props.selectedPlanningSelection,
-        planningDraft: props.planningDraft,
-        planningReplaceState: props.planningReplaceState,
-        activeGoals: activeGoalOptions,
-        onSelectSlot: props.onSelectPlanningSlot,
-        onDropGoalOnSlot: props.onDropGoalOnSlot,
-        onPlanningDraftChange: props.onPlanningDraftChange,
-        onSavePlanningDraft: props.onSavePlanningDraft,
-        onCancelPlanningDraft: props.onCancelPlanningDraft,
-        onPlanningReplaceAction: props.onPlanningReplaceAction,
-        onCancelPlanningReplace: props.onCancelPlanningReplace,
-      },
-      {
-        lane: "week",
-        items: props.weekItems,
-        selectedPlanningSelection: props.selectedPlanningSelection,
-        planningDraft: props.planningDraft,
-        planningReplaceState: props.planningReplaceState,
-        activeGoals: activeGoalOptions,
-        onSelectSlot: props.onSelectPlanningSlot,
-        onDropGoalOnSlot: props.onDropGoalOnSlot,
-        onPlanningDraftChange: props.onPlanningDraftChange,
-        onSavePlanningDraft: props.onSavePlanningDraft,
-        onCancelPlanningDraft: props.onCancelPlanningDraft,
-        onPlanningReplaceAction: props.onPlanningReplaceAction,
-        onCancelPlanningReplace: props.onCancelPlanningReplace,
-      },
-    ];
-
-    if (props.showTodayLane) {
-      lanes.push({
-        lane: "today",
-        items: props.todayItems,
-        selectedPlanningSelection: props.selectedPlanningSelection,
-        planningDraft: props.planningDraft,
-        planningReplaceState: props.planningReplaceState,
-        activeGoals: activeGoalOptions,
-        onSelectSlot: props.onSelectPlanningSlot,
-        onDropGoalOnSlot: props.onDropGoalOnSlot,
-        onPlanningDraftChange: props.onPlanningDraftChange,
-        onSavePlanningDraft: props.onSavePlanningDraft,
-        onCancelPlanningDraft: props.onCancelPlanningDraft,
-        onPlanningReplaceAction: props.onPlanningReplaceAction,
-        onCancelPlanningReplace: props.onCancelPlanningReplace,
-      });
-    }
-
-    return {
-      showTodayLane: props.showTodayLane,
-      onToggleTodayLane: props.onToggleTodayLane,
-      lanes,
-    };
-  };
 
   const nodes: Node[] = [];
   const edges: Edge[] = [];
@@ -616,8 +373,6 @@ const buildLayout = (props: LayoutProps) => {
 
     if (props.childDraft?.parentGoalId === goal.id) {
       items.push({ type: "draft", parentGoalId: goal.id });
-    } else if (props.selectedGoalId === goal.id) {
-      items.push({ type: "add", parentGoalId: goal.id });
     }
 
     return items;
@@ -656,7 +411,6 @@ const buildLayout = (props: LayoutProps) => {
     goal: GoalOverviewItem,
     leftX: number,
     depth: number,
-    verticalOffset: number,
   ) => {
     const childItems = childItemsForGoal(goal);
     const goalWidth = measureGoalWidth(goal);
@@ -664,10 +418,7 @@ const buildLayout = (props: LayoutProps) => {
       return total + measureItemWidth(item) + (index > 0 ? SIBLING_GAP : 0);
     }, 0);
     const goalX = leftX + (goalWidth - NODE_W) / 2;
-    const goalY = CONTENT_Y + depth * LEVEL_GAP + verticalOffset;
-    const childVerticalOffset =
-      verticalOffset +
-      (props.selectedGoalId === goal.id ? SELECTED_PLANNER_CLEARANCE : 0);
+    const goalY = CONTENT_Y + depth * LEVEL_GAP;
 
     nodes.push({
       id: goal.id,
@@ -686,10 +437,12 @@ const buildLayout = (props: LayoutProps) => {
         isDimmed: props.isFocusMode && props.selectedGoalId !== null && !branchIds.has(goal.id),
         canExpand: (childrenByParent.get(goal.id)?.length ?? 0) > 0,
         isExpanded: props.expandedGoalIds.has(goal.id),
-        planner: plannerForGoal(goal),
+        isInMonthFocus: props.monthFocusGoalIds.has(goal.id),
+        isInWeekFocus: props.weekFocusGoalIds.has(goal.id),
         onSelect: props.onSelectGoal,
         onToggleExpanded: props.onToggleExpanded,
         onOpenAddChild: props.onOpenAddChild,
+        onOpenPlanning: props.onOpenPlanning,
         onDropGoalOnGoal: props.onDropGoalOnGoal,
       } satisfies GoalNodeData,
       selectable: false,
@@ -705,10 +458,10 @@ const buildLayout = (props: LayoutProps) => {
     for (const item of childItems) {
       const itemWidth = measureItemWidth(item);
       const itemNodeX = currentLeft + (itemWidth - NODE_W) / 2;
-      const itemNodeY = CONTENT_Y + (depth + 1) * LEVEL_GAP + childVerticalOffset;
+      const itemNodeY = CONTENT_Y + (depth + 1) * LEVEL_GAP;
 
       if (item.type === "goal") {
-        layoutGoal(item.goal, currentLeft, depth + 1, childVerticalOffset);
+        layoutGoal(item.goal, currentLeft, depth + 1);
         edges.push({
           id: `edge-${goal.id}-${item.goal.id}`,
           source: goal.id,
@@ -722,31 +475,6 @@ const buildLayout = (props: LayoutProps) => {
                 : "rgba(216, 166, 95, 0.16)",
             strokeWidth: branchIds.has(goal.id) && branchIds.has(item.goal.id) ? 2 : 1,
             opacity: props.isFocusMode && !branchIds.has(item.goal.id) ? 0.2 : 1,
-          },
-        });
-      } else if (item.type === "add") {
-        const addNodeId = `add-child-${item.parentGoalId}`;
-        nodes.push({
-          id: addNodeId,
-          type: "addChildNode",
-          position: { x: itemNodeX, y: itemNodeY },
-          zIndex: props.selectedGoalId === goal.id ? 70 : 5,
-          data: {
-            onOpen: () => props.onOpenAddChild(item.parentGoalId),
-          } satisfies AddChildNodeData,
-          selectable: false,
-          draggable: false,
-        });
-        edges.push({
-          id: `edge-${goal.id}-${addNodeId}`,
-          source: goal.id,
-          target: addNodeId,
-          type: "smoothstep",
-          animated: true,
-          style: {
-            stroke: "rgba(217, 153, 58, 0.24)",
-            strokeWidth: 1,
-            strokeDasharray: "6 4",
           },
         });
       } else {
@@ -787,7 +515,7 @@ const buildLayout = (props: LayoutProps) => {
   let currentLeft = CONTENT_X;
   for (const root of roots) {
     const rootWidth = measureGoalWidth(root);
-    layoutGoal(root, currentLeft, 0, 0);
+    layoutGoal(root, currentLeft, 0);
     currentLeft += rootWidth + ROOT_GAP;
   }
 
@@ -894,11 +622,6 @@ const GraphInner = (props: GraphInnerProps) => {
   const handleNodeClick: NodeMouseHandler<Node> = (_event, node) => {
     if (node.type === "goalNode") {
       props.onSelectGoal(node.id);
-      return;
-    }
-
-    if (node.type === "addChildNode" && node.id.startsWith("add-child-")) {
-      props.onOpenAddChild(node.id.replace("add-child-", ""));
     }
   };
 
@@ -925,40 +648,24 @@ const GraphInner = (props: GraphInnerProps) => {
 export type GoalsPlanGraphViewProps = {
   goals: GoalOverviewItem[];
   horizons: GoalHorizonItem[];
-  monthItems: PlannerItem[];
-  weekItems: PlannerItem[];
-  todayItems: PlannerItem[];
   selectedGoalId: string | null;
   expandedGoalIds: Set<string>;
   isFocusMode: boolean;
   childDraft: ChildDraft | null;
   childDraftIsPending: boolean;
-  selectedPlanningSelection: PlanningSelection | null;
-  planningDraft: PlanningDraft | null;
-  planningReplaceState: PlanningReplaceState | null;
-  showTodayLane: boolean;
+  monthFocusGoalIds: Set<string>;
+  weekFocusGoalIds: Set<string>;
   structureError: string | null;
   isExpanded: boolean;
-  isInspectorVisible: boolean;
   onSelectGoal: (goalId: string) => void;
   onToggleExpanded: (goalId: string) => void;
   onOpenAddChild: (goalId: string) => void;
+  onOpenPlanning: (goalId: string) => void;
   onDropGoalOnGoal: (targetGoalId: string, draggedGoalId: string) => void;
-  onDropGoalOnHorizon: (horizonId: string | null, goalId: string) => void;
   onChildDraftChange: (title: string) => void;
   onSaveChildDraft: () => void;
   onCancelChildDraft: () => void;
-  onSelectPlanningSlot: (lane: PlanningLane, slot: PlanningSlot) => void;
-  onDropGoalOnSlot: (lane: PlanningLane, slot: PlanningSlot, goalId: string) => void;
-  onPlanningDraftChange: (updates: Partial<PlanningDraft>) => void;
-  onSavePlanningDraft: () => void;
-  onCancelPlanningDraft: () => void;
-  onPlanningReplaceAction: (action: "replace" | "move") => void;
-  onCancelPlanningReplace: () => void;
-  onToggleTodayLane: () => void;
   onCanvasClear: () => void;
-  onShowInspector: () => void;
-  onHideInspector: () => void;
   onEnterFocusMode: () => void;
   onExitFocusMode: () => void;
   onClearSelection: () => void;
@@ -968,40 +675,24 @@ export type GoalsPlanGraphViewProps = {
 export const GoalsPlanGraphView = ({
   goals,
   horizons,
-  monthItems,
-  weekItems,
-  todayItems,
   selectedGoalId,
   expandedGoalIds,
   isFocusMode,
   childDraft,
   childDraftIsPending,
-  selectedPlanningSelection,
-  planningDraft,
-  planningReplaceState,
-  showTodayLane,
+  monthFocusGoalIds,
+  weekFocusGoalIds,
   structureError,
   isExpanded,
-  isInspectorVisible,
   onSelectGoal,
   onToggleExpanded,
   onOpenAddChild,
+  onOpenPlanning,
   onDropGoalOnGoal,
-  onDropGoalOnHorizon: _onDropGoalOnHorizon,
   onChildDraftChange,
   onSaveChildDraft,
   onCancelChildDraft,
-  onSelectPlanningSlot,
-  onDropGoalOnSlot,
-  onPlanningDraftChange,
-  onSavePlanningDraft,
-  onCancelPlanningDraft,
-  onPlanningReplaceAction,
-  onCancelPlanningReplace,
-  onToggleTodayLane,
   onCanvasClear,
-  onShowInspector,
-  onHideInspector,
   onEnterFocusMode,
   onExitFocusMode,
   onClearSelection,
@@ -1028,10 +719,9 @@ export const GoalsPlanGraphView = ({
           <button
             className="button button--ghost button--small ghq-graph__toolbar-btn"
             type="button"
-            onClick={isInspectorVisible ? onHideInspector : onShowInspector}
-            aria-pressed={isInspectorVisible}
+            onClick={() => onOpenPlanning(selectedGoalId)}
           >
-            {isInspectorVisible ? "Hide details" : "Show details"}
+            Open plan
           </button>
         ) : null}
         {selectedGoalId ? (
@@ -1068,33 +758,21 @@ export const GoalsPlanGraphView = ({
         <GraphInner
           goals={goals}
           horizons={horizons}
-          monthItems={monthItems}
-          weekItems={weekItems}
-          todayItems={todayItems}
           selectedGoalId={selectedGoalId}
           expandedGoalIds={expandedGoalIds}
           isFocusMode={isFocusMode}
           childDraft={childDraft}
           childDraftIsPending={childDraftIsPending}
-          selectedPlanningSelection={selectedPlanningSelection}
-          planningDraft={planningDraft}
-          planningReplaceState={planningReplaceState}
-          showTodayLane={showTodayLane}
+          monthFocusGoalIds={monthFocusGoalIds}
+          weekFocusGoalIds={weekFocusGoalIds}
           onSelectGoal={onSelectGoal}
           onToggleExpanded={onToggleExpanded}
           onOpenAddChild={onOpenAddChild}
+          onOpenPlanning={onOpenPlanning}
           onDropGoalOnGoal={onDropGoalOnGoal}
           onChildDraftChange={onChildDraftChange}
           onSaveChildDraft={onSaveChildDraft}
           onCancelChildDraft={onCancelChildDraft}
-          onSelectPlanningSlot={onSelectPlanningSlot}
-          onDropGoalOnSlot={onDropGoalOnSlot}
-          onPlanningDraftChange={onPlanningDraftChange}
-          onSavePlanningDraft={onSavePlanningDraft}
-          onCancelPlanningDraft={onCancelPlanningDraft}
-          onPlanningReplaceAction={onPlanningReplaceAction}
-          onCancelPlanningReplace={onCancelPlanningReplace}
-          onToggleTodayLane={onToggleTodayLane}
           isExpanded={isExpanded}
           onCanvasClear={onCanvasClear}
         />
@@ -1102,7 +780,7 @@ export const GoalsPlanGraphView = ({
 
       {!selectedGoalId ? (
         <div className="ghq-graph__hint">
-          <p>Select a goal to open an inline planning ladder without leaving the graph.</p>
+          <p>Select a goal to inspect it and break it down. Plan Month and Week only after the tree is clear.</p>
         </div>
       ) : null}
 

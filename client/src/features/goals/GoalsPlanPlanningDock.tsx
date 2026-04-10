@@ -1,11 +1,13 @@
 import type { GoalOverviewItem } from "../../shared/lib/api";
 import type {
   PlanningDraft,
+  PlanningItem,
   PlanningLane,
   PlanningReplaceState,
   PlanningSelection,
   PlanningSlot,
 } from "./GoalsPlanTypes";
+import { GoalsPlanPlanningEditor } from "./GoalsPlanPlanningEditor";
 
 const planningSlots: PlanningSlot[] = [1, 2, 3];
 
@@ -16,8 +18,8 @@ const getLanePrefix = (lane: PlanningLane) => {
 };
 
 const getLaneTitle = (lane: PlanningLane) => {
-  if (lane === "month") return "Month";
-  if (lane === "week") return "Week";
+  if (lane === "month") return "This month";
+  if (lane === "week") return "This week";
   return "Today";
 };
 
@@ -28,39 +30,51 @@ type DockItem = {
   goalId: string | null;
 };
 
+type LaneDefinition = {
+  lane: Exclude<PlanningLane, "today">;
+  items: DockItem[];
+};
+
 type DockProps = {
-  selectedGoal: GoalOverviewItem;
+  selectedGoal: GoalOverviewItem | null;
   activeGoals: GoalOverviewItem[];
   monthItems: DockItem[];
   weekItems: DockItem[];
-  todayItems: DockItem[];
-  showTodayLane: boolean;
   selectedPlanningSelection: PlanningSelection | null;
+  selectedPlanningItem: PlanningItem | null;
   planningDraft: PlanningDraft | null;
   planningReplaceState: PlanningReplaceState | null;
-  onSelectSlot: (lane: PlanningLane, slot: PlanningSlot) => void;
-  onDropGoalOnSlot: (lane: PlanningLane, slot: PlanningSlot, goalId: string) => void;
+  planningError: string | null;
+  isOpen: boolean;
+  onToggleOpen: () => void;
+  onClose: () => void;
+  onAddSelectedGoal: (lane: Exclude<PlanningLane, "today">) => void;
+  onSelectSlot: (lane: Exclude<PlanningLane, "today">, slot: PlanningSlot) => void;
   onPlanningDraftChange: (updates: Partial<PlanningDraft>) => void;
   onSavePlanningDraft: () => void;
   onCancelPlanningDraft: () => void;
   onPlanningReplaceAction: (action: "replace" | "move") => void;
   onCancelPlanningReplace: () => void;
-  onToggleTodayLane: () => void;
-  onShowInspector: () => void;
-  onClearSelection: () => void;
+  getDuplicateCount: (lane: Exclude<PlanningLane, "today">, goalId: string, excludeSlot?: PlanningSlot) => number;
+  getAvailableSlots: (lane: Exclude<PlanningLane, "today">, currentSlot?: PlanningSlot) => PlanningSlot[];
+  isLanePending: (lane: Exclude<PlanningLane, "today">) => boolean;
+  getLaneErrorMessage: (lane: Exclude<PlanningLane, "today">) => string | null;
+  onSaveSelectedItem: (updates: { title: string; goalId: string | null; slot: PlanningSlot }) => Promise<void> | void;
+  onRemoveSelectedItem: () => Promise<void> | void;
+  onJumpToGoal: (goalId: string) => void;
 };
 
 type SlotCardProps = {
-  lane: PlanningLane;
+  lane: Exclude<PlanningLane, "today">;
   slot: PlanningSlot;
   item: DockItem | null;
   activeGoals: GoalOverviewItem[];
+  selectedGoal: GoalOverviewItem | null;
   selectedPlanningSelection: PlanningSelection | null;
   planningDraft: PlanningDraft | null;
   planningReplaceState: PlanningReplaceState | null;
   laneItems: DockItem[];
-  onSelectSlot: (lane: PlanningLane, slot: PlanningSlot) => void;
-  onDropGoalOnSlot: (lane: PlanningLane, slot: PlanningSlot, goalId: string) => void;
+  onSelectSlot: (lane: Exclude<PlanningLane, "today">, slot: PlanningSlot) => void;
   onPlanningDraftChange: (updates: Partial<PlanningDraft>) => void;
   onSavePlanningDraft: () => void;
   onCancelPlanningDraft: () => void;
@@ -73,12 +87,12 @@ const PlanningDockSlot = ({
   slot,
   item,
   activeGoals,
+  selectedGoal,
   selectedPlanningSelection,
   planningDraft,
   planningReplaceState,
   laneItems,
   onSelectSlot,
-  onDropGoalOnSlot,
   onPlanningDraftChange,
   onSavePlanningDraft,
   onCancelPlanningDraft,
@@ -108,11 +122,11 @@ const PlanningDockSlot = ({
           {slot}
         </span>
         <div className="ghq-plan-dock__slot-content">
-          <strong>Slot already filled</strong>
-          <p>Replace it with “{replaceGoal?.title ?? "Selected goal"}”?</p>
+          <strong>Replace current focus</strong>
+          <p>Put “{replaceGoal?.title ?? "Selected goal"}” here instead.</p>
           <div className="ghq-plan-dock__slot-actions">
             <button className="button button--primary button--small" type="button" onClick={() => onPlanningReplaceAction("replace")}>
-              Replace here
+              Replace
             </button>
             {openSlot ? (
               <button className="button button--ghost button--small" type="button" onClick={() => onPlanningReplaceAction("move")}>
@@ -169,29 +183,26 @@ const PlanningDockSlot = ({
   }
 
   return (
-    <div
+    <button
       className={`ghq-plan-dock__slot${item ? " ghq-plan-dock__slot--filled" : " ghq-plan-dock__slot--empty"}${isSelected ? " ghq-plan-dock__slot--selected" : ""}`}
+      type="button"
       onClick={() => onSelectSlot(lane, slot)}
-      onDragOver={(event) => {
-        event.preventDefault();
-      }}
-      onDrop={(event) => {
-        event.preventDefault();
-        const goalId = event.dataTransfer.getData("application/x-life-os-goal-id");
-        if (goalId) {
-          onDropGoalOnSlot(lane, slot, goalId);
-        }
-      }}
     >
       <span className="ghq-plan-dock__slot-badge">
         {prefix}
         {slot}
       </span>
       <div className="ghq-plan-dock__slot-content">
-        <strong>{item?.title ?? "Click or drop a goal here"}</strong>
-        <span>{item ? "Linked planning item" : "Directly plan this goal without leaving the canvas."}</span>
+        <strong>{item?.title ?? (selectedGoal ? "Add selected goal" : "Empty slot")}</strong>
+        <span>
+          {item
+            ? "Focus item"
+            : selectedGoal
+              ? `Use ${selectedGoal.title} here`
+              : "Select a goal to plan it"}
+        </span>
       </div>
-    </div>
+    </button>
   );
 };
 
@@ -200,84 +211,143 @@ export const GoalsPlanPlanningDock = ({
   activeGoals,
   monthItems,
   weekItems,
-  todayItems,
-  showTodayLane,
   selectedPlanningSelection,
+  selectedPlanningItem,
   planningDraft,
   planningReplaceState,
+  planningError,
+  isOpen,
+  onToggleOpen,
+  onClose,
+  onAddSelectedGoal,
   onSelectSlot,
-  onDropGoalOnSlot,
   onPlanningDraftChange,
   onSavePlanningDraft,
   onCancelPlanningDraft,
   onPlanningReplaceAction,
   onCancelPlanningReplace,
-  onToggleTodayLane,
-  onShowInspector,
-  onClearSelection,
+  getDuplicateCount,
+  getAvailableSlots,
+  isLanePending,
+  getLaneErrorMessage,
+  onSaveSelectedItem,
+  onRemoveSelectedItem,
+  onJumpToGoal,
 }: DockProps) => {
-  const laneDefinitions: Array<{ lane: PlanningLane; items: DockItem[] }> = [
+  const laneDefinitions: LaneDefinition[] = [
     { lane: "month", items: monthItems },
     { lane: "week", items: weekItems },
   ];
 
-  if (showTodayLane) {
-    laneDefinitions.push({ lane: "today", items: todayItems });
-  }
-
   return (
-    <div className="ghq-plan-dock">
-      <div className="ghq-plan-dock__header">
-        <div>
-          <span className="ghq-plan-dock__eyebrow">Planning Dock</span>
-          <h3>{selectedGoal.title}</h3>
-          <p>Keep the map stable while you connect this goal to Month, Week, and Today.</p>
+    <section className={`ghq-plan-dock${isOpen ? " ghq-plan-dock--open" : ""}`}>
+      <div className="ghq-plan-dock__summary">
+        <div className="ghq-plan-dock__summary-copy">
+          <span className="ghq-plan-dock__eyebrow">Focus board</span>
+          <strong>
+            Month {monthItems.length}/3 · Week {weekItems.length}/3
+          </strong>
+          <span>
+            {selectedGoal
+              ? `${selectedGoal.title} is selected for planning.`
+              : "Build the tree first, then choose what deserves month or week focus."}
+          </span>
         </div>
-        <div className="ghq-plan-dock__header-actions">
-          <button className="button button--ghost button--small" type="button" onClick={onToggleTodayLane}>
-            {showTodayLane ? "Hide Today" : "Show Today"}
+        <div className="ghq-plan-dock__summary-actions">
+          <button className="button button--ghost button--small" type="button" onClick={onToggleOpen}>
+            {isOpen ? "Hide focus board" : "Open focus board"}
           </button>
-          <button className="button button--ghost button--small" type="button" onClick={onShowInspector}>
-            Show details
-          </button>
-          <button className="button button--ghost button--small" type="button" onClick={onClearSelection}>
-            Clear selection
-          </button>
+          {isOpen ? (
+            <button className="button button--ghost button--small" type="button" onClick={onClose}>
+              Close
+            </button>
+          ) : null}
         </div>
       </div>
 
-      <div className="ghq-plan-dock__lanes">
-        {laneDefinitions.map(({ lane, items }) => (
-          <section key={lane} className="ghq-plan-dock__lane">
-            <div className="ghq-plan-dock__lane-header">
-              <h4>{getLaneTitle(lane)}</h4>
-              <span>{getLanePrefix(lane)}1-{getLanePrefix(lane)}3</span>
-            </div>
-            <div className="ghq-plan-dock__slots">
-              {planningSlots.map((slot) => (
-                <PlanningDockSlot
-                  key={`${lane}-${slot}`}
-                  lane={lane}
-                  slot={slot}
-                  item={items.find((item) => item.slot === slot) ?? null}
+      {isOpen ? (
+        <div className="ghq-plan-dock__body">
+          {selectedGoal ? (
+            <>
+              <div className="ghq-plan-dock__header">
+                <div>
+                  <h3>{selectedGoal.title}</h3>
+                  <p>Choose whether this goal belongs in this month or this week. Keep the list small and intentional.</p>
+                </div>
+              </div>
+
+              <div className="ghq-plan-dock__lanes">
+                {laneDefinitions.map(({ lane, items }) => {
+                  const existingSlot = items.find((item) => item.goalId === selectedGoal.id)?.slot ?? null;
+
+                  return (
+                    <section key={lane} className="ghq-plan-dock__lane">
+                      <div className="ghq-plan-dock__lane-header">
+                        <div>
+                          <h4>{getLaneTitle(lane)}</h4>
+                          <span>{getLanePrefix(lane)}1-{getLanePrefix(lane)}3</span>
+                        </div>
+                        <button
+                          className="button button--ghost button--small"
+                          type="button"
+                          onClick={() => onAddSelectedGoal(lane)}
+                        >
+                          {existingSlot ? `Open ${getLanePrefix(lane)}${existingSlot}` : `Add to ${lane}`}
+                        </button>
+                      </div>
+                      <div className="ghq-plan-dock__slots">
+                        {planningSlots.map((slot) => (
+                          <PlanningDockSlot
+                            key={`${lane}-${slot}`}
+                            lane={lane}
+                            slot={slot}
+                            item={items.find((item) => item.slot === slot) ?? null}
+                            activeGoals={activeGoals}
+                            selectedGoal={selectedGoal}
+                            selectedPlanningSelection={selectedPlanningSelection}
+                            planningDraft={planningDraft}
+                            planningReplaceState={planningReplaceState}
+                            laneItems={items}
+                            onSelectSlot={onSelectSlot}
+                            onPlanningDraftChange={onPlanningDraftChange}
+                            onSavePlanningDraft={onSavePlanningDraft}
+                            onCancelPlanningDraft={onCancelPlanningDraft}
+                            onPlanningReplaceAction={onPlanningReplaceAction}
+                            onCancelPlanningReplace={onCancelPlanningReplace}
+                          />
+                        ))}
+                      </div>
+                    </section>
+                  );
+                })}
+              </div>
+
+              {planningError ? (
+                <div className="inline-state inline-state--error">{planningError}</div>
+              ) : null}
+
+              {selectedPlanningSelection && selectedPlanningItem ? (
+                <GoalsPlanPlanningEditor
+                  lane={selectedPlanningSelection.lane}
+                  item={selectedPlanningItem}
                   activeGoals={activeGoals}
-                  selectedPlanningSelection={selectedPlanningSelection}
-                  planningDraft={planningDraft}
-                  planningReplaceState={planningReplaceState}
-                  laneItems={items}
-                  onSelectSlot={onSelectSlot}
-                  onDropGoalOnSlot={onDropGoalOnSlot}
-                  onPlanningDraftChange={onPlanningDraftChange}
-                  onSavePlanningDraft={onSavePlanningDraft}
-                  onCancelPlanningDraft={onCancelPlanningDraft}
-                  onPlanningReplaceAction={onPlanningReplaceAction}
-                  onCancelPlanningReplace={onCancelPlanningReplace}
+                  getDuplicateCount={(goalId) => getDuplicateCount(selectedPlanningSelection.lane as Exclude<PlanningLane, "today">, goalId, selectedPlanningItem.slot)}
+                  availableSlots={getAvailableSlots(selectedPlanningSelection.lane as Exclude<PlanningLane, "today">, selectedPlanningItem.slot)}
+                  isPending={isLanePending(selectedPlanningSelection.lane as Exclude<PlanningLane, "today">)}
+                  errorMessage={getLaneErrorMessage(selectedPlanningSelection.lane as Exclude<PlanningLane, "today">)}
+                  onSave={onSaveSelectedItem}
+                  onRemove={onRemoveSelectedItem}
+                  onJumpToGoal={onJumpToGoal}
                 />
-              ))}
+              ) : null}
+            </>
+          ) : (
+            <div className="ghq-plan-dock__empty">
+              <p>Select a goal from the graph to decide whether it belongs in this month or this week.</p>
             </div>
-          </section>
-        ))}
-      </div>
-    </div>
+          )}
+        </div>
+      ) : null}
+    </section>
   );
 };

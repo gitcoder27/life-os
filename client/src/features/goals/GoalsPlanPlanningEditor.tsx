@@ -1,8 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 
-import type {
-  GoalOverviewItem,
-} from "../../shared/lib/api";
+import type { GoalOverviewItem } from "../../shared/lib/api";
 import type {
   PlanningItem,
   PlanningLane,
@@ -54,82 +52,81 @@ export function GoalsPlanPlanningEditor({
   );
 
   return (
-    <div className="ghq-inspector">
-      <div className="ghq-inspector__header">
-        <div className="ghq-inspector__eyebrow">{getLaneLabel(lane)}</div>
-        <h2 className="ghq-inspector__title">
-          {lane === "month" ? "Monthly item" : lane === "week" ? "Weekly item" : "Today item"}
-        </h2>
-        <div className="ghq-inspector__meta">
-          <span className="ghq-inspector__horizon-badge">Slot {lane === "month" ? "M" : lane === "week" ? "W" : "T"}{item.slot}</span>
+    <section className="ghq-plan-editor">
+      <div className="ghq-plan-editor__header">
+        <div>
+          <span className="ghq-plan-editor__eyebrow">{getLaneLabel(lane)}</span>
+          <h3 className="ghq-plan-editor__title">
+            {lane === "month" ? "Monthly item" : lane === "week" ? "Weekly item" : "Today item"}
+          </h3>
         </div>
+        <span className="ghq-plan-editor__slot">
+          {lane === "month" ? "M" : lane === "week" ? "W" : "T"}
+          {item.slot}
+        </span>
       </div>
 
-      <div className="ghq-inspector__body">
-        <div className="ghq-inspector__section">
-          <h3 className="ghq-inspector__section-title">Edit planning item</h3>
+      <div className="ghq-plan-editor__body">
+        <label className="ghq-planning-form__field">
+          <span>Title</span>
+          <input
+            className="ghq-planning-form__input"
+            type="text"
+            value={title}
+            onChange={(event) => setTitle(event.target.value)}
+            disabled={isPending}
+          />
+        </label>
 
-          <label className="ghq-planning-form__field">
-            <span>Title</span>
-            <input
-              className="ghq-planning-form__input"
-              type="text"
-              value={title}
-              onChange={(event) => setTitle(event.target.value)}
-              disabled={isPending}
-            />
-          </label>
+        <label className="ghq-planning-form__field">
+          <span>Linked goal</span>
+          <select
+            className="ghq-planning-form__select"
+            value={goalId}
+            onChange={(event) => setGoalId(event.target.value)}
+            disabled={isPending}
+          >
+            <option value="">No goal</option>
+            {activeGoals.map((goal) => (
+              <option key={goal.id} value={goal.id}>
+                {goal.title}
+              </option>
+            ))}
+          </select>
+        </label>
 
-          <label className="ghq-planning-form__field">
-            <span>Linked goal</span>
-            <select
-              className="ghq-planning-form__select"
-              value={goalId}
-              onChange={(event) => setGoalId(event.target.value)}
-              disabled={isPending}
-            >
-              <option value="">No goal</option>
-              {activeGoals.map((goal) => (
-                <option key={goal.id} value={goal.id}>
-                  {goal.title}
-                </option>
-              ))}
-            </select>
-          </label>
+        <label className="ghq-planning-form__field">
+          <span>Slot</span>
+          <select
+            className="ghq-planning-form__select"
+            value={slot}
+            onChange={(event) => setSlot(Number(event.target.value) as PlanningSlot)}
+            disabled={isPending}
+          >
+            {slotChoices.map((slotChoice) => (
+              <option key={slotChoice} value={slotChoice}>
+                {lane === "month" ? "M" : lane === "week" ? "W" : "T"}
+                {slotChoice}
+              </option>
+            ))}
+          </select>
+        </label>
 
-          <label className="ghq-planning-form__field">
-            <span>Slot</span>
-            <select
-              className="ghq-planning-form__select"
-              value={slot}
-              onChange={(event) => setSlot(Number(event.target.value) as PlanningSlot)}
-              disabled={isPending}
-            >
-              {slotChoices.map((slotChoice) => (
-                <option key={slotChoice} value={slotChoice}>
-                  {lane === "month" ? "M" : lane === "week" ? "W" : "T"}
-                  {slotChoice}
-                </option>
-              ))}
-            </select>
-          </label>
+        {duplicateCount > 0 && goalId ? (
+          <p className="ghq-planning-form__warning">
+            This goal already appears elsewhere in {lane === "month" ? "this month" : lane === "week" ? "this week" : "today"}.
+          </p>
+        ) : null}
 
-          {duplicateCount > 0 && goalId ? (
-            <p className="ghq-planning-form__warning">
-              This goal already appears elsewhere in {lane === "month" ? "this month" : lane === "week" ? "this week" : "today"}.
-            </p>
-          ) : null}
-
-          {item.goalId ? (
-            <button
-              className="button button--ghost button--small"
-              type="button"
-              onClick={() => onJumpToGoal(item.goalId!)}
-            >
-              Open linked goal
-            </button>
-          ) : null}
-        </div>
+        {item.goalId ? (
+          <button
+            className="button button--ghost button--small"
+            type="button"
+            onClick={() => onJumpToGoal(item.goalId!)}
+          >
+            Open linked goal
+          </button>
+        ) : null}
 
         {errorMessage ? (
           <div className="inline-state inline-state--error">{errorMessage}</div>
@@ -154,6 +151,6 @@ export function GoalsPlanPlanningEditor({
           </button>
         </div>
       </div>
-    </div>
+    </section>
   );
 }
