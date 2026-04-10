@@ -16,6 +16,13 @@ type CategoryOption = {
   color: string | null;
 };
 
+type CategoryTotal = {
+  expenseCategoryId: string | null;
+  name: string;
+  color: string | null;
+  totalAmountMinor: number;
+};
+
 type BillItem = FinanceMonthPlanItem["billTimeline"]["today"][number];
 
 type PlanDraft = {
@@ -36,6 +43,7 @@ type FinancePlanPanelProps = {
   previousMonthTotalSpentMinor: number;
   currencyCode: string;
   categories: CategoryOption[];
+  categoryTotals: CategoryTotal[];
   isCurrentMonth: boolean;
   errorMessage: string | null;
   isSaving: boolean;
@@ -130,6 +138,7 @@ export const FinancePlanPanel = ({
   previousMonthTotalSpentMinor,
   currencyCode,
   categories,
+  categoryTotals,
   isCurrentMonth,
   errorMessage,
   isSaving,
@@ -257,11 +266,6 @@ export const FinancePlanPanel = ({
           </span>
         )}
       </div>
-
-      {/* ── Pace summary copy ── */}
-      <p className="mp__summary">
-        {monthPlan?.paceSummary ?? "Set a monthly spend target to see pace tracking and spending insights here."}
-      </p>
 
       {/* ── Pace bar ── */}
       <div className="mp__bar">
@@ -439,63 +443,26 @@ export const FinancePlanPanel = ({
             </div>
           </div>
 
-          {/* ── Breakdown list ── */}
-          {hasPlan && (
-            <div className="mp__breakdown">
-              <span className="mp__sub-label">Breakdown</span>
-              <div className="mp__breakdown-rows">
-                {monthPlan!.plannedIncomeMinor != null && (
-                  <div className="mp__brow">
-                    <span>Income</span>
-                    <span>{formatMinorCurrency(monthPlan!.plannedIncomeMinor, currencyCode)}</span>
+          {/* ── Top categories ── */}
+          {categoryTotals.length > 0 && (
+            <div className="mp__categories">
+              <span className="mp__sub-label">Top categories</span>
+              <div className="mp__cat-list">
+                {categoryTotals.slice(0, 5).map((ct) => (
+                  <div key={ct.expenseCategoryId ?? "uncategorized"} className="mp__cat-row">
+                    <span className="mp__cat-name">
+                      <span
+                        className="mp__watch-dot"
+                        style={{ background: ct.color ?? "var(--text-tertiary)" }}
+                      />
+                      {ct.name}
+                    </span>
+                    <span className="mp__cat-amount">
+                      {formatMinorCurrency(ct.totalAmountMinor, currencyCode)}
+                    </span>
                   </div>
-                )}
-                {monthPlan!.fixedObligationsMinor != null && (
-                  <div className="mp__brow">
-                    <span>Fixed bills</span>
-                    <span>{formatMinorCurrency(monthPlan!.fixedObligationsMinor, currencyCode)}</span>
-                  </div>
-                )}
-                {monthPlan!.flexibleSpendTargetMinor != null && (
-                  <div className="mp__brow">
-                    <span>Flexible target</span>
-                    <span>{formatMinorCurrency(monthPlan!.flexibleSpendTargetMinor, currencyCode)}</span>
-                  </div>
-                )}
-                {monthPlan!.expectedLargeExpensesMinor != null && (
-                  <div className="mp__brow">
-                    <span>Large one-offs</span>
-                    <span>{formatMinorCurrency(monthPlan!.expectedLargeExpensesMinor, currencyCode)}</span>
-                  </div>
-                )}
+                ))}
               </div>
-            </div>
-          )}
-
-          {/* ── Bill timeline ── */}
-          {totalBillCount > 0 && (
-            <div className="mp__bills">
-              <div className="mp__bills-head">
-                <span className="mp__sub-label">Bills</span>
-                <span className="mp__sub-count">{totalBillCount}</span>
-              </div>
-              {billGroups.map((group) => (
-                <div key={group.key} className="mp__bill-group">
-                  <span className="mp__bill-group-label">{group.label}</span>
-                  {group.items.map((bill: BillItem) => (
-                    <div key={bill.id} className="mp__bill-row">
-                      <span className="mp__bill-title">{bill.title}</span>
-                      <span className="mp__bill-meta">
-                        {bill.amountMinor != null
-                          ? formatMinorCurrency(bill.amountMinor, currencyCode)
-                          : "Open"}
-                        {" · "}
-                        {group.key === "today" ? formatDueLabel(bill.dueOn) : formatShortDate(bill.dueOn)}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              ))}
             </div>
           )}
 
@@ -530,6 +497,33 @@ export const FinancePlanPanel = ({
                   </div>
                 );
               })}
+            </div>
+          )}
+
+          {/* ── Bill timeline ── */}
+          {totalBillCount > 0 && (
+            <div className="mp__bills">
+              <div className="mp__bills-head">
+                <span className="mp__sub-label">Upcoming bills</span>
+                <span className="mp__sub-count">{totalBillCount}</span>
+              </div>
+              {billGroups.map((group) => (
+                <div key={group.key} className="mp__bill-group">
+                  <span className="mp__bill-group-label">{group.label}</span>
+                  {group.items.map((bill: BillItem) => (
+                    <div key={bill.id} className="mp__bill-row">
+                      <span className="mp__bill-title">{bill.title}</span>
+                      <span className="mp__bill-meta">
+                        {bill.amountMinor != null
+                          ? formatMinorCurrency(bill.amountMinor, currencyCode)
+                          : "Open"}
+                        {" · "}
+                        {group.key === "today" ? formatDueLabel(bill.dueOn) : formatShortDate(bill.dueOn)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              ))}
             </div>
           )}
         </>
