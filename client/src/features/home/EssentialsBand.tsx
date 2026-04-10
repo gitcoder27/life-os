@@ -1,5 +1,11 @@
 import { Link } from "react-router-dom";
-import { formatMinorCurrency, formatWorkoutStatus } from "../../shared/lib/api";
+import {
+  formatMinorCurrency,
+  formatRelativeDate,
+  formatWorkoutStatus,
+  type HomeAction,
+} from "../../shared/lib/api";
+import { resolveHomeActionTarget } from "../../shared/lib/homeNavigation";
 
 type EssentialsBandProps = {
   routines: {
@@ -22,6 +28,14 @@ type EssentialsBandProps = {
     currencyCode: string;
     budgetLabel: string;
     upcomingBills: number;
+    focusBill: {
+      id: string;
+      title: string;
+      dueOn: string;
+      amountMinor: number | null;
+      status: "pending" | "rescheduled";
+    } | null;
+    action: HomeAction;
   };
 };
 
@@ -39,6 +53,10 @@ export function EssentialsBand({
     health.waterTargetMl > 0
       ? Math.min(Math.round((health.waterMl / health.waterTargetMl) * 100), 100)
       : 0;
+  const financeTarget = resolveHomeActionTarget(finance.action);
+  const financeNote = finance.focusBill
+    ? `${finance.focusBill.title} · ${formatRelativeDate(finance.focusBill.dueOn)}`
+    : finance.budgetLabel || "Tracking";
 
   return (
     <div className="essentials-band">
@@ -83,7 +101,7 @@ export function EssentialsBand({
           </span>
         </Link>
 
-        <Link to="/finance" className="essential">
+        <Link to={financeTarget.to} state={financeTarget.state} className="essential essential--finance">
           <span className="essential__label">Money</span>
           <div className="essential__row">
             <span className="essential__value">
@@ -92,7 +110,7 @@ export function EssentialsBand({
             <span className="essential__context">this month</span>
           </div>
           <span className="essential__note">
-            {finance.budgetLabel || "Tracking"}
+            {financeNote}
             {finance.upcomingBills > 0
               ? ` · ${finance.upcomingBills} open bill${finance.upcomingBills !== 1 ? "s" : ""} this month`
               : ""}

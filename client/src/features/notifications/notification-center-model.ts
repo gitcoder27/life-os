@@ -1,4 +1,5 @@
 import { getPreferredTimezone, type NotificationItem } from "../../shared/lib/api";
+import { resolveHomeActionTarget, type HomeNavigationTarget } from "../../shared/lib/homeNavigation";
 
 export type FilterTab = "all" | "needs_action" | "read";
 export type NotificationSeverity = NotificationItem["severity"];
@@ -31,7 +32,7 @@ export const CATEGORY_LABELS: Record<NotificationItem["notificationType"], strin
   routine: "Routine",
 };
 
-export const resolveEntityRoute = (
+const resolveLegacyEntityRoute = (
   entityType: string | null,
   entityId: string | null,
 ): string | null => {
@@ -65,11 +66,22 @@ export const resolveEntityRoute = (
   return null;
 };
 
+export const resolveNotificationTarget = (
+  item: NotificationItem,
+): HomeNavigationTarget | null => {
+  if (item.action) {
+    return resolveHomeActionTarget(item.action);
+  }
+
+  const route = resolveLegacyEntityRoute(item.entityType, item.entityId);
+  return route ? { to: route } : null;
+};
+
 export const resolveActionLabel = (entityType: string | null): string => {
   if (!entityType) return "Open";
   if (entityType === "inbox_zero") return "Open inbox";
   if (entityType === "task") return "Open today";
-  if (entityType === "admin_item") return "View finances";
+  if (entityType === "admin_item") return "Open bill";
   if (entityType === "health_day" || entityType === "workout_day") return "View health";
   if (entityType === "habit" || entityType === "routine_day") return "View habits";
   if (entityType.includes("review")) return "Open review";

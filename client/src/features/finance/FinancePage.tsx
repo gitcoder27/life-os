@@ -1,6 +1,7 @@
 import {
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import { useLocation } from "react-router-dom";
@@ -52,6 +53,7 @@ import { RecurrenceEditor, buildRecurrenceInput } from "../../shared/ui/Recurren
 import { SectionCard } from "../../shared/ui/SectionCard";
 import { readHomeDestinationState } from "../../shared/lib/homeNavigation";
 import { FinanceInsightsPanel } from "./FinanceInsightsPanel";
+import { readFinanceRouteRequest } from "./finance-navigation";
 import { FinancePlanPanel } from "./FinancePlanPanel";
 
 type CategoryForm = { name: string; color: string };
@@ -197,9 +199,14 @@ export function FinancePage() {
   const [billPaymentForm, setBillPaymentForm] = useState<BillPaymentForm>(emptyBillPayment(today));
   const [linkingBillId, setLinkingBillId] = useState<string | null>(null);
   const [billLinkForm, setBillLinkForm] = useState<BillLinkForm>({ expenseId: "" });
+  const handledRouteRef = useRef<string | null>(null);
 
   const financeData = financeQuery.data;
   const homeDestination = readHomeDestinationState(location.state);
+  const financeRouteRequest = useMemo(
+    () => readFinanceRouteRequest(location.search),
+    [location.search],
+  );
   const bills = financeData?.bills?.bills ?? [];
   const summary = financeData?.summary;
   const expenses = financeData?.expenses?.expenses ?? [];
@@ -270,6 +277,77 @@ export function FinancePage() {
   }, [sortedExpenses]);
 
   useEffect(() => {
+    if (!financeRouteRequest.month || financeRouteRequest.month === selectedMonth) {
+      return;
+    }
+
+    setSelectedMonth(financeRouteRequest.month);
+  }, [financeRouteRequest.month, selectedMonth]);
+
+  useEffect(() => {
+    const routeKey = `${location.key}:${location.search}`;
+    const hasFinanceRouteTarget =
+      Boolean(financeRouteRequest.billId)
+      || financeRouteRequest.intent !== "view"
+      || Boolean(financeRouteRequest.section);
+
+    if (!hasFinanceRouteTarget || handledRouteRef.current === routeKey) {
+      return;
+    }
+
+    if (financeRouteRequest.month && financeRouteRequest.month !== selectedMonth) {
+      return;
+    }
+
+    const targetBill = financeRouteRequest.billId
+      ? workflowBills.find((bill) => bill.id === financeRouteRequest.billId)
+      : null;
+
+    if (financeRouteRequest.billId && !targetBill) {
+      return;
+    }
+
+    setHighlightedBillId(targetBill?.id ?? null);
+
+    if (targetBill && financeRouteRequest.intent === "pay" && targetBill.status !== "done") {
+      openBillPayment(targetBill);
+    }
+
+    requestAnimationFrame(() => {
+      const targetId = targetBill
+        ? `finance-bill-${targetBill.id}`
+        : financeRouteRequest.section === "pending_bills"
+          ? "finance-pending-bills"
+          : "finance-due-bills";
+
+      document.getElementById(targetId)?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    });
+
+    handledRouteRef.current = routeKey;
+  }, [
+    financeRouteRequest.billId,
+    financeRouteRequest.intent,
+    financeRouteRequest.month,
+    financeRouteRequest.section,
+    location.key,
+    location.search,
+    selectedMonth,
+    workflowBills,
+  ]);
+
+  useEffect(() => {
+    if (
+      financeRouteRequest.billId
+      || financeRouteRequest.month
+      || financeRouteRequest.intent !== "view"
+      || financeRouteRequest.section
+    ) {
+      return;
+    }
+
     if (homeDestination?.kind !== "finance_bills") {
       setHighlightedBillId(null);
       return;
@@ -290,7 +368,7 @@ export function FinancePage() {
         block: "start",
       });
     });
-  }, [currentMonth, homeDestination, location.key]);
+  }, [currentMonth, financeRouteRequest, homeDestination, location.key]);
 
   useEffect(() => {
     const manageTarget = new URLSearchParams(location.search).get("manage");

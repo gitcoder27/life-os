@@ -6,7 +6,7 @@ import {
   formatNotificationTime,
   isTonightAvailable,
   resolveActionLabel,
-  resolveEntityRoute,
+  resolveNotificationTarget,
 } from "./notification-center-model";
 
 type SnoozeMenuProps = {
@@ -154,7 +154,7 @@ export const NotificationActionCard = ({
   onOpen,
   onSnooze,
 }: NotificationActionCardProps) => {
-  const route = resolveEntityRoute(item.entityType, item.entityId);
+  const target = resolveNotificationTarget(item);
   const isUnread = !item.read;
   const actionLabel = resolveActionLabel(item.entityType);
 
@@ -185,7 +185,7 @@ export const NotificationActionCard = ({
         <div className="notif-action-card__text">{item.body}</div>
 
         <div className="notif-action-card__footer">
-          {route ? (
+          {target ? (
             <button
               className="notif-action-card__primary"
               type="button"

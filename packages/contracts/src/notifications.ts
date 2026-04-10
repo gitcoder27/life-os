@@ -1,4 +1,5 @@
 import type { ApiMeta, EntityId } from "./common.js";
+import type { HomeAction } from "./home.js";
 
 export type NotificationCategory =
   | "task"
@@ -31,6 +32,7 @@ export interface NotificationItem {
   severity: NotificationSeverity;
   title: string;
   body: string;
+  action: HomeAction | null;
   entityType: string | null;
   entityId: EntityId | null;
   ruleKey: string;

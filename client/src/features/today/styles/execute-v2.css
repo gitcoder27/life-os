@@ -950,6 +950,8 @@
   gap: 0.5rem;
   font-size: var(--fs-small);
   color: var(--text-secondary);
+  justify-content: space-between;
+  flex-wrap: wrap;
 }
 
 .de-finance-row--done { color: var(--positive); }
@@ -957,10 +959,43 @@
 .de-finance-row--summary { color: var(--text-tertiary); }
 
 .de-finance-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 1.65rem;
+  padding: 0.18rem 0.56rem;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
   font-size: var(--fs-micro);
-  font-weight: 600;
-  color: var(--accent);
+  font-weight: 700;
+  color: var(--text-secondary);
+  text-decoration: none;
+}
+
+.de-finance-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
   margin-left: auto;
+}
+
+.de-finance-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 1.65rem;
+  padding: 0.18rem 0.56rem;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--text-secondary);
+  font-size: var(--fs-micro);
+  font-weight: 700;
+}
+
+.de-finance-button:disabled {
+  opacity: 0.55;
 }
 
 /* ── Recovery Tray ──────────────────────────────────── */

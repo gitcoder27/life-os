@@ -396,9 +396,12 @@ describe("module route smoke tests", () => {
             status: "PENDING",
             relatedTaskId: null,
             recurringExpenseTemplateId: null,
+            expenseCategoryId: null,
             amountMinor: 5500,
             note: null,
+            completionMode: null,
             completedAt: null,
+            linkedExpense: null,
             createdAt: new Date(),
             updatedAt: new Date(),
           },
@@ -411,9 +414,12 @@ describe("module route smoke tests", () => {
             status: "PENDING",
             relatedTaskId: null,
             recurringExpenseTemplateId: null,
+            expenseCategoryId: null,
             amountMinor: 8900,
             note: null,
+            completionMode: null,
             completedAt: null,
+            linkedExpense: null,
             createdAt: new Date(),
             updatedAt: new Date(),
           },
@@ -428,9 +434,12 @@ describe("module route smoke tests", () => {
             status: "PENDING",
             relatedTaskId: null,
             recurringExpenseTemplateId: null,
+            expenseCategoryId: null,
             amountMinor: 50000,
             note: null,
+            completionMode: null,
             completedAt: null,
+            linkedExpense: null,
             createdAt: new Date(),
             updatedAt: new Date(),
           },
@@ -1037,11 +1046,40 @@ describe("module route smoke tests", () => {
   });
 
   it("serves notifications", async () => {
-    prisma.notification = { findMany: vi.fn().mockResolvedValue([]) } as any;
+    prisma.notification = {
+      findMany: vi.fn().mockResolvedValue([
+        {
+          id: "notification-finance-1",
+          userId: authenticatedUser.id,
+          notificationType: "finance",
+          severity: "WARNING",
+          title: "Internet bill is due tomorrow",
+          body: "Due on 2026-03-15.",
+          entityType: "admin_item",
+          entityId: "admin-1:2026-03-15:2026-03-14",
+          ruleKey: "admin_item_due_soon",
+          deliveryKey: "admin_item_due_soon|admin_item|admin-1:2026-03-15:2026-03-14",
+          visibleFrom: null,
+          expiresAt: null,
+          readAt: null,
+          dismissedAt: null,
+          createdAt: new Date("2026-03-14T10:00:00.000Z"),
+        },
+      ]),
+    } as any;
 
     const response = await app!.inject({ method: "GET", url: "/api/notifications" });
     expect(response.statusCode).toBe(200);
     expect(notificationServiceMock.generateRuleNotificationsForUser).toHaveBeenCalledTimes(1);
+    expect(JSON.parse(response.body).notifications[0]).toEqual(
+      expect.objectContaining({
+        id: "notification-finance-1",
+        action: {
+          type: "open_route",
+          route: "/finance?month=2026-03&bill=admin-1&intent=pay&section=due_now",
+        },
+      }),
+    );
     const [calledPrisma, calledUserId, calledNow] =
       notificationServiceMock.generateRuleNotificationsForUser.mock.calls[0] ?? [];
     expect(calledPrisma).toBe(prisma);
@@ -1673,14 +1711,10 @@ describe("module route smoke tests", () => {
       expect.objectContaining({
         kind: "admin",
         dismissible: true,
-        action: expect.objectContaining({
-          type: "open_destination",
-          destination: expect.objectContaining({
-            kind: "finance_bills",
-            adminItemId: "admin-1",
-            section: "due_now",
-          }),
-        }),
+        action: {
+          type: "open_route",
+          route: "/finance?month=2026-03&bill=admin-1&intent=pay&section=due_now",
+        },
       }),
     );
     expect(payload.guidance.weeklyChallenge).toEqual(
@@ -1694,6 +1728,17 @@ describe("module route smoke tests", () => {
         spentThisMonthMinor: 12345,
         currencyCode: "INR",
         upcomingBills: 2,
+        focusBill: {
+          id: "admin-1",
+          title: "Pay utilities",
+          dueOn: "2026-03-14",
+          amountMinor: 12000,
+          status: "pending",
+        },
+        action: {
+          type: "open_route",
+          route: "/finance?month=2026-03&bill=admin-1&section=due_now",
+        },
       }),
     );
     expect(payload.guidance.recommendations[0]).toEqual(

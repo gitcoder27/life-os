@@ -358,7 +358,7 @@ async function generateRuleNotificationsForTargetUser(
             : `${adminItem.title} is due soon`,
       body: `Due on ${toIsoDateString(adminItem.dueOn)}.`,
       entityType: "admin_item",
-      entityId: `${adminItem.id}:${todayIso}`,
+      entityId: `${adminItem.id}:${toIsoDateString(adminItem.dueOn)}:${todayIso}`,
       ruleKey: "admin_item_due_soon",
       now,
       timezone,

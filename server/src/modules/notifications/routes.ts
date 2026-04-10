@@ -4,6 +4,7 @@ import type {
   NotificationSeverity as PrismaNotificationSeverity,
 } from "@prisma/client";
 import type {
+  HomeAction,
   NotificationCategory,
   NotificationItem,
   NotificationMutationResponse,
@@ -16,6 +17,11 @@ import { requireAuthenticatedUser } from "../../lib/auth/require-auth.js";
 import { AppError } from "../../lib/errors/app-error.js";
 import { withGeneratedAt } from "../../lib/http/response.js";
 import { parseOrThrow } from "../../lib/validation/parse.js";
+import {
+  buildFinanceRoute,
+  extractFinanceBillDueOn,
+  extractFinanceBillId,
+} from "../finance/finance-navigation.js";
 import { generateRuleNotificationsForUser } from "./service.js";
 import {
   notificationCategories,
@@ -50,6 +56,86 @@ function fromPrismaNotificationSeverity(
   throw new Error(`Unsupported notification severity: ${severity satisfies never}`);
 }
 
+function resolveNotificationAction(notification: Notification): HomeAction | null {
+  if (notification.entityType === "admin_item") {
+    const billId = extractFinanceBillId(notification.entityId);
+    const dueOn = extractFinanceBillDueOn(notification.entityId);
+
+    return {
+      type: "open_route",
+      route: buildFinanceRoute({
+        billId,
+        dueOn,
+        intent: "pay",
+        section: "due_now",
+      }),
+    };
+  }
+
+  if (notification.entityType === "inbox_zero") {
+    return {
+      type: "open_route",
+      route: "/inbox",
+    };
+  }
+
+  if (notification.entityType === "task") {
+    return {
+      type: "open_route",
+      route: "/today",
+    };
+  }
+
+  if (notification.entityType === "health_day" || notification.entityType === "workout_day") {
+    return {
+      type: "open_route",
+      route: "/health",
+    };
+  }
+
+  if (notification.entityType === "habit" || notification.entityType === "routine_day") {
+    return {
+      type: "open_route",
+      route: "/habits",
+    };
+  }
+
+  if (notification.entityType === "daily_review" && notification.entityId) {
+    const datePart = notification.entityId.includes(":")
+      ? notification.entityId.split(":").pop()
+      : notification.entityId;
+
+    return {
+      type: "open_route",
+      route: `/reviews/daily?date=${datePart}`,
+    };
+  }
+
+  if (notification.entityType === "weekly_review" && notification.entityId) {
+    const datePart = notification.entityId.includes(":")
+      ? notification.entityId.split(":").pop()
+      : notification.entityId;
+
+    return {
+      type: "open_route",
+      route: `/reviews/weekly?date=${datePart}`,
+    };
+  }
+
+  if (notification.entityType === "monthly_review" && notification.entityId) {
+    const datePart = notification.entityId.includes(":")
+      ? notification.entityId.split(":").pop()
+      : notification.entityId;
+
+    return {
+      type: "open_route",
+      route: `/reviews/monthly?date=${datePart}`,
+    };
+  }
+
+  return null;
+}
+
 function serializeNotification(notification: Notification): NotificationItem {
   return {
     id: notification.id,
@@ -57,6 +143,7 @@ function serializeNotification(notification: Notification): NotificationItem {
     severity: fromPrismaNotificationSeverity(notification.severity),
     title: notification.title,
     body: notification.body,
+    action: resolveNotificationAction(notification),
     entityType: notification.entityType,
     entityId: notification.entityId,
     ruleKey: notification.ruleKey,

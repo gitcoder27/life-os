@@ -22,7 +22,7 @@ import { NotificationActionCard } from "./NotificationActionCard";
 import {
   FILTER_TABS,
   groupBySeverity,
-  resolveEntityRoute,
+  resolveNotificationTarget,
   type FilterTab,
 } from "./notification-center-model";
 
@@ -241,14 +241,14 @@ export const NotificationCenter = ({
     : undefined;
 
   const handleOpen = (item: NotificationItem) => {
-    const route = resolveEntityRoute(item.entityType, item.entityId);
+    const target = resolveNotificationTarget(item);
 
-    if (!route) {
+    if (!target) {
       return;
     }
 
     onClose();
-    navigate(route);
+    navigate(target.to, target.state ? { state: target.state } : undefined);
   };
 
   const handleSnooze = (notificationId: string, preset: SnoozePreset) => {

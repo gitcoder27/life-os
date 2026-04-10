@@ -1,11 +1,24 @@
 import { Link } from "react-router-dom";
-import { formatMinorCurrency } from "../../shared/lib/api";
+import {
+  formatMinorCurrency,
+  formatRelativeDate,
+  type HomeAction,
+} from "../../shared/lib/api";
+import { resolveHomeActionTarget } from "../../shared/lib/homeNavigation";
 
 type LedgerCardProps = {
   spentThisMonthMinor: number;
   currencyCode: string;
   budgetLabel: string;
   upcomingBills: number;
+  focusBill: {
+    id: string;
+    title: string;
+    dueOn: string;
+    amountMinor: number | null;
+    status: "pending" | "rescheduled";
+  } | null;
+  action: HomeAction;
 };
 
 export function LedgerCard({
@@ -13,9 +26,13 @@ export function LedgerCard({
   currencyCode,
   budgetLabel,
   upcomingBills,
+  focusBill,
+  action,
 }: LedgerCardProps) {
+  const target = resolveHomeActionTarget(action);
+
   return (
-    <Link to="/finance" className="dash-card dash-card--link">
+    <Link to={target.to} state={target.state} className="dash-card dash-card--link">
       <h3 className="dash-card__title">
         Ledger
         <span className="dash-card__arrow">&rarr;</span>
@@ -28,7 +45,9 @@ export function LedgerCard({
       </div>
       <div className="ledger-meta">
         <span className="ledger-meta__item">
-          {budgetLabel || "Tracking"}
+          {focusBill
+            ? `${focusBill.title} · ${formatRelativeDate(focusBill.dueOn)}`
+            : budgetLabel || "Tracking"}
         </span>
         <span className="ledger-meta__item">
           {upcomingBills} open bill{upcomingBills !== 1 ? "s" : ""} this month

@@ -1054,6 +1054,16 @@
   background: rgba(255, 255, 255, 0.02);
 }
 
+.essential--finance {
+  background:
+    linear-gradient(180deg, rgba(216, 166, 95, 0.06), rgba(255, 255, 255, 0.01));
+}
+
+.essential--finance:hover {
+  background:
+    linear-gradient(180deg, rgba(216, 166, 95, 0.1), rgba(255, 255, 255, 0.03));
+}
+
 .essential__label {
   font-size: var(--fs-micro);
   font-weight: 700;
@@ -1102,6 +1112,7 @@
 .essential__note {
   font-size: var(--fs-micro);
   color: var(--text-tertiary);
+  line-height: 1.45;
 }
 
 /* ── Secondary Context ──────────────────────── */

@@ -1,14 +1,18 @@
 import { useFinanceDataQuery, getTodayDate } from "../../../shared/lib/api";
 import { Link } from "react-router-dom";
+import { buildFinanceBillRoute, buildFinanceRoute } from "../../finance/finance-navigation";
+import { useQuickMarkBillPaid } from "../../finance/useQuickMarkBillPaid";
 
 export function FinanceAdmin() {
   const today = getTodayDate();
+  const currentMonth = today.slice(0, 7);
   const financeQuery = useFinanceDataQuery(today, {
     includeRecurringExpenses: false,
     includeCategories: false,
     includeMonthPlan: false,
     includeInsights: false,
   });
+  const { isPending, markPaid, pendingBillId } = useQuickMarkBillPaid(today);
 
   if (financeQuery.isLoading && !financeQuery.data) {
     return (
@@ -48,9 +52,11 @@ export function FinanceAdmin() {
               ? `${formatMinor(todayTotal, currencyCode)} logged today`
               : "No expenses logged today"}
           </span>
-          <Link to="/finance" className="today-fa__link">
-            {hasLoggedToday ? "View" : "Log"}
-          </Link>
+          <div className="today-fa__actions">
+            <Link to={buildFinanceRoute({ month: currentMonth })} className="today-fa__chip">
+              {hasLoggedToday ? "Open" : "Log"}
+            </Link>
+          </div>
         </div>
 
         {/* Overdue bills */}
@@ -62,6 +68,25 @@ export function FinanceAdmin() {
               {bill.amountMinor != null ? ` · ${formatMinor(bill.amountMinor, currencyCode)}` : ""}
             </span>
             <span className="today-fa__due">Overdue</span>
+            <div className="today-fa__actions">
+              <Link
+                to={buildFinanceBillRoute(bill, {
+                  intent: "pay",
+                  section: "due_now",
+                })}
+                className="today-fa__chip today-fa__chip--primary"
+              >
+                Pay
+              </Link>
+              <button
+                className="today-fa__chip-button"
+                type="button"
+                disabled={isPending}
+                onClick={() => void markPaid(bill.id)}
+              >
+                {pendingBillId === bill.id ? "Saving..." : "Mark paid"}
+              </button>
+            </div>
           </div>
         ))}
 
@@ -74,6 +99,17 @@ export function FinanceAdmin() {
               {bill.amountMinor != null ? ` · ${formatMinor(bill.amountMinor, currencyCode)}` : ""}
             </span>
             <span className="today-fa__due">{formatRelativeDate(bill.dueOn, today)}</span>
+            <div className="today-fa__actions">
+              <Link
+                to={buildFinanceBillRoute(bill, {
+                  intent: bill.dueOn <= today ? "pay" : "view",
+                  section: bill.dueOn <= today ? "due_now" : "pending_bills",
+                })}
+                className="today-fa__chip"
+              >
+                {bill.dueOn <= today ? "Pay" : "Open"}
+              </Link>
+            </div>
           </div>
         ))}
 

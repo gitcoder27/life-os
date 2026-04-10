@@ -8,6 +8,7 @@ import {
   apiRequest,
   queryKeys,
 } from "./core";
+import type { HomeAction } from "./home";
 
 export type NotificationCategory = "task" | "inbox" | "review" | "finance" | "health" | "habit" | "routine";
 export type NotificationMinSeverity = "info" | "warning" | "critical";
@@ -30,6 +31,7 @@ export type NotificationItem = {
   severity: "info" | "warning" | "critical";
   title: string;
   body: string;
+  action: HomeAction | null;
   entityType: string | null;
   entityId: string | null;
   ruleKey: string;

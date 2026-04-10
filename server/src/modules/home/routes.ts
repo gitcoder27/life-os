@@ -53,6 +53,7 @@ import { buildHomeGuidance } from "./guidance.js";
 import { createHomeQuoteService } from "./quote-service.js";
 import { fromPrismaGoalDomainSystemKey } from "../planning/planning-mappers.js";
 import { goalSummaryInclude } from "../planning/planning-record-shapes.js";
+import { buildFinanceRoute } from "../finance/finance-navigation.js";
 import { getOpenDailyReviewRoute } from "../reviews/submission-window.js";
 import { calculateDailyScore, ensureCycle, getWeeklyMomentum } from "../scoring/service.js";
 
@@ -492,6 +493,25 @@ async function buildHomeOverview(
   };
 
   const attentionItems: AttentionItem[] = [];
+  const focusFinanceBill =
+    todayAdminItems[0]
+    ?? monthlyPendingAdminItems[0]
+    ?? null;
+  const financeSummaryAction = focusFinanceBill
+    ? {
+        type: "open_route" as const,
+        route: buildFinanceRoute({
+          billId: focusFinanceBill.id,
+          dueOn: toIsoDateString(focusFinanceBill.dueOn),
+          section: toIsoDateString(focusFinanceBill.dueOn) <= targetIsoDate ? "due_now" : "pending_bills",
+        }),
+      }
+    : {
+        type: "open_route" as const,
+        route: buildFinanceRoute({
+          month: targetIsoDate.slice(0, 7),
+        }),
+      };
   const now = new Date();
   const openDailyReviewRoute =
     targetIsoDate === currentIsoDate ? getOpenDailyReviewRoute(now, preferences) : null;
@@ -516,12 +536,13 @@ async function buildHomeOverview(
       detail: "Open Finance to handle the bill.",
       dismissible: true,
       action: {
-        type: "open_destination",
-        destination: {
-          kind: "finance_bills",
-          adminItemId: item.id,
+        type: "open_route",
+        route: buildFinanceRoute({
+          billId: item.id,
+          dueOn: toIsoDateString(item.dueOn),
+          intent: "pay",
           section: "due_now",
-        },
+        }),
       },
     });
   }
@@ -535,12 +556,12 @@ async function buildHomeOverview(
       detail: `Upcoming on ${toIsoDateString(upcomingAdminItem.dueOn)}.`,
       dismissible: true,
       action: {
-        type: "open_destination",
-        destination: {
-          kind: "finance_bills",
-          adminItemId: upcomingAdminItem.id,
+        type: "open_route",
+        route: buildFinanceRoute({
+          billId: upcomingAdminItem.id,
+          dueOn: toIsoDateString(upcomingAdminItem.dueOn),
           section: "pending_bills",
-        },
+        }),
       },
     });
   }
@@ -677,6 +698,16 @@ async function buildHomeOverview(
       currencyCode: preferences?.currencyCode ?? "USD",
       budgetLabel: expenses.length === 0 ? "No spend logged" : "Current month spend",
       upcomingBills: monthlyPendingAdminItems.length,
+      focusBill: focusFinanceBill
+        ? {
+            id: focusFinanceBill.id,
+            title: focusFinanceBill.title,
+            dueOn: toIsoDateString(focusFinanceBill.dueOn),
+            amountMinor: focusFinanceBill.amountMinor,
+            status: focusFinanceBill.status === "RESCHEDULED" ? "rescheduled" : "pending",
+          }
+        : null,
+      action: financeSummaryAction,
     },
     accountabilityRadar,
     attentionItems: attentionItems.slice(0, 6),

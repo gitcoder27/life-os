@@ -136,6 +136,14 @@ export type HomeOverviewResponse = {
     currencyCode: string;
     budgetLabel: string;
     upcomingBills: number;
+    focusBill: {
+      id: string;
+      title: string;
+      dueOn: string;
+      amountMinor: number | null;
+      status: "pending" | "rescheduled";
+    } | null;
+    action: HomeAction;
   };
   accountabilityRadar: {
     overdueTaskCount: number;

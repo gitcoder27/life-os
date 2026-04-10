@@ -57,6 +57,14 @@ export interface FinanceSummary {
   currencyCode: string;
   budgetLabel: string;
   upcomingBills: number;
+  focusBill: {
+    id: EntityId;
+    title: string;
+    dueOn: IsoDateString;
+    amountMinor: number | null;
+    status: "pending" | "rescheduled";
+  } | null;
+  action: HomeAction;
 }
 
 export interface AccountabilityRadarItem {

@@ -6,8 +6,11 @@ import {
   useRoutineCheckinMutation,
   useFinanceDataQuery,
   getTodayDate,
+  formatRelativeDate,
   formatWorkoutStatus,
 } from "../../../shared/lib/api";
+import { buildFinanceBillRoute, buildFinanceRoute } from "../../finance/finance-navigation";
+import { useQuickMarkBillPaid } from "../../finance/useQuickMarkBillPaid";
 import { CheckIcon } from "../helpers/icons";
 import type { DayPhase } from "../helpers/day-phase";
 
@@ -310,12 +313,14 @@ function FinanceRow({
   onToggle: () => void;
 }) {
   const today = getTodayDate();
+  const currentMonth = today.slice(0, 7);
   const financeQuery = useFinanceDataQuery(today, {
     includeRecurringExpenses: false,
     includeCategories: false,
     includeMonthPlan: false,
     includeInsights: false,
   });
+  const { isPending, markPaid, pendingBillId } = useQuickMarkBillPaid(today);
   const data = financeQuery.data;
 
   if (!data) {
@@ -336,6 +341,7 @@ function FinanceRow({
   const todayTotal = todayExpenses.reduce((sum, e) => sum + e.amountMinor, 0);
   const pendingBills = summary?.upcomingBills?.filter((b) => b.status === "pending" || b.status === "rescheduled") ?? [];
   const overdueBills = pendingBills.filter((b) => b.dueOn <= today);
+  const actionableBills = pendingBills.slice(0, 2);
   const currencyCode = summary?.currencyCode ?? "USD";
 
   const issues: string[] = [];
@@ -362,13 +368,41 @@ function FinanceRow({
             <span className={hasLoggedToday ? "de-finance-row--done" : ""}>
               {hasLoggedToday ? "✓" : "○"} Expenses: {hasLoggedToday ? formatMinor(todayTotal, currencyCode) : "none logged"}
             </span>
-            <Link to="/finance" className="de-finance-link">
-              {hasLoggedToday ? "View" : "Log"}
-            </Link>
+            <div className="de-finance-actions">
+              <Link to={buildFinanceRoute({ month: currentMonth })} className="de-finance-link">
+                {hasLoggedToday ? "Open" : "Log"}
+              </Link>
+            </div>
           </div>
-          {overdueBills.map((bill) => (
-            <div key={bill.id} className="de-finance-row de-finance-row--alert">
-              ! {bill.title} — overdue
+          {actionableBills.map((bill) => (
+            <div
+              key={bill.id}
+              className={`de-finance-row${bill.dueOn <= today ? " de-finance-row--alert" : ""}`}
+            >
+              <span>
+                {bill.dueOn <= today ? "!" : "•"} {bill.title} {bill.dueOn <= today ? "— overdue" : `— ${formatRelativeDate(bill.dueOn).toLowerCase()}`}
+              </span>
+              <div className="de-finance-actions">
+                <Link
+                  to={buildFinanceBillRoute(bill, {
+                    intent: bill.dueOn <= today ? "pay" : "view",
+                    section: bill.dueOn <= today ? "due_now" : "pending_bills",
+                  })}
+                  className="de-finance-link"
+                >
+                  {bill.dueOn <= today ? "Pay" : "Open"}
+                </Link>
+                {bill.dueOn <= today ? (
+                  <button
+                    className="de-finance-button"
+                    type="button"
+                    disabled={isPending}
+                    onClick={() => void markPaid(bill.id)}
+                  >
+                    {pendingBillId === bill.id ? "Saving..." : "Mark paid"}
+                  </button>
+                ) : null}
+              </div>
             </div>
           ))}
           {summary ? (
