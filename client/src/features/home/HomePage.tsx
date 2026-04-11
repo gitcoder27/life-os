@@ -21,6 +21,7 @@ import { SecondaryContext } from "./SecondaryContext";
 import { StatusStrip } from "./StatusStrip";
 import { TodayControl } from "./TodayControl";
 import { DailyLaunchCard } from "../today/components/DailyLaunchCard";
+import { PreLaunchModeNotice } from "../today/components/PreLaunchModeNotice";
 import { RescueModeCard } from "../today/components/RescueModeCard";
 
 export function HomePage() {
@@ -104,12 +105,19 @@ export function HomePage() {
       <div className="home-operator__core">
         <div className="home-operator__main-stack">
           {!home.launch?.completedAt ? (
-            <DailyLaunchCard
-              date={home.date}
-              tasks={executionTasks}
-              launch={home.launch}
-              mustWinTask={home.mustWinTask}
-            />
+            <>
+              <PreLaunchModeNotice
+                date={home.date}
+                launch={home.launch}
+                suggestion={home.rescueSuggestion}
+              />
+              <DailyLaunchCard
+                date={home.date}
+                tasks={executionTasks}
+                launch={home.launch}
+                mustWinTask={home.mustWinTask}
+              />
+            </>
           ) : null}
 
           {home.launch?.completedAt ? (

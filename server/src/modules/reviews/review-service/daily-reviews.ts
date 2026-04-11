@@ -1,4 +1,9 @@
 import type { PrismaClient } from "@prisma/client";
+import type {
+  DailyTomorrowAdjustment,
+  DailyTomorrowAdjustmentRecommendation,
+  RescueReason,
+} from "@life-os/contracts";
 
 import { AppError } from "../../../lib/errors/app-error.js";
 import { filterDueHabits, getHabitCompletionCountForIsoDate } from "../../../lib/habits/schedule.js";
@@ -12,8 +17,13 @@ import { addDays, parseIsoDate } from "../../../lib/time/cycle.js";
 import { toIsoDateString } from "../../../lib/time/date.js";
 import { getDayWindowUtc, getUserLocalDate } from "../../../lib/time/user-time.js";
 import { calculateDailyScore, ensureCycle, finalizeDailyScore } from "../../scoring/service.js";
-import { serializeTask } from "../../planning/planning-mappers.js";
+import {
+  serializeTask,
+  toPrismaDayMode,
+  toPrismaRescueReason,
+} from "../../planning/planning-mappers.js";
 import { planningTaskInclude } from "../../planning/planning-record-shapes.js";
+import { detectMissedDayPattern } from "../../planning/day-mode.js";
 import { resolveDailyReviewSubmissionWindow } from "../submission-window.js";
 
 import {
@@ -30,6 +40,93 @@ import type {
   PlanningTaskItem,
   SubmitDailyReviewRequest,
 } from "./review-types.js";
+
+function fromStoredTomorrowAdjustment(
+  value: string | null | undefined,
+): DailyTomorrowAdjustment | null {
+  switch (value) {
+    case "keep_standard":
+    case "rescue":
+    case "recovery":
+      return value;
+    default:
+      return null;
+  }
+}
+
+function buildTomorrowAdjustmentRecommendation(input: {
+  hasMissedDayPattern: boolean;
+  energyRating?: number;
+  frictionTag?: string | null;
+}): DailyTomorrowAdjustmentRecommendation {
+  if (input.hasMissedDayPattern) {
+    return {
+      required: true,
+      suggestedAdjustment: "recovery",
+      reason: "missed_day_pattern",
+      detail: "Recent misses suggest starting tomorrow in Recovery Mode.",
+    };
+  }
+
+  if ((input.energyRating ?? 3) <= 2) {
+    return {
+      required: true,
+      suggestedAdjustment: "rescue",
+      reason: "low_energy",
+      detail: "Low energy today is a strong signal to scale tomorrow down deliberately.",
+    };
+  }
+
+  if (input.frictionTag === "overcommitment") {
+    return {
+      required: true,
+      suggestedAdjustment: "rescue",
+      reason: "overcommitment",
+      detail: "Overcommitment today is a sign to shrink tomorrow before it spirals.",
+    };
+  }
+
+  if (input.frictionTag === "poor planning") {
+    return {
+      required: true,
+      suggestedAdjustment: "rescue",
+      reason: "poor_planning",
+      detail: "Poor planning today is a signal to lower tomorrow's expectations.",
+    };
+  }
+
+  return {
+    required: false,
+    suggestedAdjustment: null,
+    reason: null,
+    detail: null,
+  };
+}
+
+function getRequiredTomorrowPriorityCount(
+  adjustment: DailyTomorrowAdjustment | null | undefined,
+) {
+  return adjustment === "rescue" || adjustment === "recovery" ? 1 : 2;
+}
+
+function mapTomorrowAdjustmentToRescueReason(input: {
+  adjustment: DailyTomorrowAdjustment;
+  recommendation: DailyTomorrowAdjustmentRecommendation;
+}): RescueReason | null {
+  if (input.adjustment === "keep_standard") {
+    return null;
+  }
+
+  if (input.adjustment === "recovery" || input.recommendation.reason === "missed_day_pattern") {
+    return "missed_day";
+  }
+
+  if (input.recommendation.reason === "low_energy") {
+    return "low_energy";
+  }
+
+  return "overload";
+}
 
 async function getDailySummary(prisma: PrismaClient, userId: string, date: Date) {
   const targetIsoDate = toIsoDateString(date);
@@ -209,7 +306,7 @@ export async function getDailyReviewModel(
 ): Promise<DailyReviewResponse> {
   const now = new Date();
   const tomorrowDate = addDays(date, 1);
-  const [preferences, { cycle, summary, incompleteTasks }, score, tomorrowCycle] = await Promise.all([
+  const [preferences, { cycle, summary, incompleteTasks }, score, tomorrowCycle, overdueTaskCount] = await Promise.all([
     getUserPreferences(prisma, userId),
     getDailySummary(prisma, userId, date),
     calculateDailyScore(prisma, userId, date),
@@ -236,7 +333,21 @@ export async function getDailyReviewModel(
         },
       },
     }),
+    prisma.task.count({
+      where: {
+        userId,
+        status: "PENDING",
+        scheduledForDate: {
+          lt: date,
+        },
+      },
+    }),
   ]);
+  const hasMissedDayPattern = await detectMissedDayPattern(prisma, {
+    userId,
+    targetDate: date,
+    overdueTaskCount,
+  });
 
   const existingReview: ExistingDailyReview | null = cycle.dailyReview
     ? {
@@ -245,6 +356,7 @@ export async function getDailyReviewModel(
         frictionNote: cycle.dailyReview.frictionNote,
         energyRating: cycle.dailyReview.energyRating,
         optionalNote: cycle.dailyReview.optionalNote,
+        tomorrowAdjustment: fromStoredTomorrowAdjustment(cycle.dailyReview.tomorrowAdjustment),
         completedAt: cycle.dailyReview.completedAt.toISOString(),
       }
     : null;
@@ -264,6 +376,9 @@ export async function getDailyReviewModel(
     canEditSubmittedReview: canEditCompletedReview,
     submissionWindow,
     seededTomorrowPriorities: tomorrowCycle?.priorities.map(serializePriority) ?? [],
+    tomorrowAdjustmentRecommendation: buildTomorrowAdjustmentRecommendation({
+      hasMissedDayPattern,
+    }),
     generatedAt: new Date().toISOString(),
   };
 }
@@ -329,6 +444,33 @@ async function validateDailyReviewTaskDecisions(
   }
 }
 
+function validateTomorrowPlanForAdjustment(
+  payload: SubmitDailyReviewRequest,
+  recommendation: DailyTomorrowAdjustmentRecommendation,
+) {
+  if (recommendation.required && !payload.tomorrowAdjustment) {
+    throw new AppError({
+      statusCode: 400,
+      code: "BAD_REQUEST",
+      message: "Choose how tomorrow should change before submitting this review",
+    });
+  }
+
+  const requiredPriorityCount = getRequiredTomorrowPriorityCount(payload.tomorrowAdjustment ?? null);
+  const filledPriorityCount = payload.tomorrowPriorities.filter((priority) => priority.title.trim().length > 0).length;
+
+  if (filledPriorityCount < requiredPriorityCount) {
+    throw new AppError({
+      statusCode: 400,
+      code: "BAD_REQUEST",
+      message:
+        requiredPriorityCount === 1
+          ? "A downgraded tomorrow must keep at least one support priority"
+          : "Tomorrow requires two support priorities before submission",
+    });
+  }
+}
+
 export async function submitDailyReview(
   prisma: PrismaClient,
   userId: string,
@@ -352,6 +494,25 @@ export async function submitDailyReview(
     cycleEndDate: date,
   });
   await assertOwnedPriorityGoalReferences(prisma, userId, payload.tomorrowPriorities);
+  const overdueTaskCount = await prisma.task.count({
+    where: {
+      userId,
+      status: "PENDING",
+      scheduledForDate: {
+        lt: date,
+      },
+    },
+  });
+  const hasMissedDayPattern = await detectMissedDayPattern(prisma, {
+    userId,
+    targetDate: date,
+    overdueTaskCount,
+  });
+  const tomorrowAdjustmentRecommendation = buildTomorrowAdjustmentRecommendation({
+    hasMissedDayPattern,
+    energyRating: payload.energyRating,
+    frictionTag: payload.frictionNote?.trim() ? payload.frictionTag : null,
+  });
 
   if (
     cycle.dailyReview &&
@@ -365,6 +526,7 @@ export async function submitDailyReview(
   }
 
   await validateDailyReviewTaskDecisions(prisma, userId, date, payload);
+  validateTomorrowPlanForAdjustment(payload, tomorrowAdjustmentRecommendation);
 
   const tomorrowDate = addDays(date, 1);
   const tomorrowCycle = await ensureCycle(prisma, {
@@ -386,6 +548,7 @@ export async function submitDailyReview(
         frictionNote: payload.frictionNote ?? null,
         energyRating: payload.energyRating,
         optionalNote: payload.optionalNote ?? null,
+        tomorrowAdjustment: payload.tomorrowAdjustment ?? null,
         completedAt,
       },
       create: {
@@ -396,11 +559,66 @@ export async function submitDailyReview(
         frictionNote: payload.frictionNote ?? null,
         energyRating: payload.energyRating,
         optionalNote: payload.optionalNote ?? null,
+        tomorrowAdjustment: payload.tomorrowAdjustment ?? null,
         completedAt,
       },
     });
 
     await replacePriorities(tx, tomorrowCycle.id, payload.tomorrowPriorities, "DAILY");
+
+    const existingTomorrowLaunch = await tx.dailyLaunch.findUnique({
+      where: {
+        planningCycleId: tomorrowCycle.id,
+      },
+    });
+
+    if (
+      payload.tomorrowAdjustment &&
+      (payload.tomorrowAdjustment !== "keep_standard" || existingTomorrowLaunch)
+    ) {
+      const nextRescueReason = mapTomorrowAdjustmentToRescueReason({
+        adjustment: payload.tomorrowAdjustment,
+        recommendation: tomorrowAdjustmentRecommendation,
+      });
+
+      await tx.dailyLaunch.upsert({
+        where: {
+          planningCycleId: tomorrowCycle.id,
+        },
+        update: {
+          dayMode: toPrismaDayMode(
+            payload.tomorrowAdjustment === "keep_standard"
+              ? "normal"
+              : payload.tomorrowAdjustment,
+          ),
+          rescueReason: nextRescueReason ? toPrismaRescueReason(nextRescueReason) : null,
+          rescueSuggestedAt:
+            payload.tomorrowAdjustment === "keep_standard"
+              ? null
+              : existingTomorrowLaunch?.rescueSuggestedAt ?? completedAt,
+          rescueActivatedAt: null,
+          rescueExitedAt: existingTomorrowLaunch?.rescueExitedAt ?? null,
+        },
+        create: {
+          userId,
+          planningCycleId: tomorrowCycle.id,
+          mustWinTaskId: null,
+          dayMode: toPrismaDayMode(
+            payload.tomorrowAdjustment === "keep_standard"
+              ? "normal"
+              : payload.tomorrowAdjustment,
+          ),
+          rescueReason: nextRescueReason ? toPrismaRescueReason(nextRescueReason) : null,
+          energyRating: null,
+          likelyDerailmentReason: null,
+          likelyDerailmentNote: null,
+          rescueSuggestedAt: payload.tomorrowAdjustment === "keep_standard" ? null : completedAt,
+          rescueActivatedAt: null,
+          rescueExitedAt: null,
+          completedAt: null,
+        },
+      });
+    }
 
     for (const taskId of payload.droppedTaskIds) {
       const task = await tx.task.findUniqueOrThrow({
@@ -506,6 +724,7 @@ export async function submitDailyReview(
     reviewCompletedAt: completedAt.toISOString(),
     score: finalizedScore,
     tomorrowPriorities,
+    appliedTomorrowAdjustment: payload.tomorrowAdjustment ?? null,
     generatedAt: new Date().toISOString(),
   };
 }

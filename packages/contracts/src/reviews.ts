@@ -12,6 +12,21 @@ export type ReviewFrictionTag =
   | "unclear task"
   | "travel or schedule disruption";
 
+export type DailyTomorrowAdjustment = "keep_standard" | "rescue" | "recovery";
+
+export type DailyTomorrowAdjustmentReason =
+  | "missed_day_pattern"
+  | "low_energy"
+  | "poor_planning"
+  | "overcommitment";
+
+export interface DailyTomorrowAdjustmentRecommendation {
+  required: boolean;
+  suggestedAdjustment: DailyTomorrowAdjustment | null;
+  reason: DailyTomorrowAdjustmentReason | null;
+  detail: string | null;
+}
+
 export interface ReviewTaskDecision {
   taskId: EntityId;
   targetDate: IsoDateString;
@@ -39,6 +54,7 @@ export interface ExistingDailyReview {
   frictionNote: string | null;
   energyRating: number;
   optionalNote: string | null;
+  tomorrowAdjustment: DailyTomorrowAdjustment | null;
   completedAt: string;
 }
 
@@ -69,6 +85,7 @@ export interface DailyReviewResponse extends ApiMeta {
   canEditSubmittedReview: boolean;
   submissionWindow: ReviewSubmissionWindow;
   seededTomorrowPriorities: PlanningPriorityItem[];
+  tomorrowAdjustmentRecommendation: DailyTomorrowAdjustmentRecommendation;
 }
 
 export interface SubmitDailyReviewRequest {
@@ -77,6 +94,7 @@ export interface SubmitDailyReviewRequest {
   frictionNote?: string | null;
   energyRating: number;
   optionalNote?: string | null;
+  tomorrowAdjustment?: DailyTomorrowAdjustment | null;
   carryForwardTaskIds: EntityId[];
   droppedTaskIds: EntityId[];
   rescheduledTasks: ReviewTaskDecision[];
@@ -87,6 +105,7 @@ export interface DailyReviewMutationResponse extends ApiMeta {
   reviewCompletedAt: string;
   score: DailyScoreBreakdownResponse;
   tomorrowPriorities: PlanningPriorityItem[];
+  appliedTomorrowAdjustment: DailyTomorrowAdjustment | null;
 }
 
 export interface WeeklyReviewSummary {

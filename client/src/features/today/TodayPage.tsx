@@ -20,6 +20,7 @@ import { DayNotes } from "./components/DayNotes";
 import { TodayTaskCaptureSheet } from "./components/TodayTaskCaptureSheet";
 import { DailyLaunchCard } from "./components/DailyLaunchCard";
 import { MustWinCard } from "./components/MustWinCard";
+import { PreLaunchModeNotice } from "./components/PreLaunchModeNotice";
 import { RescueModeCard } from "./components/RescueModeCard";
 import { buildPlannerExecutionModel } from "./helpers/planner-execution";
 import { getDayPhase } from "./helpers/day-phase";
@@ -349,12 +350,19 @@ export function TodayPage() {
         <div className="today-execute-v2">
           <div className="today-main-v2">
             {!data.launch?.completedAt ? (
-              <DailyLaunchCard
-                date={data.today}
-                tasks={data.executionTasks}
-                launch={data.launch}
-                mustWinTask={data.mustWinTask}
-              />
+              <>
+                <PreLaunchModeNotice
+                  date={data.today}
+                  launch={data.launch}
+                  suggestion={data.rescueSuggestion}
+                />
+                <DailyLaunchCard
+                  date={data.today}
+                  tasks={data.executionTasks}
+                  launch={data.launch}
+                  mustWinTask={data.mustWinTask}
+                />
+              </>
             ) : null}
 
             {data.launch?.completedAt && data.mustWinTask ? (

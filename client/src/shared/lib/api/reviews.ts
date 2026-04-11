@@ -30,6 +30,21 @@ export type DailyFrictionTag =
   | "unclear task"
   | "travel or schedule disruption";
 
+export type DailyTomorrowAdjustment = "keep_standard" | "rescue" | "recovery";
+
+export type DailyTomorrowAdjustmentReason =
+  | "missed_day_pattern"
+  | "low_energy"
+  | "poor_planning"
+  | "overcommitment";
+
+export type DailyTomorrowAdjustmentRecommendation = {
+  required: boolean;
+  suggestedAdjustment: DailyTomorrowAdjustment | null;
+  reason: DailyTomorrowAdjustmentReason | null;
+  detail: string | null;
+};
+
 export type ReviewSubmissionWindow = {
   isOpen: boolean;
   status: "open" | "too_early" | "too_late" | "wrong_period" | "no_open_window";
@@ -87,6 +102,7 @@ export type DailyReviewResponse = {
     frictionNote: string | null;
     energyRating: number;
     optionalNote: string | null;
+    tomorrowAdjustment: DailyTomorrowAdjustment | null;
     completedAt: string;
   } | null;
   isCompleted: boolean;
@@ -101,6 +117,7 @@ export type DailyReviewResponse = {
     goal: import("./goals").LinkedGoal | null;
     completedAt: string | null;
   }>;
+  tomorrowAdjustmentRecommendation: DailyTomorrowAdjustmentRecommendation;
 };
 
 export type WeeklyReviewResponse = {
@@ -206,6 +223,7 @@ export type DailyReviewMutationResponse = {
     goalId: string | null;
     completedAt: string | null;
   }>;
+  appliedTomorrowAdjustment: DailyTomorrowAdjustment | null;
 };
 
 export type WeeklyReviewMutationResponse = {
@@ -407,6 +425,7 @@ export const useSubmitDailyReviewMutation = (date: string) => {
       frictionNote?: string | null;
       energyRating: number;
       optionalNote?: string | null;
+      tomorrowAdjustment?: DailyTomorrowAdjustment | null;
       carryForwardTaskIds: string[];
       droppedTaskIds: string[];
       rescheduledTasks: Array<{

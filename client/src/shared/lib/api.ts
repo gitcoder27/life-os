@@ -246,6 +246,9 @@ export type {
 } from "./api/notifications";
 export type {
   DailyFrictionTag,
+  DailyTomorrowAdjustment,
+  DailyTomorrowAdjustmentRecommendation,
+  DailyTomorrowAdjustmentReason,
   DailyReviewMutationResponse,
   DailyReviewResponse,
   MonthlyComparisonMetrics,

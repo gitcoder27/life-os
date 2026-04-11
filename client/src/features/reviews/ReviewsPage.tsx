@@ -94,11 +94,14 @@ export function ReviewsPage() {
           setDailyTaskDecisions={state.setDailyTaskDecisions}
           dailyTomorrowPriorities={state.dailyTomorrowPriorities}
           setDailyTomorrowPriorities={state.setDailyTomorrowPriorities}
+          setDailyTomorrowPrioritiesTouched={state.setDailyTomorrowPrioritiesTouched}
           tomorrow={state.tomorrow}
           isSubmitting={state.isSubmitting}
           canSubmitDaily={state.canSubmitDaily}
           isWindowOpen={state.isWindowOpen}
           dailySubmitBlockers={state.dailySubmitBlockers}
+          requiredTomorrowPriorityCount={state.requiredTomorrowPriorityCount}
+          tomorrowAdjustmentRequirement={state.tomorrowAdjustmentRequirement}
           draftStatusText={state.draftStatusText}
           submitError={state.submitError}
           submitErrorText={state.submitErrorText}

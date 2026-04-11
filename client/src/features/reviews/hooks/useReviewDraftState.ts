@@ -39,13 +39,14 @@ export const useReviewDraftState = ({
     frictionNote: "",
     energyRating: "3",
     optionalNote: "",
+    tomorrowAdjustment: "",
   });
   const [dailyTaskDecisions, setDailyTaskDecisions] = useState<Record<string, DailyTaskDecision>>({});
   const [dailyTomorrowPriorities, setDailyTomorrowPriorities] = useState<DailyPriorityDraft[]>([
     { title: "" },
     { title: "" },
-    { title: "" },
   ]);
+  const [dailyTomorrowPrioritiesTouched, setDailyTomorrowPrioritiesTouched] = useState(false);
   const [focusHabitId, setFocusHabitId] = useState<string | null>(null);
   const [draftState, setDraftState] = useState<ReviewDraftState>({
     hydratedKey: null,
@@ -70,6 +71,10 @@ export const useReviewDraftState = ({
         frictionNote: existing?.frictionNote ?? "",
         energyRating: existing?.energyRating ? String(existing.energyRating) : "3",
         optionalNote: existing?.optionalNote ?? "",
+        tomorrowAdjustment:
+          existing?.tomorrowAdjustment ??
+          review.tomorrowAdjustmentRecommendation.suggestedAdjustment ??
+          "",
       };
 
       const seededPriorities = [...review.seededTomorrowPriorities]
@@ -82,18 +87,39 @@ export const useReviewDraftState = ({
         .filter((task) => task.status === "pending")
         .slice(0, 2)
         .map((task) => ({ title: task.title }));
+      const seededDailyTomorrowPriorities = fillThreePriorityDraft(
+        seededPriorities.length > 0 ? seededPriorities : fallbackTaskTitles,
+      );
 
       if (review.isCompleted && !review.canEditSubmittedReview) {
         clearStoredReviewDraft(draftStorageKey);
       }
 
-      setDailyInputs(storedDraft?.value.dailyInputs ?? baseDailyInputs);
-      setDailyTomorrowPriorities(
-        fillThreePriorityDraft(
-          storedDraft?.value.dailyTomorrowPriorities ??
-            (seededPriorities.length > 0 ? seededPriorities : fallbackTaskTitles),
-        ),
+      const storedDailyInputs = storedDraft?.value.dailyInputs;
+      setDailyInputs(
+        storedDailyInputs
+          ? {
+              biggestWin: storedDailyInputs.biggestWin ?? "",
+              frictionNote: storedDailyInputs.frictionNote ?? "",
+              energyRating: storedDailyInputs.energyRating ?? "3",
+              optionalNote: storedDailyInputs.optionalNote ?? "",
+              tomorrowAdjustment: storedDailyInputs.tomorrowAdjustment ?? "",
+            }
+          : baseDailyInputs,
       );
+      const storedDraftPriorities = fillThreePriorityDraft(
+        storedDraft?.value.dailyTomorrowPriorities ?? [],
+      );
+      const storedDraftTouched =
+        typeof storedDraft?.value.dailyTomorrowPrioritiesTouched === "boolean"
+          ? storedDraft.value.dailyTomorrowPrioritiesTouched
+          : storedDraftPriorities.some((priority, index) =>
+              priority.title.trim() !== seededDailyTomorrowPriorities[index]?.title.trim(),
+            );
+      setDailyTomorrowPriorities(
+        storedDraftTouched ? storedDraftPriorities : seededDailyTomorrowPriorities,
+      );
+      setDailyTomorrowPrioritiesTouched(storedDraftTouched);
       setDailyTaskDecisions(storedDraft?.value.dailyTaskDecisions ?? {});
       setDraftState({
         hydratedKey: draftStorageKey,
@@ -178,8 +204,12 @@ export const useReviewDraftState = ({
         dailyInputs,
         dailyTaskDecisions,
         dailyTomorrowPriorities: fillThreePriorityDraft(dailyTomorrowPriorities),
+        dailyTomorrowPrioritiesTouched,
       };
-      shouldPersist = hasMeaningfulDailyDraft(draftPayload);
+      shouldPersist =
+        hasMeaningfulDailyDraft(draftPayload) ||
+        (dailyTomorrowPrioritiesTouched &&
+          draftPayload.dailyTomorrowPriorities.some((priority) => priority.title.trim().length > 0));
     } else if (reviewData.cadence === "weekly") {
       if (reviewData.review.existingReview) {
         return;
@@ -229,6 +259,7 @@ export const useReviewDraftState = ({
     dailyInputs,
     dailyTaskDecisions,
     dailyTomorrowPriorities,
+    dailyTomorrowPrioritiesTouched,
     draftState.hydratedKey,
     draftStorageKey,
     focusHabitId,
@@ -242,6 +273,7 @@ export const useReviewDraftState = ({
     }
 
     clearStoredReviewDraft(draftStorageKey);
+    setDailyTomorrowPrioritiesTouched(false);
     setDraftState((current) => ({
       ...current,
       lastSavedAt: null,
@@ -257,6 +289,8 @@ export const useReviewDraftState = ({
     setDailyTaskDecisions,
     dailyTomorrowPriorities,
     setDailyTomorrowPriorities,
+    dailyTomorrowPrioritiesTouched,
+    setDailyTomorrowPrioritiesTouched,
     focusHabitId,
     setFocusHabitId,
     draftStatusText: formatDraftStatus(draftState.lastSavedAt),

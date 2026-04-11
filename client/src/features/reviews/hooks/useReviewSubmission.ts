@@ -101,6 +101,7 @@ export const useReviewSubmission = ({
         frictionNote: dailyInputs.frictionNote.trim() || null,
         energyRating: parseEnergyRating(dailyInputs.energyRating),
         optionalNote: dailyInputs.optionalNote.trim() || null,
+        tomorrowAdjustment: dailyInputs.tomorrowAdjustment || null,
         carryForwardTaskIds,
         droppedTaskIds,
         rescheduledTasks,

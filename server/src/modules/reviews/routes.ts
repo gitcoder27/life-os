@@ -50,6 +50,7 @@ const dailyReviewSchema = z.object({
   frictionNote: z.string().max(2000).nullable().optional(),
   energyRating: z.number().int().min(1).max(5),
   optionalNote: z.string().max(4000).nullable().optional(),
+  tomorrowAdjustment: z.enum(["keep_standard", "rescue", "recovery"]).nullable().optional(),
   carryForwardTaskIds: z.array(z.string().uuid()),
   droppedTaskIds: z.array(z.string().uuid()),
   rescheduledTasks: z.array(

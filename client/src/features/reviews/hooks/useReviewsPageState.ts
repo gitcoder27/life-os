@@ -9,10 +9,13 @@ import {
 import { reviewCadences, type ReviewCadenceKey } from "../reviewCadenceConfig";
 import { createReviewDraftStorageKey } from "../reviewDraftStorage";
 import {
+  detectFrictionTag,
+  evaluateTomorrowAdjustmentRequirement,
   formatClosedWindowStatus,
   formatCount,
   getTomorrowDate,
   isQuickCaptureMetadataTask,
+  parseEnergyRating,
 } from "../reviewDraftModel";
 import { useReviewDraftState } from "./useReviewDraftState";
 import { useReviewSubmission } from "./useReviewSubmission";
@@ -148,9 +151,31 @@ export const useReviewsPageState = () => {
           return decision.type === "reschedule" && !decision.targetDate;
         }).length
       : 0;
+  const tomorrowAdjustmentRequirement =
+    reviewQuery.data?.cadence === "daily"
+      ? evaluateTomorrowAdjustmentRequirement({
+          recommendation: reviewQuery.data.review.tomorrowAdjustmentRecommendation,
+          energyRating: parseEnergyRating(draftState.dailyInputs.energyRating),
+          frictionTag: draftState.dailyInputs.frictionNote.trim()
+            ? detectFrictionTag(draftState.dailyInputs.frictionNote)
+            : null,
+        })
+      : null;
+  const selectedTomorrowAdjustment =
+    reviewQuery.data?.cadence === "daily"
+      ? draftState.dailyInputs.tomorrowAdjustment
+      : "";
+  const requiredTomorrowPriorityCount =
+    selectedTomorrowAdjustment === "rescue" || selectedTomorrowAdjustment === "recovery"
+      ? 1
+      : 2;
+  const filledTomorrowPriorityCount =
+    reviewQuery.data?.cadence === "daily"
+      ? draftState.dailyTomorrowPriorities.filter((priority) => priority.title.trim().length > 0).length
+      : 0;
   const missingTomorrowPriorityCount =
     reviewQuery.data?.cadence === "daily"
-      ? draftState.dailyTomorrowPriorities.filter((priority) => priority.title.trim().length === 0).length
+      ? Math.max(requiredTomorrowPriorityCount - filledTomorrowPriorityCount, 0)
       : 0;
   const hasDecisionForEveryPendingTask =
     reviewQuery.data?.cadence === "daily"
@@ -165,8 +190,12 @@ export const useReviewsPageState = () => {
       : false;
   const hasTomorrowSupportPriorities =
     reviewQuery.data?.cadence === "daily"
-      ? draftState.dailyTomorrowPriorities.length === 2 &&
-        draftState.dailyTomorrowPriorities.every((priority) => priority.title.trim().length > 0)
+      ? filledTomorrowPriorityCount >= requiredTomorrowPriorityCount
+      : false;
+  const hasTomorrowAdjustmentDecision =
+    reviewQuery.data?.cadence === "daily"
+      ? !tomorrowAdjustmentRequirement?.required ||
+        Boolean(draftState.dailyInputs.tomorrowAdjustment)
       : false;
   const dailySubmitBlockers =
     reviewQuery.data?.cadence === "daily"
@@ -185,10 +214,15 @@ export const useReviewsPageState = () => {
             ? [
                 `${formatCount(
                   missingTomorrowPriorityCount,
-                  "tomorrow priority is still empty",
-                  "tomorrow priorities are still empty",
+                  "required tomorrow priority is still empty",
+                  "required tomorrow priorities are still empty",
                 )}.`,
               ]
+            : []),
+          ...(isWindowOpen &&
+          tomorrowAdjustmentRequirement?.required &&
+          !draftState.dailyInputs.tomorrowAdjustment
+            ? ["Choose how tomorrow should change."]
             : []),
         ]
       : [];
@@ -197,6 +231,7 @@ export const useReviewsPageState = () => {
     (!reviewQuery.data.review.isCompleted || reviewQuery.data.review.canEditSubmittedReview) &&
     isWindowOpen &&
     hasDecisionForEveryPendingTask &&
+    hasTomorrowAdjustmentDecision &&
     hasTomorrowSupportPriorities &&
     !submissionState.isSubmitting;
   const requiredCount = "prompts" in config ? config.prompts.length : 0;
@@ -244,6 +279,7 @@ export const useReviewsPageState = () => {
     setDailyTaskDecisions: draftState.setDailyTaskDecisions,
     dailyTomorrowPriorities: draftState.dailyTomorrowPriorities,
     setDailyTomorrowPriorities: draftState.setDailyTomorrowPriorities,
+    setDailyTomorrowPrioritiesTouched: draftState.setDailyTomorrowPrioritiesTouched,
     focusHabitId: draftState.focusHabitId,
     setFocusHabitId: draftState.setFocusHabitId,
     handleSubmit: submissionState.handleSubmit,
@@ -256,6 +292,8 @@ export const useReviewsPageState = () => {
     dailyPendingTasks,
     dailySubmitBlockers,
     canSubmitDaily,
+    requiredTomorrowPriorityCount,
+    tomorrowAdjustmentRequirement,
     requiredCount,
     completedCount,
     activeStep,

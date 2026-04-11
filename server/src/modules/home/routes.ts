@@ -61,6 +61,7 @@ import {
 } from "../planning/planning-mappers.js";
 import { goalSummaryInclude, planningTaskInclude } from "../planning/planning-record-shapes.js";
 import { buildRescueSuggestion } from "../planning/day-mode.js";
+import { detectMissedDayPattern } from "../planning/day-mode.js";
 import { buildFinanceRoute } from "../finance/finance-navigation.js";
 import { getOpenDailyReviewRoute } from "../reviews/submission-window.js";
 import { calculateDailyScore, ensureCycle, getWeeklyMomentum } from "../scoring/service.js";
@@ -698,6 +699,11 @@ async function buildHomeOverview(
       waterTargetMl: healthSummary.waterTargetMl,
     },
   });
+  const hasMissedDayPattern = await detectMissedDayPattern(app.prisma, {
+    userId,
+    targetDate,
+    overdueTaskCount: overdueTasks.length,
+  });
 
   return withGeneratedAt({
     date: targetIsoDate,
@@ -710,6 +716,7 @@ async function buildHomeOverview(
       mustWinTask: dailyLaunch?.mustWinTask ?? null,
       pendingTaskCount: tasks.filter((task) => task.status === "PENDING").length,
       overdueTaskCount: overdueTasks.length,
+      hasMissedDayPattern,
     }),
     dailyScore: {
       value: score.value,

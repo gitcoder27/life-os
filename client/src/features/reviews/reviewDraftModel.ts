@@ -1,4 +1,9 @@
-import type { DailyFrictionTag, TaskItem } from "../../shared/lib/api";
+import type {
+  DailyFrictionTag,
+  DailyTomorrowAdjustment,
+  DailyTomorrowAdjustmentRecommendation,
+  TaskItem,
+} from "../../shared/lib/api";
 import { isQuickCaptureReferenceTask } from "../../shared/lib/quickCapture";
 import { toIsoDate } from "../../shared/lib/api";
 import type { ReviewWindowPresentation } from "./reviewWindowModel";
@@ -18,12 +23,14 @@ export type DailyInputs = {
   frictionNote: string;
   energyRating: string;
   optionalNote: string;
+  tomorrowAdjustment: "" | DailyTomorrowAdjustment;
 };
 
 export type DailyReviewDraft = {
   dailyInputs: DailyInputs;
   dailyTaskDecisions: Record<string, DailyTaskDecision>;
   dailyTomorrowPriorities: DailyPriorityDraft[];
+  dailyTomorrowPrioritiesTouched?: boolean;
 };
 
 export type WeeklyReviewDraft = {
@@ -41,6 +48,11 @@ export type ReviewDraftState = {
 };
 
 export const prioritySlots: Array<1 | 2> = [1, 2];
+const reviewRiskFrictionTags = new Set<DailyFrictionTag>([
+  "low energy",
+  "poor planning",
+  "overcommitment",
+]);
 
 export const detectFrictionTag = (value: string): DailyFrictionTag => {
   const normalized = value.toLowerCase();
@@ -61,6 +73,62 @@ export const parseEnergyRating = (value: string) => {
   }
 
   return Math.min(5, Math.max(1, number));
+};
+
+export const formatTomorrowAdjustmentLabel = (value: DailyTomorrowAdjustment | null | undefined) => {
+  if (value === "rescue") {
+    return "Rescue Mode";
+  }
+
+  if (value === "recovery") {
+    return "Recovery Mode";
+  }
+
+  if (value === "keep_standard") {
+    return "Keep standard day";
+  }
+
+  return "No change";
+};
+
+export const evaluateTomorrowAdjustmentRequirement = (input: {
+  recommendation: DailyTomorrowAdjustmentRecommendation;
+  energyRating: number;
+  frictionTag?: DailyFrictionTag | null;
+}): DailyTomorrowAdjustmentRecommendation => {
+  if (input.recommendation.required) {
+    return input.recommendation;
+  }
+
+  if (input.energyRating <= 2) {
+    return {
+      required: true,
+      suggestedAdjustment: "rescue" as const,
+      reason: "low_energy" as const,
+      detail: "Low energy today is a strong signal to scale tomorrow down deliberately.",
+    };
+  }
+
+  if (input.frictionTag && reviewRiskFrictionTags.has(input.frictionTag)) {
+    return {
+      required: true,
+      suggestedAdjustment: "rescue" as const,
+      reason:
+        input.frictionTag === "overcommitment"
+          ? "overcommitment"
+          : input.frictionTag === "poor planning"
+            ? "poor_planning"
+            : "low_energy",
+      detail:
+        input.frictionTag === "overcommitment"
+          ? "Overcommitment today is a sign to shrink tomorrow before it spirals."
+          : input.frictionTag === "poor planning"
+            ? "Poor planning today is a signal to lower tomorrow's expectations."
+            : "Low energy today is a strong signal to scale tomorrow down deliberately.",
+    };
+  }
+
+  return input.recommendation;
 };
 
 export const getTomorrowDate = (isoDate: string) => {
@@ -91,9 +159,9 @@ export const hasMeaningfulDailyDraft = (draft: DailyReviewDraft) =>
   draft.dailyInputs.biggestWin.trim().length > 0 ||
   draft.dailyInputs.frictionNote.trim().length > 0 ||
   draft.dailyInputs.optionalNote.trim().length > 0 ||
+  (draft.dailyInputs.tomorrowAdjustment ?? "").trim().length > 0 ||
   draft.dailyInputs.energyRating.trim() !== "3" ||
-  Object.keys(draft.dailyTaskDecisions).length > 0 ||
-  draft.dailyTomorrowPriorities.some((priority) => priority.title.trim().length > 0);
+  Object.keys(draft.dailyTaskDecisions).length > 0;
 
 export const formatDraftStatus = (lastSavedAt: string | null) => {
   if (!lastSavedAt) {

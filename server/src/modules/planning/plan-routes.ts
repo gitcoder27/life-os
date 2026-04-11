@@ -29,6 +29,7 @@ import { getMonthEndDate, getWeekEndDate, parseIsoDate } from "../../lib/time/cy
 import { toIsoDateString } from "../../lib/time/date.js";
 import { parseOrThrow } from "../../lib/validation/parse.js";
 import { buildRescueSuggestion } from "./day-mode.js";
+import { detectMissedDayPattern } from "./day-mode.js";
 import { buildGoalNudges } from "./goal-nudges.js";
 import { buildGoalOverviews, buildTodayLinkedGoalCounts } from "./goal-overviews.js";
 import {
@@ -190,6 +191,12 @@ export const registerPlanningPlanRoutes: FastifyPluginAsync = async (app) => {
       }),
     );
 
+    const hasMissedDayPattern = await detectMissedDayPattern(app.prisma, {
+      userId: user.id,
+      targetDate: cycleStartDate,
+      overdueTaskCount: 0,
+    });
+
     const response: DayPlanResponse = withGeneratedAt({
       date: parsedDate,
       launch: launch ? serializeDailyLaunch(launch) : null,
@@ -212,6 +219,7 @@ export const registerPlanningPlanRoutes: FastifyPluginAsync = async (app) => {
             : null,
         pendingTaskCount: tasks.filter((task) => task.status === "PENDING").length,
         overdueTaskCount: 0,
+        hasMissedDayPattern,
       }),
       priorities: cycle.priorities.map(serializePriority),
       tasks: tasks.map(serializeTask),
@@ -325,6 +333,12 @@ export const registerPlanningPlanRoutes: FastifyPluginAsync = async (app) => {
       });
     });
 
+    const hasMissedDayPattern = await detectMissedDayPattern(app.prisma, {
+      userId: user.id,
+      targetDate: cycleStartDate,
+      overdueTaskCount: 0,
+    });
+
     const response: DayLaunchMutationResponse = withGeneratedAt({
       launch: serializeDailyLaunch(launch),
       mustWinTask: mustWinTask ? serializeTask(mustWinTask) : null,
@@ -333,6 +347,7 @@ export const registerPlanningPlanRoutes: FastifyPluginAsync = async (app) => {
         mustWinTask,
         pendingTaskCount: mustWinTask ? 1 : 0,
         overdueTaskCount: 0,
+        hasMissedDayPattern,
       }),
     });
 

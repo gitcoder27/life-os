@@ -1,4 +1,6 @@
 import type {
+  DailyTomorrowAdjustment,
+  DailyTomorrowAdjustmentRecommendation,
   GoalSummary,
   IsoDateString,
   MonthlyReviewHistoryTrendPoint,
@@ -43,6 +45,7 @@ export interface SubmitDailyReviewRequest {
   frictionNote?: string | null;
   energyRating: number;
   optionalNote?: string | null;
+  tomorrowAdjustment?: DailyTomorrowAdjustment | null;
   carryForwardTaskIds: string[];
   droppedTaskIds: string[];
   rescheduledTasks: ReviewTaskDecision[];
@@ -115,6 +118,7 @@ export interface ExistingDailyReview {
   frictionNote: string | null;
   energyRating: number;
   optionalNote: string | null;
+  tomorrowAdjustment: DailyTomorrowAdjustment | null;
   completedAt: string;
 }
 
@@ -154,6 +158,7 @@ export interface DailyReviewResponse {
   canEditSubmittedReview: boolean;
   submissionWindow: ReviewSubmissionWindow;
   seededTomorrowPriorities: PlanningPriorityItem[];
+  tomorrowAdjustmentRecommendation: DailyTomorrowAdjustmentRecommendation;
   generatedAt: string;
 }
 

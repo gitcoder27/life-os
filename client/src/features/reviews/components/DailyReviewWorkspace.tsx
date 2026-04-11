@@ -1,6 +1,7 @@
 import { useEffect, useState, type Dispatch, type MouseEvent, type SetStateAction } from "react";
 
 import type {
+  DailyTomorrowAdjustmentRecommendation,
   DailyReviewMutationResponse,
   DailyReviewResponse,
   TaskItem,
@@ -11,6 +12,7 @@ import {
   type DailyInputs,
   type DailyPriorityDraft,
   type DailyTaskDecision,
+  formatTomorrowAdjustmentLabel,
 } from "../reviewDraftModel";
 import type { ReviewWindowPresentation } from "../reviewWindowModel";
 import { ReviewTextarea } from "./ReviewTextarea";
@@ -25,11 +27,14 @@ type DailyReviewWorkspaceProps = {
   setDailyTaskDecisions: Dispatch<SetStateAction<Record<string, DailyTaskDecision>>>;
   dailyTomorrowPriorities: DailyPriorityDraft[];
   setDailyTomorrowPriorities: Dispatch<SetStateAction<DailyPriorityDraft[]>>;
+  setDailyTomorrowPrioritiesTouched: Dispatch<SetStateAction<boolean>>;
   tomorrow: string;
   isSubmitting: boolean;
   canSubmitDaily: boolean;
   isWindowOpen: boolean;
   dailySubmitBlockers: string[];
+  requiredTomorrowPriorityCount: number;
+  tomorrowAdjustmentRequirement: DailyTomorrowAdjustmentRecommendation | null;
   draftStatusText: string;
   submitError: unknown;
   submitErrorText: string | null;
@@ -223,6 +228,54 @@ const EnergyDots = ({
   );
 };
 
+const TOMORROW_ADJUSTMENTS = [
+  { value: "keep_standard", label: "Keep standard" },
+  { value: "rescue", label: "Rescue mode" },
+  { value: "recovery", label: "Recovery mode" },
+] as const;
+
+const TomorrowAdjustmentField = ({
+  value,
+  required,
+  recommendation,
+  onChange,
+}: {
+  value: DailyInputs["tomorrowAdjustment"];
+  required: boolean;
+  recommendation: DailyTomorrowAdjustmentRecommendation | null;
+  onChange: (value: DailyInputs["tomorrowAdjustment"]) => void;
+}) => (
+  <div className="dr-field">
+    <div className="dr-field__header">
+      <span className="dr-field__label">Change tomorrow</span>
+      {required ? <span className="dr-field__hint-tag">Required</span> : null}
+    </div>
+    <div className="dr-adjustment">
+      {TOMORROW_ADJUSTMENTS.map((option) => {
+        const isActive = value === option.value;
+        return (
+          <button
+            key={option.value}
+            type="button"
+            className={`dr-adjustment__option${isActive ? " dr-adjustment__option--active" : ""}`}
+            onClick={() => onChange(!required && isActive ? "" : option.value)}
+          >
+            {option.label}
+          </button>
+        );
+      })}
+    </div>
+    {recommendation?.detail ? (
+      <span className="dr-adjustment__hint">
+        {recommendation.suggestedAdjustment
+          ? `Recommended: ${formatTomorrowAdjustmentLabel(recommendation.suggestedAdjustment)}. `
+          : ""}
+        {recommendation.detail}
+      </span>
+    ) : null}
+  </div>
+);
+
 /* ── Completed View ── */
 
 const CompletedView = ({
@@ -295,6 +348,14 @@ const CompletedView = ({
                 </span>
               </div>
             </div>
+            {review.existingReview.tomorrowAdjustment ? (
+              <div className="dr-completed__entry dr-completed__entry--tomorrow">
+                <span className="dr-completed__entry-label">Tomorrow</span>
+                <p className="dr-completed__entry-value">
+                  {formatTomorrowAdjustmentLabel(review.existingReview.tomorrowAdjustment)}
+                </p>
+              </div>
+            ) : null}
             {review.existingReview.optionalNote && (
               <div className="dr-completed__entry dr-completed__entry--note">
                 <span className="dr-completed__entry-label">Note</span>
@@ -341,11 +402,14 @@ export const DailyReviewWorkspace = ({
   setDailyTaskDecisions,
   dailyTomorrowPriorities,
   setDailyTomorrowPriorities,
+  setDailyTomorrowPrioritiesTouched,
   tomorrow,
   isSubmitting,
   canSubmitDaily,
   isWindowOpen,
   dailySubmitBlockers,
+  requiredTomorrowPriorityCount,
+  tomorrowAdjustmentRequirement,
   submitErrorText,
   submitResult,
   windowPresentation,
@@ -382,9 +446,12 @@ export const DailyReviewWorkspace = ({
       return d && (d.type !== "reschedule" || d.targetDate);
     });
   const reflectStarted = dailyInputs.biggestWin.trim().length > 0;
+  const filledTomorrowPriorityCount = dailyTomorrowPriorities.filter(
+    (priority) => priority.title.trim().length > 0,
+  ).length;
   const planComplete =
-    dailyTomorrowPriorities.length === 2 &&
-    dailyTomorrowPriorities.every((p) => p.title.trim().length > 0);
+    filledTomorrowPriorityCount >= requiredTomorrowPriorityCount &&
+    (!tomorrowAdjustmentRequirement?.required || Boolean(dailyInputs.tomorrowAdjustment));
 
   const decidedCount = dailyPendingTasks.filter((t) => {
     const d = dailyTaskDecisions[t.id];
@@ -445,6 +512,14 @@ export const DailyReviewWorkspace = ({
                 value={dailyInputs.energyRating}
                 onChange={(v) => setDailyInputs((c) => ({ ...c, energyRating: v }))}
               />
+              <TomorrowAdjustmentField
+                value={dailyInputs.tomorrowAdjustment}
+                required={Boolean(tomorrowAdjustmentRequirement?.required)}
+                recommendation={tomorrowAdjustmentRequirement}
+                onChange={(value) =>
+                  setDailyInputs((current) => ({ ...current, tomorrowAdjustment: value }))
+                }
+              />
               <div className="dr-field">
                 <span className="dr-field__label">Note</span>
                 <ReviewTextarea
@@ -466,9 +541,15 @@ export const DailyReviewWorkspace = ({
             <div className="dr-section__header">
               <span className="dr-section__title">Plan tomorrow's priorities</span>
               <span className="dr-section__badge">
-                {dailyTomorrowPriorities.filter((p) => p.title.trim().length > 0).length}/3
+                {Math.min(filledTomorrowPriorityCount, requiredTomorrowPriorityCount)}/
+                {requiredTomorrowPriorityCount} required
               </span>
             </div>
+            <p className="dr-section__copy">
+              {requiredTomorrowPriorityCount === 1
+                ? "A downgraded day only needs one support priority."
+                : "Standard days keep two support priorities visible."}
+            </p>
             <div className="dr-tomorrow">
               {dailyTomorrowPriorities.map((priority, index) => (
                 <div key={`priority-${index}`} className="dr-priority">
@@ -476,14 +557,21 @@ export const DailyReviewWorkspace = ({
                   <input
                     type="text"
                     className="dr-priority__input"
-                    placeholder="Tomorrow's top priority"
+                    placeholder={
+                      requiredTomorrowPriorityCount === 1 && index === 1
+                        ? "Optional second priority"
+                        : "Tomorrow's top priority"
+                    }
                     value={priority.title}
                     onChange={(e) =>
-                      setDailyTomorrowPriorities((current) =>
-                        current.map((entry, i) =>
-                          i === index ? { ...entry, title: e.target.value } : entry,
-                        ),
-                      )
+                      {
+                        setDailyTomorrowPrioritiesTouched(true);
+                        setDailyTomorrowPriorities((current) =>
+                          current.map((entry, i) =>
+                            i === index ? { ...entry, title: e.target.value } : entry,
+                          ),
+                        );
+                      }
                     }
                   />
                 </div>
@@ -537,9 +625,21 @@ export const DailyReviewWorkspace = ({
         <div className="dr-submit__left">
           {submitResult ? (
             <span className="dr-submit__success">
-              {review.isCompleted
-                ? `Changes saved — ${submitResult.tomorrowPriorities.length} priorities updated.`
-                : `Closed — ${submitResult.tomorrowPriorities.length} priorities seeded.`}
+              {submitResult.appliedTomorrowAdjustment === "rescue"
+                ? review.isCompleted
+                  ? "Changes saved — tomorrow is preloaded in Rescue Mode."
+                  : "Closed — tomorrow is preloaded in Rescue Mode."
+                : submitResult.appliedTomorrowAdjustment === "recovery"
+                  ? review.isCompleted
+                    ? "Changes saved — tomorrow is preloaded in Recovery Mode."
+                    : "Closed — tomorrow is preloaded in Recovery Mode."
+                  : submitResult.appliedTomorrowAdjustment === "keep_standard"
+                    ? review.isCompleted
+                      ? "Changes saved — tomorrow stays in a standard day mode."
+                      : "Closed — tomorrow stays in a standard day mode."
+                    : review.isCompleted
+                      ? `Changes saved — ${submitResult.tomorrowPriorities.length} priorities updated.`
+                      : `Closed — ${submitResult.tomorrowPriorities.length} priorities seeded.`}
             </span>
           ) : submitErrorText ? (
             <span className="dr-submit__error">{submitErrorText}</span>

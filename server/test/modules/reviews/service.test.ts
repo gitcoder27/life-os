@@ -43,6 +43,7 @@ describe("reviews service", () => {
         frictionNote: "note",
         energyRating: 4,
         optionalNote: "optional",
+        tomorrowAdjustment: "recovery",
         completedAt: new Date("2026-03-14T12:00:00.000Z"),
       },
     } as any);
@@ -61,6 +62,7 @@ describe("reviews service", () => {
     const prisma = {
       recurrenceRule: { findMany: vi.fn().mockResolvedValue([]) },
       planningCycle: {
+        findMany: vi.fn().mockResolvedValue([]),
         findUnique: vi.fn().mockResolvedValue({
           priorities: [
             {
@@ -75,6 +77,7 @@ describe("reviews service", () => {
         }),
       },
       task: {
+        count: vi.fn().mockResolvedValue(0),
         findMany: vi.fn().mockResolvedValue([
           {
             id: "task-1",
@@ -112,6 +115,7 @@ describe("reviews service", () => {
       expect.objectContaining({
         biggestWin: "A big win",
         frictionTag: "low energy",
+        tomorrowAdjustment: "recovery",
       }),
     );
     expect(response.score.value).toBe(80);
@@ -208,9 +212,15 @@ describe("reviews service", () => {
       update: vi.fn().mockResolvedValue({}),
       create: vi.fn().mockResolvedValue({}),
     };
+    const txDailyLaunch = {
+      findUnique: vi.fn().mockResolvedValue(null),
+      upsert: vi.fn().mockResolvedValue({}),
+    };
     const prisma = {
       recurrenceRule: { findMany: vi.fn().mockResolvedValue([]) },
+      planningCycle: { findMany: vi.fn().mockResolvedValue([]) },
       task: {
+        count: vi.fn().mockResolvedValue(0),
         findMany: vi.fn().mockResolvedValue([
           {
             id: "carry-task",
@@ -235,6 +245,7 @@ describe("reviews service", () => {
       $transaction: vi.fn(async (callback: any) =>
         callback({
           dailyReview: { upsert: vi.fn().mockResolvedValue({}) },
+          dailyLaunch: txDailyLaunch,
           cyclePriority: txCyclePriority,
           task: txTask,
         } as any),
@@ -265,6 +276,7 @@ describe("reviews service", () => {
         frictionNote: null,
         energyRating: 3,
         optionalNote: null,
+        tomorrowAdjustment: "rescue",
         carryForwardTaskIds: ["carry-task"],
         droppedTaskIds: ["drop-task"],
         rescheduledTasks: [
@@ -281,6 +293,7 @@ describe("reviews service", () => {
     );
 
     expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+    expect(txDailyLaunch.upsert).toHaveBeenCalled();
     expect(txTask.update).toHaveBeenCalledWith(expect.objectContaining({ where: { id: "drop-task" } }));
     expect(txTask.create).toHaveBeenCalledTimes(2);
     expect(response.tomorrowPriorities).toHaveLength(1);
@@ -289,6 +302,7 @@ describe("reviews service", () => {
       title: "Tomorrow reset",
       status: "pending",
     });
+    expect(response.appliedTomorrowAdjustment).toBe("rescue");
     expect(finalizeDailyScoreMock).toHaveBeenCalledWith(prisma, "user-1", new Date("2026-03-14T00:00:00.000Z"));
   });
 
@@ -305,6 +319,7 @@ describe("reviews service", () => {
         frictionNote: null,
         energyRating: 3,
         optionalNote: null,
+        tomorrowAdjustment: "rescue",
         completedAt: new Date("2026-03-14T21:00:00.000Z"),
       },
     } as any);
@@ -313,16 +328,21 @@ describe("reviews service", () => {
       submitDailyReview(
         {
           recurrenceRule: { findMany: vi.fn().mockResolvedValue([]) },
-          task: { findMany: vi.fn().mockResolvedValue([]) },
+          planningCycle: { findMany: vi.fn().mockResolvedValue([]) },
+          task: {
+            count: vi.fn().mockResolvedValue(0),
+            findMany: vi.fn().mockResolvedValue([]),
+          },
         } as any,
         "user-1",
         new Date("2026-03-14T00:00:00.000Z"),
         {
           biggestWin: "Focus",
           frictionTag: "poor planning",
-          frictionNote: null,
-          energyRating: 3,
+          frictionNote: "Overcommitted the day",
+          energyRating: 2,
           optionalNote: null,
+          tomorrowAdjustment: "rescue",
           carryForwardTaskIds: [],
           droppedTaskIds: [],
           rescheduledTasks: [],
@@ -347,7 +367,9 @@ describe("reviews service", () => {
       submitDailyReview(
         {
           recurrenceRule: { findMany: vi.fn().mockResolvedValue([]) },
+          planningCycle: { findMany: vi.fn().mockResolvedValue([]) },
           task: {
+            count: vi.fn().mockResolvedValue(0),
             findMany: vi.fn().mockResolvedValue([
               {
                 id: "task-1",
@@ -363,9 +385,10 @@ describe("reviews service", () => {
         {
           biggestWin: "Focus",
           frictionTag: "poor planning",
-          frictionNote: null,
-          energyRating: 3,
+          frictionNote: "Overcommitted the day",
+          energyRating: 2,
           optionalNote: null,
+          tomorrowAdjustment: "rescue",
           carryForwardTaskIds: [],
           droppedTaskIds: [],
           rescheduledTasks: [],
@@ -373,6 +396,50 @@ describe("reviews service", () => {
         },
       ),
     ).rejects.toThrow("Every pending task for the review date must be resolved before submission");
+  });
+
+  it("requires a tomorrow adjustment when recovery signals are present", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-03-15T08:30:00.000Z"));
+
+    ensureCycleMock.mockResolvedValueOnce({
+      id: "day-cycle",
+      priorities: [],
+      dailyReview: null,
+      dailyScore: null,
+    } as any).mockResolvedValueOnce({
+      id: "tomorrow-cycle",
+      priorities: [],
+    } as any);
+
+    await expect(
+      submitDailyReview(
+        {
+          recurrenceRule: { findMany: vi.fn().mockResolvedValue([]) },
+          planningCycle: { findMany: vi.fn().mockResolvedValue([]) },
+          task: {
+            count: vi.fn().mockResolvedValue(0),
+            findMany: vi.fn().mockResolvedValue([]),
+          },
+        } as any,
+        "user-1",
+        new Date("2026-03-14T00:00:00.000Z"),
+        {
+          biggestWin: "Focus",
+          frictionTag: "poor planning",
+          frictionNote: "Overcommitted the day",
+          energyRating: 2,
+          optionalNote: null,
+          carryForwardTaskIds: [],
+          droppedTaskIds: [],
+          rescheduledTasks: [],
+          tomorrowPriorities: [
+            { slot: 1, title: "tomorrow 1" },
+            { slot: 2, title: "tomorrow 2" },
+          ],
+        },
+      ),
+    ).rejects.toThrow("Choose how tomorrow should change before submitting this review");
   });
 
   it("builds weekly review summaries from activity and friction data", async () => {
@@ -698,9 +765,13 @@ describe("reviews service", () => {
     const prisma = {
       recurrenceRule: { findMany: vi.fn().mockResolvedValue([]) },
       planningCycle: {
+        findMany: vi.fn().mockResolvedValue([]),
         findUnique: vi.fn().mockResolvedValue({ priorities: [] }),
       },
-      task: { findMany: vi.fn().mockResolvedValue([]) },
+      task: {
+        count: vi.fn().mockResolvedValue(0),
+        findMany: vi.fn().mockResolvedValue([]),
+      },
       routine: { findMany: vi.fn().mockResolvedValue([]) },
       routineItemCheckin: { findMany: vi.fn().mockResolvedValue([]) },
       habit: { findMany: vi.fn().mockResolvedValue([]) },

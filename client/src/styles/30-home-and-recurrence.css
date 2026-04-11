@@ -46,6 +46,13 @@
   min-width: 0;
 }
 
+.recovery-strip__actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-shrink: 0;
+}
+
 .recovery-strip__title {
   font-size: var(--fs-body);
   font-weight: 650;
@@ -290,6 +297,12 @@
 
   .recovery-strip {
     padding: 0.55rem 0.75rem;
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .recovery-strip__actions {
+    width: 100%;
   }
 }
 

@@ -999,6 +999,7 @@ model DailyReview {
   frictionNote    String?
   energyRating    Int
   optionalNote    String?
+  tomorrowAdjustment String?
   completedAt     DateTime
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
