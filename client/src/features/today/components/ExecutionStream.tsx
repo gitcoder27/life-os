@@ -7,6 +7,8 @@ import { CheckIcon, MoreIcon } from "../helpers/icons";
 import type { PlannerExecutionModel } from "../helpers/planner-execution";
 import type { useTaskActions } from "../hooks/useTaskActions";
 import type { DayPhase } from "../helpers/day-phase";
+import { StartProtocolSheet } from "./StartProtocolSheet";
+import { StuckFlowSheet } from "./StuckFlowSheet";
 
 type TaskActions = ReturnType<typeof useTaskActions>;
 
@@ -17,6 +19,7 @@ type StreamSection = {
 };
 
 export function ExecutionStream({
+  date,
   executionTasks,
   execution,
   taskActions,
@@ -24,6 +27,7 @@ export function ExecutionStream({
   phase,
   onSwitchToPlanner,
 }: {
+  date: string;
   executionTasks: TaskItem[];
   execution: PlannerExecutionModel;
   taskActions: TaskActions;
@@ -108,6 +112,7 @@ export function ExecutionStream({
           {sections.map((section) => (
             <StreamSectionGroup
               key={section.key}
+              date={date}
               section={section}
               taskActions={taskActions}
               taskBlockMap={taskBlockMap}
@@ -135,6 +140,7 @@ export function ExecutionStream({
                   {completedTasks.map((task) => (
                     <StreamTaskRow
                       key={task.id}
+                      date={date}
                       task={task}
                       taskActions={taskActions}
                       blockInfo={null}
@@ -152,11 +158,13 @@ export function ExecutionStream({
 
 function StreamSectionGroup({
   section,
+  date,
   taskActions,
   taskBlockMap,
   onSwitchToPlanner,
 }: {
   section: StreamSection;
+  date: string;
   taskActions: TaskActions;
   taskBlockMap: Map<string, DayPlannerBlockItem>;
   onSwitchToPlanner: () => void;
@@ -186,6 +194,7 @@ function StreamSectionGroup({
           return (
             <StreamTaskRow
               key={task.id}
+              date={date}
               task={task}
               taskActions={taskActions}
               blockInfo={block}
@@ -199,11 +208,13 @@ function StreamSectionGroup({
 }
 
 function StreamTaskRow({
+  date,
   task,
   taskActions,
   blockInfo,
   highlight = false,
 }: {
+  date: string;
   task: TaskItem;
   taskActions: TaskActions;
   blockInfo: DayPlannerBlockItem | null;
@@ -211,6 +222,8 @@ function StreamTaskRow({
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [showReschedule, setShowReschedule] = useState(false);
+  const [protocolOpen, setProtocolOpen] = useState(false);
+  const [stuckOpen, setStuckOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   useClickOutside(menuRef, menuOpen, () => setMenuOpen(false));
 
@@ -294,6 +307,15 @@ function StreamTaskRow({
             {isPending ? (
               <>
                 <button className="action-menu__item" type="button"
+                  onClick={() => { setProtocolOpen(true); setMenuOpen(false); }}>
+                  Start protocol
+                </button>
+                <button className="action-menu__item" type="button"
+                  onClick={() => { setStuckOpen(true); setMenuOpen(false); }}>
+                  I'm stuck
+                </button>
+                <div className="action-menu__divider" />
+                <button className="action-menu__item" type="button"
                   onClick={() => { taskActions.changeStatus(task.id, "dropped"); setMenuOpen(false); }}>
                   ✗ Drop
                 </button>
@@ -343,6 +365,9 @@ function StreamTaskRow({
           </button>
         </div>
       ) : null}
+
+      <StartProtocolSheet open={protocolOpen} date={date} task={task} onClose={() => setProtocolOpen(false)} />
+      <StuckFlowSheet open={stuckOpen} date={date} task={task} onClose={() => setStuckOpen(false)} />
     </div>
   );
 }

@@ -160,8 +160,8 @@ describe("scoring service", () => {
 
     expect(score.value).toBe(0);
     expect(score.label).toBe("Off-Track Day");
-    expect(score.buckets).toHaveLength(2);
-    expect(score.topReasons).toHaveLength(2);
+    expect(score.buckets).toHaveLength(3);
+    expect(score.topReasons).toHaveLength(3);
   });
 
   it("scores only due habits and splits routine points across all active routines", async () => {

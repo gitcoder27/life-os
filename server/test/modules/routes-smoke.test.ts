@@ -97,6 +97,14 @@ function buildTaskRecord(
       legacyRuleText: null;
       exceptions: [];
     } | null;
+    nextAction: string | null;
+    fiveMinuteVersion: string | null;
+    estimatedDurationMinutes: number | null;
+    likelyObstacle: string | null;
+    focusLengthMinutes: number | null;
+    progressState: "NOT_STARTED" | "STARTED" | "ADVANCED";
+    startedAt: Date | null;
+    lastStuckAt: Date | null;
     completedAt: Date | null;
     createdAt: Date;
     updatedAt: Date;
@@ -119,6 +127,14 @@ function buildTaskRecord(
     carriedFromTaskId: null,
     recurrenceRuleId: null,
     recurrenceRule: null,
+    nextAction: null,
+    fiveMinuteVersion: null,
+    estimatedDurationMinutes: null,
+    likelyObstacle: null,
+    focusLengthMinutes: null,
+    progressState: "NOT_STARTED" as const,
+    startedAt: null,
+    lastStuckAt: null,
     completedAt: null,
     createdAt: new Date("2026-03-14T08:00:00.000Z"),
     updatedAt: new Date("2026-03-14T08:00:00.000Z"),
@@ -143,6 +159,10 @@ describe("module route smoke tests", () => {
 
     vi.clearAllMocks();
     prisma = createMockPrisma();
+    prisma.dailyLaunch = {
+      findUnique: vi.fn().mockResolvedValue(null),
+      upsert: vi.fn(),
+    } as any;
     prisma.recurrenceRule = {
       findMany: vi.fn().mockResolvedValue([]),
       upsert: vi.fn().mockResolvedValue({ id: "recurrence-1" }),
@@ -1743,13 +1763,12 @@ describe("module route smoke tests", () => {
     );
     expect(payload.guidance.recommendations[0]).toEqual(
       expect.objectContaining({
-        id: "planning-gap:2026-03-14",
+        id: "launch:2026-03-14",
         kind: "priority",
         action: expect.objectContaining({
           type: "open_destination",
           destination: expect.objectContaining({
-            kind: "today_planning",
-            date: "2026-03-14",
+            kind: "today_execute",
           }),
         }),
       }),
@@ -3198,6 +3217,7 @@ describe("module route smoke tests", () => {
       }),
     } as any;
     prisma.dayPlannerBlock = {
+      count: vi.fn().mockResolvedValue(0),
       findMany: vi.fn().mockResolvedValue([]),
     } as any;
     prisma.dayPlannerBlockTask = {

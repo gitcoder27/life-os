@@ -34,6 +34,33 @@ export type TaskItem = {
   originType: "manual" | "quick_capture" | "carry_forward" | "review_seed" | "recurring" | "template";
   carriedFromTaskId: string | null;
   recurrence: RecurrenceDefinition | null;
+  nextAction: string | null;
+  fiveMinuteVersion: string | null;
+  estimatedDurationMinutes: number | null;
+  likelyObstacle: string | null;
+  focusLengthMinutes: number | null;
+  progressState: "not_started" | "started" | "advanced";
+  startedAt: string | null;
+  lastStuckAt: string | null;
+  completedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type DailyLaunchItem = {
+  id: string;
+  planningCycleId: string;
+  mustWinTaskId: string | null;
+  energyRating: number | null;
+  likelyDerailmentReason:
+    | "unclear"
+    | "too_big"
+    | "avoidance"
+    | "low_energy"
+    | "interrupted"
+    | "overloaded"
+    | null;
+  likelyDerailmentNote: string | null;
   completedAt: string | null;
   createdAt: string;
   updatedAt: string;
@@ -89,6 +116,8 @@ export type DayPlannerBlockItem = {
 type DayPlanResponse = {
   generatedAt: string;
   date: string;
+  launch: DailyLaunchItem | null;
+  mustWinTask: TaskItem | null;
   priorities: Array<{
     id: string;
     slot: 1 | 2 | 3;
@@ -137,6 +166,12 @@ type PriorityMutationResponse = {
 type TaskMutationResponse = {
   generatedAt: string;
   task: TaskItem;
+};
+
+type DayLaunchMutationResponse = {
+  generatedAt: string;
+  launch: DailyLaunchItem;
+  mustWinTask: TaskItem | null;
 };
 
 type BulkTaskMutationResponse = {
@@ -589,6 +624,13 @@ export const useUpdateTaskMutation = (date: string) => {
       dueAt,
       recurrence,
       carryPolicy,
+      nextAction,
+      fiveMinuteVersion,
+      estimatedDurationMinutes,
+      likelyObstacle,
+      focusLengthMinutes,
+      progressState,
+      startedAt,
     }: {
       taskId: string;
       title?: string;
@@ -601,6 +643,13 @@ export const useUpdateTaskMutation = (date: string) => {
       dueAt?: string | null;
       recurrence?: RecurrenceInput;
       carryPolicy?: RecurringTaskCarryPolicy | null;
+      nextAction?: string | null;
+      fiveMinuteVersion?: string | null;
+      estimatedDurationMinutes?: number | null;
+      likelyObstacle?: string | null;
+      focusLengthMinutes?: number | null;
+      progressState?: TaskItem["progressState"];
+      startedAt?: string | null;
     }) =>
       apiRequest<TaskMutationResponse>(`/api/tasks/${taskId}`, {
         method: "PATCH",
@@ -615,6 +664,13 @@ export const useUpdateTaskMutation = (date: string) => {
           dueAt,
           recurrence,
           carryPolicy,
+          nextAction,
+          fiveMinuteVersion,
+          estimatedDurationMinutes,
+          likelyObstacle,
+          focusLengthMinutes,
+          progressState,
+          startedAt,
         },
       }),
     meta: {
@@ -670,6 +726,13 @@ export const useCreateTaskMutation = (
       dueAt?: string | null;
       recurrence?: RecurrenceInput;
       carryPolicy?: RecurringTaskCarryPolicy;
+      nextAction?: string | null;
+      fiveMinuteVersion?: string | null;
+      estimatedDurationMinutes?: number | null;
+      likelyObstacle?: string | null;
+      focusLengthMinutes?: number | null;
+      progressState?: TaskItem["progressState"];
+      startedAt?: string | null;
     }) =>
       apiRequest<TaskMutationResponse>("/api/tasks", {
         method: "POST",
@@ -678,6 +741,62 @@ export const useCreateTaskMutation = (
     meta: {
       successMessage: options?.successMessage ?? "Captured to inbox.",
       errorMessage: options?.errorMessage ?? "Task capture failed.",
+    },
+    onSuccess: () => invalidateCoreData(queryClient, date),
+  });
+};
+
+export const useUpsertDayLaunchMutation = (date: string) => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (payload: {
+      mustWinTaskId?: string | null;
+      energyRating?: number | null;
+      likelyDerailmentReason?: DailyLaunchItem["likelyDerailmentReason"];
+      likelyDerailmentNote?: string | null;
+    }) =>
+      apiRequest<DayLaunchMutationResponse>(`/api/planning/days/${date}/launch`, {
+        method: "PUT",
+        body: payload,
+      }),
+    meta: {
+      successMessage: "Launch updated.",
+      errorMessage: "Launch update failed.",
+    },
+    onSuccess: () => invalidateCoreData(queryClient, date),
+  });
+};
+
+export const useLogTaskStuckMutation = (date: string) => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      taskId,
+      reason,
+      actionTaken,
+      note,
+      targetDate,
+    }: {
+      taskId: string;
+      reason: NonNullable<DailyLaunchItem["likelyDerailmentReason"]>;
+      actionTaken: "clarify" | "shrink" | "downgrade" | "reschedule" | "recover";
+      note?: string | null;
+      targetDate?: string | null;
+    }) =>
+      apiRequest<TaskMutationResponse>(`/api/tasks/${taskId}/stuck`, {
+        method: "POST",
+        body: {
+          reason,
+          actionTaken,
+          note,
+          targetDate,
+        },
+      }),
+    meta: {
+      successMessage: "Stuck step captured.",
+      errorMessage: "Could not save stuck step.",
     },
     onSuccess: () => invalidateCoreData(queryClient, date),
   });

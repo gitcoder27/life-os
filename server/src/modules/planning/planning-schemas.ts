@@ -8,6 +8,9 @@ import type {
   RecurringTaskCarryPolicy,
   ReviewHistoryCadenceFilter,
   TaskKind,
+  TaskProgressState,
+  TaskStuckAction,
+  TaskStuckReason,
   UpdateGoalDomainsRequest,
   UpdateGoalHorizonsRequest,
 } from "@life-os/contracts";
@@ -22,6 +25,7 @@ export const goalStatusSchema = z.enum(["active", "paused", "completed", "archiv
 export const goalMilestoneStatusSchema = z.enum(["pending", "completed"]);
 export const priorityStatusSchema = z.enum(["pending", "completed", "dropped"]);
 export const taskStatusSchema = z.enum(["pending", "completed", "dropped"]) as z.ZodType<PlanningTaskItem["status"]>;
+export const taskProgressStateSchema = z.enum(["not_started", "started", "advanced"]) as z.ZodType<TaskProgressState>;
 export const taskKindSchema = z.enum(["task", "note", "reminder"]) as z.ZodType<TaskKind>;
 export const taskOriginSchema = z.enum([
   "manual",
@@ -37,6 +41,22 @@ export const carryPolicySchema = z.enum([
   "move_due_date",
   "cancel",
 ]) as z.ZodType<RecurringTaskCarryPolicy>;
+export const taskStuckReasonSchema = z.enum([
+  "unclear",
+  "too_big",
+  "avoidance",
+  "low_energy",
+  "interrupted",
+  "overloaded",
+]) as z.ZodType<TaskStuckReason>;
+export const taskStuckActionSchema = z.enum([
+  "clarify",
+  "shrink",
+  "downgrade",
+  "reschedule",
+  "recover",
+]) as z.ZodType<TaskStuckAction>;
+const taskProtocolTextSchema = z.string().trim().max(300).nullable().optional();
 const recurrenceExceptionActionSchema = z.enum(["skip", "do_once", "reschedule"]);
 const recurrenceRuleSchema = z.object({
   frequency: z.enum(["daily", "weekly", "monthly_nth_weekday", "interval"]),
@@ -79,6 +99,13 @@ export const priorityInputSchema = z.object({
   goalId: z.string().uuid().nullable().optional(),
 });
 
+export const dayPriorityInputSchema = z.object({
+  id: z.string().uuid().optional(),
+  slot: z.union([z.literal(1), z.literal(2)]),
+  title: z.string().trim().min(1).max(200),
+  goalId: z.string().uuid().nullable().optional(),
+});
+
 export const createGoalSchema = z.object({
   title: z.string().trim().min(1).max(200),
   domainId: entityIdSchema,
@@ -105,7 +132,7 @@ export const updateGoalSchema = z
   .refine((value) => Object.keys(value).length > 0, "At least one field must be updated");
 
 export const updateDayPrioritiesSchema = z.object({
-  priorities: z.array(priorityInputSchema).max(3),
+  priorities: z.array(dayPriorityInputSchema).max(2),
 });
 
 export const updateWeekPrioritiesSchema = z.object({
@@ -223,6 +250,13 @@ export const createTaskSchema = z.object({
   originType: taskOriginSchema.optional(),
   recurrence: recurrenceInputSchema.optional(),
   carryPolicy: carryPolicySchema.optional(),
+  nextAction: taskProtocolTextSchema,
+  fiveMinuteVersion: taskProtocolTextSchema,
+  estimatedDurationMinutes: z.number().int().min(1).max(480).nullable().optional(),
+  likelyObstacle: taskProtocolTextSchema,
+  focusLengthMinutes: z.number().int().min(5).max(180).nullable().optional(),
+  progressState: taskProgressStateSchema.optional(),
+  startedAt: isoDateTimeSchema.nullable().optional(),
 });
 
 export const updateTaskSchema = z
@@ -237,8 +271,31 @@ export const updateTaskSchema = z
     goalId: z.string().uuid().nullable().optional(),
     recurrence: recurrenceInputSchema.optional(),
     carryPolicy: carryPolicySchema.nullable().optional(),
+    nextAction: taskProtocolTextSchema,
+    fiveMinuteVersion: taskProtocolTextSchema,
+    estimatedDurationMinutes: z.number().int().min(1).max(480).nullable().optional(),
+    likelyObstacle: taskProtocolTextSchema,
+    focusLengthMinutes: z.number().int().min(5).max(180).nullable().optional(),
+    progressState: taskProgressStateSchema.optional(),
+    startedAt: isoDateTimeSchema.nullable().optional(),
   })
   .refine((value) => Object.keys(value).length > 0, "At least one field must be updated");
+
+export const upsertDayLaunchSchema = z
+  .object({
+    mustWinTaskId: z.string().uuid().nullable().optional(),
+    energyRating: z.number().int().min(1).max(5).nullable().optional(),
+    likelyDerailmentReason: taskStuckReasonSchema.nullable().optional(),
+    likelyDerailmentNote: z.string().trim().max(300).nullable().optional(),
+  })
+  .refine((value) => Object.keys(value).length > 0, "At least one field must be updated");
+
+export const logTaskStuckSchema = z.object({
+  reason: taskStuckReasonSchema,
+  actionTaken: taskStuckActionSchema,
+  note: z.string().trim().max(300).nullable().optional(),
+  targetDate: isoDateSchema.nullable().optional(),
+});
 
 const bulkTaskActionSchema = z.discriminatedUnion("type", [
   z.object({

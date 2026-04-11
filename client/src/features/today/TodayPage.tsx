@@ -18,6 +18,8 @@ import { RecoveryTray } from "./components/RecoveryTray";
 import { DayPlanner } from "./components/DayPlanner";
 import { DayNotes } from "./components/DayNotes";
 import { TodayTaskCaptureSheet } from "./components/TodayTaskCaptureSheet";
+import { DailyLaunchCard } from "./components/DailyLaunchCard";
+import { MustWinCard } from "./components/MustWinCard";
 import { buildPlannerExecutionModel } from "./helpers/planner-execution";
 import { getDayPhase } from "./helpers/day-phase";
 import { useTodayData } from "./hooks/useTodayData";
@@ -326,7 +328,7 @@ export function TodayPage() {
           hasDrift={todayPlannerExecution.slippedBlocks.length > 0}
           onAddTask={() => setTodayTaskCaptureOpen(true)}
           execution={todayPlannerExecution}
-          topPriorityTitle={priorityDraft.draft.find((p) => p.status === "pending")?.title}
+          topPriorityTitle={data.mustWinTask?.title ?? priorityDraft.draft.find((p) => p.status === "pending")?.title}
           onSwitchToPlanner={() => setTodayMode("plan")}
         />
 
@@ -338,7 +340,21 @@ export function TodayPage() {
       {mode === "execute" ? (
         <div className="today-execute-v2">
           <div className="today-main-v2">
+            {!data.launch?.completedAt ? (
+              <DailyLaunchCard
+                date={data.today}
+                tasks={data.executionTasks}
+                launch={data.launch}
+                mustWinTask={data.mustWinTask}
+              />
+            ) : null}
+
+            {data.launch?.completedAt && data.mustWinTask ? (
+              <MustWinCard date={data.today} task={data.mustWinTask} />
+            ) : null}
+
             <ExecutionStream
+              date={data.today}
               executionTasks={data.executionTasks}
               execution={todayPlannerExecution}
               taskActions={taskActions}

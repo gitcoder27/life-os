@@ -50,6 +50,7 @@ describe("home guidance builder", () => {
         hasPlannerBlocks: false,
         pendingPriorityCount: 1,
         openTaskCount: 1,
+        launchComplete: false,
       },
       accountability: {
         staleInboxCount: 2,
@@ -83,7 +84,7 @@ describe("home guidance builder", () => {
 
     expect(guidance.recommendations).toHaveLength(3);
     expect(guidance.recommendations.map((item) => item.id)).toEqual([
-      "planning-gap:2026-03-14",
+      "launch:2026-03-14",
       "inbox-triage:task-stale-1",
       "overdue-recovery:task-overdue-1",
     ]);
@@ -95,8 +96,7 @@ describe("home guidance builder", () => {
     expect(guidance.recommendations[0]?.action).toEqual({
       type: "open_destination",
       destination: {
-        kind: "today_planning",
-        date: "2026-03-14",
+        kind: "today_execute",
       },
     });
   });
@@ -119,6 +119,7 @@ describe("home guidance builder", () => {
         hasPlannerBlocks: false,
         pendingPriorityCount: 0,
         openTaskCount: 0,
+        launchComplete: false,
       },
       accountability: {
         staleInboxCount: 0,
@@ -167,6 +168,7 @@ describe("home guidance builder", () => {
         hasPlannerBlocks: true,
         pendingPriorityCount: 0,
         openTaskCount: 0,
+        launchComplete: true,
       },
       accountability: {
         staleInboxCount: 0,

@@ -233,7 +233,7 @@ export async function seedPlannerBlocksFromMostRecentDay(
     return false;
   }
 
-  const sourceCycle = await prisma.planningCycle.findFirst({
+  const sourceCycle = await (prisma.planningCycle?.findFirst?.({
     where: {
       userId: input.userId,
       cycleType: "DAY",
@@ -250,7 +250,7 @@ export async function seedPlannerBlocksFromMostRecentDay(
     select: {
       id: true,
     },
-  });
+  }) ?? Promise.resolve(null));
 
   if (!sourceCycle) {
     return false;

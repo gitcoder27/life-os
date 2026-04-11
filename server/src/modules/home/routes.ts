@@ -51,8 +51,13 @@ import {
 import { parseOrThrow } from "../../lib/validation/parse.js";
 import { buildHomeGuidance } from "./guidance.js";
 import { createHomeQuoteService } from "./quote-service.js";
-import { fromPrismaGoalDomainSystemKey } from "../planning/planning-mappers.js";
-import { goalSummaryInclude } from "../planning/planning-record-shapes.js";
+import {
+  fromPrismaGoalDomainSystemKey,
+  fromPrismaTaskProgressState,
+  serializeDailyLaunch,
+  serializeTask,
+} from "../planning/planning-mappers.js";
+import { goalSummaryInclude, planningTaskInclude } from "../planning/planning-record-shapes.js";
 import { buildFinanceRoute } from "../finance/finance-navigation.js";
 import { getOpenDailyReviewRoute } from "../reviews/submission-window.js";
 import { calculateDailyScore, ensureCycle, getWeeklyMomentum } from "../scoring/service.js";
@@ -384,6 +389,16 @@ async function buildHomeOverview(
       planningCycleId: dayCycle.id,
     },
   });
+  const dailyLaunch = await app.prisma.dailyLaunch.findUnique({
+    where: {
+      planningCycleId: dayCycle.id,
+    },
+    include: {
+      mustWinTask: {
+        include: planningTaskInclude,
+      },
+    },
+  });
   const completedHabits = dueHabits.filter((habit) =>
     isHabitCompletedOnIsoDate(
       recentHabitCheckins.filter((checkin) => checkin.habitId === habit.id),
@@ -629,12 +644,15 @@ async function buildHomeOverview(
       title: task.title,
       status:
         task.status === "COMPLETED" ? "completed" : task.status === "DROPPED" ? "dropped" : "pending",
+      progressState: fromPrismaTaskProgressState(task.progressState),
+      lastStuckAt: task.lastStuckAt?.toISOString() ?? null,
     })),
     planning: {
       date: targetIsoDate,
       hasPlannerBlocks: plannerBlockCount > 0,
       pendingPriorityCount: dayCycle.priorities.filter((priority) => priority.status !== "COMPLETED" && priority.status !== "DROPPED").length,
       openTaskCount: tasks.filter((task) => task.status === "PENDING").length,
+      launchComplete: Boolean(dailyLaunch?.completedAt),
     },
     accountability: {
       staleInboxCount: staleInboxTasks.length,
@@ -656,6 +674,8 @@ async function buildHomeOverview(
     date: targetIsoDate,
     greeting: getLocalGreeting(now, preferences?.timezone),
     phase: currentHomePhase(now, preferences?.timezone),
+    launch: dailyLaunch ? serializeDailyLaunch(dailyLaunch) : null,
+    mustWinTask: dailyLaunch?.mustWinTask ? serializeTask(dailyLaunch.mustWinTask) : null,
     dailyScore: {
       value: score.value,
       label: score.label,

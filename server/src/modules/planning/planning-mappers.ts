@@ -1,4 +1,5 @@
 import type {
+  DailyLaunchItem,
   GoalDomainItem,
   GoalDomainSystemKey,
   GoalHierarchySummary,
@@ -16,9 +17,13 @@ import type {
   PlanningPriorityItem,
   PlanningTaskItem,
   TaskKind,
+  TaskProgressState,
+  TaskStuckAction,
+  TaskStuckReason,
   TaskTemplateItem,
 } from "@life-os/contracts";
 import type {
+  DailyDerailmentReason as PrismaDailyDerailmentReason,
   Goal,
   GoalDomainConfig,
   GoalDomainSystemKey as PrismaGoalDomainSystemKey,
@@ -34,7 +39,9 @@ import type {
   Task,
   TaskKind as PrismaTaskKind,
   TaskOriginType as PrismaTaskOriginType,
+  TaskProgressState as PrismaTaskProgressState,
   TaskStatus as PrismaTaskStatus,
+  TaskStuckAction as PrismaTaskStuckAction,
   TaskTemplate,
 } from "@prisma/client";
 import { z } from "zod";
@@ -98,6 +105,18 @@ type DayPlannerBlockRecord = {
     sortOrder: number;
     task: PlanningTaskRecord;
   }>;
+};
+
+type DailyLaunchRecord = {
+  id: string;
+  planningCycleId: string;
+  mustWinTaskId: string | null;
+  energyRating: number | null;
+  likelyDerailmentReason: PrismaDailyDerailmentReason | null;
+  likelyDerailmentNote: string | null;
+  completedAt: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
 };
 
 export type GoalLinkedHabitRecord = Habit & {
@@ -278,6 +297,28 @@ export function toPrismaTaskStatus(status: PlanningTaskItem["status"]): PrismaTa
   }
 }
 
+export function toPrismaTaskProgressState(progressState: TaskProgressState): PrismaTaskProgressState {
+  switch (progressState) {
+    case "not_started":
+      return "NOT_STARTED";
+    case "started":
+      return "STARTED";
+    case "advanced":
+      return "ADVANCED";
+  }
+}
+
+export function fromPrismaTaskProgressState(progressState: PrismaTaskProgressState): TaskProgressState {
+  switch (progressState) {
+    case "NOT_STARTED":
+      return "not_started";
+    case "STARTED":
+      return "started";
+    case "ADVANCED":
+      return "advanced";
+  }
+}
+
 export function fromPrismaTaskStatus(status: PrismaTaskStatus): PlanningTaskItem["status"] {
   switch (status) {
     case "PENDING":
@@ -327,6 +368,57 @@ export function toPrismaTaskOriginType(originType: PlanningTaskItem["originType"
       return "TEMPLATE";
     case "meal_plan":
       return "MEAL_PLAN";
+  }
+}
+
+export function toPrismaTaskStuckReason(reason: TaskStuckReason): PrismaDailyDerailmentReason {
+  switch (reason) {
+    case "unclear":
+      return "UNCLEAR";
+    case "too_big":
+      return "TOO_BIG";
+    case "avoidance":
+      return "AVOIDANCE";
+    case "low_energy":
+      return "LOW_ENERGY";
+    case "interrupted":
+      return "INTERRUPTED";
+    case "overloaded":
+      return "OVERLOADED";
+  }
+}
+
+export function fromPrismaTaskStuckReason(reason: PrismaDailyDerailmentReason | null): TaskStuckReason | null {
+  switch (reason) {
+    case "UNCLEAR":
+      return "unclear";
+    case "TOO_BIG":
+      return "too_big";
+    case "AVOIDANCE":
+      return "avoidance";
+    case "LOW_ENERGY":
+      return "low_energy";
+    case "INTERRUPTED":
+      return "interrupted";
+    case "OVERLOADED":
+      return "overloaded";
+    default:
+      return null;
+  }
+}
+
+export function toPrismaTaskStuckAction(action: TaskStuckAction): PrismaTaskStuckAction {
+  switch (action) {
+    case "clarify":
+      return "CLARIFY";
+    case "shrink":
+      return "SHRINK";
+    case "downgrade":
+      return "DOWNGRADE";
+    case "reschedule":
+      return "RESCHEDULE";
+    case "recover":
+      return "RECOVER";
   }
 }
 
@@ -491,9 +583,31 @@ export function serializeTask(task: PlanningTaskRecord): PlanningTaskItem {
     originType: fromPrismaTaskOriginType(task.originType),
     carriedFromTaskId: task.carriedFromTaskId,
     recurrence: serializeRecurrenceDefinition(task.recurrenceRule),
+    nextAction: task.nextAction ?? null,
+    fiveMinuteVersion: task.fiveMinuteVersion ?? null,
+    estimatedDurationMinutes: task.estimatedDurationMinutes ?? null,
+    likelyObstacle: task.likelyObstacle ?? null,
+    focusLengthMinutes: task.focusLengthMinutes ?? null,
+    progressState: fromPrismaTaskProgressState(task.progressState),
+    startedAt: task.startedAt?.toISOString() ?? null,
+    lastStuckAt: task.lastStuckAt?.toISOString() ?? null,
     completedAt: task.completedAt?.toISOString() ?? null,
     createdAt: task.createdAt.toISOString(),
     updatedAt: task.updatedAt.toISOString(),
+  };
+}
+
+export function serializeDailyLaunch(launch: DailyLaunchRecord): DailyLaunchItem {
+  return {
+    id: launch.id,
+    planningCycleId: launch.planningCycleId,
+    mustWinTaskId: launch.mustWinTaskId,
+    energyRating: launch.energyRating ?? null,
+    likelyDerailmentReason: fromPrismaTaskStuckReason(launch.likelyDerailmentReason),
+    likelyDerailmentNote: launch.likelyDerailmentNote ?? null,
+    completedAt: launch.completedAt?.toISOString() ?? null,
+    createdAt: launch.createdAt.toISOString(),
+    updatedAt: launch.updatedAt.toISOString(),
   };
 }
 

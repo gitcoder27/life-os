@@ -46,7 +46,7 @@ export function FocusStack({
     <section className="focus-stack">
       <div className="focus-stack__priorities">
         <div className="focus-stack__priorities-header">
-          <h2 className="focus-stack__priorities-title">Top Priorities</h2>
+          <h2 className="focus-stack__priorities-title">Support Priorities</h2>
           <SaveIndicator status={priorityDraft.saveStatus} />
         </div>
 
@@ -80,13 +80,13 @@ export function FocusStack({
           <div className="focus-stack__empty">
             <p className="focus-stack__empty-text">
               {phase === "morning"
-                ? "Start the day by naming your top 3 outcomes."
-                : "Add up to three priorities to define today's focus."}
+                ? "Start the day by naming the two support priorities around the must-win."
+                : "Add up to two support priorities around the must-win."}
             </p>
           </div>
         )}
 
-        {priorityDraft.draft.length < 3 ? (
+        {priorityDraft.draft.length < 2 ? (
           <button
             className="focus-stack__add-priority"
             type="button"

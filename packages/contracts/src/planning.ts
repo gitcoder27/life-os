@@ -4,6 +4,7 @@ import type { RecurrenceDefinition, RecurrenceInput, RecurringTaskCarryPolicy } 
 
 export type PriorityStatus = "pending" | "completed" | "dropped";
 export type TaskStatus = "pending" | "completed" | "dropped";
+export type TaskProgressState = "not_started" | "started" | "advanced";
 export type TaskKind = "task" | "note" | "reminder";
 export type TaskOriginType =
   | "manual"
@@ -14,6 +15,14 @@ export type TaskOriginType =
   | "template"
   | "meal_plan";
 export type TaskScheduledState = "all" | "scheduled" | "unscheduled";
+export type TaskStuckReason =
+  | "unclear"
+  | "too_big"
+  | "avoidance"
+  | "low_energy"
+  | "interrupted"
+  | "overloaded";
+export type TaskStuckAction = "clarify" | "shrink" | "downgrade" | "reschedule" | "recover";
 
 export interface PlanningPriorityItem {
   id: EntityId;
@@ -46,6 +55,26 @@ export interface PlanningTaskItem {
   originType: TaskOriginType;
   carriedFromTaskId: EntityId | null;
   recurrence: RecurrenceDefinition | null;
+  nextAction: string | null;
+  fiveMinuteVersion: string | null;
+  estimatedDurationMinutes: number | null;
+  likelyObstacle: string | null;
+  focusLengthMinutes: number | null;
+  progressState: TaskProgressState;
+  startedAt: string | null;
+  lastStuckAt: string | null;
+  completedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface DailyLaunchItem {
+  id: EntityId;
+  planningCycleId: EntityId;
+  mustWinTaskId: EntityId | null;
+  energyRating: number | null;
+  likelyDerailmentReason: TaskStuckReason | null;
+  likelyDerailmentNote: string | null;
   completedAt: string | null;
   createdAt: string;
   updatedAt: string;
@@ -78,6 +107,8 @@ export interface DayPlannerBlockItem {
 
 export interface DayPlanResponse extends ApiMeta {
   date: IsoDateString;
+  launch: DailyLaunchItem | null;
+  mustWinTask: PlanningTaskItem | null;
   priorities: PlanningPriorityItem[];
   tasks: PlanningTaskItem[];
   goalNudges: GoalNudgeItem[];
@@ -168,6 +199,13 @@ export interface CreateTaskRequest {
   originType?: TaskOriginType;
   recurrence?: RecurrenceInput;
   carryPolicy?: RecurringTaskCarryPolicy;
+  nextAction?: string | null;
+  fiveMinuteVersion?: string | null;
+  estimatedDurationMinutes?: number | null;
+  likelyObstacle?: string | null;
+  focusLengthMinutes?: number | null;
+  progressState?: TaskProgressState;
+  startedAt?: string | null;
 }
 
 export interface UpdateTaskRequest {
@@ -181,6 +219,38 @@ export interface UpdateTaskRequest {
   goalId?: EntityId | null;
   recurrence?: RecurrenceInput;
   carryPolicy?: RecurringTaskCarryPolicy | null;
+  nextAction?: string | null;
+  fiveMinuteVersion?: string | null;
+  estimatedDurationMinutes?: number | null;
+  likelyObstacle?: string | null;
+  focusLengthMinutes?: number | null;
+  progressState?: TaskProgressState;
+  startedAt?: string | null;
+}
+
+export interface UpsertDayLaunchRequest {
+  mustWinTaskId?: EntityId | null;
+  energyRating?: number | null;
+  likelyDerailmentReason?: TaskStuckReason | null;
+  likelyDerailmentNote?: string | null;
+}
+
+export interface DayLaunchResponse extends ApiMeta {
+  date: IsoDateString;
+  launch: DailyLaunchItem | null;
+  mustWinTask: PlanningTaskItem | null;
+}
+
+export interface DayLaunchMutationResponse extends ApiMeta {
+  launch: DailyLaunchItem;
+  mustWinTask: PlanningTaskItem | null;
+}
+
+export interface LogTaskStuckRequest {
+  reason: TaskStuckReason;
+  actionTaken: TaskStuckAction;
+  note?: string | null;
+  targetDate?: IsoDateString | null;
 }
 
 export type BulkUpdateTaskAction =

@@ -1,7 +1,7 @@
 import type { ApiMeta, EntityId, IsoDateString } from "./common.js";
 import type { GoalSummary } from "./goals.js";
 import type { WeeklyHabitChallenge } from "./habits.js";
-import type { TaskKind, TaskOriginType } from "./planning.js";
+import type { DailyLaunchItem, PlanningTaskItem, TaskKind, TaskOriginType } from "./planning.js";
 
 export interface DailyScoreSnapshot {
   value: number;
@@ -199,6 +199,8 @@ export interface HomeOverviewResponse extends ApiMeta {
   date: IsoDateString;
   greeting: string;
   phase: "morning" | "midday" | "evening";
+  launch: DailyLaunchItem | null;
+  mustWinTask: PlanningTaskItem | null;
   dailyScore: DailyScoreSnapshot;
   weeklyMomentum: number;
   topPriorities: PriorityItem[];

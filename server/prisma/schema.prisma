@@ -65,6 +65,12 @@ enum TaskStatus {
   DROPPED
 }
 
+enum TaskProgressState {
+  NOT_STARTED
+  STARTED
+  ADVANCED
+}
+
 enum TaskOriginType {
   MANUAL
   QUICK_CAPTURE
@@ -207,6 +213,23 @@ enum ReviewType {
   MONTHLY
 }
 
+enum DailyDerailmentReason {
+  UNCLEAR
+  TOO_BIG
+  AVOIDANCE
+  LOW_ENERGY
+  INTERRUPTED
+  OVERLOADED
+}
+
+enum TaskStuckAction {
+  CLARIFY
+  SHRINK
+  DOWNGRADE
+  RESCHEDULE
+  RECOVER
+}
+
 enum NotificationSeverity {
   INFO
   WARNING
@@ -231,6 +254,8 @@ model User {
   goalHorizonConfigs    GoalHorizonConfig[]
   planningCycles        PlanningCycle[]
   tasks                 Task[]
+  dailyLaunches         DailyLaunch[]
+  taskStuckEvents       TaskStuckEvent[]
   taskTemplates         TaskTemplate[]
   habits                Habit[]
   routines              Routine[]
@@ -398,6 +423,7 @@ model PlanningCycle {
   user           User                @relation(fields: [userId], references: [id], onDelete: Cascade)
   priorities     CyclePriority[]
   plannerBlocks  DayPlannerBlock[]
+  dailyLaunch    DailyLaunch?
   dailyReview    DailyReview?
   weeklyReview   WeeklyReview?
   monthlyReview  MonthlyReview?
@@ -454,6 +480,25 @@ model DayPlannerBlockTask {
   @@index([taskId, blockId])
 }
 
+model DailyLaunch {
+  id                    String                @id @default(uuid())
+  userId                String
+  planningCycleId       String                @unique
+  mustWinTaskId         String?
+  energyRating          Int?
+  likelyDerailmentReason DailyDerailmentReason?
+  likelyDerailmentNote  String?
+  completedAt           DateTime?
+  createdAt             DateTime              @default(now())
+  updatedAt             DateTime              @updatedAt
+  user                  User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  planningCycle         PlanningCycle         @relation(fields: [planningCycleId], references: [id], onDelete: Cascade)
+  mustWinTask           Task?                 @relation("DailyLaunchMustWinTask", fields: [mustWinTaskId], references: [id], onDelete: SetNull)
+
+  @@index([userId, completedAt])
+  @@index([mustWinTaskId])
+}
+
 model Task {
   id                String         @id @default(uuid())
   userId            String
@@ -469,6 +514,14 @@ model Task {
   originType        TaskOriginType @default(MANUAL)
   carriedFromTaskId String?
   recurrenceRuleId  String?
+  nextAction        String?
+  fiveMinuteVersion String?
+  estimatedDurationMinutes Int?
+  likelyObstacle    String?
+  focusLengthMinutes Int?
+  progressState     TaskProgressState @default(NOT_STARTED)
+  startedAt         DateTime?
+  lastStuckAt       DateTime?
   completedAt       DateTime?
   createdAt         DateTime       @default(now())
   updatedAt         DateTime       @updatedAt
@@ -476,6 +529,8 @@ model Task {
   goal              Goal?          @relation(fields: [goalId], references: [id], onDelete: SetNull)
   carriedFromTask   Task?          @relation("TaskCarryForward", fields: [carriedFromTaskId], references: [id], onDelete: SetNull)
   carriedTasks      Task[]         @relation("TaskCarryForward")
+  dailyLaunchMustWins DailyLaunch[] @relation("DailyLaunchMustWinTask")
+  stuckEvents       TaskStuckEvent[]
   plannerBlockTask  DayPlannerBlockTask?
   mealPrepSession   MealPrepSession?
   adminItems        AdminItem[]    @relation("AdminItemTask")
@@ -485,6 +540,22 @@ model Task {
   @@index([userId, status, originType, scheduledForDate, kind, createdAt, id])
   @@index([userId, kind, status, reminderAt, reminderTriggeredAt])
   @@index([userId, recurrenceRuleId, scheduledForDate])
+}
+
+model TaskStuckEvent {
+  id          String          @id @default(uuid())
+  userId      String
+  taskId      String
+  reason      DailyDerailmentReason
+  actionTaken TaskStuckAction
+  note        String?
+  targetDate  DateTime?
+  createdAt   DateTime        @default(now())
+  user        User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  task        Task            @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([taskId, createdAt])
 }
 
 model TaskTemplate {

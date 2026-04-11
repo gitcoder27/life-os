@@ -20,6 +20,7 @@ import { GuidanceRail } from "./GuidanceRail";
 import { SecondaryContext } from "./SecondaryContext";
 import { StatusStrip } from "./StatusStrip";
 import { TodayControl } from "./TodayControl";
+import { DailyLaunchCard } from "../today/components/DailyLaunchCard";
 
 export function HomePage() {
   const today = getTodayDate();
@@ -66,6 +67,13 @@ export function HomePage() {
     .filter((p) => p.status === "pending")
     .sort((a, b) => a.slot - b.slot);
   const topOpenPriority = openPriorities[0] ?? null;
+  const featuredPriority = home.mustWinTask
+    ? {
+        slot: 1,
+        title: home.mustWinTask.title,
+        goal: home.mustWinTask.goal,
+      }
+    : topOpenPriority;
   const openExecutionTasks = executionTasks.filter((t) => t.status === "pending");
   const nextTimedTask = [...openExecutionTasks]
     .filter((t) => Boolean(t.dueAt))
@@ -94,8 +102,17 @@ export function HomePage() {
 
       <div className="home-operator__core">
         <div className="home-operator__main-stack">
+          {!home.launch?.completedAt ? (
+            <DailyLaunchCard
+              date={home.date}
+              tasks={executionTasks}
+              launch={home.launch}
+              mustWinTask={home.mustWinTask}
+            />
+          ) : null}
+
           <CommandBlock
-            topPriority={topOpenPriority}
+            topPriority={featuredPriority}
             openTaskCount={openExecutionTasks.length}
             nextTimedTask={
               nextTimedTask
