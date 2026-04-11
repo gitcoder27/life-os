@@ -1,6 +1,7 @@
 import type { FastifyPluginAsync } from "fastify";
 import type {
   CreateDayPlannerBlockRequest,
+  DayLaunchMutationResponse,
   DayPlanResponse,
   DayPlannerBlockMutationResponse,
   DayPlannerBlocksMutationResponse,
@@ -11,6 +12,7 @@ import type {
   PriorityMutationResponse,
   ReorderDayPlannerBlocksRequest,
   ReplaceDayPlannerBlockTasksRequest,
+  UpsertDayLaunchRequest,
   UpdateDayPlannerBlockRequest,
   UpdateDayPrioritiesRequest,
   UpdateMonthFocusRequest,
@@ -35,6 +37,7 @@ import {
 } from "./planning-context.js";
 import {
   normalizePlannerBlockTitle,
+  serializeDailyLaunch,
   serializeDayPlannerBlock,
   serializePriority,
   serializeTask,
@@ -56,6 +59,7 @@ import {
 import {
   createDayPlannerBlockSchema,
   isoDateSchema,
+  upsertDayLaunchSchema,
   reorderDayPlannerBlocksSchema,
   replaceDayPlannerBlockTasksSchema,
   updateDayPlannerBlockSchema,
@@ -76,6 +80,34 @@ const toPrismaPriorityStatus = (status: UpdatePriorityRequest["status"]) =>
 
 const toPriorityCompletedAt = (status: UpdatePriorityRequest["status"]) =>
   status === "completed" ? new Date() : status === "pending" || status === "dropped" ? null : undefined;
+
+async function findOwnedScheduledTaskForDay(
+  app: Parameters<FastifyPluginAsync>[0],
+  input: {
+    userId: string;
+    taskId: string;
+    date: IsoDateString;
+  },
+) {
+  const task = await app.prisma.task.findFirst({
+    where: {
+      id: input.taskId,
+      userId: input.userId,
+      scheduledForDate: parseIsoDate(input.date),
+    },
+    include: planningTaskInclude,
+  });
+
+  if (!task) {
+    throw new AppError({
+      statusCode: 400,
+      code: "BAD_REQUEST",
+      message: "Must-win task must belong to the user and be scheduled for the selected day",
+    });
+  }
+
+  return task;
+}
 
 export const registerPlanningPlanRoutes: FastifyPluginAsync = async (app) => {
   app.get("/planning/days/:date", async (request, reply) => {
@@ -98,7 +130,7 @@ export const registerPlanningPlanRoutes: FastifyPluginAsync = async (app) => {
       planningCycleId: cycle.id,
       timezone,
     });
-    const [tasks, activeGoals, plannerBlocks] = await Promise.all([
+    const [tasks, activeGoals, plannerBlocks, launch] = await Promise.all([
       app.prisma.task.findMany({
         where: {
           userId: user.id,
@@ -118,6 +150,11 @@ export const registerPlanningPlanRoutes: FastifyPluginAsync = async (app) => {
         include: goalWithMilestonesInclude,
       }),
       loadPlannerBlocks(app.prisma, cycle.id),
+      app.prisma.dailyLaunch?.findUnique?.({
+        where: {
+          planningCycleId: cycle.id,
+        },
+      }) ?? Promise.resolve(null),
     ]);
     const goalOverviews = await buildGoalOverviews(app, user.id, activeGoals, goalContext);
     const todayLinkedGoalCounts = buildTodayLinkedGoalCounts(cycle.priorities, tasks);
@@ -150,10 +187,119 @@ export const registerPlanningPlanRoutes: FastifyPluginAsync = async (app) => {
 
     const response: DayPlanResponse = withGeneratedAt({
       date: parsedDate,
+      launch: launch ? serializeDailyLaunch(launch) : null,
+      mustWinTask:
+        launch?.mustWinTaskId
+          ? serializeTask(
+              tasks.find((task) => task.id === launch.mustWinTaskId) ??
+                (await findOwnedScheduledTaskForDay(app, {
+                  userId: user.id,
+                  taskId: launch.mustWinTaskId,
+                  date: parsedDate,
+                }))
+            )
+          : null,
       priorities: cycle.priorities.map(serializePriority),
       tasks: tasks.map(serializeTask),
       goalNudges,
       plannerBlocks,
+    });
+
+    return reply.send(response);
+  });
+
+  app.put("/planning/days/:date/launch", async (request, reply) => {
+    const user = requireAuthenticatedUser(request);
+    const { date } = request.params as { date: IsoDateString };
+    const parsedDate = parseOrThrow(isoDateSchema, date);
+    const payload = parseOrThrow(upsertDayLaunchSchema, request.body as UpsertDayLaunchRequest);
+    const cycleStartDate = parseIsoDate(parsedDate);
+    const cycle = await ensurePlanningCycle(app, {
+      userId: user.id,
+      cycleType: "DAY",
+      cycleStartDate,
+      cycleEndDate: cycleStartDate,
+    });
+
+    let mustWinTask = payload.mustWinTaskId
+      ? await findOwnedScheduledTaskForDay(app, {
+          userId: user.id,
+          taskId: payload.mustWinTaskId,
+          date: parsedDate,
+        })
+      : null;
+
+    const launch = await app.prisma.$transaction(async (tx) => {
+      const existing = await tx.dailyLaunch.findUnique({
+        where: {
+          planningCycleId: cycle.id,
+        },
+      });
+
+      const nextMustWinTaskId =
+        payload.mustWinTaskId === undefined ? existing?.mustWinTaskId ?? null : payload.mustWinTaskId ?? null;
+      const nextEnergyRating =
+        payload.energyRating === undefined ? existing?.energyRating ?? null : payload.energyRating ?? null;
+      const nextReason =
+        payload.likelyDerailmentReason === undefined
+          ? existing?.likelyDerailmentReason ?? null
+          : payload.likelyDerailmentReason === null
+            ? null
+            : payload.likelyDerailmentReason === "unclear"
+              ? "UNCLEAR"
+              : payload.likelyDerailmentReason === "too_big"
+                ? "TOO_BIG"
+                : payload.likelyDerailmentReason === "avoidance"
+                  ? "AVOIDANCE"
+                  : payload.likelyDerailmentReason === "low_energy"
+                    ? "LOW_ENERGY"
+                    : payload.likelyDerailmentReason === "interrupted"
+                      ? "INTERRUPTED"
+                      : "OVERLOADED";
+      const nextReasonNote =
+        payload.likelyDerailmentNote === undefined
+          ? existing?.likelyDerailmentNote ?? null
+          : payload.likelyDerailmentNote ?? null;
+
+      if (nextMustWinTaskId && !mustWinTask) {
+        mustWinTask = await tx.task.findFirst({
+          where: {
+            id: nextMustWinTaskId,
+            userId: user.id,
+            scheduledForDate: cycleStartDate,
+          },
+          include: planningTaskInclude,
+        });
+      }
+
+      const isComplete = Boolean(nextEnergyRating && mustWinTask?.nextAction?.trim());
+
+      return tx.dailyLaunch.upsert({
+        where: {
+          planningCycleId: cycle.id,
+        },
+        update: {
+          mustWinTaskId: nextMustWinTaskId,
+          energyRating: nextEnergyRating,
+          likelyDerailmentReason: nextReason,
+          likelyDerailmentNote: nextReasonNote,
+          completedAt: isComplete ? existing?.completedAt ?? new Date() : null,
+        },
+        create: {
+          userId: user.id,
+          planningCycleId: cycle.id,
+          mustWinTaskId: nextMustWinTaskId,
+          energyRating: nextEnergyRating,
+          likelyDerailmentReason: nextReason,
+          likelyDerailmentNote: nextReasonNote,
+          completedAt: isComplete ? new Date() : null,
+        },
+      });
+    });
+
+    const response: DayLaunchMutationResponse = withGeneratedAt({
+      launch: serializeDailyLaunch(launch),
+      mustWinTask: mustWinTask ? serializeTask(mustWinTask) : null,
     });
 
     return reply.send(response);

@@ -29,6 +29,12 @@ const priorityInputSchema = z.object({
   goalId: z.string().uuid().nullable().optional(),
 });
 
+const dailyPriorityInputSchema = z.object({
+  slot: z.union([z.literal(1), z.literal(2)]),
+  title: z.string().min(1).max(200),
+  goalId: z.string().uuid().nullable().optional(),
+});
+
 const dailyReviewSchema = z.object({
   biggestWin: z.string().min(1).max(500),
   frictionTag: z.enum([
@@ -52,7 +58,7 @@ const dailyReviewSchema = z.object({
       targetDate: isoDateSchema,
     }),
   ),
-  tomorrowPriorities: z.array(priorityInputSchema).length(3),
+  tomorrowPriorities: z.array(dailyPriorityInputSchema).max(2),
 });
 
 const weeklyReviewSchema = z.object({

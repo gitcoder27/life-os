@@ -69,10 +69,12 @@ export {
   useDayPlanQuery,
   useDeletePlannerBlockMutation,
   useInboxQuery,
+  useLogTaskStuckMutation,
   useRemovePlannerBlockTaskMutation,
   useReorderPlannerBlocksMutation,
   useReplacePlannerBlockTasksMutation,
   useTasksQuery,
+  useUpsertDayLaunchMutation,
   useTaskStatusMutation,
   useTaskTemplatesQuery,
   useUpdateDayPrioritiesMutation,
@@ -218,6 +220,7 @@ export type {
   WeekPlanResponse,
 } from "./api/goals";
 export type {
+  DailyLaunchItem,
   BulkUpdateTasksInput,
   DayPlannerBlockItem,
   DayPlannerBlockTaskItem,

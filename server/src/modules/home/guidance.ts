@@ -26,6 +26,8 @@ interface GuidanceTask {
   id: string;
   title: string;
   status: "pending" | "completed" | "dropped";
+  progressState?: "not_started" | "started" | "advanced";
+  lastStuckAt?: string | null;
 }
 
 interface GuidancePlanning {
@@ -33,6 +35,7 @@ interface GuidancePlanning {
   hasPlannerBlocks: boolean;
   pendingPriorityCount: number;
   openTaskCount: number;
+  launchComplete: boolean;
 }
 
 interface GuidanceAccountability {
@@ -143,10 +146,32 @@ function buildRecommendations(input: GuidanceInput): HomeGuidanceRecommendation[
   }
 
   const hasPlanningGap =
-    !input.planning.hasPlannerBlocks &&
+    !input.planning.launchComplete &&
+    input.currentHour >= 11 &&
     (input.planning.pendingPriorityCount > 0 || input.planning.openTaskCount > 0);
 
   if (hasPlanningGap) {
+    addRecommendation({
+      id: `launch:${input.planning.date}`,
+      kind: "priority",
+      title: "Launch the day",
+      detail: "Choose the must-win and define the first visible step",
+      impactLabel: "Launch",
+      action: {
+        type: "open_destination",
+        destination: {
+          kind: "today_execute",
+        },
+      },
+    });
+  }
+
+  const hasPlannerGap =
+    input.planning.launchComplete &&
+    !input.planning.hasPlannerBlocks &&
+    (input.planning.pendingPriorityCount > 0 || input.planning.openTaskCount > 0);
+
+  if (hasPlannerGap) {
     addRecommendation({
       id: `planning-gap:${input.planning.date}`,
       kind: "priority",
@@ -164,6 +189,50 @@ function buildRecommendations(input: GuidanceInput): HomeGuidanceRecommendation[
         destination: {
           kind: "today_planning",
           date: input.planning.date,
+        },
+      },
+    });
+  }
+
+  const mustWinTask = input.tasks.find((task) => task.progressState !== undefined);
+  if (
+    mustWinTask &&
+    mustWinTask.status === "pending" &&
+    mustWinTask.lastStuckAt
+  ) {
+    addRecommendation({
+      id: `must-win-recover:${mustWinTask.id}`,
+      kind: "task",
+      title: `Recover ${mustWinTask.title}`,
+      detail: "You marked this as stuck earlier",
+      impactLabel: "Recover",
+      action: {
+        type: "open_destination",
+        destination: {
+          kind: "today_execute",
+          taskId: mustWinTask.id,
+        },
+      },
+    });
+  }
+
+  if (
+    mustWinTask &&
+    mustWinTask.status === "pending" &&
+    mustWinTask.progressState === "not_started" &&
+    input.currentHour >= 14
+  ) {
+    addRecommendation({
+      id: `must-win-start:${mustWinTask.id}`,
+      kind: "task",
+      title: `Start ${mustWinTask.title}`,
+      detail: "The must-win still has not started",
+      impactLabel: "Start",
+      action: {
+        type: "open_destination",
+        destination: {
+          kind: "today_execute",
+          taskId: mustWinTask.id,
         },
       },
     });
@@ -241,7 +310,7 @@ function buildRecommendations(input: GuidanceInput): HomeGuidanceRecommendation[
     });
   }
 
-  const openTask = input.tasks.find((task) => task.status === "pending");
+  const openTask = input.tasks.find((task) => task.status === "pending" && task.id !== mustWinTask?.id);
   if (openTask) {
     addRecommendation({
       id: `task:${openTask.id}`,

@@ -80,7 +80,7 @@ export const useReviewDraftState = ({
         }));
       const fallbackTaskTitles = review.incompleteTasks
         .filter((task) => task.status === "pending")
-        .slice(0, 3)
+        .slice(0, 2)
         .map((task) => ({ title: task.title }));
 
       if (review.isCompleted && !review.canEditSubmittedReview) {

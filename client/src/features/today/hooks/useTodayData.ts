@@ -30,6 +30,8 @@ export function useTodayData() {
   const scoreQuery = useDailyScoreQuery(today);
 
   const priorities = dayPlanQuery.data?.priorities ?? [];
+  const launch = dayPlanQuery.data?.launch ?? null;
+  const mustWinTask = dayPlanQuery.data?.mustWinTask ?? null;
   const allTasks = dayPlanQuery.data?.tasks ?? [];
   const goalNudges = dayPlanQuery.data?.goalNudges ?? [];
   const plannerBlocks = dayPlanQuery.data?.plannerBlocks ?? [];
@@ -100,6 +102,8 @@ export function useTodayData() {
     isError: dayPlanQuery.isError || !dayPlanQuery.data,
     error: dayPlanQuery.error,
     priorities,
+    launch,
+    mustWinTask,
     executionTasks,
     taskGroups,
     completedTaskCount,

@@ -14,7 +14,7 @@ export type EditablePriority = {
   status: "pending" | "completed" | "dropped";
 };
 
-const PRIORITY_SLOTS: Array<1 | 2 | 3> = [1, 2, 3];
+const PRIORITY_SLOTS: Array<1 | 2> = [1, 2];
 const AUTO_SAVE_DELAY = 800;
 
 type ServerPriority = {
@@ -122,7 +122,7 @@ export function usePriorityDraft(today: string, priorities: ServerPriority[], da
 
   const addPriority = useCallback(() => {
     setDraft((current) => {
-      if (current.length >= 3) return current;
+      if (current.length >= 2) return current;
       return [...current, { title: "", goalId: null, status: "pending" as const, sortKey: nextDraftKey() }];
     });
   }, []);
@@ -151,7 +151,7 @@ export function usePriorityDraft(today: string, priorities: ServerPriority[], da
           i === emptyIdx ? { ...p, title: nudge.suggestedPriorityTitle, goalId: nudge.goal.id } : p,
         );
       }
-      if (current.length >= 3) return current;
+      if (current.length >= 2) return current;
       return [...current, {
         title: nudge.suggestedPriorityTitle,
         goalId: nudge.goal.id,

@@ -383,7 +383,7 @@ export const DailyReviewWorkspace = ({
     });
   const reflectStarted = dailyInputs.biggestWin.trim().length > 0;
   const planComplete =
-    dailyTomorrowPriorities.length === 3 &&
+    dailyTomorrowPriorities.length === 2 &&
     dailyTomorrowPriorities.every((p) => p.title.trim().length > 0);
 
   const decidedCount = dailyPendingTasks.filter((t) => {

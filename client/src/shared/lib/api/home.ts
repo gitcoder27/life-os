@@ -5,7 +5,7 @@ import {
   queryKeys,
 } from "./core";
 import type { LinkedGoal } from "./goals";
-import type { TaskItem } from "./planning";
+import type { DailyLaunchItem, TaskItem } from "./planning";
 
 export type HomeDestination =
   | {
@@ -87,6 +87,8 @@ export type HomeOverviewResponse = {
   generatedAt: string;
   greeting: string;
   phase: "morning" | "midday" | "evening";
+  launch: DailyLaunchItem | null;
+  mustWinTask: TaskItem | null;
   dailyScore: {
     value: number;
     label: string;

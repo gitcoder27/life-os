@@ -163,9 +163,9 @@ export const useReviewsPageState = () => {
           return decision.type === "reschedule" ? Boolean(decision.targetDate) : true;
         })
       : false;
-  const hasThreeTomorrowPriorities =
+  const hasTomorrowSupportPriorities =
     reviewQuery.data?.cadence === "daily"
-      ? draftState.dailyTomorrowPriorities.length === 3 &&
+      ? draftState.dailyTomorrowPriorities.length === 2 &&
         draftState.dailyTomorrowPriorities.every((priority) => priority.title.trim().length > 0)
       : false;
   const dailySubmitBlockers =
@@ -197,7 +197,7 @@ export const useReviewsPageState = () => {
     (!reviewQuery.data.review.isCompleted || reviewQuery.data.review.canEditSubmittedReview) &&
     isWindowOpen &&
     hasDecisionForEveryPendingTask &&
-    hasThreeTomorrowPriorities &&
+    hasTomorrowSupportPriorities &&
     !submissionState.isSubmitting;
   const requiredCount = "prompts" in config ? config.prompts.length : 0;
   const completedCount = draftState.responses.filter((response) => response.trim().length > 0).length;

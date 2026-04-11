@@ -70,10 +70,9 @@ export interface WeeklyMomentumResponse {
   generatedAt: string;
 }
 
-const PRIORITY_POINTS: Record<number, number> = {
-  1: 10,
-  2: 8,
-  3: 6,
+const SUPPORT_PRIORITY_POINTS: Record<number, number> = {
+  1: 8,
+  2: 6,
 };
 
 const planningCycleInclude = {
@@ -247,6 +246,7 @@ async function getDayContext(prisma: PrismaClient, userId: string, date: Date) {
 
   const [
     tasks,
+    dailyLaunch,
     activeHabits,
     habitCheckins,
     activeRoutines,
@@ -271,6 +271,11 @@ async function getDayContext(prisma: PrismaClient, userId: string, date: Date) {
       },
       orderBy: [{ dueAt: "asc" }, { createdAt: "asc" }],
     }),
+    prisma.dailyLaunch?.findUnique?.({
+      where: {
+        planningCycleId: dayCycle.id,
+      },
+    }) ?? Promise.resolve(null),
     prisma.habit.findMany({
       where: {
         userId,
@@ -375,6 +380,7 @@ async function getDayContext(prisma: PrismaClient, userId: string, date: Date) {
     tomorrowCycle,
     weekCycle,
     tasks,
+    dailyLaunch,
     activeHabits,
     habitCheckins,
     activeRoutines,
@@ -477,31 +483,43 @@ export async function calculateDailyScore(
 ): Promise<DailyScoreBreakdownResponse> {
   const context = await getDayContext(prisma, userId, date);
   const priorities = context.dayCycle.priorities;
-  const tasksForScore = sortTasksForScore(context.tasks).slice(0, 5);
+  const mustWinTask = context.dailyLaunch?.mustWinTaskId
+    ? context.tasks.find((task) => task.id === context.dailyLaunch?.mustWinTaskId) ?? null
+    : null;
+  const supportPriorities = priorities.filter((priority) => priority.slot <= 2);
+  const tasksForScore = sortTasksForScore(
+    context.tasks.filter((task) => task.id !== mustWinTask?.id),
+  ).slice(0, 5);
 
-  const priorityEarned = priorities.reduce(
+  const launchEarned = context.dailyLaunch?.completedAt ? 4 : 0;
+  const launchApplicable = 4;
+  const mustWinApplicable = mustWinTask ? 10 : 0;
+  const mustWinEarned =
+    mustWinTask?.status === "COMPLETED"
+      ? 10
+      : mustWinTask?.progressState === "ADVANCED"
+        ? 7
+        : mustWinTask?.progressState === "STARTED"
+          ? 4
+          : 0;
+  const priorityEarned = supportPriorities.reduce(
     (sum, priority) =>
-      sum + (priority.status === "COMPLETED" ? PRIORITY_POINTS[priority.slot] ?? 0 : 0),
+      sum + (priority.status === "COMPLETED" ? SUPPORT_PRIORITY_POINTS[priority.slot] ?? 0 : 0),
     0,
   );
-  const priorityApplicable = priorities.reduce((sum, priority) => sum + (PRIORITY_POINTS[priority.slot] ?? 0), 0);
-  const hasPlannedTasks = tasksForScore.some((task) => task.plannerBlockTask);
-  const taskWeights = tasksForScore.map((task) => (hasPlannedTasks && !task.plannerBlockTask ? 0.5 : 1));
-  const weightedTaskTotal = taskWeights.reduce((sum, weight) => sum + weight, 0);
-  const completedTaskWeight = tasksForScore.reduce(
-    (sum, task, index) => sum + (task.status === "COMPLETED" ? taskWeights[index] : 0),
+  const priorityApplicable = supportPriorities.reduce(
+    (sum, priority) => sum + (SUPPORT_PRIORITY_POINTS[priority.slot] ?? 0),
     0,
   );
-  const taskApplicable = weightedTaskTotal > 0 ? 6 : 0;
-  const taskEarned = taskApplicable > 0 ? 6 * (completedTaskWeight / weightedTaskTotal) : 0;
+  const completedTaskCount = tasksForScore.filter((task) => task.status === "COMPLETED").length;
+  const taskApplicable = tasksForScore.length > 0 ? 2 : 0;
+  const taskEarned = taskApplicable > 0 ? 2 * (completedTaskCount / tasksForScore.length) : 0;
   const planBucket = buildBucket(
     "plan_and_priorities",
     "Plan and Priorities",
-    priorityEarned + taskEarned,
-    priorityApplicable + taskApplicable,
-    hasPlannedTasks
-      ? "Top priorities plus up to five focus tasks. Planned tasks count first, and unplanned work earns partial credit. Goals guide what you plan, but do not add separate bonus points."
-      : "Top priorities plus up to five focus tasks scheduled for the day. Goals guide what you plan, but do not add separate bonus points.",
+    launchEarned + mustWinEarned + priorityEarned + taskEarned,
+    launchApplicable + mustWinApplicable + priorityApplicable + taskApplicable,
+    "Launch completion, must-win progress, two support priorities, and a small contribution from completed supporting tasks.",
   );
 
   const routines = getRoutineCompletion(context.activeRoutines, context.routineCheckins);
@@ -573,7 +591,7 @@ export async function calculateDailyScore(
     "Same-day expense logging and due admin or bill items.",
   );
 
-  const tomorrowPrepared = context.tomorrowCycle.priorities.length === 3 ? 4 : 0;
+  const tomorrowPrepared = context.tomorrowCycle.priorities.length >= 2 ? 4 : 0;
   const reviewCompleted = context.dayCycle.dailyReview ? 6 : 0;
   const reviewBucket = buildBucket(
     "review_and_reset",

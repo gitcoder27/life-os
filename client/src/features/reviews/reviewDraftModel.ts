@@ -40,7 +40,7 @@ export type ReviewDraftState = {
   lastSavedAt: string | null;
 };
 
-export const prioritySlots: Array<1 | 2 | 3> = [1, 2, 3];
+export const prioritySlots: Array<1 | 2> = [1, 2];
 
 export const detectFrictionTag = (value: string): DailyFrictionTag => {
   const normalized = value.toLowerCase();
@@ -73,8 +73,8 @@ export const isQuickCaptureMetadataTask = (task: Pick<TaskItem, "originType" | "
   isQuickCaptureReferenceTask(task);
 
 export const fillThreePriorityDraft = (values: DailyPriorityDraft[]) => {
-  const next = values.slice(0, 3);
-  while (next.length < 3) {
+  const next = values.slice(0, 2);
+  while (next.length < 2) {
     next.push({ title: "" });
   }
 

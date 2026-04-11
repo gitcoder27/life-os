@@ -4,6 +4,7 @@ import type {
   BulkUpdateTasksRequest,
   CarryForwardTaskRequest,
   CreateTaskRequest,
+  LogTaskStuckRequest,
   PlanningTaskItem,
   TaskMutationResponse,
   TasksResponse,
@@ -28,7 +29,10 @@ import {
   serializeTask,
   toPrismaTaskKind,
   toPrismaTaskOriginType,
+  toPrismaTaskProgressState,
   toPrismaTaskStatus,
+  toPrismaTaskStuckAction,
+  toPrismaTaskStuckReason,
 } from "./planning-mappers.js";
 import { planningTaskInclude } from "./planning-record-shapes.js";
 import {
@@ -40,6 +44,7 @@ import {
   bulkUpdateTasksSchema,
   carryForwardTaskSchema,
   createTaskSchema,
+  logTaskStuckSchema,
   taskListQuerySchema,
   updateTaskSchema,
 } from "./planning-schemas.js";
@@ -94,6 +99,29 @@ function buildBulkTaskUpdateData(
 
 function shouldTrackInboxZeroForBulkAction(action: BulkUpdateTasksRequest["action"]) {
   return action.type !== "link_goal";
+}
+
+function buildTaskProtocolData(
+  payload: Pick<
+    CreateTaskRequest,
+    | "nextAction"
+    | "fiveMinuteVersion"
+    | "estimatedDurationMinutes"
+    | "likelyObstacle"
+    | "focusLengthMinutes"
+    | "progressState"
+    | "startedAt"
+  >,
+) {
+  return {
+    nextAction: payload.nextAction ?? null,
+    fiveMinuteVersion: payload.fiveMinuteVersion ?? null,
+    estimatedDurationMinutes: payload.estimatedDurationMinutes ?? null,
+    likelyObstacle: payload.likelyObstacle ?? null,
+    focusLengthMinutes: payload.focusLengthMinutes ?? null,
+    progressState: toPrismaTaskProgressState(payload.progressState ?? "not_started"),
+    startedAt: payload.startedAt ? new Date(payload.startedAt) : null,
+  };
 }
 
 function getBulkInboxZeroMutationSource(action: BulkUpdateTasksRequest["action"]) {
@@ -288,6 +316,7 @@ export const registerPlanningTaskRoutes: FastifyPluginAsync = async (app) => {
           dueAt: payload.dueAt ? new Date(payload.dueAt) : null,
           goalId: payload.goalId ?? null,
           originType: toPrismaTaskOriginType(payload.recurrence ? "recurring" : (payload.originType ?? "manual")),
+          ...buildTaskProtocolData(payload),
         },
       });
 
@@ -494,6 +523,16 @@ export const registerPlanningTaskRoutes: FastifyPluginAsync = async (app) => {
     const shouldClearPlannerDueAt = shouldRemovePlannerAssignment && payload.dueAt === undefined;
     await assertOwnedGoalReference(app, user.id, payload.goalId);
     const shouldTrackInboxZero = payload.status !== undefined || payload.scheduledForDate !== undefined;
+    const nextProgressState =
+      payload.status === "completed"
+        ? "advanced"
+        : payload.progressState;
+    const nextStartedAt =
+      payload.startedAt !== undefined
+        ? payload.startedAt
+        : nextProgressState === "started" || nextProgressState === "advanced" || payload.status === "completed"
+          ? existingTask.startedAt?.toISOString() ?? now.toISOString()
+          : undefined;
     const task = await app.prisma.$transaction(async (tx) => {
       const staleCountBefore = shouldTrackInboxZero
         ? await countStaleInboxTasks(tx, {
@@ -530,6 +569,19 @@ export const registerPlanningTaskRoutes: FastifyPluginAsync = async (app) => {
                 ? null
                 : new Date(payload.dueAt),
           goalId: payload.goalId,
+          nextAction: payload.nextAction,
+          fiveMinuteVersion: payload.fiveMinuteVersion,
+          estimatedDurationMinutes: payload.estimatedDurationMinutes,
+          likelyObstacle: payload.likelyObstacle,
+          focusLengthMinutes: payload.focusLengthMinutes,
+          progressState:
+            nextProgressState === undefined ? undefined : toPrismaTaskProgressState(nextProgressState),
+          startedAt:
+            nextStartedAt === undefined
+              ? undefined
+              : nextStartedAt === null
+                ? null
+                : new Date(nextStartedAt),
           completedAt:
             payload.status === "completed"
               ? new Date()
@@ -587,6 +639,64 @@ export const registerPlanningTaskRoutes: FastifyPluginAsync = async (app) => {
     });
 
     return reply.send(response);
+  });
+
+  app.post("/tasks/:taskId/stuck", async (request, reply) => {
+    const user = requireAuthenticatedUser(request);
+    const payload = parseOrThrow(logTaskStuckSchema, request.body as LogTaskStuckRequest);
+    const { taskId } = request.params as { taskId: string };
+
+    const existingTask = await app.prisma.task.findFirst({
+      where: {
+        id: taskId,
+        userId: user.id,
+      },
+      include: planningTaskInclude,
+    });
+
+    if (!existingTask) {
+      throw new AppError({
+        statusCode: 404,
+        code: "NOT_FOUND",
+        message: "Task not found",
+      });
+    }
+
+    const now = new Date();
+    const task = await app.prisma.$transaction(async (tx) => {
+      await tx.taskStuckEvent.create({
+        data: {
+          userId: user.id,
+          taskId,
+          reason: toPrismaTaskStuckReason(payload.reason),
+          actionTaken: toPrismaTaskStuckAction(payload.actionTaken),
+          note: payload.note ?? null,
+          targetDate: payload.targetDate ? parseIsoDate(payload.targetDate) : null,
+        },
+      });
+
+      await tx.task.update({
+        where: {
+          id: taskId,
+        },
+        data: {
+          lastStuckAt: now,
+        },
+      });
+
+      return tx.task.findUniqueOrThrow({
+        where: {
+          id: taskId,
+        },
+        include: planningTaskInclude,
+      });
+    });
+
+    const response: TaskMutationResponse = withGeneratedAt({
+      task: serializeTask(task),
+    });
+
+    return reply.status(201).send(response);
   });
 
   app.post("/tasks/:taskId/carry-forward", async (request, reply) => {
