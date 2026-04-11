@@ -18,6 +18,7 @@ export const getTodayContext = async (app: HabitsApp, userId: string) => {
 
   return {
     targetIsoDate: getUserLocalDate(new Date(), preferences?.timezone),
+    timezone: preferences?.timezone ?? null,
     weekStartsOn: preferences?.weekStartsOn ?? 1,
   };
 };

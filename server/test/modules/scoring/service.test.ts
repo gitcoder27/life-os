@@ -244,9 +244,118 @@ describe("scoring service", () => {
     const routinesBucket = score.buckets.find((bucket) => bucket.key === "routines_and_habits");
 
     expect(routinesBucket).toMatchObject({
-      earnedPoints: 20,
-      applicablePoints: 25,
+      earnedPoints: 16,
+      applicablePoints: 20,
     });
+  });
+
+  it("awards punctuality points for timed habits and routines completed on time", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-03-14T20:00:00.000Z"));
+
+    try {
+      const prisma = {
+        planningCycle: {
+          upsert: vi
+            .fn()
+            .mockResolvedValueOnce({
+              id: "day",
+              priorities: [],
+              dailyReview: null,
+              dailyScore: null,
+            })
+            .mockResolvedValueOnce({
+              id: "tomorrow",
+              priorities: [],
+              dailyReview: null,
+              dailyScore: null,
+            })
+            .mockResolvedValueOnce({
+              id: "week",
+              priorities: [],
+            })
+            .mockResolvedValueOnce({
+              id: "month",
+              priorities: [],
+            })
+            .mockResolvedValueOnce({
+              id: "next-month",
+              priorities: [],
+            }),
+        },
+        userPreference: {
+          findUnique: vi.fn().mockResolvedValue({
+            timezone: "UTC",
+            weekStartsOn: 1,
+            dailyWaterTargetMl: 2500,
+          }),
+        },
+        task: { findMany: vi.fn().mockResolvedValue([]) },
+        dailyLaunch: { findUnique: vi.fn().mockResolvedValue(null) },
+        habit: {
+          findMany: vi.fn().mockResolvedValue([
+            {
+              id: "habit-timed",
+              timingMode: "EXACT_TIME",
+              targetTimeMinutes: 540,
+              windowStartMinutes: null,
+              windowEndMinutes: null,
+              scheduleRuleJson: { daysOfWeek: [6] },
+              status: "ACTIVE",
+              archivedAt: null,
+              targetPerDay: 1,
+            },
+          ]),
+        },
+        habitCheckin: {
+          findMany: vi.fn().mockResolvedValue([
+            {
+              habitId: "habit-timed",
+              occurredOn: new Date("2026-03-14T00:00:00.000Z"),
+              status: "COMPLETED",
+              completedAt: new Date("2026-03-14T09:30:00.000Z"),
+            },
+          ]),
+        },
+        routine: {
+          findMany: vi.fn().mockResolvedValue([
+            {
+              id: "routine-morning",
+              timingMode: "PERIOD",
+              period: "MORNING",
+              windowStartMinutes: null,
+              windowEndMinutes: null,
+              sortOrder: 0,
+              items: [{ id: "item-1", isRequired: true }],
+            },
+          ]),
+        },
+        routineItemCheckin: {
+          findMany: vi.fn().mockResolvedValue([
+            {
+              routineItemId: "item-1",
+              occurredOn: new Date("2026-03-14T00:00:00.000Z"),
+              completedAt: new Date("2026-03-14T11:00:00.000Z"),
+            },
+          ]),
+        },
+        waterLog: { findMany: vi.fn().mockResolvedValue([]) },
+        mealLog: { findMany: vi.fn().mockResolvedValue([]) },
+        workoutDay: { findUnique: vi.fn().mockResolvedValue(null) },
+        expense: { findMany: vi.fn().mockResolvedValue([]) },
+        adminItem: { findMany: vi.fn().mockResolvedValue([]) },
+      } as any;
+
+      const score = await calculateDailyScore(prisma, "user-1", new Date("2026-03-14T00:00:00.000Z"));
+      const routinesBucket = score.buckets.find((bucket) => bucket.key === "routines_and_habits");
+
+      expect(routinesBucket).toMatchObject({
+        earnedPoints: 25,
+        applicablePoints: 25,
+      });
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("does not award full meal points when today's intended meal target is not met", async () => {
@@ -359,8 +468,8 @@ describe("scoring service", () => {
     const routinesBucket = score.buckets.find((bucket) => bucket.key === "routines_and_habits");
 
     expect(routinesBucket).toMatchObject({
-      earnedPoints: 7.5,
-      applicablePoints: 15,
+      earnedPoints: 6,
+      applicablePoints: 12,
     });
   });
 });

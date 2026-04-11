@@ -25,6 +25,10 @@ import {
   calculateHabitRisk,
   calculateWeeklyHabitChallenge,
 } from "../../lib/habits/guidance.js";
+import {
+  buildHabitTimingLabel,
+  getHabitTimingStatusToday,
+} from "../../lib/habits/timing.js";
 import { buildStaleInboxTaskWhere } from "../../lib/inbox/stale.js";
 import {
   isHabitCompletedOnIsoDate,
@@ -429,6 +433,7 @@ async function buildHomeOverview(
       },
     },
   });
+  const now = new Date();
   const completedHabits = dueHabits.filter((habit) =>
     isHabitCompletedOnIsoDate(
       recentHabitCheckins.filter((checkin) => checkin.habitId === habit.id),
@@ -441,6 +446,16 @@ async function buildHomeOverview(
     const recurrence = resolveHabitRecurrence(habit, targetIsoDate);
     const risk = calculateHabitRisk(habitCheckins, recurrence, targetIsoDate, habit.pauseWindows, habit.targetPerDay);
     const completedToday = isHabitCompletedOnIsoDate(habitCheckins, targetIsoDate, habit.targetPerDay);
+    const timingMode =
+      habit.timingMode === "ANCHOR"
+        ? "anchor"
+        : habit.timingMode === "EXACT_TIME"
+          ? "exact_time"
+          : habit.timingMode === "TIME_WINDOW"
+            ? "time_window"
+            : "anytime";
+    const completedAtToday =
+      habitCheckins.find((checkin) => toIsoDateString(checkin.occurredOn) === targetIsoDate)?.completedAt ?? null;
 
     return {
       id: habit.id,
@@ -449,6 +464,24 @@ async function buildHomeOverview(
         !isHabitPermanentlyInactive(habit) &&
         isHabitDueOnIsoDate(recurrence, targetIsoDate, habit.pauseWindows),
       completedToday,
+      timingStatusToday: getHabitTimingStatusToday({
+        timingMode,
+        targetPerDay: habit.targetPerDay,
+        completedAt: completedAtToday,
+        now,
+        targetIsoDate,
+        timezone: effectiveTimezone,
+        targetTimeMinutes: habit.targetTimeMinutes ?? null,
+        windowStartMinutes: habit.windowStartMinutes ?? null,
+        windowEndMinutes: habit.windowEndMinutes ?? null,
+      }),
+      timingLabel: buildHabitTimingLabel({
+        timingMode,
+        anchorText: habit.anchorText ?? null,
+        targetTimeMinutes: habit.targetTimeMinutes ?? null,
+        windowStartMinutes: habit.windowStartMinutes ?? null,
+        windowEndMinutes: habit.windowEndMinutes ?? null,
+      }),
       streakCount: calculateHabitActiveStreak(habitCheckins, recurrence, targetIsoDate, habit.pauseWindows, habit.targetPerDay),
       risk,
       scheduleRule: habit.scheduleRuleJson,
@@ -557,7 +590,6 @@ async function buildHomeOverview(
           month: targetIsoDate.slice(0, 7),
         }),
       };
-  const now = new Date();
   const openDailyReviewRoute =
     targetIsoDate === currentIsoDate ? getOpenDailyReviewRoute(now, preferences) : null;
   const openDailyReviewDate = openDailyReviewRoute?.split("date=")[1] ?? null;
@@ -655,6 +687,8 @@ async function buildHomeOverview(
       title: habit.title,
       dueToday: habit.dueToday,
       completedToday: habit.completedToday,
+      timingStatusToday: habit.timingStatusToday,
+      timingLabel: habit.timingLabel,
       streakCount: habit.streakCount,
       risk: habit.risk,
     })),

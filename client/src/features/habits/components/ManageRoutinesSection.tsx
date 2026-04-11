@@ -9,6 +9,7 @@ import {
   buildRoutineFormItems,
   RoutineForm,
 } from "./RoutineForm";
+import { formatMinutesToTimeInput } from "../timing";
 
 type ManageRoutinesSectionProps = {
   routines: Routine[];
@@ -117,6 +118,8 @@ export function ManageRoutinesSection({
                 <RoutineForm
                   initial={{
                     name: routine.name,
+                    windowStartTime: formatMinutesToTimeInput(routine.windowStartMinutes),
+                    windowEndTime: formatMinutesToTimeInput(routine.windowEndMinutes),
                     items: buildRoutineFormItems(routine.items),
                   }}
                   submitLabel="Save changes"
@@ -135,6 +138,7 @@ export function ManageRoutinesSection({
                       {routine.items.length} step{routine.items.length !== 1 ? "s" : ""}
                       {" · "}
                       {routine.completedItems}/{routine.totalItems} today
+                      {routine.timingLabel ? ` · ${routine.timingLabel}` : ""}
                     </div>
                   </div>
                   <div className="habits-manage-actions">

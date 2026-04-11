@@ -11,6 +11,8 @@ interface GuidanceHabit {
   title: string;
   dueToday: boolean;
   completedToday: boolean;
+  timingStatusToday?: "none" | "upcoming" | "due_now" | "late" | "complete_on_time" | "complete_late";
+  timingLabel?: string | null;
   streakCount: number;
   risk: HabitRiskState;
 }
@@ -266,6 +268,40 @@ function buildRecommendations(input: GuidanceInput): HomeGuidanceRecommendation[
         destination: {
           kind: "today_overdue",
           taskId: input.accountability.overdueTaskId,
+        },
+      },
+    });
+  }
+
+  const timedHabit = input.habits
+    .filter((habit) => habit.timingStatusToday === "late" || habit.timingStatusToday === "due_now")
+    .sort((left, right) => {
+      if (left.timingStatusToday === right.timingStatusToday) {
+        return left.title.localeCompare(right.title);
+      }
+
+      return left.timingStatusToday === "late" ? -1 : 1;
+    })[0];
+  if (timedHabit) {
+    addRecommendation({
+      id: `habit-timing:${timedHabit.id}`,
+      kind: "habit",
+      title: timedHabit.timingStatusToday === "late" ? `Reset ${timedHabit.title}` : `Do ${timedHabit.title}`,
+      detail:
+        timedHabit.timingStatusToday === "late"
+          ? timedHabit.timingLabel
+            ? `Late for ${timedHabit.timingLabel}`
+            : "Late today"
+          : timedHabit.timingLabel
+            ? `Due now · ${timedHabit.timingLabel}`
+            : "Due now",
+      impactLabel: timedHabit.timingStatusToday === "late" ? "Timing" : "Now",
+      action: {
+        type: "open_destination",
+        destination: {
+          kind: "habit_focus",
+          habitId: timedHabit.id,
+          surface: "due_today",
         },
       },
     });

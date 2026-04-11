@@ -717,7 +717,14 @@
   letter-spacing: -0.005em;
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 0.5rem;
+}
+
+.habits-group__timing {
+  font-size: var(--fs-small);
+  font-weight: 500;
+  color: var(--text-secondary);
 }
 
 .habits-group--habit .habits-group__label::before,
@@ -894,6 +901,7 @@
   font-size: var(--fs-body);
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 0.4rem;
 }
 
@@ -905,6 +913,7 @@
 
 .habits-check-row__meta {
   display: flex;
+  flex-wrap: wrap;
   gap: 0.5rem;
   font-size: var(--fs-micro);
   color: var(--text-tertiary);

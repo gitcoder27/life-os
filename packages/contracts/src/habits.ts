@@ -10,6 +10,16 @@ export type HabitRiskLevel = "none" | "at_risk" | "drifting";
 export type HabitRiskReason = "streak_at_risk" | "missed_recently" | "low_completion_rate" | null;
 export type HabitType = "maintenance" | "growth" | "identity";
 export type HabitCheckinLevel = "minimum" | "standard" | "stretch";
+export type HabitTimingMode = "anytime" | "anchor" | "exact_time" | "time_window";
+export type RoutineTimingMode = "anytime" | "period" | "custom_window";
+export type RoutinePeriod = "morning" | "evening";
+export type TimingStatusToday =
+  | "none"
+  | "upcoming"
+  | "due_now"
+  | "late"
+  | "complete_on_time"
+  | "complete_late";
 
 export interface HabitScheduleRule {
   daysOfWeek?: number[];
@@ -25,7 +35,13 @@ export interface HabitItem {
   goalId: EntityId | null;
   goal: GoalSummary | null;
   targetPerDay: number;
+  timingMode: HabitTimingMode;
   anchorText: string | null;
+  targetTimeMinutes: number | null;
+  windowStartMinutes: number | null;
+  windowEndMinutes: number | null;
+  timingStatusToday: TimingStatusToday;
+  timingLabel: string | null;
   minimumVersion: string | null;
   standardVersion: string | null;
   stretchVersion: string | null;
@@ -84,6 +100,13 @@ export interface RoutineRecord {
   name: string;
   sortOrder: number;
   status: RoutineStatus;
+  timingMode: RoutineTimingMode;
+  period: RoutinePeriod | null;
+  windowStartMinutes: number | null;
+  windowEndMinutes: number | null;
+  timingStatusToday: TimingStatusToday;
+  timingLabel: string | null;
+  completedAtToday: string | null;
   completedItems: number;
   totalItems: number;
   items: RoutineItemState[];
@@ -110,7 +133,11 @@ export interface CreateHabitRequest {
   recurrence?: RecurrenceInput;
   goalId?: EntityId | null;
   targetPerDay?: number;
+  timingMode?: HabitTimingMode;
   anchorText?: string | null;
+  targetTimeMinutes?: number | null;
+  windowStartMinutes?: number | null;
+  windowEndMinutes?: number | null;
   minimumVersion?: string | null;
   standardVersion?: string | null;
   stretchVersion?: string | null;
@@ -127,7 +154,11 @@ export interface UpdateHabitRequest {
   recurrence?: RecurrenceInput;
   goalId?: EntityId | null;
   targetPerDay?: number;
+  timingMode?: HabitTimingMode;
   anchorText?: string | null;
+  targetTimeMinutes?: number | null;
+  windowStartMinutes?: number | null;
+  windowEndMinutes?: number | null;
   minimumVersion?: string | null;
   standardVersion?: string | null;
   stretchVersion?: string | null;
@@ -164,6 +195,10 @@ export interface RoutineItemInput {
 
 export interface CreateRoutineRequest {
   name: string;
+  timingMode?: RoutineTimingMode;
+  period?: RoutinePeriod | null;
+  windowStartMinutes?: number | null;
+  windowEndMinutes?: number | null;
   items: RoutineItemInput[];
 }
 
@@ -171,6 +206,10 @@ export interface UpdateRoutineRequest {
   name?: string;
   sortOrder?: number;
   status?: RoutineStatus;
+  timingMode?: RoutineTimingMode;
+  period?: RoutinePeriod | null;
+  windowStartMinutes?: number | null;
+  windowEndMinutes?: number | null;
   items?: RoutineItemInput[];
 }
 

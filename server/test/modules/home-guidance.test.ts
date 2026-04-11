@@ -200,4 +200,67 @@ describe("home guidance builder", () => {
       },
     });
   });
+
+  it("surfaces a due-now timed habit as a guidance recommendation", () => {
+    const guidance = buildHomeGuidance({
+      score: {
+        label: "Solid Day",
+        value: 74,
+        topReasons: [],
+      },
+      momentum: {
+        strongDayStreak: 1,
+      },
+      habits: [
+        {
+          id: "habit-1",
+          title: "Morning walk",
+          dueToday: true,
+          completedToday: false,
+          timingStatusToday: "due_now",
+          timingLabel: "7:00 AM - 8:00 AM",
+          streakCount: 0,
+          risk: {
+            level: "none",
+            reason: null,
+            message: null,
+            dueCount7d: 0,
+            completedCount7d: 0,
+            completionRate7d: 0,
+          },
+        },
+      ],
+      priorities: [],
+      tasks: [],
+      planning: {
+        date: "2026-03-14",
+        hasPlannerBlocks: true,
+        pendingPriorityCount: 0,
+        openTaskCount: 0,
+        launchComplete: true,
+      },
+      accountability: {
+        staleInboxCount: 0,
+        staleInboxTaskId: null,
+        overdueTaskCount: 0,
+        overdueTaskId: null,
+      },
+      weeklyChallenge: null,
+      dailyReviewAvailable: false,
+      dailyReviewRoute: null,
+      currentHour: 7,
+      health: {
+        waterMl: 0,
+        waterTargetMl: 2500,
+      },
+    });
+
+    expect(guidance.recommendations[0]).toEqual(
+      expect.objectContaining({
+        id: "habit-timing:habit-1",
+        title: "Do Morning walk",
+        detail: "Due now · 7:00 AM - 8:00 AM",
+      }),
+    );
+  });
 });

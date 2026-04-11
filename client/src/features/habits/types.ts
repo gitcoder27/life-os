@@ -23,7 +23,11 @@ export type HabitFormValues = {
   targetPerDay: string;
   recurrenceRule: RecurrenceRuleInput | null;
   goalId: string;
+  timingMode: "anytime" | "anchor" | "exact_time" | "time_window";
   anchorText: string;
+  targetTime: string;
+  windowStartTime: string;
+  windowEndTime: string;
   minimumVersion: string;
   standardVersion: string;
   stretchVersion: string;
@@ -34,6 +38,8 @@ export type HabitFormValues = {
 
 export type RoutineFormValues = {
   name: string;
+  windowStartTime: string;
+  windowEndTime: string;
   items: RoutineItemEntry[];
 };
 

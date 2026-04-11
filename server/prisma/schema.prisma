@@ -152,6 +152,24 @@ enum HabitCheckinLevel {
   STRETCH
 }
 
+enum HabitTimingMode {
+  ANYTIME
+  ANCHOR
+  EXACT_TIME
+  TIME_WINDOW
+}
+
+enum RoutineTimingMode {
+  ANYTIME
+  PERIOD
+  CUSTOM_WINDOW
+}
+
+enum RoutinePeriod {
+  MORNING
+  EVENING
+}
+
 enum RoutineStatus {
   ACTIVE
   ARCHIVED
@@ -624,7 +642,11 @@ model Habit {
   goalId           String?
   recurrenceRuleId String?
   targetPerDay     Int            @default(1)
+  timingMode       HabitTimingMode @default(ANYTIME)
   anchorText       String?
+  targetTimeMinutes Int?
+  windowStartMinutes Int?
+  windowEndMinutes Int?
   minimumVersion   String?
   standardVersion  String?
   stretchVersion   String?
@@ -680,6 +702,10 @@ model Routine {
   name      String
   sortOrder Int
   status    RoutineStatus @default(ACTIVE)
+  timingMode RoutineTimingMode @default(ANYTIME)
+  period    RoutinePeriod?
+  windowStartMinutes Int?
+  windowEndMinutes Int?
   createdAt DateTime      @default(now())
   updatedAt DateTime      @updatedAt
   user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)

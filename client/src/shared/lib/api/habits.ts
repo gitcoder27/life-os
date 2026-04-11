@@ -39,7 +39,13 @@ type HabitsResponse = {
     goalId: string | null;
     goal: LinkedGoal | null;
     targetPerDay: number;
+    timingMode: "anytime" | "anchor" | "exact_time" | "time_window";
     anchorText: string | null;
+    targetTimeMinutes: number | null;
+    windowStartMinutes: number | null;
+    windowEndMinutes: number | null;
+    timingStatusToday: "none" | "upcoming" | "due_now" | "late" | "complete_on_time" | "complete_late";
+    timingLabel: string | null;
     minimumVersion: string | null;
     standardVersion: string | null;
     stretchVersion: string | null;
@@ -79,7 +85,13 @@ type HabitsResponse = {
     goalId: string | null;
     goal: LinkedGoal | null;
     targetPerDay: number;
+    timingMode: "anytime" | "anchor" | "exact_time" | "time_window";
     anchorText: string | null;
+    targetTimeMinutes: number | null;
+    windowStartMinutes: number | null;
+    windowEndMinutes: number | null;
+    timingStatusToday: "none" | "upcoming" | "due_now" | "late" | "complete_on_time" | "complete_late";
+    timingLabel: string | null;
     minimumVersion: string | null;
     standardVersion: string | null;
     stretchVersion: string | null;
@@ -114,6 +126,13 @@ type HabitsResponse = {
     name: string;
     sortOrder: number;
     status: "active" | "archived";
+    timingMode: "anytime" | "period" | "custom_window";
+    period: "morning" | "evening" | null;
+    windowStartMinutes: number | null;
+    windowEndMinutes: number | null;
+    timingStatusToday: "none" | "upcoming" | "due_now" | "late" | "complete_on_time" | "complete_late";
+    timingLabel: string | null;
+    completedAtToday: string | null;
     completedItems: number;
     totalItems: number;
     items: Array<{
@@ -240,7 +259,11 @@ export const useCreateHabitMutation = () => {
       recurrence?: RecurrenceInput;
       targetPerDay?: number;
       goalId?: string | null;
+      timingMode?: "anytime" | "anchor" | "exact_time" | "time_window";
       anchorText?: string | null;
+      targetTimeMinutes?: number | null;
+      windowStartMinutes?: number | null;
+      windowEndMinutes?: number | null;
       minimumVersion?: string | null;
       standardVersion?: string | null;
       stretchVersion?: string | null;
@@ -256,7 +279,7 @@ export const useCreateHabitMutation = () => {
       successMessage: "Habit created.",
       errorMessage: "Habit creation failed.",
     },
-    onSuccess: () => invalidateHabits(queryClient),
+    onSuccess: () => invalidateHabitsAndCore(queryClient),
   });
 };
 
@@ -273,7 +296,11 @@ export const useUpdateHabitMutation = () => {
     targetPerDay?: number;
     status?: "active" | "paused" | "archived";
     goalId?: string | null;
+    timingMode?: "anytime" | "anchor" | "exact_time" | "time_window";
     anchorText?: string | null;
+    targetTimeMinutes?: number | null;
+    windowStartMinutes?: number | null;
+    windowEndMinutes?: number | null;
     minimumVersion?: string | null;
     standardVersion?: string | null;
     stretchVersion?: string | null;
@@ -347,6 +374,10 @@ export const useCreateRoutineMutation = () => {
   return useMutation({
     mutationFn: (payload: {
       name: string;
+      timingMode?: "anytime" | "period" | "custom_window";
+      period?: "morning" | "evening" | null;
+      windowStartMinutes?: number | null;
+      windowEndMinutes?: number | null;
       items: Array<{ title: string; sortOrder: number; isRequired?: boolean }>;
     }) =>
       apiRequest<RoutineMutationResponse>("/api/routines", {
@@ -357,7 +388,7 @@ export const useCreateRoutineMutation = () => {
       successMessage: "Routine created.",
       errorMessage: "Routine creation failed.",
     },
-    onSuccess: () => invalidateHabits(queryClient),
+    onSuccess: () => invalidateHabitsAndCore(queryClient),
   });
 };
 
@@ -373,6 +404,10 @@ export const useUpdateRoutineMutation = () => {
       name?: string;
       sortOrder?: number;
       status?: "active" | "archived";
+      timingMode?: "anytime" | "period" | "custom_window";
+      period?: "morning" | "evening" | null;
+      windowStartMinutes?: number | null;
+      windowEndMinutes?: number | null;
       items?: Array<{ id?: string; title: string; sortOrder: number; isRequired?: boolean }>;
     }) =>
       apiRequest<RoutineMutationResponse>(`/api/routines/${routineId}`, {
@@ -383,6 +418,6 @@ export const useUpdateRoutineMutation = () => {
       successMessage: "Routine updated.",
       errorMessage: "Routine update failed.",
     },
-    onSuccess: () => invalidateHabits(queryClient),
+    onSuccess: () => invalidateHabitsAndCore(queryClient),
   });
 };

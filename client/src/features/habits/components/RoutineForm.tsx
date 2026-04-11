@@ -11,6 +11,8 @@ import type {
 
 const emptyRoutineForm: RoutineFormValues = {
   name: "",
+  windowStartTime: "",
+  windowEndTime: "",
   items: [createEmptyItem()],
 };
 
@@ -40,10 +42,14 @@ export function RoutineForm({
   onCancel,
 }: RoutineFormProps) {
   const [values, setValues] = useState<RoutineFormValues>(initial);
+  const hasValidTiming =
+    values.windowStartTime.length > 0 &&
+    values.windowEndTime.length > 0 &&
+    values.windowStartTime < values.windowEndTime;
 
   function handleSubmit(event: FormEvent) {
     event.preventDefault();
-    if (!values.name.trim()) return;
+    if (!values.name.trim() || !hasValidTiming) return;
 
     const nonEmptyItems = values.items.filter((item) => item.title.trim());
     if (nonEmptyItems.length === 0) return;
@@ -66,6 +72,28 @@ export function RoutineForm({
             autoFocus
           />
         </label>
+        <div className="manage-form__row">
+          <label className="field" style={{ flex: 1 }}>
+            <span>Window start time</span>
+            <input
+              type="time"
+              value={values.windowStartTime}
+              onChange={(event) =>
+                setValues((current) => ({ ...current, windowStartTime: event.target.value }))
+              }
+            />
+          </label>
+          <label className="field" style={{ flex: 1 }}>
+            <span>Window end time</span>
+            <input
+              type="time"
+              value={values.windowEndTime}
+              onChange={(event) =>
+                setValues((current) => ({ ...current, windowEndTime: event.target.value }))
+              }
+            />
+          </label>
+        </div>
         <RoutineItemEditor
           items={values.items}
           onChange={(items) => setValues((current) => ({ ...current, items }))}
@@ -78,6 +106,7 @@ export function RoutineForm({
           disabled={
             isPending ||
             !values.name.trim() ||
+            !hasValidTiming ||
             !values.items.some((item) => item.title.trim())
           }
         >

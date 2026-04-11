@@ -12,6 +12,11 @@ import {
 } from "../../../shared/lib/api";
 import { buildFinanceBillRoute, buildFinanceRoute } from "../../finance/finance-navigation";
 import { useQuickMarkBillPaid } from "../../finance/useQuickMarkBillPaid";
+import {
+  sortByTimingStatus,
+  timingStatusLabel,
+  timingStatusTagClass,
+} from "../../habits/timing";
 import { CheckIcon } from "../helpers/icons";
 import type { DayPhase } from "../helpers/day-phase";
 
@@ -37,6 +42,8 @@ type Routine = {
   name: string;
   sortOrder: number;
   status: "active" | "archived";
+  timingStatusToday: "none" | "upcoming" | "due_now" | "late" | "complete_on_time" | "complete_late";
+  timingLabel: string | null;
   completedItems: number;
   totalItems: number;
   items: RoutineItem[];
@@ -46,6 +53,8 @@ type DueHabit = {
   id: string;
   title: string;
   targetPerDay: number;
+  timingStatusToday: "none" | "upcoming" | "due_now" | "late" | "complete_on_time" | "complete_late";
+  timingLabel: string | null;
   completedToday: boolean;
   completedCountToday: number;
   streakCount: number;
@@ -140,10 +149,23 @@ function RoutinesRow({
   if (allDone) {
     summary = "All complete";
   } else {
+    const dueNowCount =
+      routines.filter((routine) => routine.timingStatusToday === "due_now").length +
+      dueHabits.filter((habit) => habit.timingStatusToday === "due_now").length;
+    const lateCount =
+      routines.filter((routine) => routine.timingStatusToday === "late").length +
+      dueHabits.filter((habit) => habit.timingStatusToday === "late").length;
+
+    if (lateCount > 0) {
+      summary = `${lateCount} late`;
+    } else if (dueNowCount > 0) {
+      summary = `${dueNowCount} due now`;
+    } else {
     const parts: string[] = [];
     if (totalRoutineItems > 0) parts.push(`${completedRoutineItems}/${totalRoutineItems} routine`);
     if (totalHabitUnits > 0) parts.push(`${completedHabitUnits}/${totalHabitUnits} habits`);
-    summary = parts.join(", ");
+    summary = parts.length > 0 ? parts.join(", ") : "Nothing due";
+    }
   }
 
   const tone = allDone ? "good" : atRiskHabits.length > 0 ? "warn" : "neutral";
@@ -159,12 +181,22 @@ function RoutinesRow({
       />
       {expanded ? (
         <div className="daily-essentials__detail">
-          {routines.map((routine) => (
+          {sortByTimingStatus(routines).map((routine) => (
             <div key={routine.id} className="de-routine">
               <div className="de-routine__header">
-                <span>{routine.name}</span>
+                <span>
+                  {routine.name}
+                  {timingStatusLabel(routine.timingStatusToday) ? (
+                    <span className={timingStatusTagClass(routine.timingStatusToday)} style={{ marginLeft: "0.4rem", fontSize: "var(--fs-micro)" }}>
+                      {timingStatusLabel(routine.timingStatusToday)}
+                    </span>
+                  ) : null}
+                </span>
                 <span className="de-routine__count">{routine.completedItems}/{routine.totalItems}</span>
               </div>
+              {routine.timingLabel ? (
+                <div className="de-routine__submeta">{routine.timingLabel}</div>
+              ) : null}
               <div className="de-routine__items">
                 {routine.items
                   .sort((a, b) => a.sortOrder - b.sortOrder)
@@ -192,7 +224,7 @@ function RoutinesRow({
                 <span className="de-routine__count">{completedHabitUnits}/{totalHabitUnits}</span>
               </div>
               <div className="de-routine__items">
-                {dueHabits.map((habit) => (
+                {sortByTimingStatus(dueHabits).map((habit) => (
                   <button
                     key={habit.id}
                     type="button"
@@ -211,6 +243,14 @@ function RoutinesRow({
                       {habit.completedToday ? <CheckIcon /> : null}
                     </span>
                       <span className="de-check-item__title">{habit.title}</span>
+                      {timingStatusLabel(habit.timingStatusToday) ? (
+                        <span className={timingStatusTagClass(habit.timingStatusToday)} style={{ fontSize: "var(--fs-micro)" }}>
+                          {timingStatusLabel(habit.timingStatusToday)}
+                        </span>
+                      ) : null}
+                      {habit.timingLabel ? (
+                        <span className="de-check-item__timing">{habit.timingLabel}</span>
+                      ) : null}
                       <span>{Math.min(habit.completedCountToday, habit.targetPerDay)}/{habit.targetPerDay}</span>
                     {habit.streakCount > 0 ? (
                       <span className="de-check-item__streak">🔥{habit.streakCount}</span>

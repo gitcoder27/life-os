@@ -1,3 +1,4 @@
+import type { IsoDateString } from "@life-os/contracts";
 import type { Prisma, PrismaClient } from "@prisma/client";
 
 import {
@@ -5,6 +6,12 @@ import {
   scoreMealConsistency,
 } from "../../lib/health/meals.js";
 import { filterDueHabits, getHabitCompletionCountForIsoDate } from "../../lib/habits/schedule.js";
+import {
+  getHabitTimingStatusToday,
+  getRoutineTimingStatusToday,
+  isScoredHabitTimingMode,
+  isScoredRoutineTimingMode,
+} from "../../lib/habits/timing.js";
 import {
   addDays,
   getMonthEndDate,
@@ -398,7 +405,19 @@ async function getDayContext(prisma: PrismaClient, userId: string, date: Date) {
 function getRoutineCompletion(
   routines: Awaited<ReturnType<typeof getDayContext>>["activeRoutines"],
   routineCheckins: Awaited<ReturnType<typeof getDayContext>>["routineCheckins"],
-) {
+  input: {
+    targetIsoDate: IsoDateString;
+    now: Date;
+    timezone?: string | null;
+    dayMode?: "NORMAL" | "RESCUE" | "RECOVERY";
+  },
+): {
+  earned: number;
+  punctualityEarned: number;
+  applicable: number;
+  completed: number;
+  total: number;
+} {
   const scorableRoutines = routines
     .map((routine) => ({
       ...routine,
@@ -409,19 +428,20 @@ function getRoutineCompletion(
   if (scorableRoutines.length === 0) {
     return {
       earned: 0,
+      punctualityEarned: 0,
       applicable: 0,
       completed: 0,
       total: 0,
     };
   }
 
-  const routineShare = 10 / scorableRoutines.length;
+  const completionShare = 8 / scorableRoutines.length;
   const earned = scorableRoutines.reduce((sum, routine) => {
     const completed = routine.requiredItems.filter((item) =>
       routineCheckins.some((checkin) => checkin.routineItemId === item.id),
     ).length;
 
-    return sum + routineShare * (completed / routine.requiredItems.length);
+    return sum + completionShare * (completed / routine.requiredItems.length);
   }, 0);
   const completed = scorableRoutines.reduce(
     (sum, routine) =>
@@ -433,9 +453,58 @@ function getRoutineCompletion(
   );
   const total = scorableRoutines.reduce((sum, routine) => sum + routine.requiredItems.length, 0);
 
+  const timedRoutines = scorableRoutines.filter((routine) => isScoredRoutineTimingMode(
+    routine.timingMode === "PERIOD"
+      ? "period"
+      : routine.timingMode === "CUSTOM_WINDOW"
+        ? "custom_window"
+        : "anytime",
+  ));
+  const punctualityShare = timedRoutines.length > 0 ? 2 / timedRoutines.length : 0;
+  const punctualityEarned = timedRoutines.reduce((sum, routine) => {
+    const completedAt = routine.requiredItems.every((item) =>
+      routineCheckins.some((checkin) => checkin.routineItemId === item.id),
+    )
+      ? routine.requiredItems
+        .flatMap((item) => routineCheckins.filter((checkin) => checkin.routineItemId === item.id))
+        .sort((left, right) => (left.completedAt?.getTime() ?? 0) - (right.completedAt?.getTime() ?? 0))
+        .at(-1)?.completedAt ?? null
+      : null;
+    const timingMode =
+      routine.timingMode === "PERIOD"
+        ? "period"
+        : routine.timingMode === "CUSTOM_WINDOW"
+          ? "custom_window"
+          : "anytime";
+    const period =
+      routine.period === "MORNING"
+        ? "morning"
+        : routine.period === "EVENING"
+          ? "evening"
+          : null;
+    const status = getRoutineTimingStatusToday({
+      timingMode,
+      period,
+      completedAt,
+      now: input.now,
+      targetIsoDate: input.targetIsoDate,
+      timezone: input.timezone,
+      windowStartMinutes: routine.windowStartMinutes ?? null,
+      windowEndMinutes: routine.windowEndMinutes ?? null,
+    });
+    const rescueActive = input.dayMode === "RESCUE" || input.dayMode === "RECOVERY";
+
+    if (rescueActive && completedAt) {
+      return sum + punctualityShare;
+    }
+
+    return sum + (status === "complete_on_time" ? punctualityShare : 0);
+  }, 0);
+
   return {
     earned,
-    applicable: 10,
+    punctualityEarned,
+    applicable: 8 + (timedRoutines.length > 0 ? 2 : 0),
     completed,
     total,
   };
@@ -522,7 +591,12 @@ export async function calculateDailyScore(
     "Launch completion, must-win progress, two support priorities, and a small contribution from completed supporting tasks.",
   );
 
-  const routines = getRoutineCompletion(context.activeRoutines, context.routineCheckins);
+  const routines = getRoutineCompletion(context.activeRoutines, context.routineCheckins, {
+    targetIsoDate: context.targetIsoDate,
+    now: new Date(),
+    timezone: context.timezone,
+    dayMode: context.dailyLaunch?.dayMode ?? undefined,
+  });
   const dueHabits = filterDueHabits(context.activeHabits, context.targetIsoDate);
   const habitCompletedUnits = dueHabits.reduce(
     (sum, habit) =>
@@ -537,14 +611,57 @@ export async function calculateDailyScore(
     0,
   );
   const habitTargetUnits = dueHabits.reduce((sum, habit) => sum + habit.targetPerDay, 0);
-  const habitApplicable = dueHabits.length > 0 ? 15 : 0;
-  const habitEarned = habitTargetUnits > 0 ? 15 * (habitCompletedUnits / habitTargetUnits) : 0;
+  const habitApplicable = dueHabits.length > 0 ? 12 : 0;
+  const habitEarned = habitTargetUnits > 0 ? 12 * (habitCompletedUnits / habitTargetUnits) : 0;
+  const timedDueHabits = dueHabits.filter((habit) =>
+    isScoredHabitTimingMode(
+      habit.timingMode === "EXACT_TIME"
+        ? "exact_time"
+        : habit.timingMode === "TIME_WINDOW"
+          ? "time_window"
+          : habit.timingMode === "ANCHOR"
+            ? "anchor"
+            : "anytime",
+      habit.targetPerDay,
+    ),
+  );
+  const habitPunctualityShare = timedDueHabits.length > 0 ? 3 / timedDueHabits.length : 0;
+  const rescueActive = context.dailyLaunch?.dayMode === "RESCUE" || context.dailyLaunch?.dayMode === "RECOVERY";
+  const habitPunctualityEarned = timedDueHabits.reduce((sum, habit) => {
+    const completedAt =
+      context.habitCheckins.find((checkin) => checkin.habitId === habit.id && toIsoDateString(checkin.occurredOn) === context.targetIsoDate)?.completedAt ?? null;
+    const timingMode =
+      habit.timingMode === "ANCHOR"
+        ? "anchor"
+        : habit.timingMode === "EXACT_TIME"
+          ? "exact_time"
+          : habit.timingMode === "TIME_WINDOW"
+            ? "time_window"
+            : "anytime";
+    const status = getHabitTimingStatusToday({
+      timingMode,
+      targetPerDay: habit.targetPerDay,
+      completedAt,
+      now: new Date(),
+      targetIsoDate: context.targetIsoDate,
+      timezone: context.timezone,
+      targetTimeMinutes: habit.targetTimeMinutes ?? null,
+      windowStartMinutes: habit.windowStartMinutes ?? null,
+      windowEndMinutes: habit.windowEndMinutes ?? null,
+    });
+
+    if (rescueActive && completedAt) {
+      return sum + habitPunctualityShare;
+    }
+
+    return sum + (status === "complete_on_time" ? habitPunctualityShare : 0);
+  }, 0);
   const routineHabitBucket = buildBucket(
     "routines_and_habits",
     "Routines and Habits",
-    routines.earned + habitEarned,
-    routines.applicable + habitApplicable,
-    "Required routine items plus due habit repetitions for the day.",
+    routines.earned + routines.punctualityEarned + habitEarned + habitPunctualityEarned,
+    routines.applicable + habitApplicable + (timedDueHabits.length > 0 ? 3 : 0),
+    "Required routine items, due habit repetitions, and on-time completion for timed consistency work.",
   );
 
   const waterTarget = context.preferences?.dailyWaterTargetMl ?? 2500;

@@ -12,7 +12,11 @@ const emptyHabitForm: HabitFormValues = {
   targetPerDay: "1",
   recurrenceRule: null,
   goalId: "",
+  timingMode: "anytime",
   anchorText: "",
+  targetTime: "",
+  windowStartTime: "",
+  windowEndTime: "",
   minimumVersion: "",
   standardVersion: "",
   stretchVersion: "",
@@ -20,6 +24,19 @@ const emptyHabitForm: HabitFormValues = {
   repairRule: "",
   identityMeaning: "",
 };
+
+function hasAdvancedValues(values: HabitFormValues) {
+  return Boolean(
+    values.category ||
+    values.goalId ||
+    values.habitType !== "maintenance" ||
+    Number(values.targetPerDay) > 1 ||
+    values.stretchVersion ||
+    values.obstaclePlan ||
+    values.repairRule ||
+    values.identityMeaning,
+  );
+}
 
 type HabitFormProps = {
   initial?: HabitFormValues;
@@ -39,25 +56,22 @@ export function HabitForm({
   const today = getTodayDate();
   const [values, setValues] = useState<HabitFormValues>(initial);
   const [showAdvanced, setShowAdvanced] = useState(
-    Boolean(
-      initial.category ||
-      initial.goalId ||
-      Number(initial.targetPerDay) > 1 ||
-      initial.anchorText ||
-      initial.minimumVersion ||
-      initial.standardVersion ||
-      initial.stretchVersion ||
-      initial.obstaclePlan ||
-      initial.repairRule ||
-      initial.identityMeaning,
-    ),
+    hasAdvancedValues(initial),
   );
   const goalsQuery = useGoalsListQuery();
   const activeGoals = (goalsQuery.data?.goals ?? []).filter((goal) => goal.status === "active");
+  const hasValidTiming =
+    values.timingMode === "anytime" ||
+    (values.timingMode === "anchor" && values.anchorText.trim().length > 0) ||
+    (values.timingMode === "exact_time" && values.targetTime.length > 0) ||
+    (values.timingMode === "time_window" &&
+      values.windowStartTime.length > 0 &&
+      values.windowEndTime.length > 0 &&
+      values.windowStartTime < values.windowEndTime);
 
   function handleSubmit(event: FormEvent) {
     event.preventDefault();
-    if (!values.title.trim()) return;
+    if (!values.title.trim() || !hasValidTiming) return;
 
     onSubmit(values);
   }
@@ -88,16 +102,111 @@ export function HabitForm({
             startsOn={values.recurrenceRule?.startsOn ?? today}
           />
         </div>
-        {!showAdvanced ? (
-          <button
-            className="habits-advanced-toggle"
-            type="button"
-            onClick={() => setShowAdvanced(true)}
-          >
-            More options
-          </button>
-        ) : (
-          <>
+        <div className="manage-form__section">
+          <span className="manage-form__section-label">Timing</span>
+          <div className="manage-form__row">
+            <label className="field" style={{ flex: 1 }}>
+              <span>When</span>
+              <select
+                value={values.timingMode}
+                onChange={(event) =>
+                  setValues((current) => ({ ...current, timingMode: event.target.value as HabitFormValues["timingMode"] }))
+                }
+              >
+                <option value="anytime">Anytime</option>
+                <option value="anchor">Anchor</option>
+                <option value="exact_time">Exact time</option>
+                <option value="time_window">Time window</option>
+              </select>
+            </label>
+            {values.timingMode === "exact_time" ? (
+              <label className="field" style={{ flex: 1 }}>
+                <span>Time</span>
+                <input
+                  type="time"
+                  value={values.targetTime}
+                  onChange={(event) =>
+                    setValues((current) => ({ ...current, targetTime: event.target.value }))
+                  }
+                />
+              </label>
+            ) : null}
+          </div>
+          {values.timingMode === "anchor" ? (
+            <label className="field">
+              <span>Anchor</span>
+              <input
+                type="text"
+                placeholder="After dinner"
+                value={values.anchorText}
+                onChange={(event) =>
+                  setValues((current) => ({ ...current, anchorText: event.target.value }))
+                }
+              />
+            </label>
+          ) : null}
+          {values.timingMode === "time_window" ? (
+            <div className="manage-form__row">
+              <label className="field" style={{ flex: 1 }}>
+                <span>Window start</span>
+                <input
+                  type="time"
+                  value={values.windowStartTime}
+                  onChange={(event) =>
+                    setValues((current) => ({ ...current, windowStartTime: event.target.value }))
+                  }
+                />
+              </label>
+              <label className="field" style={{ flex: 1 }}>
+                <span>Window end</span>
+                <input
+                  type="time"
+                  value={values.windowEndTime}
+                  onChange={(event) =>
+                    setValues((current) => ({ ...current, windowEndTime: event.target.value }))
+                  }
+                />
+              </label>
+            </div>
+          ) : null}
+        </div>
+        <div className="manage-form__section">
+          <span className="manage-form__section-label">What Counts</span>
+          <div className="manage-form__row">
+            <label className="field" style={{ flex: 1 }}>
+              <span>Minimum version</span>
+              <input
+                type="text"
+                placeholder="1 page"
+                value={values.minimumVersion}
+                onChange={(event) =>
+                  setValues((current) => ({ ...current, minimumVersion: event.target.value }))
+                }
+              />
+            </label>
+            <label className="field" style={{ flex: 1 }}>
+              <span>Standard version</span>
+              <input
+                type="text"
+                placeholder="20 minutes"
+                value={values.standardVersion}
+                onChange={(event) =>
+                  setValues((current) => ({ ...current, standardVersion: event.target.value }))
+                }
+              />
+            </label>
+          </div>
+        </div>
+        <button
+          className="habits-advanced-toggle"
+          type="button"
+          onClick={() => setShowAdvanced((current) => !current)}
+        >
+          {showAdvanced ? "Hide advanced options" : "Show advanced options"}
+        </button>
+        {showAdvanced ? (
+          <div className="manage-form__section">
+            <span className="manage-form__section-label">Advanced</span>
             <div className="manage-form__row">
               <label className="field" style={{ flex: 1 }}>
                 <span>Habit type</span>
@@ -135,41 +244,6 @@ export function HabitForm({
                       ...current,
                       targetPerDay: event.target.value,
                     }))
-                  }
-                />
-              </label>
-            </div>
-            <label className="field">
-              <span>Anchor</span>
-              <input
-                type="text"
-                placeholder="After dinner"
-                value={values.anchorText}
-                onChange={(event) =>
-                  setValues((current) => ({ ...current, anchorText: event.target.value }))
-                }
-              />
-            </label>
-            <div className="manage-form__row">
-              <label className="field" style={{ flex: 1 }}>
-                <span>Minimum version</span>
-                <input
-                  type="text"
-                  placeholder="1 page"
-                  value={values.minimumVersion}
-                  onChange={(event) =>
-                    setValues((current) => ({ ...current, minimumVersion: event.target.value }))
-                  }
-                />
-              </label>
-              <label className="field" style={{ flex: 1 }}>
-                <span>Standard version</span>
-                <input
-                  type="text"
-                  placeholder="20 minutes"
-                  value={values.standardVersion}
-                  onChange={(event) =>
-                    setValues((current) => ({ ...current, standardVersion: event.target.value }))
                   }
                 />
               </label>
@@ -234,14 +308,14 @@ export function HabitForm({
                 ))}
               </select>
             </label>
-          </>
-        )}
+          </div>
+        ) : null}
       </div>
       <div className="button-row button-row--tight">
         <button
           className="button button--primary button--small"
           type="submit"
-          disabled={isPending || !values.title.trim()}
+          disabled={isPending || !values.title.trim() || !hasValidTiming}
         >
           {isPending ? "Saving..." : submitLabel}
         </button>

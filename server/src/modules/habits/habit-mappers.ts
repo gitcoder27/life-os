@@ -23,6 +23,10 @@ import {
   calculateHabitRisk,
 } from "../../lib/habits/guidance.js";
 import {
+  buildHabitTimingLabel,
+  getHabitTimingStatusToday,
+} from "../../lib/habits/timing.js";
+import {
   getHabitCompletionCountForIsoDate,
   isHabitCompletedOnIsoDate,
   isHabitDueOnIsoDate,
@@ -207,7 +211,11 @@ export const serializeHabitPauseWindow = (
 export const serializeHabit = (
   habit: HabitDetailRecord,
   targetIsoDate: IsoDateString,
-  options?: { pauseWindowCutoffIsoDate?: IsoDateString },
+  options?: {
+    pauseWindowCutoffIsoDate?: IsoDateString;
+    now?: Date;
+    timezone?: string | null;
+  },
 ): HabitItem => {
   const checkins = habit.checkins ?? [];
   const pauseWindows = habit.pauseWindows ?? [];
@@ -218,6 +226,18 @@ export const serializeHabit = (
     : isHabitDueOnIsoDate(recurrence, targetIsoDate, pauseWindows);
   const completedCountToday = getHabitCompletionCountForIsoDate(checkins, targetIsoDate);
   const completedToday = isHabitCompletedOnIsoDate(checkins, targetIsoDate, habit.targetPerDay);
+  const completedAtToday =
+    checkins.find((checkin) => toIsoDateString(checkin.occurredOn) === targetIsoDate)?.completedAt ?? null;
+  const timingMode =
+    habit.timingMode === "ANCHOR"
+      ? "anchor"
+      : habit.timingMode === "EXACT_TIME"
+        ? "exact_time"
+        : habit.timingMode === "TIME_WINDOW"
+          ? "time_window"
+          : "anytime";
+  const now = options?.now ?? new Date();
+  const timezone = options?.timezone;
 
   return {
     id: habit.id,
@@ -229,7 +249,29 @@ export const serializeHabit = (
     goalId: habit.goalId ?? null,
     goal: habit.goal ? serializeGoalSummary(habit.goal) : null,
     targetPerDay: habit.targetPerDay,
+    timingMode,
     anchorText: habit.anchorText ?? null,
+    targetTimeMinutes: habit.targetTimeMinutes ?? null,
+    windowStartMinutes: habit.windowStartMinutes ?? null,
+    windowEndMinutes: habit.windowEndMinutes ?? null,
+    timingStatusToday: getHabitTimingStatusToday({
+      timingMode,
+      targetPerDay: habit.targetPerDay,
+      completedAt: completedAtToday,
+      now,
+      targetIsoDate,
+      timezone,
+      targetTimeMinutes: habit.targetTimeMinutes ?? null,
+      windowStartMinutes: habit.windowStartMinutes ?? null,
+      windowEndMinutes: habit.windowEndMinutes ?? null,
+    }),
+    timingLabel: buildHabitTimingLabel({
+      timingMode,
+      anchorText: habit.anchorText ?? null,
+      targetTimeMinutes: habit.targetTimeMinutes ?? null,
+      windowStartMinutes: habit.windowStartMinutes ?? null,
+      windowEndMinutes: habit.windowEndMinutes ?? null,
+    }),
     minimumVersion: habit.minimumVersion ?? null,
     standardVersion: habit.standardVersion ?? null,
     stretchVersion: habit.stretchVersion ?? null,

@@ -3,6 +3,11 @@ import type {
   HabitItem,
   Routine,
 } from "../types";
+import {
+  sortByTimingStatus,
+  timingStatusLabel,
+  timingStatusTagClass,
+} from "../timing";
 
 type DailyFocusSectionProps = {
   allHabits: HabitItem[];
@@ -41,6 +46,8 @@ export function DailyFocusSection({
   onRoutineItemUndo,
   onRestDay,
 }: DailyFocusSectionProps) {
+  const orderedRoutines = sortByTimingStatus(activeRoutines);
+
   return (
     <div className="habits-daily" id="habits-daily-focus">
       <DueHabitsGroup
@@ -58,7 +65,7 @@ export function DailyFocusSection({
         onRestDay={onRestDay}
       />
       {activeRoutines.length > 0 ? (
-        activeRoutines.map((routine) => (
+        orderedRoutines.map((routine) => (
           <RoutineGroup
             key={routine.id}
             routine={routine}
@@ -110,6 +117,8 @@ function DueHabitsGroup({
   onHabitUndo,
   onRestDay,
 }: DueHabitsGroupProps) {
+  const orderedHabits = sortByTimingStatus(dueHabits);
+
   return (
     <div className="habits-group habits-group--habit">
       <div className="habits-group__header">
@@ -124,8 +133,9 @@ function DueHabitsGroup({
       </div>
       {dueHabits.length > 0 ? (
         <div className="habits-group__items">
-          {dueHabits.map((habit) => {
+          {orderedHabits.map((habit) => {
             const riskLevel = habit.risk?.level ?? "none";
+            const timingTag = timingStatusLabel(habit.timingStatusToday);
 
             return (
               <div
@@ -160,6 +170,11 @@ function DueHabitsGroup({
                 <div className="habits-check-row__body">
                   <div className="habits-check-row__title">
                     {habit.title}
+                    {timingTag ? (
+                      <span className={timingStatusTagClass(habit.timingStatusToday)} style={{ marginLeft: "0.35rem", fontSize: "var(--fs-micro)" }}>
+                        {timingTag}
+                      </span>
+                    ) : null}
                     {riskLevel !== "none" ? (
                       <span
                         className={`risk-badge risk-badge--${riskLevel === "at_risk" ? "at-risk" : "drifting"}`}
@@ -173,6 +188,7 @@ function DueHabitsGroup({
                       {habit.achievedLevelToday ? (
                         <span>{habit.achievedLevelToday} today</span>
                       ) : null}
+                      {habit.timingLabel ? <span>{habit.timingLabel}</span> : null}
                       <span>
                         {Math.min(habit.completedCountToday, habit.targetPerDay)}/
                         {habit.targetPerDay} today
@@ -256,11 +272,22 @@ function RoutineGroup({
 }: RoutineGroupProps) {
   const items = [...routine.items].sort((left, right) => left.sortOrder - right.sortOrder);
   const allDone = routine.completedItems === items.length && items.length > 0;
+  const timingTag = timingStatusLabel(routine.timingStatusToday);
 
   return (
     <div className={`habits-group habits-group--routine${allDone ? " habits-group--routine-done" : ""}`}>
       <div className="habits-group__header">
-        <span className="habits-group__label">{routine.name}</span>
+        <span className="habits-group__label">
+          <span>{routine.name}</span>
+          {routine.timingLabel ? (
+            <span className="habits-group__timing">{routine.timingLabel}</span>
+          ) : null}
+          {timingTag ? (
+            <span className={timingStatusTagClass(routine.timingStatusToday)} style={{ marginLeft: "0.4rem", fontSize: "var(--fs-micro)" }}>
+              {timingTag}
+            </span>
+          ) : null}
+        </span>
         <span className={`habits-group__count${allDone ? " habits-group__count--done" : ""}`}>
           {routine.completedItems}/{items.length}
         </span>

@@ -6,6 +6,7 @@ import type {
   UpdateRoutineRequest,
 } from "@life-os/contracts";
 
+import { AppError } from "../../lib/errors/app-error.js";
 import { withGeneratedAt } from "../../lib/http/response.js";
 import { parseIsoDate } from "../../lib/time/cycle.js";
 import {
@@ -17,6 +18,70 @@ import {
 } from "./habits-repository.js";
 import type { HabitsApp, HabitsPrisma } from "./module-types.js";
 import { serializeRoutine, toPrismaRoutineStatus } from "./routine-mappers.js";
+
+function resolveRoutineTimingFields(
+  current: {
+    timingMode?: "ANYTIME" | "PERIOD" | "CUSTOM_WINDOW";
+    period?: "MORNING" | "EVENING" | null;
+    windowStartMinutes?: number | null;
+    windowEndMinutes?: number | null;
+  } | null,
+  payload: Pick<CreateRoutineRequest, "timingMode" | "period" | "windowStartMinutes" | "windowEndMinutes">,
+) {
+  const timingMode =
+    payload.timingMode ??
+    (current?.timingMode === "PERIOD"
+      ? "period"
+      : current?.timingMode === "CUSTOM_WINDOW"
+        ? "custom_window"
+        : "anytime");
+  const period =
+    payload.period ??
+    (current?.period === "MORNING" ? "morning" : current?.period === "EVENING" ? "evening" : null);
+  const windowStartMinutes = payload.windowStartMinutes ?? current?.windowStartMinutes ?? null;
+  const windowEndMinutes = payload.windowEndMinutes ?? current?.windowEndMinutes ?? null;
+
+  if (timingMode === "period") {
+    if (!period) {
+      throw new AppError({
+        statusCode: 400,
+        code: "BAD_REQUEST",
+        message: "Period-timed routines require a period",
+      });
+    }
+
+    return {
+      timingMode: "PERIOD" as const,
+      period: period === "morning" ? "MORNING" as const : "EVENING" as const,
+      windowStartMinutes: null,
+      windowEndMinutes: null,
+    };
+  }
+
+  if (timingMode === "custom_window") {
+    if (windowStartMinutes == null || windowEndMinutes == null || windowStartMinutes >= windowEndMinutes) {
+      throw new AppError({
+        statusCode: 400,
+        code: "BAD_REQUEST",
+        message: "Custom-window routines require a valid start and end time",
+      });
+    }
+
+    return {
+      timingMode: "CUSTOM_WINDOW" as const,
+      period: null,
+      windowStartMinutes,
+      windowEndMinutes,
+    };
+  }
+
+  return {
+    timingMode: "ANYTIME" as const,
+    period: null,
+    windowStartMinutes: null,
+    windowEndMinutes: null,
+  };
+}
 
 const normalizeRoutineOrder = async (
   tx: HabitsPrisma,
@@ -56,13 +121,13 @@ const normalizeRoutineOrder = async (
 };
 
 export const listRoutines = async (app: HabitsApp, userId: string): Promise<RoutinesResponse> => {
-  const { targetIsoDate } = await getTodayContext(app, userId);
+  const { targetIsoDate, timezone } = await getTodayContext(app, userId);
   const targetDate = parseIsoDate(targetIsoDate);
   const routines = await listRoutinesForUser(app.prisma, userId, targetDate);
 
   return withGeneratedAt({
     date: targetIsoDate,
-    routines: routines.map(serializeRoutine),
+    routines: routines.map((routine) => serializeRoutine(routine, { targetIsoDate, now: new Date(), timezone })),
   });
 };
 
@@ -71,6 +136,8 @@ export const createRoutine = async (
   userId: string,
   payload: CreateRoutineRequest,
 ): Promise<RoutineMutationResponse> => {
+  const { targetIsoDate, timezone } = await getTodayContext(app, userId);
+  const timing = resolveRoutineTimingFields(null, payload);
   const lastRoutine = await app.prisma.routine.findFirst({
     where: {
       userId,
@@ -87,6 +154,10 @@ export const createRoutine = async (
       userId,
       name: payload.name,
       sortOrder: (lastRoutine?.sortOrder ?? -1) + 1,
+      timingMode: timing.timingMode,
+      period: timing.period,
+      windowStartMinutes: timing.windowStartMinutes,
+      windowEndMinutes: timing.windowEndMinutes,
       items: {
         create: payload.items.map((item) => ({
           title: item.title,
@@ -96,10 +167,13 @@ export const createRoutine = async (
       },
     },
   });
-  const { targetIsoDate } = await getTodayContext(app, userId);
 
   return withGeneratedAt({
-    routine: serializeRoutine(await loadRoutineById(app.prisma, routine.id, parseIsoDate(targetIsoDate))),
+    routine: serializeRoutine(await loadRoutineById(app.prisma, routine.id, parseIsoDate(targetIsoDate)), {
+      targetIsoDate,
+      now: new Date(),
+      timezone,
+    }),
   });
 };
 
@@ -110,6 +184,8 @@ export const updateRoutine = async (
   payload: UpdateRoutineRequest,
 ): Promise<RoutineMutationResponse> => {
   const routine = await findOwnedRoutine(app.prisma, userId, routineId);
+  const { targetIsoDate, timezone } = await getTodayContext(app, userId);
+  const timing = resolveRoutineTimingFields(routine, payload);
 
   await app.prisma.$transaction(async (tx) => {
     await tx.routine.update({
@@ -119,6 +195,10 @@ export const updateRoutine = async (
       data: {
         name: payload.name,
         status: payload.status ? toPrismaRoutineStatus(payload.status) : undefined,
+        timingMode: timing.timingMode,
+        period: timing.period,
+        windowStartMinutes: timing.windowStartMinutes,
+        windowEndMinutes: timing.windowEndMinutes,
       },
     });
 
@@ -172,10 +252,12 @@ export const updateRoutine = async (
     }
   });
 
-  const { targetIsoDate } = await getTodayContext(app, userId);
-
   return withGeneratedAt({
-    routine: serializeRoutine(await loadRoutineById(app.prisma, routineId, parseIsoDate(targetIsoDate))),
+    routine: serializeRoutine(await loadRoutineById(app.prisma, routineId, parseIsoDate(targetIsoDate)), {
+      targetIsoDate,
+      now: new Date(),
+      timezone,
+    }),
   });
 };
 
@@ -186,7 +268,8 @@ export const createRoutineItemCheckin = async (
   payload: RoutineItemCheckinRequest,
 ): Promise<RoutineMutationResponse> => {
   const item = await findOwnedRoutineItem(app.prisma, userId, itemId);
-  const targetDate = parseIsoDate(payload.date ?? (await getTodayContext(app, userId)).targetIsoDate);
+  const context = await getTodayContext(app, userId);
+  const targetDate = parseIsoDate(payload.date ?? context.targetIsoDate);
 
   await app.prisma.routineItemCheckin.upsert({
     where: {
@@ -206,7 +289,11 @@ export const createRoutineItemCheckin = async (
   });
 
   return withGeneratedAt({
-    routine: serializeRoutine(await loadRoutineById(app.prisma, item.routineId, targetDate)),
+    routine: serializeRoutine(await loadRoutineById(app.prisma, item.routineId, targetDate), {
+      targetIsoDate: payload.date ?? context.targetIsoDate,
+      now: new Date(),
+      timezone: context.timezone,
+    }),
   });
 };
 
@@ -217,7 +304,8 @@ export const deleteRoutineItemCheckin = async (
   payload: RoutineItemCheckinRequest,
 ): Promise<RoutineMutationResponse> => {
   const item = await findOwnedRoutineItem(app.prisma, userId, itemId);
-  const targetDate = parseIsoDate(payload.date ?? (await getTodayContext(app, userId)).targetIsoDate);
+  const context = await getTodayContext(app, userId);
+  const targetDate = parseIsoDate(payload.date ?? context.targetIsoDate);
 
   await app.prisma.routineItemCheckin.deleteMany({
     where: {
@@ -227,6 +315,10 @@ export const deleteRoutineItemCheckin = async (
   });
 
   return withGeneratedAt({
-    routine: serializeRoutine(await loadRoutineById(app.prisma, item.routineId, targetDate)),
+    routine: serializeRoutine(await loadRoutineById(app.prisma, item.routineId, targetDate), {
+      targetIsoDate: payload.date ?? context.targetIsoDate,
+      now: new Date(),
+      timezone: context.timezone,
+    }),
   });
 };

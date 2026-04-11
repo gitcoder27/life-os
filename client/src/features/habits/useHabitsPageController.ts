@@ -24,6 +24,7 @@ import type {
   HabitPauseFormValues,
   RoutineFormValues,
 } from "./types";
+import { parseTimeInputToMinutes } from "./timing";
 
 export function useHabitsPageController() {
   const today = getTodayDate();
@@ -132,7 +133,11 @@ export function useHabitsPageController() {
           ? buildRecurrenceInput(values.recurrenceRule)
           : undefined,
         goalId: values.goalId || null,
+        timingMode: values.timingMode,
         anchorText: values.anchorText.trim() || null,
+        targetTimeMinutes: parseTimeInputToMinutes(values.targetTime),
+        windowStartMinutes: parseTimeInputToMinutes(values.windowStartTime),
+        windowEndMinutes: parseTimeInputToMinutes(values.windowEndTime),
         minimumVersion: values.minimumVersion.trim() || null,
         standardVersion: values.standardVersion.trim() || null,
         stretchVersion: values.stretchVersion.trim() || null,
@@ -156,7 +161,11 @@ export function useHabitsPageController() {
           ? buildRecurrenceInput(values.recurrenceRule)
           : undefined,
         goalId: values.goalId || null,
+        timingMode: values.timingMode,
         anchorText: values.anchorText.trim() || null,
+        targetTimeMinutes: parseTimeInputToMinutes(values.targetTime),
+        windowStartMinutes: parseTimeInputToMinutes(values.windowStartTime),
+        windowEndMinutes: parseTimeInputToMinutes(values.windowEndTime),
         minimumVersion: values.minimumVersion.trim() || null,
         standardVersion: values.standardVersion.trim() || null,
         stretchVersion: values.stretchVersion.trim() || null,
@@ -229,7 +238,13 @@ export function useHabitsPageController() {
     if (!items.length) return;
 
     createRoutineMutation.mutate(
-      { name: values.name.trim(), items },
+      {
+        name: values.name.trim(),
+        timingMode: "custom_window",
+        windowStartMinutes: parseTimeInputToMinutes(values.windowStartTime),
+        windowEndMinutes: parseTimeInputToMinutes(values.windowEndTime),
+        items,
+      },
       { onSuccess: () => setShowAddRoutine(false) },
     );
   }
@@ -245,7 +260,14 @@ export function useHabitsPageController() {
       }));
 
     updateRoutineMutation.mutate(
-      { routineId, name: values.name.trim(), items: items.length ? items : undefined },
+      {
+        routineId,
+        name: values.name.trim(),
+        timingMode: "custom_window",
+        windowStartMinutes: parseTimeInputToMinutes(values.windowStartTime),
+        windowEndMinutes: parseTimeInputToMinutes(values.windowEndTime),
+        items: items.length ? items : undefined,
+      },
       { onSuccess: () => setEditingRoutineId(null) },
     );
   }

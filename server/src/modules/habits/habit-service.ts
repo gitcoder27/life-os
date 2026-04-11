@@ -76,15 +76,105 @@ const resolveMutationRecurrence = (
 ): RecurrenceInput =>
   resolveHabitRecurrenceInput(payload, targetIsoDate) as RecurrenceInput;
 
+function resolveHabitTimingFields(
+  current: {
+    timingMode?: "ANYTIME" | "ANCHOR" | "EXACT_TIME" | "TIME_WINDOW";
+    anchorText?: string | null;
+    targetTimeMinutes?: number | null;
+    windowStartMinutes?: number | null;
+    windowEndMinutes?: number | null;
+  } | null,
+  payload: Pick<
+    CreateHabitRequest,
+    "timingMode" | "anchorText" | "targetTimeMinutes" | "windowStartMinutes" | "windowEndMinutes"
+  >,
+) {
+  const timingMode =
+    payload.timingMode ??
+    (current?.timingMode === "ANCHOR"
+      ? "anchor"
+      : current?.timingMode === "EXACT_TIME"
+        ? "exact_time"
+        : current?.timingMode === "TIME_WINDOW"
+          ? "time_window"
+          : "anytime");
+  const anchorText = payload.anchorText ?? current?.anchorText ?? null;
+  const targetTimeMinutes = payload.targetTimeMinutes ?? current?.targetTimeMinutes ?? null;
+  const windowStartMinutes = payload.windowStartMinutes ?? current?.windowStartMinutes ?? null;
+  const windowEndMinutes = payload.windowEndMinutes ?? current?.windowEndMinutes ?? null;
+
+  if (timingMode === "anchor") {
+    if (!anchorText?.trim()) {
+      throw new AppError({
+        statusCode: 400,
+        code: "BAD_REQUEST",
+        message: "Anchor timing requires anchor text",
+      });
+    }
+
+    return {
+      timingMode: "ANCHOR" as const,
+      anchorText: anchorText.trim(),
+      targetTimeMinutes: null,
+      windowStartMinutes: null,
+      windowEndMinutes: null,
+    };
+  }
+
+  if (timingMode === "exact_time") {
+    if (targetTimeMinutes == null) {
+      throw new AppError({
+        statusCode: 400,
+        code: "BAD_REQUEST",
+        message: "Exact-time habits require a target time",
+      });
+    }
+
+    return {
+      timingMode: "EXACT_TIME" as const,
+      anchorText: null,
+      targetTimeMinutes,
+      windowStartMinutes: null,
+      windowEndMinutes: null,
+    };
+  }
+
+  if (timingMode === "time_window") {
+    if (windowStartMinutes == null || windowEndMinutes == null || windowStartMinutes >= windowEndMinutes) {
+      throw new AppError({
+        statusCode: 400,
+        code: "BAD_REQUEST",
+        message: "Windowed habits require a valid start and end time",
+      });
+    }
+
+    return {
+      timingMode: "TIME_WINDOW" as const,
+      anchorText: null,
+      targetTimeMinutes: null,
+      windowStartMinutes,
+      windowEndMinutes,
+    };
+  }
+
+  return {
+    timingMode: "ANYTIME" as const,
+    anchorText: null,
+    targetTimeMinutes: null,
+    windowStartMinutes: null,
+    windowEndMinutes: null,
+  };
+}
+
 export const listHabits = async (app: HabitsApp, userId: string): Promise<HabitsResponse> => {
-  const { targetIsoDate, weekStartsOn } = await getTodayContext(app, userId);
+  const { targetIsoDate, timezone, weekStartsOn } = await getTodayContext(app, userId);
   const targetDate = parseIsoDate(targetIsoDate);
   const [habits, routines] = await Promise.all([
     listHabitsForUser(app.prisma, userId, targetIsoDate),
     listRoutinesForUser(app.prisma, userId, targetDate),
   ]);
 
-  const habitItems = habits.map((habit) => serializeHabit(habit, targetIsoDate));
+  const habitItems = habits.map((habit) => serializeHabit(habit, targetIsoDate, { now: new Date(), timezone }));
   const weekStartDate = parseIsoDate(getWeekStartIsoDate(targetIsoDate, weekStartsOn));
   const weekCycle = await ensureCycle(app.prisma, {
     userId,
@@ -98,7 +188,9 @@ export const listHabits = async (app: HabitsApp, userId: string): Promise<Habits
     date: targetIsoDate,
     habits: habitItems,
     dueHabits: habitItems.filter((habit) => habit.dueToday),
-    routines: routines.map(serializeRoutine),
+    routines: routines.map((routine) =>
+      serializeRoutine(routine, { targetIsoDate, now: new Date(), timezone }),
+    ),
     weeklyChallenge: buildWeeklyChallenge(focusHabit, targetIsoDate, weekStartsOn),
   });
 };
@@ -108,11 +200,12 @@ export const createHabit = async (
   userId: string,
   payload: CreateHabitRequest,
 ): Promise<HabitMutationResponse> => {
-  const { targetIsoDate } = await getTodayContext(app, userId);
+  const { targetIsoDate, timezone } = await getTodayContext(app, userId);
   await assertOwnedGoalReference(app.prisma, userId, payload.goalId);
 
   const habit = await app.prisma.$transaction(async (tx) => {
     const recurrence = resolveMutationRecurrence(payload, targetIsoDate);
+    const timing = resolveHabitTimingFields(null, payload);
     const createdHabit = await tx.habit.create({
       data: {
         userId,
@@ -122,7 +215,11 @@ export const createHabit = async (
         scheduleRuleJson: recurrence.rule as unknown as Prisma.InputJsonValue,
         goalId: payload.goalId ?? null,
         targetPerDay: payload.targetPerDay ?? 1,
-        anchorText: payload.anchorText ?? null,
+        timingMode: timing.timingMode,
+        anchorText: timing.anchorText,
+        targetTimeMinutes: timing.targetTimeMinutes,
+        windowStartMinutes: timing.windowStartMinutes,
+        windowEndMinutes: timing.windowEndMinutes,
         minimumVersion: payload.minimumVersion ?? null,
         standardVersion: payload.standardVersion ?? null,
         stretchVersion: payload.stretchVersion ?? null,
@@ -151,7 +248,7 @@ export const createHabit = async (
   });
 
   return withGeneratedAt({
-    habit: serializeHabit(habit, targetIsoDate),
+    habit: serializeHabit(habit, targetIsoDate, { now: new Date(), timezone }),
   });
 };
 
@@ -161,14 +258,15 @@ export const updateHabit = async (
   habitId: string,
   payload: UpdateHabitRequest,
 ): Promise<HabitMutationResponse> => {
-  await findOwnedHabit(app.prisma, userId, habitId);
   await assertOwnedGoalReference(app.prisma, userId, payload.goalId);
-  const { targetIsoDate } = await getTodayContext(app, userId);
+  const existingHabit = await findOwnedHabit(app.prisma, userId, habitId);
+  const { targetIsoDate, timezone } = await getTodayContext(app, userId);
 
   const habit = await app.prisma.$transaction(async (tx) => {
     const recurrence = payload.recurrence || payload.scheduleRule
       ? resolveMutationRecurrence(payload, targetIsoDate)
       : null;
+    const timing = resolveHabitTimingFields(existingHabit, payload);
 
     await tx.habit.update({
       where: {
@@ -182,7 +280,11 @@ export const updateHabit = async (
           (recurrence?.rule ?? payload.scheduleRule) as Prisma.InputJsonValue | undefined,
         goalId: payload.goalId,
         targetPerDay: payload.targetPerDay,
-        anchorText: payload.anchorText,
+        timingMode: timing.timingMode,
+        anchorText: timing.anchorText,
+        targetTimeMinutes: timing.targetTimeMinutes,
+        windowStartMinutes: timing.windowStartMinutes,
+        windowEndMinutes: timing.windowEndMinutes,
         minimumVersion: payload.minimumVersion,
         standardVersion: payload.standardVersion,
         stretchVersion: payload.stretchVersion,
@@ -215,7 +317,7 @@ export const updateHabit = async (
   });
 
   return withGeneratedAt({
-    habit: serializeHabit(habit, targetIsoDate),
+    habit: serializeHabit(habit, targetIsoDate, { now: new Date(), timezone }),
   });
 };
 
@@ -251,7 +353,7 @@ export const createHabitPauseWindow = async (
     });
   }
 
-  const { targetIsoDate } = await getTodayContext(app, userId);
+  const { targetIsoDate, timezone } = await getTodayContext(app, userId);
   const habit = await app.prisma.$transaction(async (tx) => {
     await tx.habitPauseWindow.create({
       data: {
@@ -269,6 +371,8 @@ export const createHabitPauseWindow = async (
   return withGeneratedAt({
     habit: serializeHabit(habit, targetIsoDate, {
       pauseWindowCutoffIsoDate: payload.startsOn,
+      now: new Date(),
+      timezone,
     }),
   });
 };
@@ -281,7 +385,7 @@ export const deleteHabitPauseWindow = async (
 ): Promise<HabitMutationResponse> => {
   await findOwnedHabit(app.prisma, userId, habitId);
   await findOwnedPauseWindow(app.prisma, userId, habitId, pauseWindowId);
-  const { targetIsoDate } = await getTodayContext(app, userId);
+  const { targetIsoDate, timezone } = await getTodayContext(app, userId);
 
   const habit = await app.prisma.$transaction(async (tx) => {
     await tx.habitPauseWindow.delete({
@@ -294,7 +398,7 @@ export const deleteHabitPauseWindow = async (
   });
 
   return withGeneratedAt({
-    habit: serializeHabit(habit, targetIsoDate),
+    habit: serializeHabit(habit, targetIsoDate, { now: new Date(), timezone }),
   });
 };
 
@@ -304,7 +408,8 @@ export const createHabitCheckin = async (
   habitId: string,
   payload: HabitCheckinRequest,
 ): Promise<HabitMutationResponse> => {
-  const targetIsoDate = payload.date ?? (await getTodayContext(app, userId)).targetIsoDate;
+  const context = await getTodayContext(app, userId);
+  const targetIsoDate = payload.date ?? context.targetIsoDate;
   const targetDate = parseIsoDate(targetIsoDate);
   const habitRecord = await findOwnedHabit(app.prisma, userId, habitId);
 
@@ -359,7 +464,7 @@ export const createHabitCheckin = async (
   const habit = await loadHabitDetail(app.prisma, habitId, targetIsoDate);
 
   return withGeneratedAt({
-    habit: serializeHabit(habit, targetIsoDate),
+    habit: serializeHabit(habit, targetIsoDate, { now: new Date(), timezone: context.timezone }),
   });
 };
 
@@ -369,7 +474,8 @@ export const deleteHabitCheckin = async (
   habitId: string,
   payload: HabitCheckinRequest,
 ): Promise<HabitMutationResponse> => {
-  const targetIsoDate = payload.date ?? (await getTodayContext(app, userId)).targetIsoDate;
+  const context = await getTodayContext(app, userId);
+  const targetIsoDate = payload.date ?? context.targetIsoDate;
   const targetDate = parseIsoDate(targetIsoDate);
 
   await findOwnedHabit(app.prisma, userId, habitId);
@@ -383,6 +489,6 @@ export const deleteHabitCheckin = async (
   const habit = await loadHabitDetail(app.prisma, habitId, targetIsoDate);
 
   return withGeneratedAt({
-    habit: serializeHabit(habit, targetIsoDate),
+    habit: serializeHabit(habit, targetIsoDate, { now: new Date(), timezone: context.timezone }),
   });
 };

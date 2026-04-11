@@ -10,6 +10,7 @@ import type {
   HabitItem,
   HabitPauseFormValues,
 } from "../types";
+import { formatMinutesToTimeInput } from "../timing";
 import { CollapsibleSection } from "./CollapsibleSection";
 import { HabitForm } from "./HabitForm";
 
@@ -179,7 +180,11 @@ export function ManageHabitsSection({
                     targetPerDay: String(habit.targetPerDay),
                     recurrenceRule: habit.recurrence?.rule ?? null,
                     goalId: habit.goalId ?? "",
+                    timingMode: habit.timingMode,
                     anchorText: habit.anchorText ?? "",
+                    targetTime: formatMinutesToTimeInput(habit.targetTimeMinutes),
+                    windowStartTime: formatMinutesToTimeInput(habit.windowStartMinutes),
+                    windowEndTime: formatMinutesToTimeInput(habit.windowEndMinutes),
                     minimumVersion: habit.minimumVersion ?? "",
                     standardVersion: habit.standardVersion ?? "",
                     stretchVersion: habit.stretchVersion ?? "",
@@ -217,9 +222,9 @@ export function ManageHabitsSection({
                           </span>
                         ) : null}
                       </div>
-                      {habit.anchorText || habit.minimumVersion || habit.repairRule ? (
+                      {habit.timingLabel || habit.minimumVersion || habit.repairRule ? (
                         <div className="manage-list__meta">
-                          {habit.anchorText ? `Anchor: ${habit.anchorText}` : ""}
+                          {habit.timingLabel ? `Timing: ${habit.timingLabel}` : ""}
                           {habit.minimumVersion ? ` · Min: ${habit.minimumVersion}` : ""}
                           {habit.repairRule ? ` · Repair: ${habit.repairRule}` : ""}
                         </div>

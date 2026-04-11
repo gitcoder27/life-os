@@ -840,6 +840,11 @@
   color: var(--text-secondary);
 }
 
+.de-routine__submeta {
+  font-size: var(--fs-micro);
+  color: var(--text-tertiary);
+}
+
 .de-routine__count {
   color: var(--text-tertiary);
 }
@@ -852,6 +857,7 @@
 .de-check-item {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 0.4rem;
   padding: 0.3rem 0.15rem;
   background: none;
@@ -896,6 +902,11 @@
 .de-check-item__title {
   flex: 1;
   min-width: 0;
+}
+
+.de-check-item__timing {
+  font-size: var(--fs-micro);
+  color: var(--text-tertiary);
 }
 
 .de-check-item__streak {

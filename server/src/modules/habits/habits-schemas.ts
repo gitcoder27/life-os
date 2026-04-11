@@ -5,10 +5,13 @@ import type {
   HabitCheckinLevel,
   HabitCheckinRequest,
   HabitType,
+  HabitTimingMode,
   HabitScheduleRule,
   IsoDateString,
   RecurrenceInput,
+  RoutinePeriod,
   RoutineItemCheckinRequest,
+  RoutineTimingMode,
   UpdateHabitRequest,
   UpdateRoutineRequest,
 } from "@life-os/contracts";
@@ -21,7 +24,11 @@ const habitTypeSchema = z.enum(["maintenance", "growth", "identity"]) as z.ZodTy
 const habitPauseKindSchema = z.enum(["rest_day", "vacation"]);
 const habitCheckinStatusSchema = z.enum(["completed", "skipped"]);
 const habitCheckinLevelSchema = z.enum(["minimum", "standard", "stretch"]) as z.ZodType<HabitCheckinLevel>;
+const habitTimingModeSchema = z.enum(["anytime", "anchor", "exact_time", "time_window"]) as z.ZodType<HabitTimingMode>;
 const routineStatusSchema = z.enum(["active", "archived"]);
+const routineTimingModeSchema = z.enum(["anytime", "period", "custom_window"]) as z.ZodType<RoutineTimingMode>;
+const routinePeriodSchema = z.enum(["morning", "evening"]) as z.ZodType<RoutinePeriod>;
+const minuteOfDaySchema = z.number().int().min(0).max(1439);
 
 const habitScheduleRuleSchema = z.object({
   daysOfWeek: z.array(z.number().int().min(0).max(6)).max(7).optional(),
@@ -77,13 +84,65 @@ export const createHabitSchema = z.object({
   recurrence: recurrenceInputSchema.optional(),
   goalId: z.string().uuid().nullable().optional(),
   targetPerDay: z.number().int().positive().max(20).optional(),
+  timingMode: habitTimingModeSchema.optional(),
   anchorText: z.string().max(240).nullable().optional(),
+  targetTimeMinutes: minuteOfDaySchema.nullable().optional(),
+  windowStartMinutes: minuteOfDaySchema.nullable().optional(),
+  windowEndMinutes: minuteOfDaySchema.nullable().optional(),
   minimumVersion: z.string().max(240).nullable().optional(),
   standardVersion: z.string().max(240).nullable().optional(),
   stretchVersion: z.string().max(240).nullable().optional(),
   obstaclePlan: z.string().max(500).nullable().optional(),
   repairRule: z.string().max(500).nullable().optional(),
   identityMeaning: z.string().max(500).nullable().optional(),
+}).superRefine((value, ctx) => {
+  const timingMode = value.timingMode ?? "anytime";
+
+  if (timingMode === "anchor" && !value.anchorText?.trim()) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Anchor timing requires anchor text",
+      path: ["anchorText"],
+    });
+  }
+
+  if (timingMode === "exact_time" && value.targetTimeMinutes == null) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Exact-time habits require a target time",
+      path: ["targetTimeMinutes"],
+    });
+  }
+
+  if (timingMode === "time_window") {
+    if (value.windowStartMinutes == null) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Windowed habits require a window start",
+        path: ["windowStartMinutes"],
+      });
+    }
+
+    if (value.windowEndMinutes == null) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Windowed habits require a window end",
+        path: ["windowEndMinutes"],
+      });
+    }
+
+    if (
+      value.windowStartMinutes != null &&
+      value.windowEndMinutes != null &&
+      value.windowStartMinutes >= value.windowEndMinutes
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Window end must be after the window start",
+        path: ["windowEndMinutes"],
+      });
+    }
+  }
 }) as z.ZodType<CreateHabitRequest>;
 
 export const updateHabitSchema = z
@@ -95,7 +154,11 @@ export const updateHabitSchema = z
     recurrence: recurrenceInputSchema.optional(),
     goalId: z.string().uuid().nullable().optional(),
     targetPerDay: z.number().int().positive().max(20).optional(),
+    timingMode: habitTimingModeSchema.optional(),
     anchorText: z.string().max(240).nullable().optional(),
+    targetTimeMinutes: minuteOfDaySchema.nullable().optional(),
+    windowStartMinutes: minuteOfDaySchema.nullable().optional(),
+    windowEndMinutes: minuteOfDaySchema.nullable().optional(),
     minimumVersion: z.string().max(240).nullable().optional(),
     standardVersion: z.string().max(240).nullable().optional(),
     stretchVersion: z.string().max(240).nullable().optional(),
@@ -103,6 +166,19 @@ export const updateHabitSchema = z
     repairRule: z.string().max(500).nullable().optional(),
     identityMeaning: z.string().max(500).nullable().optional(),
     status: habitStatusSchema.optional(),
+  })
+  .superRefine((value, ctx) => {
+    if (
+      value.windowStartMinutes != null &&
+      value.windowEndMinutes != null &&
+      value.windowStartMinutes >= value.windowEndMinutes
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Window end must be after the window start",
+        path: ["windowEndMinutes"],
+      });
+    }
   })
   .refine((value) => Object.keys(value).length > 0, "At least one field must be updated") as z.ZodType<UpdateHabitRequest>;
 
@@ -131,7 +207,51 @@ export const createHabitPauseWindowSchema = z
 
 export const createRoutineSchema = z.object({
   name: z.string().min(1).max(200),
+  timingMode: routineTimingModeSchema.optional(),
+  period: routinePeriodSchema.nullable().optional(),
+  windowStartMinutes: minuteOfDaySchema.nullable().optional(),
+  windowEndMinutes: minuteOfDaySchema.nullable().optional(),
   items: z.array(routineItemInputSchema),
+}).superRefine((value, ctx) => {
+  const timingMode = value.timingMode ?? "anytime";
+
+  if (timingMode === "period" && !value.period) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Period-timed routines require a period",
+      path: ["period"],
+    });
+  }
+
+  if (timingMode === "custom_window") {
+    if (value.windowStartMinutes == null) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Custom-window routines require a start time",
+        path: ["windowStartMinutes"],
+      });
+    }
+
+    if (value.windowEndMinutes == null) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Custom-window routines require an end time",
+        path: ["windowEndMinutes"],
+      });
+    }
+
+    if (
+      value.windowStartMinutes != null &&
+      value.windowEndMinutes != null &&
+      value.windowStartMinutes >= value.windowEndMinutes
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Window end must be after the window start",
+        path: ["windowEndMinutes"],
+      });
+    }
+  }
 }) as z.ZodType<CreateRoutineRequest>;
 
 export const updateRoutineSchema = z
@@ -139,7 +259,24 @@ export const updateRoutineSchema = z
     name: z.string().min(1).max(200).optional(),
     sortOrder: z.number().int().min(0).optional(),
     status: routineStatusSchema.optional(),
+    timingMode: routineTimingModeSchema.optional(),
+    period: routinePeriodSchema.nullable().optional(),
+    windowStartMinutes: minuteOfDaySchema.nullable().optional(),
+    windowEndMinutes: minuteOfDaySchema.nullable().optional(),
     items: z.array(routineItemInputSchema).optional(),
+  })
+  .superRefine((value, ctx) => {
+    if (
+      value.windowStartMinutes != null &&
+      value.windowEndMinutes != null &&
+      value.windowStartMinutes >= value.windowEndMinutes
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Window end must be after the window start",
+        path: ["windowEndMinutes"],
+      });
+    }
   })
   .refine((value) => Object.keys(value).length > 0, "At least one field must be updated") as z.ZodType<UpdateRoutineRequest>;
 
