@@ -2,6 +2,7 @@ import { useState } from "react";
 
 import {
   getTodayDate,
+  useDayPlanQuery,
   useCreateHabitPauseWindowMutation,
   useCreateHabitMutation,
   useCreateRoutineMutation,
@@ -28,6 +29,7 @@ export function useHabitsPageController() {
   const habitsQuery = useHabitsQuery();
   const scoreQuery = useDailyScoreQuery(today);
   const weeklyMomentumQuery = useWeeklyMomentumQuery(today);
+  const dayPlanQuery = useDayPlanQuery(today);
   const habitCheckinMutation = useHabitCheckinMutation(today);
   const routineCheckinMutation = useRoutineCheckinMutation(today);
   const deleteRoutineCheckinMutation = useDeleteRoutineCheckinMutation(today);
@@ -80,6 +82,8 @@ export function useHabitsPageController() {
   const routineTotal = activeRoutines.reduce((sum, routine) => sum + routine.totalItems, 0);
   const strongDayStreak = weeklyMomentumQuery.data?.strongDayStreak ?? 0;
   const statsCount = strongDayStreak > 0 ? 4 : 3;
+  const isRescueMode =
+    dayPlanQuery.data?.launch?.dayMode === "rescue" || dayPlanQuery.data?.launch?.dayMode === "recovery";
 
   function resetHabitManagementState() {
     setEditingHabitId(null);
@@ -120,11 +124,19 @@ export function useHabitsPageController() {
       {
         title: values.title.trim(),
         category: values.category.trim() || null,
+        habitType: values.habitType,
         targetPerDay: Math.max(1, Number.parseInt(values.targetPerDay, 10) || 1),
         recurrence: values.recurrenceRule
           ? buildRecurrenceInput(values.recurrenceRule)
           : undefined,
         goalId: values.goalId || null,
+        anchorText: values.anchorText.trim() || null,
+        minimumVersion: values.minimumVersion.trim() || null,
+        standardVersion: values.standardVersion.trim() || null,
+        stretchVersion: values.stretchVersion.trim() || null,
+        obstaclePlan: values.obstaclePlan.trim() || null,
+        repairRule: values.repairRule.trim() || null,
+        identityMeaning: values.identityMeaning.trim() || null,
       },
       { onSuccess: () => setShowAddHabit(false) },
     );
@@ -136,11 +148,19 @@ export function useHabitsPageController() {
         habitId,
         title: values.title.trim(),
         category: values.category.trim() || null,
+        habitType: values.habitType,
         targetPerDay: Math.max(1, Number.parseInt(values.targetPerDay, 10) || 1),
         recurrence: values.recurrenceRule
           ? buildRecurrenceInput(values.recurrenceRule)
           : undefined,
         goalId: values.goalId || null,
+        anchorText: values.anchorText.trim() || null,
+        minimumVersion: values.minimumVersion.trim() || null,
+        standardVersion: values.standardVersion.trim() || null,
+        stretchVersion: values.stretchVersion.trim() || null,
+        obstaclePlan: values.obstaclePlan.trim() || null,
+        repairRule: values.repairRule.trim() || null,
+        identityMeaning: values.identityMeaning.trim() || null,
       },
       { onSuccess: () => setEditingHabitId(null) },
     );
@@ -267,6 +287,8 @@ export function useHabitsPageController() {
     routineTotal,
     strongDayStreak,
     statsCount,
+    dayPlanQuery,
+    isRescueMode,
     habitCheckinMutation,
     routineCheckinMutation,
     deleteRoutineCheckinMutation,

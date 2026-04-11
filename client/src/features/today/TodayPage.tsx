@@ -20,6 +20,7 @@ import { DayNotes } from "./components/DayNotes";
 import { TodayTaskCaptureSheet } from "./components/TodayTaskCaptureSheet";
 import { DailyLaunchCard } from "./components/DailyLaunchCard";
 import { MustWinCard } from "./components/MustWinCard";
+import { RescueModeCard } from "./components/RescueModeCard";
 import { buildPlannerExecutionModel } from "./helpers/planner-execution";
 import { getDayPhase } from "./helpers/day-phase";
 import { useTodayData } from "./hooks/useTodayData";
@@ -299,6 +300,13 @@ export function TodayPage() {
     (p) => p.status === "pending" && p.title.trim(),
   ).length;
   const pendingTaskCount = data.executionTasks.filter((t) => t.status === "pending").length;
+  const isRescueMode = data.launch?.dayMode === "rescue" || data.launch?.dayMode === "recovery";
+  const rescueDeferredCandidates = data.executionTasks.filter(
+    (task) => task.status === "pending" && task.id !== data.mustWinTask?.id,
+  );
+  const visibleExecutionTasks = isRescueMode
+    ? []
+    : data.executionTasks;
   const todayLayoutStyle = {
     "--today-top-rail-height": `${topRailHeight}px`,
     "--today-sticky-offset": `${stickyTop}px`,
@@ -353,9 +361,20 @@ export function TodayPage() {
               <MustWinCard date={data.today} task={data.mustWinTask} />
             ) : null}
 
+            {data.launch?.completedAt ? (
+              <RescueModeCard
+                date={data.today}
+                launch={data.launch}
+                suggestion={data.rescueSuggestion}
+                mustWinTask={data.mustWinTask}
+                deferredCandidates={rescueDeferredCandidates}
+                taskActions={taskActions}
+              />
+            ) : null}
+
             <ExecutionStream
               date={data.today}
-              executionTasks={data.executionTasks}
+              executionTasks={visibleExecutionTasks}
               execution={todayPlannerExecution}
               taskActions={taskActions}
               plannerBlocks={data.plannerBlocks}
@@ -370,11 +389,13 @@ export function TodayPage() {
           </div>
 
           <aside className="today-sidebar" style={todaySidebarStyle}>
-            <FocusStack
-              priorityDraft={priorityDraft}
-              activeGoals={data.activeGoals}
-              phase={phase}
-            />
+            {!isRescueMode ? (
+              <FocusStack
+                priorityDraft={priorityDraft}
+                activeGoals={data.activeGoals}
+                phase={phase}
+              />
+            ) : null}
             <DayNotes tasks={data.quickCaptureTasks} today={data.today} />
             <DailyEssentials
               currentDay={data.currentDay}

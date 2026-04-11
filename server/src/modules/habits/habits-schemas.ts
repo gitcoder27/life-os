@@ -2,7 +2,9 @@ import type {
   CreateHabitPauseWindowRequest,
   CreateHabitRequest,
   CreateRoutineRequest,
+  HabitCheckinLevel,
   HabitCheckinRequest,
+  HabitType,
   HabitScheduleRule,
   IsoDateString,
   RecurrenceInput,
@@ -15,8 +17,10 @@ import { z } from "zod";
 export const isoDateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/) as unknown as z.ZodType<IsoDateString>;
 
 const habitStatusSchema = z.enum(["active", "paused", "archived"]);
+const habitTypeSchema = z.enum(["maintenance", "growth", "identity"]) as z.ZodType<HabitType>;
 const habitPauseKindSchema = z.enum(["rest_day", "vacation"]);
 const habitCheckinStatusSchema = z.enum(["completed", "skipped"]);
+const habitCheckinLevelSchema = z.enum(["minimum", "standard", "stretch"]) as z.ZodType<HabitCheckinLevel>;
 const routineStatusSchema = z.enum(["active", "archived"]);
 
 const habitScheduleRuleSchema = z.object({
@@ -68,20 +72,36 @@ const routineItemInputSchema = z.object({
 export const createHabitSchema = z.object({
   title: z.string().min(1).max(200),
   category: z.string().max(120).nullable().optional(),
+  habitType: habitTypeSchema.optional(),
   scheduleRule: habitScheduleRuleSchema.optional(),
   recurrence: recurrenceInputSchema.optional(),
   goalId: z.string().uuid().nullable().optional(),
   targetPerDay: z.number().int().positive().max(20).optional(),
+  anchorText: z.string().max(240).nullable().optional(),
+  minimumVersion: z.string().max(240).nullable().optional(),
+  standardVersion: z.string().max(240).nullable().optional(),
+  stretchVersion: z.string().max(240).nullable().optional(),
+  obstaclePlan: z.string().max(500).nullable().optional(),
+  repairRule: z.string().max(500).nullable().optional(),
+  identityMeaning: z.string().max(500).nullable().optional(),
 }) as z.ZodType<CreateHabitRequest>;
 
 export const updateHabitSchema = z
   .object({
     title: z.string().min(1).max(200).optional(),
     category: z.string().max(120).nullable().optional(),
+    habitType: habitTypeSchema.optional(),
     scheduleRule: habitScheduleRuleSchema.optional(),
     recurrence: recurrenceInputSchema.optional(),
     goalId: z.string().uuid().nullable().optional(),
     targetPerDay: z.number().int().positive().max(20).optional(),
+    anchorText: z.string().max(240).nullable().optional(),
+    minimumVersion: z.string().max(240).nullable().optional(),
+    standardVersion: z.string().max(240).nullable().optional(),
+    stretchVersion: z.string().max(240).nullable().optional(),
+    obstaclePlan: z.string().max(500).nullable().optional(),
+    repairRule: z.string().max(500).nullable().optional(),
+    identityMeaning: z.string().max(500).nullable().optional(),
     status: habitStatusSchema.optional(),
   })
   .refine((value) => Object.keys(value).length > 0, "At least one field must be updated") as z.ZodType<UpdateHabitRequest>;
@@ -89,6 +109,7 @@ export const updateHabitSchema = z
 export const habitCheckinSchema = z.object({
   date: isoDateSchema.optional(),
   status: habitCheckinStatusSchema.optional(),
+  level: habitCheckinLevelSchema.nullable().optional(),
   note: z.string().max(4000).nullable().optional(),
 }) as z.ZodType<HabitCheckinRequest>;
 

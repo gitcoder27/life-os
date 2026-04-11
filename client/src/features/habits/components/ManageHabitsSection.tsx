@@ -175,9 +175,17 @@ export function ManageHabitsSection({
                   initial={{
                     title: habit.title,
                     category: habit.category ?? "",
+                    habitType: habit.habitType,
                     targetPerDay: String(habit.targetPerDay),
                     recurrenceRule: habit.recurrence?.rule ?? null,
                     goalId: habit.goalId ?? "",
+                    anchorText: habit.anchorText ?? "",
+                    minimumVersion: habit.minimumVersion ?? "",
+                    standardVersion: habit.standardVersion ?? "",
+                    stretchVersion: habit.stretchVersion ?? "",
+                    obstaclePlan: habit.obstaclePlan ?? "",
+                    repairRule: habit.repairRule ?? "",
+                    identityMeaning: habit.identityMeaning ?? "",
                   }}
                   submitLabel="Save changes"
                   isPending={updatePending}
@@ -199,6 +207,7 @@ export function ManageHabitsSection({
                       </div>
                       <div className="manage-list__meta">
                         {habit.category || "Uncategorized"}
+                        {habit.habitType ? ` · ${habit.habitType}` : ""}
                         {habit.streakCount > 0 ? ` · ${habit.streakCount} streak` : ""}
                         {habit.goal ? ` · ${habit.goal.title}` : ""}
                         {habit.recurrence && isRecurring(habit.recurrence) ? (
@@ -208,6 +217,13 @@ export function ManageHabitsSection({
                           </span>
                         ) : null}
                       </div>
+                      {habit.anchorText || habit.minimumVersion || habit.repairRule ? (
+                        <div className="manage-list__meta">
+                          {habit.anchorText ? `Anchor: ${habit.anchorText}` : ""}
+                          {habit.minimumVersion ? ` · Min: ${habit.minimumVersion}` : ""}
+                          {habit.repairRule ? ` · Repair: ${habit.repairRule}` : ""}
+                        </div>
+                      ) : null}
                       {habit.pauseWindows.length > 0 ? (
                         <div
                           style={{

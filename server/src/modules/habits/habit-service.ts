@@ -31,7 +31,15 @@ import {
   listRoutinesForUser,
   loadHabitDetail,
 } from "./habits-repository.js";
-import { resolveHabitRecurrenceInput, serializeHabit, toPrismaCheckinStatus, toPrismaHabitPauseKind, toPrismaHabitStatus } from "./habit-mappers.js";
+import {
+  resolveHabitRecurrenceInput,
+  serializeHabit,
+  toPrismaCheckinStatus,
+  toPrismaHabitCheckinLevel,
+  toPrismaHabitPauseKind,
+  toPrismaHabitStatus,
+  toPrismaHabitType,
+} from "./habit-mappers.js";
 import type { HabitDetailRecord } from "./habit-record-shapes.js";
 import type { HabitsApp } from "./module-types.js";
 import { serializeRoutine } from "./routine-mappers.js";
@@ -110,9 +118,17 @@ export const createHabit = async (
         userId,
         title: payload.title,
         category: payload.category ?? null,
+        habitType: payload.habitType ? toPrismaHabitType(payload.habitType) : undefined,
         scheduleRuleJson: recurrence.rule as unknown as Prisma.InputJsonValue,
         goalId: payload.goalId ?? null,
         targetPerDay: payload.targetPerDay ?? 1,
+        anchorText: payload.anchorText ?? null,
+        minimumVersion: payload.minimumVersion ?? null,
+        standardVersion: payload.standardVersion ?? null,
+        stretchVersion: payload.stretchVersion ?? null,
+        obstaclePlan: payload.obstaclePlan ?? null,
+        repairRule: payload.repairRule ?? null,
+        identityMeaning: payload.identityMeaning ?? null,
       },
     });
 
@@ -161,10 +177,18 @@ export const updateHabit = async (
       data: {
         title: payload.title,
         category: payload.category,
+        habitType: payload.habitType ? toPrismaHabitType(payload.habitType) : undefined,
         scheduleRuleJson:
           (recurrence?.rule ?? payload.scheduleRule) as Prisma.InputJsonValue | undefined,
         goalId: payload.goalId,
         targetPerDay: payload.targetPerDay,
+        anchorText: payload.anchorText,
+        minimumVersion: payload.minimumVersion,
+        standardVersion: payload.standardVersion,
+        stretchVersion: payload.stretchVersion,
+        obstaclePlan: payload.obstaclePlan,
+        repairRule: payload.repairRule,
+        identityMeaning: payload.identityMeaning,
         status: payload.status ? toPrismaHabitStatus(payload.status) : undefined,
         archivedAt: payload.status === "archived" ? new Date() : undefined,
       },
@@ -301,6 +325,10 @@ export const createHabitCheckin = async (
   }
 
   const status = payload.status ?? "completed";
+  const achievedLevel =
+    status === "skipped"
+      ? null
+      : payload.level ?? "standard";
   await app.prisma.habitCheckin.upsert({
     where: {
       habitId_occurredOn: {
@@ -311,6 +339,7 @@ export const createHabitCheckin = async (
     update: {
       status: toPrismaCheckinStatus(status),
       source: "TAP",
+      achievedLevel: achievedLevel ? toPrismaHabitCheckinLevel(achievedLevel) : null,
       completionCount: status === "skipped" ? 0 : { increment: 1 },
       completedAt: status === "skipped" ? null : new Date(),
       note: payload.note ?? null,
@@ -320,6 +349,7 @@ export const createHabitCheckin = async (
       occurredOn: targetDate,
       status: toPrismaCheckinStatus(status),
       source: "TAP",
+      achievedLevel: achievedLevel ? toPrismaHabitCheckinLevel(achievedLevel) : null,
       completionCount: status === "skipped" ? 0 : 1,
       completedAt: status === "skipped" ? null : new Date(),
       note: payload.note ?? null,

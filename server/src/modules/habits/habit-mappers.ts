@@ -1,5 +1,6 @@
 import type {
   CreateHabitPauseWindowRequest,
+  HabitCheckinLevel,
   HabitCheckinRequest,
   HabitItem,
   HabitPauseWindow,
@@ -11,8 +12,10 @@ import type {
 import type {
   CheckinStatus as PrismaCheckinStatus,
   GoalStatus as PrismaGoalStatus,
+  HabitCheckinLevel as PrismaHabitCheckinLevel,
   HabitPauseKind as PrismaHabitPauseKind,
   HabitStatus as PrismaHabitStatus,
+  HabitType as PrismaHabitType,
 } from "@prisma/client";
 
 import {
@@ -52,6 +55,15 @@ const serializeGoalSummary = (goal: NonNullable<HabitDetailRecord["goal"]>): Hab
   domain: goal.domain.name,
   domainSystemKey: fromPrismaGoalDomainSystemKey(goal.domain.systemKey),
   status: fromPrismaGoalStatus(goal.status),
+  engagementState: goal.engagementState ? (
+    goal.engagementState === "PRIMARY"
+      ? "primary"
+      : goal.engagementState === "SECONDARY"
+        ? "secondary"
+        : goal.engagementState === "PARKED"
+          ? "parked"
+          : "maintenance"
+  ) : null,
 });
 
 const fromPrismaHabitPauseKind = (kind: PrismaHabitPauseKind): HabitPauseWindow["kind"] => {
@@ -87,6 +99,30 @@ export const fromPrismaHabitStatus = (status: PrismaHabitStatus): HabitItem["sta
   }
 };
 
+const fromPrismaHabitType = (habitType: PrismaHabitType): HabitItem["habitType"] => {
+  switch (habitType) {
+    case "MAINTENANCE":
+      return "maintenance";
+    case "GROWTH":
+      return "growth";
+    case "IDENTITY":
+      return "identity";
+  }
+};
+
+export const toPrismaHabitType = (
+  habitType: NonNullable<UpdateHabitRequest["habitType"]>,
+): PrismaHabitType => {
+  switch (habitType) {
+    case "maintenance":
+      return "MAINTENANCE";
+    case "growth":
+      return "GROWTH";
+    case "identity":
+      return "IDENTITY";
+  }
+};
+
 export const toPrismaCheckinStatus = (
   status: NonNullable<HabitCheckinRequest["status"]>,
 ): PrismaCheckinStatus => {
@@ -95,6 +131,34 @@ export const toPrismaCheckinStatus = (
       return "COMPLETED";
     case "skipped":
       return "SKIPPED";
+  }
+};
+
+export const toPrismaHabitCheckinLevel = (
+  level: HabitCheckinLevel,
+): PrismaHabitCheckinLevel => {
+  switch (level) {
+    case "minimum":
+      return "MINIMUM";
+    case "standard":
+      return "STANDARD";
+    case "stretch":
+      return "STRETCH";
+  }
+};
+
+const fromPrismaHabitCheckinLevel = (
+  level: PrismaHabitCheckinLevel | null,
+): HabitCheckinLevel | null => {
+  switch (level) {
+    case "MINIMUM":
+      return "minimum";
+    case "STANDARD":
+      return "standard";
+    case "STRETCH":
+      return "stretch";
+    default:
+      return null;
   }
 };
 
@@ -159,15 +223,26 @@ export const serializeHabit = (
     id: habit.id,
     title: habit.title,
     category: habit.category,
+    habitType: fromPrismaHabitType(habit.habitType),
     scheduleRule,
     recurrence: serializeRecurrenceDefinition(habit.recurrenceRule),
     goalId: habit.goalId ?? null,
     goal: habit.goal ? serializeGoalSummary(habit.goal) : null,
     targetPerDay: habit.targetPerDay,
+    anchorText: habit.anchorText ?? null,
+    minimumVersion: habit.minimumVersion ?? null,
+    standardVersion: habit.standardVersion ?? null,
+    stretchVersion: habit.stretchVersion ?? null,
+    obstaclePlan: habit.obstaclePlan ?? null,
+    repairRule: habit.repairRule ?? null,
+    identityMeaning: habit.identityMeaning ?? null,
     status: fromPrismaHabitStatus(habit.status),
     dueToday,
     completedToday,
     completedCountToday,
+    achievedLevelToday: fromPrismaHabitCheckinLevel(
+      checkins.find((checkin) => toIsoDateString(checkin.occurredOn) === targetIsoDate)?.achievedLevel ?? null,
+    ),
     streakCount: calculateHabitActiveStreak(checkins, recurrence, targetIsoDate, pauseWindows, habit.targetPerDay),
     risk: isHabitPermanentlyInactive(habit)
       ? {

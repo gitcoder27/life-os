@@ -51,6 +51,8 @@ export type DailyLaunchItem = {
   id: string;
   planningCycleId: string;
   mustWinTaskId: string | null;
+  dayMode: "normal" | "rescue" | "recovery";
+  rescueReason: "overload" | "low_energy" | "interruption" | "missed_day" | null;
   energyRating: number | null;
   likelyDerailmentReason:
     | "unclear"
@@ -61,9 +63,20 @@ export type DailyLaunchItem = {
     | "overloaded"
     | null;
   likelyDerailmentNote: string | null;
+  rescueSuggestedAt: string | null;
+  rescueActivatedAt: string | null;
+  rescueExitedAt: string | null;
   completedAt: string | null;
   createdAt: string;
   updatedAt: string;
+};
+
+export type RescueSuggestion = {
+  mode: "rescue" | "recovery";
+  reason: "overload" | "low_energy" | "interruption" | "missed_day";
+  title: string;
+  detail: string;
+  minimumViableAction: string | null;
 };
 
 export type TaskListCounts = {
@@ -118,6 +131,7 @@ type DayPlanResponse = {
   date: string;
   launch: DailyLaunchItem | null;
   mustWinTask: TaskItem | null;
+  rescueSuggestion: RescueSuggestion | null;
   priorities: Array<{
     id: string;
     slot: 1 | 2 | 3;
@@ -172,6 +186,7 @@ type DayLaunchMutationResponse = {
   generatedAt: string;
   launch: DailyLaunchItem;
   mustWinTask: TaskItem | null;
+  rescueSuggestion: RescueSuggestion | null;
 };
 
 type BulkTaskMutationResponse = {
@@ -752,6 +767,8 @@ export const useUpsertDayLaunchMutation = (date: string) => {
   return useMutation({
     mutationFn: (payload: {
       mustWinTaskId?: string | null;
+      dayMode?: DailyLaunchItem["dayMode"];
+      rescueReason?: DailyLaunchItem["rescueReason"];
       energyRating?: number | null;
       likelyDerailmentReason?: DailyLaunchItem["likelyDerailmentReason"];
       likelyDerailmentNote?: string | null;

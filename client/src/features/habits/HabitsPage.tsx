@@ -95,6 +95,7 @@ export function HabitsPage() {
         allHabits={controller.allHabits}
         dueHabits={controller.dueHabits}
         activeRoutines={controller.activeRoutines}
+        isRescueMode={controller.isRescueMode}
         highlightedHabitId={highlightedHabitId}
         dueCompletedUnits={controller.dueCompletedUnits}
         dueTargetUnits={controller.dueTargetUnits}
@@ -105,7 +106,7 @@ export function HabitsPage() {
         }
         isPausePending={controller.createHabitPauseWindowMutation.isPending}
         onCreateFirstHabit={controller.handleOpenAddHabit}
-        onHabitCheckin={(habitId) => controller.habitCheckinMutation.mutate(habitId)}
+        onHabitCheckin={(habitId, level) => controller.habitCheckinMutation.mutate({ habitId, level })}
         onRoutineItemCheckin={(itemId) => controller.routineCheckinMutation.mutate(itemId)}
         onRoutineItemUndo={(itemId) => controller.deleteRoutineCheckinMutation.mutate(itemId)}
         onRestDay={controller.handleRestDay}

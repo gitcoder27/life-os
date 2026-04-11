@@ -73,6 +73,7 @@ export type GoalHorizonInput = {
 
 export type GoalDomain = string;
 export type GoalStatus = "active" | "paused" | "completed" | "archived";
+export type GoalEngagementState = "primary" | "secondary" | "parked" | "maintenance";
 
 export type LinkedGoal = {
   id: string;
@@ -80,6 +81,7 @@ export type LinkedGoal = {
   domain: GoalDomain;
   domainSystemKey: GoalDomainSystemKey | null;
   status: GoalStatus;
+  engagementState: GoalEngagementState | null;
 };
 
 export type GoalHealthState = "on_track" | "drifting" | "stalled" | "achieved";
@@ -124,9 +126,13 @@ export type GoalOverviewItem = {
   horizonSpanMonths: number | null;
   parentGoalId: string | null;
   status: GoalStatus;
+  engagementState: GoalEngagementState | null;
   why: string | null;
   targetDate: string | null;
   notes: string | null;
+  weeklyProofText: string | null;
+  knownObstacle: string | null;
+  parkingRule: string | null;
   sortOrder: number;
   createdAt: string;
   updatedAt: string;
@@ -150,6 +156,7 @@ export type GoalHierarchySummary = {
   horizonSystemKey: GoalHorizonSystemKey | null;
   parentGoalId: string | null;
   status: GoalStatus;
+  engagementState: GoalEngagementState | null;
   sortOrder: number;
   targetDate: string | null;
 };
@@ -416,6 +423,10 @@ export const useCreateGoalMutation = () => {
       why?: string | null;
       targetDate?: string | null;
       notes?: string | null;
+      engagementState?: GoalEngagementState | null;
+      weeklyProofText?: string | null;
+      knownObstacle?: string | null;
+      parkingRule?: string | null;
       sortOrder?: number;
     }) =>
       apiRequest<GoalMutationResponse>("/api/goals", {
@@ -447,6 +458,10 @@ export const useUpdateGoalMutation = () => {
       status?: GoalStatus;
       targetDate?: string | null;
       notes?: string | null;
+      engagementState?: GoalEngagementState | null;
+      weeklyProofText?: string | null;
+      knownObstacle?: string | null;
+      parkingRule?: string | null;
       sortOrder?: number;
     }) =>
       apiRequest<GoalMutationResponse>(`/api/goals/${goalId}`, {

@@ -42,6 +42,7 @@ import {
   serializeGoalMilestone,
   serializePriority,
   serializeTask,
+  toPrismaGoalEngagementState,
   toPrismaGoalStatus,
 } from "./planning-mappers.js";
 import { goalWithMilestonesInclude, planningTaskInclude } from "./planning-record-shapes.js";
@@ -75,6 +76,54 @@ const goalHierarchyInclude = {
   domain: true,
   horizon: true,
 } as const;
+
+async function assertGoalEngagementCapacity(
+  app: Parameters<FastifyPluginAsync>[0],
+  input: {
+    userId: string;
+    goalId?: string;
+    status: "active" | "paused" | "completed" | "archived";
+    engagementState: "primary" | "secondary" | "parked" | "maintenance" | null;
+  },
+) {
+  if (input.status !== "active") {
+    return;
+  }
+
+  if (input.engagementState !== "primary" && input.engagementState !== "secondary") {
+    return;
+  }
+
+  const activeGoals = await app.prisma.goal.findMany({
+    where: {
+      userId: input.userId,
+      status: "ACTIVE",
+      id: input.goalId ? { not: input.goalId } : undefined,
+    },
+    select: {
+      engagementState: true,
+    },
+  });
+
+  const primaryCount = activeGoals.filter((goal) => goal.engagementState === "PRIMARY").length;
+  const secondaryCount = activeGoals.filter((goal) => goal.engagementState === "SECONDARY").length;
+
+  if (input.engagementState === "primary" && primaryCount >= 1) {
+    throw new AppError({
+      statusCode: 409,
+      code: "CONFLICT",
+      message: "Only one primary active goal is allowed",
+    });
+  }
+
+  if (input.engagementState === "secondary" && secondaryCount >= 2) {
+    throw new AppError({
+      statusCode: 409,
+      code: "CONFLICT",
+      message: "Only two secondary active goals are allowed",
+    });
+  }
+}
 
 async function loadGoalAncestors(
   app: Parameters<FastifyPluginAsync>[0],
@@ -255,6 +304,11 @@ export const registerPlanningGoalRoutes: FastifyPluginAsync = async (app) => {
     await assertOwnedGoalDomainReference(app, user.id, payload.domainId);
     await assertOwnedGoalHorizonReference(app, user.id, payload.horizonId);
     await assertValidGoalParentReference(app, user.id, null, payload.parentGoalId);
+    await assertGoalEngagementCapacity(app, {
+      userId: user.id,
+      status: "active",
+      engagementState: payload.engagementState ?? null,
+    });
 
     const sortOrder =
       payload.sortOrder ??
@@ -276,6 +330,10 @@ export const registerPlanningGoalRoutes: FastifyPluginAsync = async (app) => {
         why: payload.why ?? null,
         targetDate: payload.targetDate ? parseIsoDate(payload.targetDate) : null,
         notes: payload.notes ?? null,
+        engagementState: payload.engagementState ? toPrismaGoalEngagementState(payload.engagementState) : null,
+        weeklyProofText: payload.weeklyProofText ?? null,
+        knownObstacle: payload.knownObstacle ?? null,
+        parkingRule: payload.parkingRule ?? null,
         sortOrder,
       },
       include: goalMutationInclude,
@@ -423,12 +481,37 @@ export const registerPlanningGoalRoutes: FastifyPluginAsync = async (app) => {
     const user = requireAuthenticatedUser(request);
     const payload = parseOrThrow(updateGoalSchema, request.body as UpdateGoalRequest);
     const { goalId } = request.params as { goalId: string };
-    await findOwnedGoal(app, user.id, goalId);
+    const existingGoal = await findOwnedGoal(app, user.id, goalId);
     if (payload.domainId) {
       await assertOwnedGoalDomainReference(app, user.id, payload.domainId);
     }
     await assertOwnedGoalHorizonReference(app, user.id, payload.horizonId);
     await assertValidGoalParentReference(app, user.id, goalId, payload.parentGoalId);
+    await assertGoalEngagementCapacity(app, {
+      userId: user.id,
+      goalId,
+      status:
+        payload.status ??
+        (existingGoal.status === "ACTIVE"
+          ? "active"
+          : existingGoal.status === "PAUSED"
+            ? "paused"
+            : existingGoal.status === "COMPLETED"
+              ? "completed"
+              : "archived"),
+      engagementState:
+        payload.engagementState === undefined
+          ? existingGoal.engagementState === "PRIMARY"
+            ? "primary"
+            : existingGoal.engagementState === "SECONDARY"
+              ? "secondary"
+              : existingGoal.engagementState === "PARKED"
+                ? "parked"
+                : existingGoal.engagementState === "MAINTENANCE"
+                  ? "maintenance"
+                  : null
+          : payload.engagementState,
+    });
 
     const goal = await app.prisma.goal.update({
       where: {
@@ -448,6 +531,15 @@ export const registerPlanningGoalRoutes: FastifyPluginAsync = async (app) => {
               ? null
               : parseIsoDate(payload.targetDate),
         notes: payload.notes,
+        engagementState:
+          payload.engagementState === undefined
+            ? undefined
+            : payload.engagementState === null
+              ? null
+              : toPrismaGoalEngagementState(payload.engagementState),
+        weeklyProofText: payload.weeklyProofText,
+        knownObstacle: payload.knownObstacle,
+        parkingRule: payload.parkingRule,
         sortOrder: payload.sortOrder,
       },
       include: goalMutationInclude,

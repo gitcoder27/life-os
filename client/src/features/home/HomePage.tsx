@@ -21,6 +21,7 @@ import { SecondaryContext } from "./SecondaryContext";
 import { StatusStrip } from "./StatusStrip";
 import { TodayControl } from "./TodayControl";
 import { DailyLaunchCard } from "../today/components/DailyLaunchCard";
+import { RescueModeCard } from "../today/components/RescueModeCard";
 
 export function HomePage() {
   const today = getTodayDate();
@@ -108,6 +109,17 @@ export function HomePage() {
               tasks={executionTasks}
               launch={home.launch}
               mustWinTask={home.mustWinTask}
+            />
+          ) : null}
+
+          {home.launch?.completedAt ? (
+            <RescueModeCard
+              date={home.date}
+              launch={home.launch}
+              suggestion={home.rescueSuggestion}
+              mustWinTask={home.mustWinTask}
+              deferredCandidates={openExecutionTasks.filter((task) => task.id !== home.mustWinTask?.id)}
+              compact
             />
           ) : null}
 
