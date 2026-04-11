@@ -7,6 +7,7 @@ import {
   useCreateHabitMutation,
   useCreateRoutineMutation,
   useDailyScoreQuery,
+  useDeleteHabitCheckinMutation,
   useDeleteHabitPauseWindowMutation,
   useDeleteRoutineCheckinMutation,
   useHabitCheckinMutation,
@@ -31,6 +32,7 @@ export function useHabitsPageController() {
   const weeklyMomentumQuery = useWeeklyMomentumQuery(today);
   const dayPlanQuery = useDayPlanQuery(today);
   const habitCheckinMutation = useHabitCheckinMutation(today);
+  const deleteHabitCheckinMutation = useDeleteHabitCheckinMutation(today);
   const routineCheckinMutation = useRoutineCheckinMutation(today);
   const deleteRoutineCheckinMutation = useDeleteRoutineCheckinMutation(today);
   const createHabitMutation = useCreateHabitMutation();
@@ -290,6 +292,7 @@ export function useHabitsPageController() {
     dayPlanQuery,
     isRescueMode,
     habitCheckinMutation,
+    deleteHabitCheckinMutation,
     routineCheckinMutation,
     deleteRoutineCheckinMutation,
     createHabitMutation,

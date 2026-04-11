@@ -362,3 +362,27 @@ export const createHabitCheckin = async (
     habit: serializeHabit(habit, targetIsoDate),
   });
 };
+
+export const deleteHabitCheckin = async (
+  app: HabitsApp,
+  userId: string,
+  habitId: string,
+  payload: HabitCheckinRequest,
+): Promise<HabitMutationResponse> => {
+  const targetIsoDate = payload.date ?? (await getTodayContext(app, userId)).targetIsoDate;
+  const targetDate = parseIsoDate(targetIsoDate);
+
+  await findOwnedHabit(app.prisma, userId, habitId);
+  await app.prisma.habitCheckin.deleteMany({
+    where: {
+      habitId,
+      occurredOn: targetDate,
+    },
+  });
+
+  const habit = await loadHabitDetail(app.prisma, habitId, targetIsoDate);
+
+  return withGeneratedAt({
+    habit: serializeHabit(habit, targetIsoDate),
+  });
+};

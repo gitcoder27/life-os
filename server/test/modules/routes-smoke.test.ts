@@ -1170,6 +1170,38 @@ describe("module route smoke tests", () => {
     );
   });
 
+  it("prefers the request timezone in settings profile when the saved timezone is default UTC", async () => {
+    prisma.user = {
+      findUniqueOrThrow: vi.fn().mockResolvedValue({
+        id: "user-1",
+        email: "owner@example.com",
+        displayName: "Owner",
+      }),
+    } as any;
+    prisma.userPreference = {
+      findUnique: vi.fn().mockResolvedValue({
+        timezone: "UTC",
+        currencyCode: "USD",
+        weekStartsOn: 1,
+        dailyWaterTargetMl: 2500,
+        dailyReviewStartTime: null,
+        dailyReviewEndTime: null,
+        notificationPreferences: {},
+      }),
+    } as any;
+
+    const response = await app!.inject({
+      method: "GET",
+      url: "/api/settings/profile",
+      headers: {
+        "x-client-timezone": "Asia/Kolkata",
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(JSON.parse(response.body).preferences.timezone).toBe("Asia/Kolkata");
+  });
+
   it("serves onboarding state", async () => {
     prisma.userPreference = { findUnique: vi.fn().mockResolvedValue({}) } as any;
     prisma.user = { findUniqueOrThrow: vi.fn().mockResolvedValue({ onboardedAt: null }) } as any;
@@ -1800,6 +1832,84 @@ describe("module route smoke tests", () => {
     );
   });
 
+  it("prefers the request timezone for the home greeting when the saved timezone is default UTC", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-03-14T15:30:00.000Z"));
+
+    scoringMock.ensureCycle.mockImplementation(async (_prisma: unknown, input: { cycleType: string }) => {
+      if (input.cycleType === "WEEK") {
+        return {
+          id: "week-cycle",
+          weeklyReview: null,
+        };
+      }
+
+      return {
+        id: "day-cycle",
+        priorities: [],
+        dailyReview: null,
+        dailyScore: null,
+        weeklyReview: null,
+        plan: [],
+      };
+    });
+    scoringMock.calculateDailyScore.mockResolvedValue({
+      value: 0,
+      label: "Off track",
+      earnedPoints: 0,
+      possiblePoints: 1,
+      generatedAt: new Date().toISOString(),
+    });
+    scoringMock.getWeeklyMomentum.mockResolvedValue({
+      endingOn: "2026-03-14",
+      value: 0,
+      basedOnDays: 0,
+      weeklyReviewBonus: 0,
+      strongDayStreak: 0,
+      dailyScores: [],
+      generatedAt: new Date().toISOString(),
+    });
+
+    prisma.task = {
+      findMany: vi
+        .fn()
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([]),
+    } as any;
+    prisma.habit = { findMany: vi.fn().mockResolvedValue([]) } as any;
+    prisma.habitCheckin = { findMany: vi.fn().mockResolvedValue([]) } as any;
+    prisma.routine = { findMany: vi.fn().mockResolvedValue([]) } as any;
+    prisma.routineItemCheckin = { findMany: vi.fn().mockResolvedValue([]) } as any;
+    prisma.waterLog = { findMany: vi.fn().mockResolvedValue([]) } as any;
+    prisma.mealLog = { findMany: vi.fn().mockResolvedValue([]) } as any;
+    prisma.workoutDay = { findUnique: vi.fn().mockResolvedValue(null) } as any;
+    prisma.dayPlannerBlock = { count: vi.fn().mockResolvedValue(0) } as any;
+    prisma.expense = { findMany: vi.fn().mockResolvedValue([]) } as any;
+    prisma.adminItem = { findMany: vi.fn().mockResolvedValue([]) } as any;
+    prisma.notification = { findMany: vi.fn().mockResolvedValue([]) } as any;
+    prisma.routineItem = { findMany: vi.fn().mockResolvedValue([]) } as any;
+    prisma.userPreference = {
+      findUnique: vi.fn().mockResolvedValue({
+        dailyWaterTargetMl: 2500,
+        timezone: "UTC",
+        weekStartsOn: 1,
+        currencyCode: "USD",
+      }),
+    } as any;
+
+    const response = await app!.inject({
+      method: "GET",
+      url: "/api/home/overview?date=2026-03-14",
+      headers: {
+        "x-client-timezone": "Asia/Kolkata",
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(JSON.parse(response.body).greeting).toBe("Good evening");
+  });
+
   it("limits accountability radar items and materializes recurring task occurrences", async () => {
     const overdueTasks = Array.from({ length: 6 }, (_, index) => ({
       id: index === 0 ? "recurring-overdue-1" : `overdue-${index}`,
@@ -2207,6 +2317,7 @@ describe("module route smoke tests", () => {
     } as any;
     prisma.habitCheckin = {
       upsert: vi.fn().mockResolvedValue({}),
+      deleteMany: vi.fn().mockResolvedValue({ count: 1 }),
     } as any;
     prisma.routine = {
       findMany: vi.fn().mockResolvedValue([
@@ -2318,6 +2429,11 @@ describe("module route smoke tests", () => {
       url: "/api/habits/habit-1/checkins",
       payload: { status: "completed" },
     });
+    const habitCheckinDelete = await app!.inject({
+      method: "DELETE",
+      url: "/api/habits/habit-1/checkins",
+      query: { date: "2026-03-21" },
+    });
     const routinesList = await app!.inject({ method: "GET", url: "/api/routines" });
     const routinesCreate = await app!.inject({
       method: "POST",
@@ -2347,6 +2463,7 @@ describe("module route smoke tests", () => {
     expect(habitsCreate.statusCode).toBe(201);
     expect(habitsPatch.statusCode).toBe(200);
     expect(habitCheckin.statusCode).toBe(200);
+    expect(habitCheckinDelete.statusCode).toBe(200);
     expect(routinesList.statusCode).toBe(200);
     expect(routinesCreate.statusCode).toBe(201);
     expect(routinesPatch.statusCode).toBe(200);

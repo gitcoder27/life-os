@@ -47,6 +47,8 @@ import {
   getLocalGreeting,
   getUserLocalDate,
   getUserLocalHour,
+  isValidTimezone,
+  resolveDisplayTimezone,
 } from "../../lib/time/user-time.js";
 import { parseOrThrow } from "../../lib/validation/parse.js";
 import { buildHomeGuidance } from "./guidance.js";
@@ -70,6 +72,19 @@ const dateQuerySchema = z.object({
 
 const ACCOUNTABILITY_LOOKBACK_DAYS = 30;
 const ACCOUNTABILITY_SURFACED_ITEMS = 5;
+const CLIENT_TIMEZONE_HEADER = "x-client-timezone";
+
+function getRequestTimezone(request: { headers: Record<string, unknown> }) {
+  const headerValue = request.headers[CLIENT_TIMEZONE_HEADER];
+  const candidate = Array.isArray(headerValue) ? headerValue[0] : headerValue;
+
+  if (typeof candidate !== "string") {
+    return null;
+  }
+
+  const timezone = candidate.trim();
+  return isValidTimezone(timezone) ? timezone : null;
+}
 
 function currentHomePhase(
   date: Date,
@@ -193,6 +208,7 @@ async function buildHomeOverview(
   app: Parameters<FastifyPluginAsync>[0],
   userId: string,
   targetDate: Date,
+  fallbackTimezone?: string | null,
 ): Promise<HomeOverviewResponse> {
   const targetIsoDate = toIsoDateString(targetDate);
   const preferences = await app.prisma.userPreference.findUnique({
@@ -200,7 +216,8 @@ async function buildHomeOverview(
       userId,
     },
   });
-  const dayWindow = getDayWindowUtc(targetIsoDate, preferences?.timezone);
+  const effectiveTimezone = resolveDisplayTimezone(preferences?.timezone, fallbackTimezone);
+  const dayWindow = getDayWindowUtc(targetIsoDate, effectiveTimezone);
   const weekStartIsoDate = getWeekStartIsoDate(targetIsoDate, preferences?.weekStartsOn ?? 1);
   const weekStartDate = parseIsoDate(weekStartIsoDate);
   const overdueWindowStartIsoDate = addIsoDays(targetIsoDate, -ACCOUNTABILITY_LOOKBACK_DAYS);
@@ -259,7 +276,7 @@ async function buildHomeOverview(
         where: buildStaleInboxTaskWhere({
           userId,
           targetDate,
-          timezone: preferences?.timezone,
+          timezone: effectiveTimezone,
         }),
         orderBy: [{ createdAt: "asc" }],
       }),
@@ -447,12 +464,12 @@ async function buildHomeOverview(
 
   const totalRoutineItems = routines.reduce((sum, routine) => sum + routine.items.length, 0);
   const completedRoutineItems = routineCheckins.length;
-  const currentIsoDate = getUserLocalDate(new Date(), preferences?.timezone);
+  const currentIsoDate = getUserLocalDate(new Date(), effectiveTimezone);
   const routineSummary: RoutineSummary = {
     completedItems: completedRoutineItems,
     totalItems: totalRoutineItems,
     currentPeriod:
-      targetIsoDate === currentIsoDate ? currentRoutinePeriod(new Date(), preferences?.timezone) : "none",
+      targetIsoDate === currentIsoDate ? currentRoutinePeriod(new Date(), effectiveTimezone) : "none",
   };
 
   const healthSummary: HealthSummary = {
@@ -492,7 +509,7 @@ async function buildHomeOverview(
       };
     }),
     ...staleInboxTasks.map((task) => {
-      const createdOnIsoDate = getUserLocalDate(task.createdAt, preferences?.timezone);
+      const createdOnIsoDate = getUserLocalDate(task.createdAt, effectiveTimezone);
       const ageDays = getIsoDayDifference(createdOnIsoDate, targetIsoDate);
 
       return {
@@ -675,7 +692,7 @@ async function buildHomeOverview(
     weeklyChallenge,
     dailyReviewAvailable,
     dailyReviewRoute: dailyReviewAvailable ? openDailyReviewRoute : null,
-    currentHour: targetIsoDate === currentIsoDate ? getUserLocalHour(now, preferences?.timezone) : 12,
+    currentHour: targetIsoDate === currentIsoDate ? getUserLocalHour(now, effectiveTimezone) : 12,
     health: {
       waterMl: healthSummary.waterMl,
       waterTargetMl: healthSummary.waterTargetMl,
@@ -684,8 +701,8 @@ async function buildHomeOverview(
 
   return withGeneratedAt({
     date: targetIsoDate,
-    greeting: getLocalGreeting(now, preferences?.timezone),
-    phase: currentHomePhase(now, preferences?.timezone),
+    greeting: getLocalGreeting(now, effectiveTimezone),
+    phase: currentHomePhase(now, effectiveTimezone),
     launch: dailyLaunch ? serializeDailyLaunch(dailyLaunch) : null,
     mustWinTask: dailyLaunch?.mustWinTask ? serializeTask(dailyLaunch.mustWinTask) : null,
     rescueSuggestion: buildRescueSuggestion({
@@ -760,25 +777,27 @@ export const registerHomeRoutes: FastifyPluginAsync = async (app) => {
   app.get("/overview", async (request, reply) => {
     const user = requireAuthenticatedUser(request);
     const query = parseOrThrow(dateQuerySchema, request.query);
+    const fallbackTimezone = getRequestTimezone(request);
+    const savedTimezone = (
+      await app.prisma.userPreference.findUnique({
+        where: {
+          userId: user.id,
+        },
+        select: {
+          timezone: true,
+        },
+      })
+    )?.timezone;
     const targetDate = query.date
       ? parseIsoDate(query.date)
       : parseIsoDate(
           getUserLocalDate(
             new Date(),
-            (
-              await app.prisma.userPreference.findUnique({
-                where: {
-                  userId: user.id,
-                },
-                select: {
-                  timezone: true,
-                },
-              })
-            )?.timezone,
+            resolveDisplayTimezone(savedTimezone, fallbackTimezone),
           ),
         );
 
-    return reply.send(await buildHomeOverview(app, user.id, targetDate));
+    return reply.send(await buildHomeOverview(app, user.id, targetDate, fallbackTimezone));
   });
 
   app.get("/quote", async (request, reply): Promise<HomeQuoteResponse> => {
@@ -795,7 +814,8 @@ export const registerHomeRoutes: FastifyPluginAsync = async (app) => {
     const user = requireAuthenticatedUser(request);
     const { date } = request.params as { date: IsoDateString };
     const targetDate = parseIsoDate(parseOrThrow(isoDateSchema, date));
+    const fallbackTimezone = getRequestTimezone(request);
 
-    return reply.send(await buildHomeOverview(app, user.id, targetDate));
+    return reply.send(await buildHomeOverview(app, user.id, targetDate, fallbackTimezone));
   });
 };

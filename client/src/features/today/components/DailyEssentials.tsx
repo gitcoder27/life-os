@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import {
   useHabitsQuery,
+  useDeleteHabitCheckinMutation,
   useHabitCheckinMutation,
   useRoutineCheckinMutation,
   useFinanceDataQuery,
@@ -100,6 +101,7 @@ function RoutinesRow({
   const today = getTodayDate();
   const habitsQuery = useHabitsQuery();
   const habitCheckin = useHabitCheckinMutation(today);
+  const deleteHabitCheckin = useDeleteHabitCheckinMutation(today);
   const routineCheckin = useRoutineCheckinMutation(today);
 
   const data = habitsQuery.data;
@@ -195,8 +197,15 @@ function RoutinesRow({
                     key={habit.id}
                     type="button"
                     className={`de-check-item${habit.completedToday ? " de-check-item--done" : ""}`}
-                    onClick={() => !habit.completedToday && habitCheckin.mutate(habit.id)}
-                    disabled={habit.completedToday || habitCheckin.isPending}
+                    onClick={() => {
+                      if (habit.completedToday) {
+                        deleteHabitCheckin.mutate(habit.id);
+                        return;
+                      }
+
+                      habitCheckin.mutate(habit.id);
+                    }}
+                    disabled={habitCheckin.isPending || deleteHabitCheckin.isPending}
                   >
                     <span className={`de-check-item__box${habit.completedToday ? " de-check-item__box--done" : ""}`}>
                       {habit.completedToday ? <CheckIcon /> : null}

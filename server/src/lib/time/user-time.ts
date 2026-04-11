@@ -124,6 +124,37 @@ export function normalizeTimezone(timezone?: string | null) {
   return timezone ?? DEFAULT_TIMEZONE;
 }
 
+export function isValidTimezone(timezone?: string | null) {
+  if (!timezone) {
+    return false;
+  }
+
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone: timezone });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function resolveDisplayTimezone(
+  savedTimezone?: string | null,
+  clientTimezone?: string | null,
+) {
+  const normalizedSavedTimezone = normalizeTimezone(savedTimezone);
+  const normalizedClientTimezone = isValidTimezone(clientTimezone) ? clientTimezone : null;
+
+  if (
+    normalizedSavedTimezone === DEFAULT_TIMEZONE &&
+    normalizedClientTimezone &&
+    normalizedClientTimezone !== DEFAULT_TIMEZONE
+  ) {
+    return normalizedClientTimezone;
+  }
+
+  return normalizedSavedTimezone;
+}
+
 export function getUserLocalDate(date: Date, timezone?: string | null): IsoDateString {
   const localDate = getLocalDateTimeParts(date, normalizeTimezone(timezone));
 

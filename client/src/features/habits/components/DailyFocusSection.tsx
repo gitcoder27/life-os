@@ -17,6 +17,7 @@ type DailyFocusSectionProps = {
   isPausePending: boolean;
   onCreateFirstHabit: () => void;
   onHabitCheckin: (habitId: string, level?: "minimum" | "standard" | "stretch") => void;
+  onHabitUndo: (habitId: string) => void;
   onRoutineItemCheckin: (itemId: string) => void;
   onRoutineItemUndo: (itemId: string) => void;
   onRestDay: (habitId: string) => void;
@@ -35,6 +36,7 @@ export function DailyFocusSection({
   isPausePending,
   onCreateFirstHabit,
   onHabitCheckin,
+  onHabitUndo,
   onRoutineItemCheckin,
   onRoutineItemUndo,
   onRestDay,
@@ -52,6 +54,7 @@ export function DailyFocusSection({
         isPausePending={isPausePending}
         onCreateFirstHabit={onCreateFirstHabit}
         onHabitCheckin={onHabitCheckin}
+        onHabitUndo={onHabitUndo}
         onRestDay={onRestDay}
       />
       {activeRoutines.length > 0 ? (
@@ -89,6 +92,7 @@ type DueHabitsGroupProps = {
   isPausePending: boolean;
   onCreateFirstHabit: () => void;
   onHabitCheckin: (habitId: string, level?: "minimum" | "standard" | "stretch") => void;
+  onHabitUndo: (habitId: string) => void;
   onRestDay: (habitId: string) => void;
 };
 
@@ -103,6 +107,7 @@ function DueHabitsGroup({
   isPausePending,
   onCreateFirstHabit,
   onHabitCheckin,
+  onHabitUndo,
   onRestDay,
 }: DueHabitsGroupProps) {
   return (
@@ -140,12 +145,15 @@ function DueHabitsGroup({
                   className={`habits-check-row__box${habit.completedToday ? " habits-check-row__box--done" : ""}`}
                   type="button"
                   onClick={() => {
-                    if (!habit.completedToday) {
-                      onHabitCheckin(habit.id, isRescueMode ? "minimum" : "standard");
+                    if (habit.completedToday) {
+                      onHabitUndo(habit.id);
+                      return;
                     }
+
+                    onHabitCheckin(habit.id, isRescueMode ? "minimum" : "standard");
                   }}
-                  disabled={habit.completedToday || isHabitCheckinPending}
-                  aria-label={`Log progress for ${habit.title}`}
+                  disabled={isHabitCheckinPending}
+                  aria-label={`${habit.completedToday ? "Reopen" : "Log progress for"} ${habit.title}`}
                 >
                   {habit.completedToday ? "\u2713" : isRescueMode ? "min" : ""}
                 </button>

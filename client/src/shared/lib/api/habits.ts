@@ -177,6 +177,23 @@ export const useHabitCheckinMutation = (date: string) => {
   });
 };
 
+export const useDeleteHabitCheckinMutation = (date: string) => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (habitId: string) =>
+      apiRequest<HabitMutationResponse>(`/api/habits/${habitId}/checkins`, {
+        method: "DELETE",
+        query: { date },
+      }),
+    meta: {
+      successMessage: "Habit reopened.",
+      errorMessage: "Habit update failed.",
+    },
+    onSuccess: () => invalidateCoreData(queryClient, date),
+  });
+};
+
 export const useRoutineCheckinMutation = (date: string) => {
   const queryClient = useQueryClient();
 

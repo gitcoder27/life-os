@@ -9,6 +9,7 @@ import { z } from "zod";
 
 import { requireAuthenticatedUser } from "../../lib/auth/require-auth.js";
 import { withGeneratedAt } from "../../lib/http/response.js";
+import { isValidTimezone, resolveDisplayTimezone } from "../../lib/time/user-time.js";
 import { parseOrThrow } from "../../lib/validation/parse.js";
 import {
   mergeNotificationPreferences,
@@ -27,6 +28,8 @@ const intlWithSupportedValues = Intl as typeof Intl & {
 const supportedCurrencyCodes = new Set(
   intlWithSupportedValues.supportedValuesOf?.("currency") ?? [],
 );
+
+const CLIENT_TIMEZONE_HEADER = "x-client-timezone";
 
 const notificationPreferenceUpdateSchema = z
   .object({
@@ -54,13 +57,16 @@ const notificationPreferencesUpdateSchema = z
     "At least one notification category must be updated",
   );
 
-function isValidTimezone(value: string) {
-  try {
-    new Intl.DateTimeFormat("en-US", { timeZone: value });
-    return true;
-  } catch {
-    return false;
+function getRequestTimezone(request: { headers: Record<string, unknown> }) {
+  const headerValue = request.headers[CLIENT_TIMEZONE_HEADER];
+  const candidate = Array.isArray(headerValue) ? headerValue[0] : headerValue;
+
+  if (typeof candidate !== "string") {
+    return null;
   }
+
+  const timezone = candidate.trim();
+  return isValidTimezone(timezone) ? timezone : null;
 }
 
 const updateSettingsProfileSchema = z
@@ -101,11 +107,12 @@ function toSettingsProfileResponse(input: {
     dailyReviewEndTime: string | null;
     notificationPreferences: unknown;
   } | null;
+  fallbackTimezone?: string | null;
 }): SettingsProfileResponse {
   return withGeneratedAt({
     user: input.user,
     preferences: {
-      timezone: input.preferences?.timezone ?? "UTC",
+      timezone: resolveDisplayTimezone(input.preferences?.timezone, input.fallbackTimezone),
       currencyCode: input.preferences?.currencyCode ?? "USD",
       weekStartsOn: input.preferences?.weekStartsOn ?? 1,
       dailyWaterTargetMl: input.preferences?.dailyWaterTargetMl ?? 2500,
@@ -121,6 +128,7 @@ function toSettingsProfileResponse(input: {
 export const registerSettingsRoutes: FastifyPluginAsync = async (app) => {
   app.get("/profile", async (request, reply) => {
     const user = requireAuthenticatedUser(request);
+    const fallbackTimezone = getRequestTimezone(request);
 
     const [userRecord, preferences] = await Promise.all([
       app.prisma.user.findUniqueOrThrow({
@@ -153,6 +161,7 @@ export const registerSettingsRoutes: FastifyPluginAsync = async (app) => {
       toSettingsProfileResponse({
         user: userRecord,
         preferences,
+        fallbackTimezone,
       }),
     );
   });
@@ -160,6 +169,7 @@ export const registerSettingsRoutes: FastifyPluginAsync = async (app) => {
   app.put("/profile", async (request, reply) => {
     const user = requireAuthenticatedUser(request);
     const payload = parseOrThrow(updateSettingsProfileSchema, request.body as UpdateSettingsProfileRequest);
+    const fallbackTimezone = getRequestTimezone(request);
 
     const { updatedUser, updatedPreferences } = await app.prisma.$transaction(async (tx) => {
       const currentPreferences = await tx.userPreference.findUnique({
@@ -189,7 +199,7 @@ export const registerSettingsRoutes: FastifyPluginAsync = async (app) => {
         },
         create: {
           userId: user.id,
-          timezone: payload.timezone ?? "UTC",
+          timezone: payload.timezone ?? fallbackTimezone ?? "UTC",
           currencyCode: payload.currencyCode ?? "USD",
           weekStartsOn: payload.weekStartsOn ?? 1,
           dailyWaterTargetMl: payload.dailyWaterTargetMl ?? 2500,

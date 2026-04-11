@@ -1,5 +1,6 @@
 import {
   useHabitsQuery,
+  useDeleteHabitCheckinMutation,
   useHabitCheckinMutation,
   useRoutineCheckinMutation,
   getTodayDate,
@@ -47,6 +48,7 @@ export function RoutinesHabits() {
   const today = getTodayDate();
   const habitsQuery = useHabitsQuery();
   const habitCheckin = useHabitCheckinMutation(today);
+  const deleteHabitCheckin = useDeleteHabitCheckinMutation(today);
   const routineCheckin = useRoutineCheckinMutation(today);
 
   if (habitsQuery.isLoading && !habitsQuery.data) {
@@ -108,7 +110,8 @@ export function RoutinesHabits() {
                 key={habit.id}
                 habit={habit}
                 onCheckin={() => habitCheckin.mutate(habit.id)}
-                isPending={habitCheckin.isPending}
+                onUndo={() => deleteHabitCheckin.mutate(habit.id)}
+                isPending={habitCheckin.isPending || deleteHabitCheckin.isPending}
               />
             ))}
           </div>
@@ -164,18 +167,27 @@ function RoutineSection({
 function HabitRow({
   habit,
   onCheckin,
+  onUndo,
   isPending,
 }: {
   habit: DueHabit;
   onCheckin: () => void;
+  onUndo: () => void;
   isPending: boolean;
 }) {
   return (
     <button
       type="button"
       className={`today-rh__item${habit.completedToday ? " today-rh__item--done" : ""}`}
-      onClick={() => !habit.completedToday && onCheckin()}
-      disabled={habit.completedToday || isPending}
+      onClick={() => {
+        if (habit.completedToday) {
+          onUndo();
+          return;
+        }
+
+        onCheckin();
+      }}
+      disabled={isPending}
     >
       <span className={`today-rh__check${habit.completedToday ? " today-rh__check--done" : ""}`}>
         {habit.completedToday ? <CheckIcon /> : null}

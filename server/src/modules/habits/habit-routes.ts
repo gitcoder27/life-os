@@ -18,6 +18,7 @@ import {
   createHabit,
   createHabitCheckin,
   createHabitPauseWindow,
+  deleteHabitCheckin,
   deleteHabitPauseWindow,
   listHabits,
   updateHabit,
@@ -72,5 +73,13 @@ export const registerHabitRoutes: FastifyPluginAsync = async (app) => {
     const payload = parseOrThrow(habitCheckinSchema, request.body as HabitCheckinRequest);
 
     return reply.send(await createHabitCheckin(app, user.id, habitId, payload));
+  });
+
+  app.delete("/habits/:habitId/checkins", async (request, reply) => {
+    const user = requireAuthenticatedUser(request);
+    const { habitId } = request.params as { habitId: string };
+    const payload = parseOrThrow(habitCheckinSchema, request.query as HabitCheckinRequest);
+
+    return reply.send(await deleteHabitCheckin(app, user.id, habitId, payload));
   });
 };

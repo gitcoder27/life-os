@@ -1,4 +1,5 @@
 import type { QueryClient } from "@tanstack/react-query";
+import { getPreferredTimezone } from "../date";
 
 type ApiFieldError = {
   field: string;
@@ -128,6 +129,28 @@ const getCsrfToken = () => {
   return getCookie(CSRF_COOKIE_NAME);
 };
 
+const getClientTimezone = () => {
+  const candidates = [
+    getPreferredTimezone(),
+    Intl.DateTimeFormat().resolvedOptions().timeZone,
+  ];
+
+  for (const candidate of candidates) {
+    if (!candidate) {
+      continue;
+    }
+
+    try {
+      new Intl.DateTimeFormat("en-US", { timeZone: candidate });
+      return candidate;
+    } catch {
+      continue;
+    }
+  }
+
+  return null;
+};
+
 const readErrorPayload = async (response: Response) => {
   try {
     return (await response.json()) as ApiErrorResponse;
@@ -173,6 +196,11 @@ export const apiRequest = async <TResponse>(
 
   if (init?.body !== undefined) {
     headers.set("content-type", "application/json");
+  }
+
+  const clientTimezone = getClientTimezone();
+  if (clientTimezone) {
+    headers.set("x-client-timezone", clientTimezone);
   }
 
   if (!SAFE_METHODS.has(method.toUpperCase()) && path !== "/api/auth/login") {

@@ -87,6 +87,7 @@ export {
   useCreateHabitMutation,
   useCreateHabitPauseWindowMutation,
   useCreateRoutineMutation,
+  useDeleteHabitCheckinMutation,
   useDeleteRoutineCheckinMutation,
   useDeleteHabitPauseWindowMutation,
   useHabitCheckinMutation,
