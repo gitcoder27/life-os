@@ -343,6 +343,10 @@
   animation: scaleIn 0.45s var(--ease) 0.08s both;
 }
 
+.command-block--must-win {
+  gap: 0.75rem;
+}
+
 .command-block__eyebrow {
   font-size: var(--fs-micro);
   font-weight: 700;
@@ -399,6 +403,73 @@
 
 .command-block__actions {
   margin-top: 0.5rem;
+}
+
+.command-block__must-win-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  padding-top: 0.2rem;
+}
+
+.command-block__must-win-detail {
+  display: grid;
+  gap: 0.2rem;
+  min-width: 0;
+}
+
+.command-block__must-win-label {
+  font-size: var(--fs-micro);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+}
+
+.command-block__must-win-detail strong {
+  min-width: 0;
+  font-size: var(--fs-small);
+  line-height: 1.35;
+  color: var(--text);
+}
+
+.command-block__must-win-state {
+  flex-shrink: 0;
+  padding: 0.28rem 0.6rem;
+  border-radius: var(--r-pill);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+  font-size: var(--fs-micro);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+.command-block__must-win-state--not_started {
+  color: rgba(240, 192, 96, 0.92);
+  border-color: rgba(240, 192, 96, 0.18);
+  background: rgba(240, 192, 96, 0.08);
+}
+
+.command-block__must-win-state--started,
+.command-block__must-win-state--advanced {
+  color: rgba(93, 184, 106, 0.92);
+  border-color: rgba(93, 184, 106, 0.18);
+  background: rgba(93, 184, 106, 0.08);
+}
+
+.command-block__must-win-state--completed {
+  color: rgba(93, 184, 106, 0.95);
+  border-color: rgba(93, 184, 106, 0.22);
+  background: rgba(93, 184, 106, 0.12);
+}
+
+.command-block__must-win-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
 }
 
 .command-block__cta {
@@ -1008,6 +1079,11 @@
 }
 
 @media (max-width: 720px) {
+  .command-block__must-win-row {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
   .today-control__summary-card {
     flex-direction: column;
   }

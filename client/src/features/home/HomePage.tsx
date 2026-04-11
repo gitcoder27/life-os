@@ -124,7 +124,9 @@ export function HomePage() {
           ) : null}
 
           <CommandBlock
+            date={home.date}
             topPriority={featuredPriority}
+            mustWinTask={home.mustWinTask}
             openTaskCount={openExecutionTasks.length}
             nextTimedTask={
               nextTimedTask
