@@ -8,9 +8,17 @@ import type { HabitFormValues } from "../types";
 const emptyHabitForm: HabitFormValues = {
   title: "",
   category: "",
+  habitType: "maintenance",
   targetPerDay: "1",
   recurrenceRule: null,
   goalId: "",
+  anchorText: "",
+  minimumVersion: "",
+  standardVersion: "",
+  stretchVersion: "",
+  obstaclePlan: "",
+  repairRule: "",
+  identityMeaning: "",
 };
 
 type HabitFormProps = {
@@ -31,7 +39,18 @@ export function HabitForm({
   const today = getTodayDate();
   const [values, setValues] = useState<HabitFormValues>(initial);
   const [showAdvanced, setShowAdvanced] = useState(
-    Boolean(initial.category || initial.goalId || Number(initial.targetPerDay) > 1),
+    Boolean(
+      initial.category ||
+      initial.goalId ||
+      Number(initial.targetPerDay) > 1 ||
+      initial.anchorText ||
+      initial.minimumVersion ||
+      initial.standardVersion ||
+      initial.stretchVersion ||
+      initial.obstaclePlan ||
+      initial.repairRule ||
+      initial.identityMeaning,
+    ),
   );
   const goalsQuery = useGoalsListQuery();
   const activeGoals = (goalsQuery.data?.goals ?? []).filter((goal) => goal.status === "active");
@@ -81,6 +100,19 @@ export function HabitForm({
           <>
             <div className="manage-form__row">
               <label className="field" style={{ flex: 1 }}>
+                <span>Habit type</span>
+                <select
+                  value={values.habitType}
+                  onChange={(event) =>
+                    setValues((current) => ({ ...current, habitType: event.target.value as HabitFormValues["habitType"] }))
+                  }
+                >
+                  <option value="maintenance">Maintenance</option>
+                  <option value="growth">Growth</option>
+                  <option value="identity">Identity</option>
+                </select>
+              </label>
+              <label className="field" style={{ flex: 1 }}>
                 <span>Category</span>
                 <input
                   type="text"
@@ -107,6 +139,85 @@ export function HabitForm({
                 />
               </label>
             </div>
+            <label className="field">
+              <span>Anchor</span>
+              <input
+                type="text"
+                placeholder="After dinner"
+                value={values.anchorText}
+                onChange={(event) =>
+                  setValues((current) => ({ ...current, anchorText: event.target.value }))
+                }
+              />
+            </label>
+            <div className="manage-form__row">
+              <label className="field" style={{ flex: 1 }}>
+                <span>Minimum version</span>
+                <input
+                  type="text"
+                  placeholder="1 page"
+                  value={values.minimumVersion}
+                  onChange={(event) =>
+                    setValues((current) => ({ ...current, minimumVersion: event.target.value }))
+                  }
+                />
+              </label>
+              <label className="field" style={{ flex: 1 }}>
+                <span>Standard version</span>
+                <input
+                  type="text"
+                  placeholder="20 minutes"
+                  value={values.standardVersion}
+                  onChange={(event) =>
+                    setValues((current) => ({ ...current, standardVersion: event.target.value }))
+                  }
+                />
+              </label>
+            </div>
+            <label className="field">
+              <span>Stretch version</span>
+              <input
+                type="text"
+                placeholder="40 minutes"
+                value={values.stretchVersion}
+                onChange={(event) =>
+                  setValues((current) => ({ ...current, stretchVersion: event.target.value }))
+                }
+              />
+            </label>
+            <label className="field">
+              <span>Obstacle plan</span>
+              <textarea
+                rows={2}
+                value={values.obstaclePlan}
+                placeholder="If traveling, do 5 minutes on the phone"
+                onChange={(event) =>
+                  setValues((current) => ({ ...current, obstaclePlan: event.target.value }))
+                }
+              />
+            </label>
+            <label className="field">
+              <span>Repair rule</span>
+              <textarea
+                rows={2}
+                value={values.repairRule}
+                placeholder="Tomorrow minimum counts as recovery"
+                onChange={(event) =>
+                  setValues((current) => ({ ...current, repairRule: event.target.value }))
+                }
+              />
+            </label>
+            <label className="field">
+              <span>Identity meaning</span>
+              <textarea
+                rows={2}
+                value={values.identityMeaning}
+                placeholder="This supports the kind of person I want to become"
+                onChange={(event) =>
+                  setValues((current) => ({ ...current, identityMeaning: event.target.value }))
+                }
+              />
+            </label>
             <label className="field">
               <span>Linked goal (optional)</span>
               <select

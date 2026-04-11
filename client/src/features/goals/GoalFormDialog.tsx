@@ -14,6 +14,10 @@ export type GoalFormData = {
   why: string;
   targetDate: string;
   notes: string;
+  engagementState: "" | "primary" | "secondary" | "parked" | "maintenance";
+  weeklyProofText: string;
+  knownObstacle: string;
+  parkingRule: string;
 };
 
 export function emptyGoalForm(defaults?: Partial<GoalFormData>): GoalFormData {
@@ -25,6 +29,10 @@ export function emptyGoalForm(defaults?: Partial<GoalFormData>): GoalFormData {
     why: "",
     targetDate: "",
     notes: "",
+    engagementState: "",
+    weeklyProofText: "",
+    knownObstacle: "",
+    parkingRule: "",
     ...defaults,
   };
 }
@@ -38,11 +46,24 @@ export function goalToFormData(goal: GoalOverviewItem): GoalFormData {
     why: goal.why ?? "",
     targetDate: goal.targetDate ?? "",
     notes: goal.notes ?? "",
+    engagementState: goal.engagementState ?? "",
+    weeklyProofText: goal.weeklyProofText ?? "",
+    knownObstacle: goal.knownObstacle ?? "",
+    parkingRule: goal.parkingRule ?? "",
   };
 }
 
 function hasAdvancedDetails(form: GoalFormData) {
-  return Boolean(form.horizonId || form.why.trim() || form.targetDate || form.notes.trim());
+  return Boolean(
+    form.horizonId ||
+    form.why.trim() ||
+    form.targetDate ||
+    form.notes.trim() ||
+    form.engagementState ||
+    form.weeklyProofText.trim() ||
+    form.knownObstacle.trim() ||
+    form.parkingRule.trim(),
+  );
 }
 
 export function GoalFormDialog({
@@ -157,6 +178,20 @@ export function GoalFormDialog({
           </div>
 
           <label className="field">
+            <span>Engagement</span>
+            <select
+              value={form.engagementState}
+              onChange={(e) => onChangeForm((p) => ({ ...p, engagementState: e.target.value as GoalFormData["engagementState"] }))}
+            >
+              <option value="">Unclassified</option>
+              <option value="primary">Primary</option>
+              <option value="secondary">Secondary</option>
+              <option value="parked">Parked</option>
+              <option value="maintenance">Maintenance</option>
+            </select>
+          </label>
+
+          <label className="field">
             <span>Why this goal matters (optional)</span>
             <textarea
               rows={2}
@@ -182,6 +217,36 @@ export function GoalFormDialog({
               value={form.notes}
               placeholder="Context or reference links"
               onChange={(e) => onChangeForm((p) => ({ ...p, notes: e.target.value }))}
+            />
+          </label>
+
+          <label className="field">
+            <span>Weekly proof of progress</span>
+            <textarea
+              rows={2}
+              value={form.weeklyProofText}
+              placeholder="What proves this goal moved this week?"
+              onChange={(e) => onChangeForm((p) => ({ ...p, weeklyProofText: e.target.value }))}
+            />
+          </label>
+
+          <label className="field">
+            <span>Known obstacle</span>
+            <textarea
+              rows={2}
+              value={form.knownObstacle}
+              placeholder="What tends to derail this goal?"
+              onChange={(e) => onChangeForm((p) => ({ ...p, knownObstacle: e.target.value }))}
+            />
+          </label>
+
+          <label className="field">
+            <span>Parking rule</span>
+            <textarea
+              rows={2}
+              value={form.parkingRule}
+              placeholder="When should this be parked instead of pushed harder?"
+              onChange={(e) => onChangeForm((p) => ({ ...p, parkingRule: e.target.value }))}
             />
           </label>
         </div>

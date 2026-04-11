@@ -126,6 +126,10 @@ export function GoalsPage() {
         why: goalForm.why.trim() || null,
         targetDate: goalForm.targetDate || null,
         notes: goalForm.notes.trim() || null,
+        engagementState: goalForm.engagementState || null,
+        weeklyProofText: goalForm.weeklyProofText.trim() || null,
+        knownObstacle: goalForm.knownObstacle.trim() || null,
+        parkingRule: goalForm.parkingRule.trim() || null,
       });
     } else {
       await createGoalMutation.mutateAsync({
@@ -136,6 +140,10 @@ export function GoalsPage() {
         why: goalForm.why.trim() || null,
         targetDate: goalForm.targetDate || null,
         notes: goalForm.notes.trim() || null,
+        engagementState: goalForm.engagementState || null,
+        weeklyProofText: goalForm.weeklyProofText.trim() || null,
+        knownObstacle: goalForm.knownObstacle.trim() || null,
+        parkingRule: goalForm.parkingRule.trim() || null,
       });
     }
     setShowGoalForm(false);
@@ -154,6 +162,10 @@ export function GoalsPage() {
       why: childForm.why.trim() || null,
       targetDate: childForm.targetDate || null,
       notes: childForm.notes.trim() || null,
+      engagementState: childForm.engagementState || null,
+      weeklyProofText: childForm.weeklyProofText.trim() || null,
+      knownObstacle: childForm.knownObstacle.trim() || null,
+      parkingRule: childForm.parkingRule.trim() || null,
     });
     setShowChildForm(false);
     setChildFormParent(null);

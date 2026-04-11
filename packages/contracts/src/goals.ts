@@ -18,6 +18,7 @@ export type GoalDomainSystemKey =
   | "other";
 export type GoalHorizonSystemKey = "life_vision" | "five_year" | "one_year" | "quarter" | "month";
 export type GoalStatus = "active" | "paused" | "completed" | "archived";
+export type GoalEngagementState = "primary" | "secondary" | "parked" | "maintenance";
 export type GoalHealthState = "on_track" | "drifting" | "stalled" | "achieved";
 export type GoalMilestoneStatus = "pending" | "completed";
 export type GoalMomentumTrend = "up" | "down" | "steady";
@@ -65,6 +66,7 @@ export interface GoalSummary {
   domain: GoalDomain;
   domainSystemKey: GoalDomainSystemKey | null;
   status: GoalStatus;
+  engagementState: GoalEngagementState | null;
 }
 
 export interface GoalItem extends GoalSummary {
@@ -76,6 +78,9 @@ export interface GoalItem extends GoalSummary {
   why: string | null;
   targetDate: IsoDateString | null;
   notes: string | null;
+  weeklyProofText: string | null;
+  knownObstacle: string | null;
+  parkingRule: string | null;
   sortOrder: number;
   createdAt: string;
   updatedAt: string;
@@ -241,6 +246,10 @@ export interface CreateGoalRequest {
   why?: string | null;
   targetDate?: IsoDateString | null;
   notes?: string | null;
+  engagementState?: GoalEngagementState | null;
+  weeklyProofText?: string | null;
+  knownObstacle?: string | null;
+  parkingRule?: string | null;
   sortOrder?: number;
 }
 
@@ -253,6 +262,10 @@ export interface UpdateGoalRequest {
   status?: GoalStatus;
   targetDate?: IsoDateString | null;
   notes?: string | null;
+  engagementState?: GoalEngagementState | null;
+  weeklyProofText?: string | null;
+  knownObstacle?: string | null;
+  parkingRule?: string | null;
   sortOrder?: number;
 }
 

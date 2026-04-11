@@ -8,6 +8,8 @@ export type HabitPauseKind = "rest_day" | "vacation";
 export type RoutineStatus = "active" | "archived";
 export type HabitRiskLevel = "none" | "at_risk" | "drifting";
 export type HabitRiskReason = "streak_at_risk" | "missed_recently" | "low_completion_rate" | null;
+export type HabitType = "maintenance" | "growth" | "identity";
+export type HabitCheckinLevel = "minimum" | "standard" | "stretch";
 
 export interface HabitScheduleRule {
   daysOfWeek?: number[];
@@ -17,15 +19,24 @@ export interface HabitItem {
   id: EntityId;
   title: string;
   category: string | null;
+  habitType: HabitType;
   scheduleRule: HabitScheduleRule;
   recurrence: RecurrenceDefinition | null;
   goalId: EntityId | null;
   goal: GoalSummary | null;
   targetPerDay: number;
+  anchorText: string | null;
+  minimumVersion: string | null;
+  standardVersion: string | null;
+  stretchVersion: string | null;
+  obstaclePlan: string | null;
+  repairRule: string | null;
+  identityMeaning: string | null;
   status: HabitStatus;
   dueToday: boolean;
   completedToday: boolean;
   completedCountToday: number;
+  achievedLevelToday: HabitCheckinLevel | null;
   streakCount: number;
   risk: HabitRiskState;
   pauseWindows: HabitPauseWindow[];
@@ -94,19 +105,35 @@ export interface RoutinesResponse extends ApiMeta {
 export interface CreateHabitRequest {
   title: string;
   category?: string | null;
+  habitType?: HabitType;
   scheduleRule?: HabitScheduleRule;
   recurrence?: RecurrenceInput;
   goalId?: EntityId | null;
   targetPerDay?: number;
+  anchorText?: string | null;
+  minimumVersion?: string | null;
+  standardVersion?: string | null;
+  stretchVersion?: string | null;
+  obstaclePlan?: string | null;
+  repairRule?: string | null;
+  identityMeaning?: string | null;
 }
 
 export interface UpdateHabitRequest {
   title?: string;
   category?: string | null;
+  habitType?: HabitType;
   scheduleRule?: HabitScheduleRule;
   recurrence?: RecurrenceInput;
   goalId?: EntityId | null;
   targetPerDay?: number;
+  anchorText?: string | null;
+  minimumVersion?: string | null;
+  standardVersion?: string | null;
+  stretchVersion?: string | null;
+  obstaclePlan?: string | null;
+  repairRule?: string | null;
+  identityMeaning?: string | null;
   status?: HabitStatus;
 }
 
@@ -124,6 +151,7 @@ export interface CreateHabitPauseWindowRequest {
 export interface HabitCheckinRequest {
   date?: IsoDateString;
   status?: HabitCheckinStatus;
+  level?: HabitCheckinLevel | null;
   note?: string | null;
 }
 

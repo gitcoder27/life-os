@@ -58,6 +58,7 @@ import {
   serializeTask,
 } from "../planning/planning-mappers.js";
 import { goalSummaryInclude, planningTaskInclude } from "../planning/planning-record-shapes.js";
+import { buildRescueSuggestion } from "../planning/day-mode.js";
 import { buildFinanceRoute } from "../finance/finance-navigation.js";
 import { getOpenDailyReviewRoute } from "../reviews/submission-window.js";
 import { calculateDailyScore, ensureCycle, getWeeklyMomentum } from "../scoring/service.js";
@@ -154,6 +155,7 @@ function serializeGoalSummary(goal: {
     systemKey: Parameters<typeof fromPrismaGoalDomainSystemKey>[0];
   };
   status: PrismaGoalStatus;
+  engagementState?: "PRIMARY" | "SECONDARY" | "PARKED" | "MAINTENANCE" | null;
 }): GoalSummary {
   return {
     id: goal.id,
@@ -162,6 +164,16 @@ function serializeGoalSummary(goal: {
     domain: goal.domain.name,
     domainSystemKey: fromPrismaGoalDomainSystemKey(goal.domain.systemKey),
     status: fromPrismaGoalStatus(goal.status),
+    engagementState:
+      goal.engagementState === "PRIMARY"
+        ? "primary"
+        : goal.engagementState === "SECONDARY"
+          ? "secondary"
+          : goal.engagementState === "PARKED"
+            ? "parked"
+            : goal.engagementState === "MAINTENANCE"
+              ? "maintenance"
+              : null,
   };
 }
 
@@ -676,6 +688,12 @@ async function buildHomeOverview(
     phase: currentHomePhase(now, preferences?.timezone),
     launch: dailyLaunch ? serializeDailyLaunch(dailyLaunch) : null,
     mustWinTask: dailyLaunch?.mustWinTask ? serializeTask(dailyLaunch.mustWinTask) : null,
+    rescueSuggestion: buildRescueSuggestion({
+      launch: dailyLaunch,
+      mustWinTask: dailyLaunch?.mustWinTask ?? null,
+      pendingTaskCount: tasks.filter((task) => task.status === "PENDING").length,
+      overdueTaskCount: overdueTasks.length,
+    }),
     dailyScore: {
       value: score.value,
       label: score.label,

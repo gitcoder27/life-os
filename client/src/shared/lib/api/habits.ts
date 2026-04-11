@@ -33,15 +33,24 @@ type HabitsResponse = {
     id: string;
     title: string;
     category: string | null;
+    habitType: "maintenance" | "growth" | "identity";
     scheduleRule: { daysOfWeek?: number[] };
     recurrence: RecurrenceDefinition | null;
     goalId: string | null;
     goal: LinkedGoal | null;
     targetPerDay: number;
+    anchorText: string | null;
+    minimumVersion: string | null;
+    standardVersion: string | null;
+    stretchVersion: string | null;
+    obstaclePlan: string | null;
+    repairRule: string | null;
+    identityMeaning: string | null;
     status: "active" | "paused" | "archived";
     dueToday: boolean;
     completedToday: boolean;
     completedCountToday: number;
+    achievedLevelToday: "minimum" | "standard" | "stretch" | null;
     streakCount: number;
     risk: {
       level: "none" | "at_risk" | "drifting";
@@ -64,15 +73,24 @@ type HabitsResponse = {
     id: string;
     title: string;
     category: string | null;
+    habitType: "maintenance" | "growth" | "identity";
     scheduleRule: { daysOfWeek?: number[] };
     recurrence: RecurrenceDefinition | null;
     goalId: string | null;
     goal: LinkedGoal | null;
     targetPerDay: number;
+    anchorText: string | null;
+    minimumVersion: string | null;
+    standardVersion: string | null;
+    stretchVersion: string | null;
+    obstaclePlan: string | null;
+    repairRule: string | null;
+    identityMeaning: string | null;
     status: "active" | "paused" | "archived";
     dueToday: boolean;
     completedToday: boolean;
     completedCountToday: number;
+    achievedLevelToday: "minimum" | "standard" | "stretch" | null;
     streakCount: number;
     risk: {
       level: "none" | "at_risk" | "drifting";
@@ -138,11 +156,19 @@ export const useHabitCheckinMutation = (date: string) => {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (habitId: string) =>
-      apiRequest<HabitMutationResponse>(`/api/habits/${habitId}/checkins`, {
+    mutationFn: (payload: string | { habitId: string; level?: "minimum" | "standard" | "stretch" | null }) => {
+      const habitId = typeof payload === "string" ? payload : payload.habitId;
+      const level = typeof payload === "string" ? "standard" : payload.level ?? "standard";
+
+      return apiRequest<HabitMutationResponse>(`/api/habits/${habitId}/checkins`, {
         method: "POST",
-        body: { date, status: "completed" },
-      }),
+        body: {
+          date,
+          status: "completed",
+          level,
+        },
+      });
+    },
     meta: {
       successMessage: "Habit logged.",
       errorMessage: "Habit log failed.",
@@ -192,10 +218,18 @@ export const useCreateHabitMutation = () => {
     mutationFn: (payload: {
       title: string;
       category?: string | null;
+      habitType?: "maintenance" | "growth" | "identity";
       scheduleRule?: { daysOfWeek?: number[] };
       recurrence?: RecurrenceInput;
       targetPerDay?: number;
       goalId?: string | null;
+      anchorText?: string | null;
+      minimumVersion?: string | null;
+      standardVersion?: string | null;
+      stretchVersion?: string | null;
+      obstaclePlan?: string | null;
+      repairRule?: string | null;
+      identityMeaning?: string | null;
     }) =>
       apiRequest<HabitMutationResponse>("/api/habits", {
         method: "POST",
@@ -216,11 +250,19 @@ export const useUpdateHabitMutation = () => {
     habitId: string;
     title?: string;
     category?: string | null;
+    habitType?: "maintenance" | "growth" | "identity";
     scheduleRule?: { daysOfWeek?: number[] };
     recurrence?: RecurrenceInput;
     targetPerDay?: number;
     status?: "active" | "paused" | "archived";
     goalId?: string | null;
+    anchorText?: string | null;
+    minimumVersion?: string | null;
+    standardVersion?: string | null;
+    stretchVersion?: string | null;
+    obstaclePlan?: string | null;
+    repairRule?: string | null;
+    identityMeaning?: string | null;
   };
 
   return useMutation<HabitMutationResponse, Error, UpdateHabitVariables>({

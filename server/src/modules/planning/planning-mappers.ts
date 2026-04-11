@@ -1,6 +1,8 @@
 import type {
+  DayMode,
   DailyLaunchItem,
   GoalDomainItem,
+  GoalEngagementState,
   GoalDomainSystemKey,
   GoalHierarchySummary,
   GoalHorizonItem,
@@ -16,6 +18,7 @@ import type {
   IsoDateString,
   PlanningPriorityItem,
   PlanningTaskItem,
+  RescueReason,
   TaskKind,
   TaskProgressState,
   TaskStuckAction,
@@ -23,8 +26,10 @@ import type {
   TaskTemplateItem,
 } from "@life-os/contracts";
 import type {
+  DayMode as PrismaDayMode,
   DailyDerailmentReason as PrismaDailyDerailmentReason,
   Goal,
+  GoalEngagementState as PrismaGoalEngagementState,
   GoalDomainConfig,
   GoalDomainSystemKey as PrismaGoalDomainSystemKey,
   GoalHorizonConfig,
@@ -40,6 +45,7 @@ import type {
   TaskKind as PrismaTaskKind,
   TaskOriginType as PrismaTaskOriginType,
   TaskProgressState as PrismaTaskProgressState,
+  RescueReason as PrismaRescueReason,
   TaskStatus as PrismaTaskStatus,
   TaskStuckAction as PrismaTaskStuckAction,
   TaskTemplate,
@@ -69,12 +75,13 @@ type GoalHorizonRecord = Pick<
 >;
 
 type GoalSummaryRecord = Pick<Goal, "id" | "title" | "status" | "domainId"> & {
+  engagementState?: PrismaGoalEngagementState | null;
   domain: GoalDomainRecord;
 };
 
 type GoalHierarchyRecord = Pick<
   Goal,
-  "id" | "title" | "status" | "domainId" | "horizonId" | "parentGoalId" | "sortOrder" | "targetDate"
+  "id" | "title" | "status" | "engagementState" | "domainId" | "horizonId" | "parentGoalId" | "sortOrder" | "targetDate"
 > & {
   domain: GoalDomainRecord;
   horizon?: GoalHorizonRecord | null;
@@ -111,9 +118,14 @@ type DailyLaunchRecord = {
   id: string;
   planningCycleId: string;
   mustWinTaskId: string | null;
+  dayMode: PrismaDayMode;
+  rescueReason: PrismaRescueReason | null;
   energyRating: number | null;
   likelyDerailmentReason: PrismaDailyDerailmentReason | null;
   likelyDerailmentNote: string | null;
+  rescueSuggestedAt: Date | null;
+  rescueActivatedAt: Date | null;
+  rescueExitedAt: Date | null;
   completedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
@@ -233,6 +245,38 @@ export function fromPrismaGoalStatus(status: PrismaGoalStatus): GoalStatus {
   }
 }
 
+export function toPrismaGoalEngagementState(
+  engagementState: GoalEngagementState,
+): PrismaGoalEngagementState {
+  switch (engagementState) {
+    case "primary":
+      return "PRIMARY";
+    case "secondary":
+      return "SECONDARY";
+    case "parked":
+      return "PARKED";
+    case "maintenance":
+      return "MAINTENANCE";
+  }
+}
+
+export function fromPrismaGoalEngagementState(
+  engagementState: PrismaGoalEngagementState | null | undefined,
+): GoalEngagementState | null {
+  switch (engagementState) {
+    case "PRIMARY":
+      return "primary";
+    case "SECONDARY":
+      return "secondary";
+    case "PARKED":
+      return "parked";
+    case "MAINTENANCE":
+      return "maintenance";
+    default:
+      return null;
+  }
+}
+
 export function toPrismaGoalMilestoneStatus(status: GoalMilestoneInput["status"]): PrismaGoalMilestoneStatus {
   switch (status) {
     case "pending":
@@ -319,6 +363,28 @@ export function fromPrismaTaskProgressState(progressState: PrismaTaskProgressSta
   }
 }
 
+export function toPrismaDayMode(dayMode: DayMode): PrismaDayMode {
+  switch (dayMode) {
+    case "normal":
+      return "NORMAL";
+    case "rescue":
+      return "RESCUE";
+    case "recovery":
+      return "RECOVERY";
+  }
+}
+
+export function fromPrismaDayMode(dayMode: PrismaDayMode): DayMode {
+  switch (dayMode) {
+    case "NORMAL":
+      return "normal";
+    case "RESCUE":
+      return "rescue";
+    case "RECOVERY":
+      return "recovery";
+  }
+}
+
 export function fromPrismaTaskStatus(status: PrismaTaskStatus): PlanningTaskItem["status"] {
   switch (status) {
     case "PENDING":
@@ -385,6 +451,34 @@ export function toPrismaTaskStuckReason(reason: TaskStuckReason): PrismaDailyDer
       return "INTERRUPTED";
     case "overloaded":
       return "OVERLOADED";
+  }
+}
+
+export function toPrismaRescueReason(reason: RescueReason): PrismaRescueReason {
+  switch (reason) {
+    case "overload":
+      return "OVERLOAD";
+    case "low_energy":
+      return "LOW_ENERGY";
+    case "interruption":
+      return "INTERRUPTION";
+    case "missed_day":
+      return "MISSED_DAY";
+  }
+}
+
+export function fromPrismaRescueReason(reason: PrismaRescueReason | null | undefined): RescueReason | null {
+  switch (reason) {
+    case "OVERLOAD":
+      return "overload";
+    case "LOW_ENERGY":
+      return "low_energy";
+    case "INTERRUPTION":
+      return "interruption";
+    case "MISSED_DAY":
+      return "missed_day";
+    default:
+      return null;
   }
 }
 
@@ -474,6 +568,7 @@ function serializeGoalSummary(goal: GoalSummaryRecord): GoalSummary {
     domain: goal.domain.name,
     domainSystemKey: fromPrismaGoalDomainSystemKey(goal.domain.systemKey),
     status: fromPrismaGoalStatus(goal.status),
+    engagementState: fromPrismaGoalEngagementState(goal.engagementState),
   };
 }
 
@@ -500,6 +595,9 @@ export function serializeGoal(goal: GoalRecord): GoalItem {
     why: goal.why,
     targetDate: goal.targetDate ? toIsoDateString(goal.targetDate) : null,
     notes: goal.notes,
+    weeklyProofText: goal.weeklyProofText ?? null,
+    knownObstacle: goal.knownObstacle ?? null,
+    parkingRule: goal.parkingRule ?? null,
     sortOrder: goal.sortOrder,
     createdAt: goal.createdAt.toISOString(),
     updatedAt: goal.updatedAt.toISOString(),
@@ -602,9 +700,14 @@ export function serializeDailyLaunch(launch: DailyLaunchRecord): DailyLaunchItem
     id: launch.id,
     planningCycleId: launch.planningCycleId,
     mustWinTaskId: launch.mustWinTaskId,
+    dayMode: fromPrismaDayMode(launch.dayMode),
+    rescueReason: fromPrismaRescueReason(launch.rescueReason),
     energyRating: launch.energyRating ?? null,
     likelyDerailmentReason: fromPrismaTaskStuckReason(launch.likelyDerailmentReason),
     likelyDerailmentNote: launch.likelyDerailmentNote ?? null,
+    rescueSuggestedAt: launch.rescueSuggestedAt?.toISOString() ?? null,
+    rescueActivatedAt: launch.rescueActivatedAt?.toISOString() ?? null,
+    rescueExitedAt: launch.rescueExitedAt?.toISOString() ?? null,
     completedAt: launch.completedAt?.toISOString() ?? null,
     createdAt: launch.createdAt.toISOString(),
     updatedAt: launch.updatedAt.toISOString(),

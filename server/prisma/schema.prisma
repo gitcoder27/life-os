@@ -36,6 +36,13 @@ enum GoalStatus {
   ARCHIVED
 }
 
+enum GoalEngagementState {
+  PRIMARY
+  SECONDARY
+  PARKED
+  MAINTENANCE
+}
+
 enum GoalMilestoneStatus {
   PENDING
   COMPLETED
@@ -69,6 +76,12 @@ enum TaskProgressState {
   NOT_STARTED
   STARTED
   ADVANCED
+}
+
+enum DayMode {
+  NORMAL
+  RESCUE
+  RECOVERY
 }
 
 enum TaskOriginType {
@@ -111,6 +124,12 @@ enum HabitStatus {
   ARCHIVED
 }
 
+enum HabitType {
+  MAINTENANCE
+  GROWTH
+  IDENTITY
+}
+
 enum HabitPauseKind {
   REST_DAY
   VACATION
@@ -125,6 +144,12 @@ enum HabitCheckinSource {
   TAP
   QUICK_CAPTURE
   REVIEW
+}
+
+enum HabitCheckinLevel {
+  MINIMUM
+  STANDARD
+  STRETCH
 }
 
 enum RoutineStatus {
@@ -230,6 +255,13 @@ enum TaskStuckAction {
   RECOVER
 }
 
+enum RescueReason {
+  OVERLOAD
+  LOW_ENERGY
+  INTERRUPTION
+  MISSED_DAY
+}
+
 enum NotificationSeverity {
   INFO
   WARNING
@@ -325,8 +357,12 @@ model Goal {
   title        String
   why          String?
   status       GoalStatus       @default(ACTIVE)
+  engagementState GoalEngagementState?
   targetDate   DateTime?
   notes        String?
+  weeklyProofText String?
+  knownObstacle String?
+  parkingRule  String?
   sortOrder    Int              @default(0)
   createdAt    DateTime         @default(now())
   updatedAt    DateTime         @updatedAt
@@ -485,9 +521,14 @@ model DailyLaunch {
   userId                String
   planningCycleId       String                @unique
   mustWinTaskId         String?
+  dayMode               DayMode               @default(NORMAL)
+  rescueReason          RescueReason?
   energyRating          Int?
   likelyDerailmentReason DailyDerailmentReason?
   likelyDerailmentNote  String?
+  rescueSuggestedAt     DateTime?
+  rescueActivatedAt     DateTime?
+  rescueExitedAt        DateTime?
   completedAt           DateTime?
   createdAt             DateTime              @default(now())
   updatedAt             DateTime              @updatedAt
@@ -578,10 +619,18 @@ model Habit {
   userId           String
   title            String
   category         String?
+  habitType        HabitType      @default(MAINTENANCE)
   scheduleRuleJson Json
   goalId           String?
   recurrenceRuleId String?
   targetPerDay     Int            @default(1)
+  anchorText       String?
+  minimumVersion   String?
+  standardVersion  String?
+  stretchVersion   String?
+  obstaclePlan     String?
+  repairRule       String?
+  identityMeaning  String?
   status           HabitStatus    @default(ACTIVE)
   createdAt        DateTime       @default(now())
   updatedAt        DateTime       @updatedAt
@@ -616,6 +665,7 @@ model HabitCheckin {
   occurredOn   DateTime
   status       CheckinStatus      @default(COMPLETED)
   source       HabitCheckinSource @default(TAP)
+  achievedLevel HabitCheckinLevel?
   completionCount Int             @default(1)
   completedAt  DateTime?
   note         String?

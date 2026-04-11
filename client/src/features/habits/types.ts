@@ -19,9 +19,17 @@ export type ConsistencyBar = NonNullable<WeeklyMomentum>["dailyScores"][number];
 export type HabitFormValues = {
   title: string;
   category: string;
+  habitType: "maintenance" | "growth" | "identity";
   targetPerDay: string;
   recurrenceRule: RecurrenceRuleInput | null;
   goalId: string;
+  anchorText: string;
+  minimumVersion: string;
+  standardVersion: string;
+  stretchVersion: string;
+  obstaclePlan: string;
+  repairRule: string;
+  identityMeaning: string;
 };
 
 export type RoutineFormValues = {

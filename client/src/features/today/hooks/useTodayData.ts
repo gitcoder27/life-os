@@ -32,6 +32,7 @@ export function useTodayData() {
   const priorities = dayPlanQuery.data?.priorities ?? [];
   const launch = dayPlanQuery.data?.launch ?? null;
   const mustWinTask = dayPlanQuery.data?.mustWinTask ?? null;
+  const rescueSuggestion = dayPlanQuery.data?.rescueSuggestion ?? null;
   const allTasks = dayPlanQuery.data?.tasks ?? [];
   const goalNudges = dayPlanQuery.data?.goalNudges ?? [];
   const plannerBlocks = dayPlanQuery.data?.plannerBlocks ?? [];
@@ -104,6 +105,7 @@ export function useTodayData() {
     priorities,
     launch,
     mustWinTask,
+    rescueSuggestion,
     executionTasks,
     taskGroups,
     completedTaskCount,

@@ -8,6 +8,7 @@ type DailyFocusSectionProps = {
   allHabits: HabitItem[];
   dueHabits: DueHabit[];
   activeRoutines: Routine[];
+  isRescueMode: boolean;
   highlightedHabitId?: string | null;
   dueCompletedUnits: number;
   dueTargetUnits: number;
@@ -15,7 +16,7 @@ type DailyFocusSectionProps = {
   isRoutineCheckinPending: boolean;
   isPausePending: boolean;
   onCreateFirstHabit: () => void;
-  onHabitCheckin: (habitId: string) => void;
+  onHabitCheckin: (habitId: string, level?: "minimum" | "standard" | "stretch") => void;
   onRoutineItemCheckin: (itemId: string) => void;
   onRoutineItemUndo: (itemId: string) => void;
   onRestDay: (habitId: string) => void;
@@ -25,6 +26,7 @@ export function DailyFocusSection({
   allHabits,
   dueHabits,
   activeRoutines,
+  isRescueMode,
   highlightedHabitId = null,
   dueCompletedUnits,
   dueTargetUnits,
@@ -42,6 +44,7 @@ export function DailyFocusSection({
       <DueHabitsGroup
         allHabits={allHabits}
         dueHabits={dueHabits}
+        isRescueMode={isRescueMode}
         highlightedHabitId={highlightedHabitId}
         dueCompletedUnits={dueCompletedUnits}
         dueTargetUnits={dueTargetUnits}
@@ -78,19 +81,21 @@ export function DailyFocusSection({
 type DueHabitsGroupProps = {
   allHabits: HabitItem[];
   dueHabits: DueHabit[];
+  isRescueMode: boolean;
   highlightedHabitId?: string | null;
   dueCompletedUnits: number;
   dueTargetUnits: number;
   isHabitCheckinPending: boolean;
   isPausePending: boolean;
   onCreateFirstHabit: () => void;
-  onHabitCheckin: (habitId: string) => void;
+  onHabitCheckin: (habitId: string, level?: "minimum" | "standard" | "stretch") => void;
   onRestDay: (habitId: string) => void;
 };
 
 function DueHabitsGroup({
   allHabits,
   dueHabits,
+  isRescueMode,
   highlightedHabitId = null,
   dueCompletedUnits,
   dueTargetUnits,
@@ -135,12 +140,14 @@ function DueHabitsGroup({
                   className={`habits-check-row__box${habit.completedToday ? " habits-check-row__box--done" : ""}`}
                   type="button"
                   onClick={() => {
-                    if (!habit.completedToday) onHabitCheckin(habit.id);
+                    if (!habit.completedToday) {
+                      onHabitCheckin(habit.id, isRescueMode ? "minimum" : "standard");
+                    }
                   }}
                   disabled={habit.completedToday || isHabitCheckinPending}
                   aria-label={`Log progress for ${habit.title}`}
                 >
-                  {habit.completedToday ? "\u2713" : ""}
+                  {habit.completedToday ? "\u2713" : isRescueMode ? "min" : ""}
                 </button>
                 <div className="habits-check-row__body">
                   <div className="habits-check-row__title">
@@ -155,6 +162,9 @@ function DueHabitsGroup({
                   </div>
                   {habit.risk?.message || habit.risk?.dueCount7d ? (
                     <div className="habits-check-row__meta">
+                      {habit.achievedLevelToday ? (
+                        <span>{habit.achievedLevelToday} today</span>
+                      ) : null}
                       <span>
                         {Math.min(habit.completedCountToday, habit.targetPerDay)}/
                         {habit.targetPerDay} today
@@ -170,15 +180,28 @@ function DueHabitsGroup({
                 </div>
                 <div className="habits-check-row__actions">
                   {!habit.completedToday ? (
-                    <button
-                      className="habits-rest-btn"
-                      type="button"
-                      onClick={() => onRestDay(habit.id)}
-                      disabled={isPausePending}
-                      title="Take a rest day"
-                    >
-                      rest
-                    </button>
+                    <>
+                      {!isRescueMode ? (
+                        <button
+                          className="habits-rest-btn"
+                          type="button"
+                          onClick={() => onHabitCheckin(habit.id, "stretch")}
+                          disabled={isHabitCheckinPending}
+                          title="Log stretch completion"
+                        >
+                          stretch
+                        </button>
+                      ) : null}
+                      <button
+                        className="habits-rest-btn"
+                        type="button"
+                        onClick={() => onRestDay(habit.id)}
+                        disabled={isPausePending}
+                        title="Take a rest day"
+                      >
+                        rest
+                      </button>
+                    </>
                   ) : null}
                   {habit.streakCount > 0 ? (
                     <span className="streak-badge">{habit.streakCount} streak</span>

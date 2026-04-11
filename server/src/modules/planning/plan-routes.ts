@@ -28,6 +28,7 @@ import { materializeRecurringTasksInRange } from "../../lib/recurrence/tasks.js"
 import { getMonthEndDate, getWeekEndDate, parseIsoDate } from "../../lib/time/cycle.js";
 import { toIsoDateString } from "../../lib/time/date.js";
 import { parseOrThrow } from "../../lib/validation/parse.js";
+import { buildRescueSuggestion } from "./day-mode.js";
 import { buildGoalNudges } from "./goal-nudges.js";
 import { buildGoalOverviews, buildTodayLinkedGoalCounts } from "./goal-overviews.js";
 import {
@@ -41,6 +42,9 @@ import {
   serializeDayPlannerBlock,
   serializePriority,
   serializeTask,
+  toPrismaDayMode,
+  toPrismaRescueReason,
+  toPrismaTaskStuckReason,
 } from "./planning-mappers.js";
 import { goalWithMilestonesInclude, planningTaskInclude } from "./planning-record-shapes.js";
 import {
@@ -173,6 +177,7 @@ export const registerPlanningPlanRoutes: FastifyPluginAsync = async (app) => {
             domain: goal.domain,
             domainSystemKey: goal.domainSystemKey,
             status: goal.status,
+            engagementState: goal.engagementState,
           },
           health: goal.health,
           progressPercent: goal.progressPercent,
@@ -196,9 +201,18 @@ export const registerPlanningPlanRoutes: FastifyPluginAsync = async (app) => {
                   userId: user.id,
                   taskId: launch.mustWinTaskId,
                   date: parsedDate,
-                }))
+                })),
             )
           : null,
+      rescueSuggestion: buildRescueSuggestion({
+        launch,
+        mustWinTask:
+          launch?.mustWinTaskId
+            ? tasks.find((task) => task.id === launch.mustWinTaskId) ?? null
+            : null,
+        pendingTaskCount: tasks.filter((task) => task.status === "PENDING").length,
+        overdueTaskCount: 0,
+      }),
       priorities: cycle.priorities.map(serializePriority),
       tasks: tasks.map(serializeTask),
       goalNudges,
@@ -238,6 +252,13 @@ export const registerPlanningPlanRoutes: FastifyPluginAsync = async (app) => {
 
       const nextMustWinTaskId =
         payload.mustWinTaskId === undefined ? existing?.mustWinTaskId ?? null : payload.mustWinTaskId ?? null;
+      const nextDayMode = payload.dayMode === undefined ? existing?.dayMode ?? "NORMAL" : toPrismaDayMode(payload.dayMode);
+      const nextRescueReason =
+        payload.rescueReason === undefined
+          ? existing?.rescueReason ?? null
+          : payload.rescueReason === null
+            ? null
+            : toPrismaRescueReason(payload.rescueReason);
       const nextEnergyRating =
         payload.energyRating === undefined ? existing?.energyRating ?? null : payload.energyRating ?? null;
       const nextReason =
@@ -245,17 +266,7 @@ export const registerPlanningPlanRoutes: FastifyPluginAsync = async (app) => {
           ? existing?.likelyDerailmentReason ?? null
           : payload.likelyDerailmentReason === null
             ? null
-            : payload.likelyDerailmentReason === "unclear"
-              ? "UNCLEAR"
-              : payload.likelyDerailmentReason === "too_big"
-                ? "TOO_BIG"
-                : payload.likelyDerailmentReason === "avoidance"
-                  ? "AVOIDANCE"
-                  : payload.likelyDerailmentReason === "low_energy"
-                    ? "LOW_ENERGY"
-                    : payload.likelyDerailmentReason === "interrupted"
-                      ? "INTERRUPTED"
-                      : "OVERLOADED";
+            : toPrismaTaskStuckReason(payload.likelyDerailmentReason);
       const nextReasonNote =
         payload.likelyDerailmentNote === undefined
           ? existing?.likelyDerailmentNote ?? null
@@ -280,18 +291,35 @@ export const registerPlanningPlanRoutes: FastifyPluginAsync = async (app) => {
         },
         update: {
           mustWinTaskId: nextMustWinTaskId,
+          dayMode: nextDayMode,
+          rescueReason: nextRescueReason,
           energyRating: nextEnergyRating,
           likelyDerailmentReason: nextReason,
           likelyDerailmentNote: nextReasonNote,
+          rescueSuggestedAt:
+            nextDayMode === "NORMAL" ? existing?.rescueSuggestedAt ?? null : existing?.rescueSuggestedAt ?? new Date(),
+          rescueActivatedAt:
+            nextDayMode === "RESCUE" || nextDayMode === "RECOVERY"
+              ? existing?.rescueActivatedAt ?? new Date()
+              : null,
+          rescueExitedAt:
+            nextDayMode === "NORMAL" && existing?.dayMode && existing.dayMode !== "NORMAL"
+              ? new Date()
+              : existing?.rescueExitedAt ?? null,
           completedAt: isComplete ? existing?.completedAt ?? new Date() : null,
         },
         create: {
           userId: user.id,
           planningCycleId: cycle.id,
           mustWinTaskId: nextMustWinTaskId,
+          dayMode: nextDayMode,
+          rescueReason: nextRescueReason,
           energyRating: nextEnergyRating,
           likelyDerailmentReason: nextReason,
           likelyDerailmentNote: nextReasonNote,
+          rescueSuggestedAt: nextDayMode === "NORMAL" ? null : new Date(),
+          rescueActivatedAt: nextDayMode === "NORMAL" ? null : new Date(),
+          rescueExitedAt: null,
           completedAt: isComplete ? new Date() : null,
         },
       });
@@ -300,6 +328,12 @@ export const registerPlanningPlanRoutes: FastifyPluginAsync = async (app) => {
     const response: DayLaunchMutationResponse = withGeneratedAt({
       launch: serializeDailyLaunch(launch),
       mustWinTask: mustWinTask ? serializeTask(mustWinTask) : null,
+      rescueSuggestion: buildRescueSuggestion({
+        launch,
+        mustWinTask,
+        pendingTaskCount: mustWinTask ? 1 : 0,
+        overdueTaskCount: 0,
+      }),
     });
 
     return reply.send(response);

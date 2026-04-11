@@ -14,6 +14,13 @@ const statusDisplayLabels: Record<string, string> = {
   achieved: "ACHIEVED",
 };
 
+const engagementLabels: Record<string, string> = {
+  primary: "Primary",
+  secondary: "Secondary",
+  parked: "Parked",
+  maintenance: "Maintenance",
+};
+
 function formatDate(iso: string | null): string {
   if (!iso) return "";
   const d = new Date(`${iso}T12:00:00`);
@@ -68,6 +75,9 @@ export function GoalCard({
           {statusLabel}
         </span>
         <div className="ap-goal-card__badges">
+          {goal.engagementState ? (
+            <span className="ap-goal-card__horizon-badge">{engagementLabels[goal.engagementState]}</span>
+          ) : null}
           {goal.horizonName && (
             <span className="ap-goal-card__horizon-badge">{goal.horizonName}</span>
           )}

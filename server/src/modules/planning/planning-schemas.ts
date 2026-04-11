@@ -1,10 +1,12 @@
 import type {
   BulkUpdateTasksRequest,
   GoalMilestoneInput,
+  GoalEngagementState,
   GoalStatus,
   GoalsQuery,
   IsoDateString,
   PlanningTaskItem,
+  RescueReason,
   RecurringTaskCarryPolicy,
   ReviewHistoryCadenceFilter,
   TaskKind,
@@ -22,6 +24,7 @@ const reminderAtSchema = z.union([isoDateSchema, isoDateTimeSchema]);
 const entityIdSchema = z.string().trim().min(1);
 
 export const goalStatusSchema = z.enum(["active", "paused", "completed", "archived"]) as z.ZodType<GoalStatus>;
+export const goalEngagementStateSchema = z.enum(["primary", "secondary", "parked", "maintenance"]) as z.ZodType<GoalEngagementState>;
 export const goalMilestoneStatusSchema = z.enum(["pending", "completed"]);
 export const priorityStatusSchema = z.enum(["pending", "completed", "dropped"]);
 export const taskStatusSchema = z.enum(["pending", "completed", "dropped"]) as z.ZodType<PlanningTaskItem["status"]>;
@@ -56,6 +59,13 @@ export const taskStuckActionSchema = z.enum([
   "reschedule",
   "recover",
 ]) as z.ZodType<TaskStuckAction>;
+export const dayModeSchema = z.enum(["normal", "rescue", "recovery"]);
+export const rescueReasonSchema = z.enum([
+  "overload",
+  "low_energy",
+  "interruption",
+  "missed_day",
+]) as z.ZodType<RescueReason>;
 const taskProtocolTextSchema = z.string().trim().max(300).nullable().optional();
 const recurrenceExceptionActionSchema = z.enum(["skip", "do_once", "reschedule"]);
 const recurrenceRuleSchema = z.object({
@@ -114,6 +124,10 @@ export const createGoalSchema = z.object({
   why: z.string().max(2000).nullable().optional(),
   targetDate: isoDateSchema.nullable().optional(),
   notes: z.string().max(4000).nullable().optional(),
+  engagementState: goalEngagementStateSchema.nullable().optional(),
+  weeklyProofText: z.string().max(500).nullable().optional(),
+  knownObstacle: z.string().max(500).nullable().optional(),
+  parkingRule: z.string().max(500).nullable().optional(),
   sortOrder: z.number().int().min(0).optional(),
 });
 
@@ -127,6 +141,10 @@ export const updateGoalSchema = z
     status: goalStatusSchema.optional(),
     targetDate: isoDateSchema.nullable().optional(),
     notes: z.string().max(4000).nullable().optional(),
+    engagementState: goalEngagementStateSchema.nullable().optional(),
+    weeklyProofText: z.string().max(500).nullable().optional(),
+    knownObstacle: z.string().max(500).nullable().optional(),
+    parkingRule: z.string().max(500).nullable().optional(),
     sortOrder: z.number().int().min(0).optional(),
   })
   .refine((value) => Object.keys(value).length > 0, "At least one field must be updated");
@@ -284,6 +302,8 @@ export const updateTaskSchema = z
 export const upsertDayLaunchSchema = z
   .object({
     mustWinTaskId: z.string().uuid().nullable().optional(),
+    dayMode: dayModeSchema.optional(),
+    rescueReason: rescueReasonSchema.nullable().optional(),
     energyRating: z.number().int().min(1).max(5).nullable().optional(),
     likelyDerailmentReason: taskStuckReasonSchema.nullable().optional(),
     likelyDerailmentNote: z.string().trim().max(300).nullable().optional(),

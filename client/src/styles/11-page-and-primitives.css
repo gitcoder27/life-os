@@ -875,7 +875,8 @@
 }
 
 .daily-launch-card,
-.must-win-card {
+.must-win-card,
+.rescue-mode-card {
   border: 1px solid var(--border);
   border-radius: var(--r-lg);
   background: linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.025));
@@ -890,6 +891,91 @@
   justify-content: space-between;
   gap: 1rem;
   margin-bottom: 1rem;
+}
+
+.rescue-mode-card__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.75rem;
+}
+
+.rescue-mode-card__eyebrow {
+  margin: 0 0 0.3rem;
+  font-size: var(--fs-small);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent-bright);
+}
+
+.rescue-mode-card__title {
+  margin: 0;
+  font-size: var(--fs-h3);
+}
+
+.rescue-mode-card__copy {
+  margin: 0 0 0.9rem;
+  color: var(--text-secondary);
+}
+
+.rescue-mode-card__focus {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  padding: 0.75rem 0.85rem;
+  border-radius: var(--r-sm);
+  background: rgba(255,255,255,0.04);
+}
+
+.rescue-mode-card__focus-label {
+  font-size: var(--fs-small);
+  color: var(--text-secondary);
+}
+
+.rescue-mode-card__badge {
+  padding: 0.35rem 0.7rem;
+  border-radius: 999px;
+  font-size: var(--fs-small);
+  font-weight: 700;
+}
+
+.rescue-mode-card__badge--suggested {
+  background: rgba(216,166,95,0.16);
+  color: var(--accent-bright);
+}
+
+.rescue-mode-card__badge--active {
+  background: rgba(93,184,106,0.16);
+  color: var(--positive);
+}
+
+.rescue-mode-card__defer-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-top: 0.9rem;
+}
+
+.rescue-mode-card__defer-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.65rem 0.75rem;
+  border-radius: var(--r-sm);
+  background: rgba(255,255,255,0.03);
+}
+
+.rescue-mode-card__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  margin-top: 1rem;
+}
+
+.rescue-mode-card--compact .rescue-mode-card__defer-list {
+  display: none;
 }
 
 .daily-launch-card__eyebrow,

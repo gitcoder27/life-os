@@ -23,6 +23,16 @@ export type TaskStuckReason =
   | "interrupted"
   | "overloaded";
 export type TaskStuckAction = "clarify" | "shrink" | "downgrade" | "reschedule" | "recover";
+export type DayMode = "normal" | "rescue" | "recovery";
+export type RescueReason = "overload" | "low_energy" | "interruption" | "missed_day";
+
+export interface RescueSuggestion {
+  mode: Exclude<DayMode, "normal">;
+  reason: RescueReason;
+  title: string;
+  detail: string;
+  minimumViableAction: string | null;
+}
 
 export interface PlanningPriorityItem {
   id: EntityId;
@@ -72,9 +82,14 @@ export interface DailyLaunchItem {
   id: EntityId;
   planningCycleId: EntityId;
   mustWinTaskId: EntityId | null;
+  dayMode: DayMode;
+  rescueReason: RescueReason | null;
   energyRating: number | null;
   likelyDerailmentReason: TaskStuckReason | null;
   likelyDerailmentNote: string | null;
+  rescueSuggestedAt: string | null;
+  rescueActivatedAt: string | null;
+  rescueExitedAt: string | null;
   completedAt: string | null;
   createdAt: string;
   updatedAt: string;
@@ -109,6 +124,7 @@ export interface DayPlanResponse extends ApiMeta {
   date: IsoDateString;
   launch: DailyLaunchItem | null;
   mustWinTask: PlanningTaskItem | null;
+  rescueSuggestion: RescueSuggestion | null;
   priorities: PlanningPriorityItem[];
   tasks: PlanningTaskItem[];
   goalNudges: GoalNudgeItem[];
@@ -230,6 +246,8 @@ export interface UpdateTaskRequest {
 
 export interface UpsertDayLaunchRequest {
   mustWinTaskId?: EntityId | null;
+  dayMode?: DayMode;
+  rescueReason?: RescueReason | null;
   energyRating?: number | null;
   likelyDerailmentReason?: TaskStuckReason | null;
   likelyDerailmentNote?: string | null;
@@ -239,11 +257,13 @@ export interface DayLaunchResponse extends ApiMeta {
   date: IsoDateString;
   launch: DailyLaunchItem | null;
   mustWinTask: PlanningTaskItem | null;
+  rescueSuggestion: RescueSuggestion | null;
 }
 
 export interface DayLaunchMutationResponse extends ApiMeta {
   launch: DailyLaunchItem;
   mustWinTask: PlanningTaskItem | null;
+  rescueSuggestion: RescueSuggestion | null;
 }
 
 export interface LogTaskStuckRequest {
