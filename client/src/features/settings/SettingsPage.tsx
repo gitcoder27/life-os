@@ -6,6 +6,7 @@ import {
   setPreferredWeekStart,
   useLogoutMutation,
   useOnboardingStateQuery,
+  useResetWorkspaceMutation,
   useSettingsProfileQuery,
   useUpdateSettingsProfileMutation,
 } from "../../shared/lib/api";
@@ -84,6 +85,7 @@ export function SettingsPage() {
   const settingsQuery = useSettingsProfileQuery();
   const updateMutation = useUpdateSettingsProfileMutation();
   const logoutMutation = useLogoutMutation();
+  const resetWorkspaceMutation = useResetWorkspaceMutation();
   const onboardingQuery = useOnboardingStateQuery();
 
   const [form, setForm] = useState({
@@ -97,6 +99,7 @@ export function SettingsPage() {
   });
 
   const [notifPrefs, setNotifPrefs] = useState<NotificationCategoryPreferences>(DEFAULT_NOTIF_PREFS);
+  const [resetConfirmationText, setResetConfirmationText] = useState("");
 
   const [dirty, setDirty] = useState(false);
   const timezoneOptions = form.timezone
@@ -169,6 +172,14 @@ export function SettingsPage() {
   async function handleLogout() {
     await logoutMutation.mutateAsync();
     navigate("/login", { replace: true });
+  }
+
+  async function handleResetWorkspace() {
+    await resetWorkspaceMutation.mutateAsync({
+      confirmationText: resetConfirmationText,
+    });
+    setResetConfirmationText("");
+    navigate("/onboarding", { replace: true });
   }
 
   if (settingsQuery.isLoading && !settingsQuery.data) {
@@ -437,6 +448,55 @@ export function SettingsPage() {
               {logoutMutation.error instanceof Error
                 ? logoutMutation.error.message
                 : "Log out failed."}
+            </div>
+          ) : null}
+        </SectionCard>
+
+        <SectionCard
+          title="Danger Zone"
+          subtitle="Clear this workspace and start over while keeping your account and preferences"
+          className="settings-danger-zone"
+        >
+          <div className="stack-form">
+            <div className="settings-danger-zone__copy">
+              This removes all user data across inbox and today, habits and routines, goals, health, finance, reviews, scores, and notifications.
+            </div>
+            <ul className="settings-danger-zone__list">
+              <li>Deletes all captured tasks, plans, launches, templates, and review history.</li>
+              <li>Deletes all habits, routines, goals, health logs, finance data, and notifications.</li>
+              <li>Keeps your login, display name, timezone, currency, week start, review window, and notification preferences.</li>
+            </ul>
+            <label className="field">
+              <span>Type RESET to continue</span>
+              <input
+                type="text"
+                value={resetConfirmationText}
+                onChange={(event) => setResetConfirmationText(event.target.value)}
+                placeholder="RESET"
+                autoComplete="off"
+                spellCheck={false}
+              />
+            </label>
+            <div className="button-row button-row--wrap">
+              <span className="support-copy">
+                After reset, you will be taken to onboarding to set the workspace up again.
+              </span>
+              <button
+                className="button button--danger"
+                type="button"
+                disabled={resetConfirmationText !== "RESET" || resetWorkspaceMutation.isPending}
+                onClick={() => void handleResetWorkspace()}
+              >
+                {resetWorkspaceMutation.isPending ? "Clearing workspace…" : "Clear all data"}
+              </button>
+            </div>
+          </div>
+
+          {resetWorkspaceMutation.error ? (
+            <div className="inline-state inline-state--error" style={{ marginTop: "0.75rem" }}>
+              {resetWorkspaceMutation.error instanceof Error
+                ? resetWorkspaceMutation.error.message
+                : "Workspace reset failed."}
             </div>
           ) : null}
         </SectionCard>

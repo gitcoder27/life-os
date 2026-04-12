@@ -631,6 +631,44 @@
   margin-top: 0.1rem;
 }
 
+.settings-danger-zone {
+  border-color: rgba(201, 85, 76, 0.28);
+  background:
+    radial-gradient(ellipse at top left, rgba(201, 85, 76, 0.08), transparent 55%),
+    linear-gradient(180deg, var(--panel-elevated), var(--panel));
+}
+
+.settings-danger-zone .section-card__title {
+  color: #f0a099;
+}
+
+.settings-danger-zone__copy {
+  font-size: var(--fs-small);
+  line-height: 1.6;
+  color: var(--text-secondary);
+}
+
+.settings-danger-zone__list {
+  margin: 0;
+  padding-left: 1.1rem;
+  display: grid;
+  gap: 0.35rem;
+  color: var(--text-secondary);
+  font-size: var(--fs-small);
+  line-height: 1.5;
+}
+
+.button--danger {
+  border: 1px solid rgba(201, 85, 76, 0.24);
+  background: rgba(201, 85, 76, 0.1);
+  color: #f4b2ac;
+}
+
+.button--danger:hover {
+  border-color: rgba(201, 85, 76, 0.36);
+  background: rgba(201, 85, 76, 0.16);
+}
+
 /* ── Manage sections (habits/routines CRUD) ── */
 
 .manage-section {

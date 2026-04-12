@@ -1,4 +1,4 @@
-import type { ApiMeta } from "./common.js";
+import type { ApiMeta, ApiSuccess } from "./common.js";
 import type { NotificationCategoryPreferences } from "./notifications.js";
 
 export interface SettingsProfile {
@@ -34,3 +34,11 @@ export interface UpdateSettingsProfileRequest {
 }
 
 export interface SettingsProfileMutationResponse extends ApiMeta, SettingsProfile {}
+
+export interface ResetWorkspaceRequest {
+  confirmationText: string;
+}
+
+export interface ResetWorkspaceResponse extends ApiMeta, ApiSuccess {
+  resetAt: string;
+}

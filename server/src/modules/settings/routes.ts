@@ -1,6 +1,8 @@
 import type { FastifyPluginAsync } from "fastify";
 import type { Prisma } from "@prisma/client";
 import type {
+  ResetWorkspaceRequest,
+  ResetWorkspaceResponse,
   SettingsProfileMutationResponse,
   SettingsProfileResponse,
   UpdateSettingsProfileRequest,
@@ -15,6 +17,7 @@ import {
   mergeNotificationPreferences,
   normalizeNotificationPreferences,
 } from "../notifications/policy.js";
+import { resetWorkspaceData } from "./workspace-reset.js";
 
 const reviewTimeSchema = z
   .string()
@@ -91,6 +94,13 @@ const updateSettingsProfileSchema = z
     notificationPreferences: notificationPreferencesUpdateSchema.optional(),
   })
   .refine((value) => Object.keys(value).length > 0, "At least one field must be updated");
+
+const resetWorkspaceSchema = z.object({
+  confirmationText: z
+    .string()
+    .trim()
+    .refine((value) => value === "RESET", "Type RESET to confirm workspace reset"),
+});
 
 function toSettingsProfileResponse(input: {
   user: {
@@ -254,6 +264,29 @@ export const registerSettingsRoutes: FastifyPluginAsync = async (app) => {
           updatedPreferences.notificationPreferences,
         ),
       },
+    });
+
+    return reply.send(response);
+  });
+
+  app.post("/reset-workspace", async (request, reply) => {
+    const user = requireAuthenticatedUser(request);
+    parseOrThrow(
+      resetWorkspaceSchema,
+      request.body as ResetWorkspaceRequest,
+    );
+    const resetAt = new Date().toISOString();
+
+    await app.prisma.$transaction(async (tx) => {
+      await resetWorkspaceData(tx, {
+        userId: user.id,
+        resetAt,
+      });
+    });
+
+    const response: ResetWorkspaceResponse = withGeneratedAt({
+      success: true,
+      resetAt,
     });
 
     return reply.send(response);

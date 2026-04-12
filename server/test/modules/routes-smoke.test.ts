@@ -3807,6 +3807,106 @@ describe("module route smoke tests", () => {
     );
   });
 
+  it("resets workspace data from settings", async () => {
+    prisma.task = {
+      findMany: vi.fn().mockResolvedValue([{ id: "task-1" }]),
+      deleteMany: vi.fn().mockResolvedValue({ count: 3 }),
+    } as any;
+    prisma.habit = {
+      findMany: vi.fn().mockResolvedValue([{ id: "habit-1" }]),
+      deleteMany: vi.fn().mockResolvedValue({ count: 1 }),
+    } as any;
+    prisma.recurringExpenseTemplate = {
+      findMany: vi.fn().mockResolvedValue([{ id: "recurring-1" }]),
+      deleteMany: vi.fn().mockResolvedValue({ count: 1 }),
+    } as any;
+    prisma.recurrenceRule = {
+      deleteMany: vi.fn().mockResolvedValue({ count: 3 }),
+    } as any;
+    prisma.notification = { deleteMany: vi.fn().mockResolvedValue({ count: 4 }) } as any;
+    prisma.taskTemplate = { deleteMany: vi.fn().mockResolvedValue({ count: 1 }) } as any;
+    prisma.waterLog = { deleteMany: vi.fn().mockResolvedValue({ count: 1 }) } as any;
+    prisma.mealLog = { deleteMany: vi.fn().mockResolvedValue({ count: 1 }) } as any;
+    prisma.mealPlanWeek = { deleteMany: vi.fn().mockResolvedValue({ count: 1 }) } as any;
+    prisma.mealTemplate = { deleteMany: vi.fn().mockResolvedValue({ count: 1 }) } as any;
+    prisma.workoutDay = { deleteMany: vi.fn().mockResolvedValue({ count: 1 }) } as any;
+    prisma.weightLog = { deleteMany: vi.fn().mockResolvedValue({ count: 1 }) } as any;
+    prisma.financeMonthPlan = { deleteMany: vi.fn().mockResolvedValue({ count: 1 }) } as any;
+    prisma.expense = { deleteMany: vi.fn().mockResolvedValue({ count: 1 }) } as any;
+    prisma.adminItem = { deleteMany: vi.fn().mockResolvedValue({ count: 1 }) } as any;
+    prisma.expenseCategory = { deleteMany: vi.fn().mockResolvedValue({ count: 1 }) } as any;
+    prisma.routine = { deleteMany: vi.fn().mockResolvedValue({ count: 1 }) } as any;
+    prisma.planningCycle = { deleteMany: vi.fn().mockResolvedValue({ count: 2 }) } as any;
+    prisma.goal = { deleteMany: vi.fn().mockResolvedValue({ count: 2 }) } as any;
+    prisma.goalDomainConfig = { deleteMany: vi.fn().mockResolvedValue({ count: 6 }) } as any;
+    prisma.goalHorizonConfig = { deleteMany: vi.fn().mockResolvedValue({ count: 5 }) } as any;
+    prisma.user = {
+      update: vi.fn().mockResolvedValue({
+        id: "user-1",
+        onboardedAt: null,
+      }),
+    } as any;
+    prisma.auditEvent = {
+      create: vi.fn().mockResolvedValue({
+        id: "audit-1",
+      }),
+    } as any;
+
+    const response = await app!.inject({
+      method: "POST",
+      url: "/api/settings/reset-workspace",
+      payload: {
+        confirmationText: "RESET",
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(JSON.parse(response.body)).toEqual(
+      expect.objectContaining({
+        success: true,
+        resetAt: expect.any(String),
+      }),
+    );
+    expect(prisma.recurrenceRule.deleteMany).toHaveBeenCalledWith({
+      where: {
+        OR: [
+          { ownerType: "TASK", ownerId: "task-1" },
+          { ownerType: "HABIT", ownerId: "habit-1" },
+          { ownerType: "RECURRING_EXPENSE", ownerId: "recurring-1" },
+        ],
+      },
+    });
+    expect(prisma.task.deleteMany).toHaveBeenCalledWith({ where: { userId: "user-1" } });
+    expect(prisma.planningCycle.deleteMany).toHaveBeenCalledWith({ where: { userId: "user-1" } });
+    expect(prisma.goalDomainConfig.deleteMany).toHaveBeenCalledWith({ where: { userId: "user-1" } });
+    expect(prisma.notification.deleteMany).toHaveBeenCalledWith({ where: { userId: "user-1" } });
+    expect(prisma.user.update).toHaveBeenCalledWith({
+      where: { id: "user-1" },
+      data: { onboardedAt: null },
+    });
+    expect(prisma.auditEvent.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          userId: "user-1",
+          eventType: "settings.workspace_reset",
+        }),
+      }),
+    );
+  });
+
+  it("rejects settings workspace reset without the RESET confirmation", async () => {
+    const response = await app!.inject({
+      method: "POST",
+      url: "/api/settings/reset-workspace",
+      payload: {
+        confirmationText: "reset",
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(prisma.task.findMany).not.toHaveBeenCalled();
+  });
+
   it("rejects invalid locale values on settings profile update", async () => {
     const response = await app!.inject({
       method: "PUT",

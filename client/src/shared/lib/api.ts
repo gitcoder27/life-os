@@ -191,6 +191,7 @@ export {
 } from "./api/notifications";
 export {
   useSettingsProfileQuery,
+  useResetWorkspaceMutation,
   useUpdateSettingsProfileMutation,
 } from "./api/settings";
 export type {
