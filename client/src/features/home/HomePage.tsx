@@ -1,4 +1,5 @@
 import {
+  useActiveFocusSessionQuery,
   formatTimeLabel,
   getTodayDate,
   useDailyScoreQuery,
@@ -20,6 +21,7 @@ import { GuidanceRail } from "./GuidanceRail";
 import { SecondaryContext } from "./SecondaryContext";
 import { StatusStrip } from "./StatusStrip";
 import { TodayControl } from "./TodayControl";
+import { FocusSessionBanner } from "./FocusSessionBanner";
 import { DailyLaunchCard } from "../today/components/DailyLaunchCard";
 import { PreLaunchModeNotice } from "../today/components/PreLaunchModeNotice";
 import { RescueModeCard } from "../today/components/RescueModeCard";
@@ -29,6 +31,7 @@ export function HomePage() {
   const homeQuery = useHomeOverviewQuery(today);
   const inboxQuery = useInboxQuery({ limit: 4 });
   const quoteQuery = useHomeQuoteQuery();
+  const activeFocusSessionQuery = useActiveFocusSessionQuery();
   const scoreQuery = useDailyScoreQuery(today);
   const weeklyMomentumQuery = useWeeklyMomentumQuery(today);
 
@@ -36,6 +39,7 @@ export function HomePage() {
     void homeQuery.refetch();
     void inboxQuery.refetch();
     void quoteQuery.refetch();
+    void activeFocusSessionQuery.refetch();
     void scoreQuery.refetch();
     void weeklyMomentumQuery.refetch();
   };
@@ -109,6 +113,8 @@ export function HomePage() {
         reviewClosed={Boolean(scoreQuery.data?.finalizedAt)}
         phase={home.phase}
       />
+
+      <FocusSessionBanner session={activeFocusSessionQuery.data?.session ?? null} />
 
       <div className="home-operator__core">
         <div className="home-operator__main-stack">

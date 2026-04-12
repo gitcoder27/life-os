@@ -28,6 +28,8 @@ export function RescueModeCard({
 }) {
   const upsertLaunchMutation = useUpsertDayLaunchMutation(date);
   const isActive = launch?.dayMode === "rescue" || launch?.dayMode === "recovery";
+  const isMinimal = isActive && deferredCandidates.length === 0;
+  const copy = suggestion?.detail ?? "The day has been reduced so you can protect continuity and keep one thing alive.";
 
   async function handleActivate() {
     if (!suggestion) {
@@ -52,7 +54,9 @@ export function RescueModeCard({
   }
 
   return (
-    <section className={`rescue-mode-card${compact ? " rescue-mode-card--compact" : ""}`}>
+    <section
+      className={`rescue-mode-card${compact ? " rescue-mode-card--compact" : ""}${isMinimal ? " rescue-mode-card--minimal" : ""}`}
+    >
       <div className="rescue-mode-card__header">
         <div>
           <p className="rescue-mode-card__eyebrow">
@@ -68,12 +72,12 @@ export function RescueModeCard({
       </div>
 
       <p className="rescue-mode-card__copy">
-        {suggestion?.detail ?? "The day has been reduced so you can protect continuity and keep one thing alive."}
+        {isMinimal ? "Reduced to one believable action so the day stays recoverable." : copy}
       </p>
 
       {mustWinTask ? (
         <div className="rescue-mode-card__focus">
-          <span className="rescue-mode-card__focus-label">Minimum viable action</span>
+          <span className="rescue-mode-card__focus-label">{isMinimal ? "Focus now" : "Minimum viable action"}</span>
           <strong>{suggestion?.minimumViableAction ?? mustWinTask.fiveMinuteVersion ?? mustWinTask.nextAction ?? mustWinTask.title}</strong>
         </div>
       ) : null}

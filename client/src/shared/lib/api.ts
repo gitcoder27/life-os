@@ -41,6 +41,20 @@ export {
   useSessionQuery,
 } from "./api/auth";
 export {
+  useAbortFocusSessionMutation,
+  useActiveFocusSessionQuery,
+  useCaptureFocusDistractionMutation,
+  useCompleteFocusSessionMutation,
+  useStartFocusSessionMutation,
+} from "./api/focus";
+export type {
+  FocusSessionDepth,
+  FocusSessionExitReason,
+  FocusSessionItem,
+  FocusSessionStatus,
+  FocusSessionTaskOutcome,
+} from "./api/focus";
+export {
   useHomeOverviewQuery,
   useHomeQuoteQuery,
 } from "./api/home";

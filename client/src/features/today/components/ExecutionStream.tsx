@@ -2,11 +2,12 @@ import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { isRecurring } from "../../../shared/lib/recurrence";
 import { RecurrenceInfo } from "../../../shared/ui/RecurrenceBadge";
-import { formatTimeLabel, type TaskItem, type LinkedGoal, type DayPlannerBlockItem } from "../../../shared/lib/api";
+import { formatTimeLabel, type FocusSessionItem, type TaskItem, type LinkedGoal, type DayPlannerBlockItem } from "../../../shared/lib/api";
 import { CheckIcon, MoreIcon } from "../helpers/icons";
 import type { PlannerExecutionModel } from "../helpers/planner-execution";
 import type { useTaskActions } from "../hooks/useTaskActions";
 import type { DayPhase } from "../helpers/day-phase";
+import { FocusSessionLauncher } from "./FocusSessionLauncher";
 import { StartProtocolSheet } from "./StartProtocolSheet";
 import { StuckFlowSheet } from "./StuckFlowSheet";
 
@@ -26,6 +27,7 @@ export function ExecutionStream({
   plannerBlocks,
   phase,
   onSwitchToPlanner,
+  activeFocusSession,
 }: {
   date: string;
   executionTasks: TaskItem[];
@@ -34,6 +36,7 @@ export function ExecutionStream({
   plannerBlocks: DayPlannerBlockItem[];
   phase: DayPhase;
   onSwitchToPlanner: () => void;
+  activeFocusSession: FocusSessionItem | null;
 }) {
   const [showCompleted, setShowCompleted] = useState(false);
 
@@ -117,6 +120,7 @@ export function ExecutionStream({
               taskActions={taskActions}
               taskBlockMap={taskBlockMap}
               onSwitchToPlanner={onSwitchToPlanner}
+              activeFocusSession={activeFocusSession}
             />
           ))}
 
@@ -144,6 +148,7 @@ export function ExecutionStream({
                       task={task}
                       taskActions={taskActions}
                       blockInfo={null}
+                      activeFocusSession={activeFocusSession}
                     />
                   ))}
                 </div>
@@ -162,12 +167,14 @@ function StreamSectionGroup({
   taskActions,
   taskBlockMap,
   onSwitchToPlanner,
+  activeFocusSession,
 }: {
   section: StreamSection;
   date: string;
   taskActions: TaskActions;
   taskBlockMap: Map<string, DayPlannerBlockItem>;
   onSwitchToPlanner: () => void;
+  activeFocusSession: FocusSessionItem | null;
 }) {
   const isNow = section.key === "now";
   const isUnplanned = section.key === "unplanned";
@@ -199,6 +206,7 @@ function StreamSectionGroup({
               taskActions={taskActions}
               blockInfo={block}
               highlight={isNow}
+              activeFocusSession={activeFocusSession}
             />
           );
         })}
@@ -213,12 +221,14 @@ function StreamTaskRow({
   taskActions,
   blockInfo,
   highlight = false,
+  activeFocusSession,
 }: {
   date: string;
   task: TaskItem;
   taskActions: TaskActions;
   blockInfo: DayPlannerBlockItem | null;
   highlight?: boolean;
+  activeFocusSession: FocusSessionItem | null;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [showReschedule, setShowReschedule] = useState(false);
@@ -279,6 +289,16 @@ function StreamTaskRow({
       {/* Quick actions — visible, not hidden behind hover */}
       {isPending ? (
         <div className="stream-task__quick-actions">
+          <FocusSessionLauncher
+            date={date}
+            task={task}
+            activeSession={activeFocusSession}
+            buttonLabel="Focus"
+            activeLabel="In focus"
+            disabledLabel="Locked"
+            buttonClassName="stream-task__quick-btn stream-task__quick-btn--focus"
+            activeChipClassName="stream-task__quick-pill"
+          />
           <button
             className="stream-task__quick-btn"
             type="button"

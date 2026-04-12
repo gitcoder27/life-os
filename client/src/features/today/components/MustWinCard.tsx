@@ -1,14 +1,17 @@
 import { useState } from "react";
-import { useUpdateTaskMutation, type TaskItem } from "../../../shared/lib/api";
+import { useUpdateTaskMutation, type FocusSessionItem, type TaskItem } from "../../../shared/lib/api";
+import { FocusSessionLauncher } from "./FocusSessionLauncher";
 import { StartProtocolSheet } from "./StartProtocolSheet";
 import { StuckFlowSheet } from "./StuckFlowSheet";
 
 export function MustWinCard({
   date,
   task,
+  activeFocusSession = null,
 }: {
   date: string;
   task: TaskItem;
+  activeFocusSession?: FocusSessionItem | null;
 }) {
   const updateTaskMutation = useUpdateTaskMutation(date);
   const [protocolOpen, setProtocolOpen] = useState(false);
@@ -16,6 +19,7 @@ export function MustWinCard({
   const isCompleted = task.status === "completed";
   const isStarted = task.progressState === "started" || task.progressState === "advanced" || isCompleted;
   const isAdvanced = task.progressState === "advanced" || isCompleted;
+  const isMinimal = isCompleted;
   const stateLabel = isCompleted
     ? "Completed"
     : task.progressState === "advanced"
@@ -33,7 +37,7 @@ export function MustWinCard({
 
   return (
     <>
-      <section className="must-win-card">
+      <section className={`must-win-card${isMinimal ? " must-win-card--minimal" : ""}`}>
         <div className="must-win-card__header">
           <div>
             <p className="must-win-card__eyebrow">Must-Win</p>
@@ -44,21 +48,23 @@ export function MustWinCard({
           </span>
         </div>
 
-        <p className="must-win-card__state-detail">{stateDetail}</p>
+        <p className="must-win-card__state-detail">
+          {isMinimal ? "Done for today." : stateDetail}
+        </p>
 
-        <div className="must-win-card__details">
-          <div>
+        <div className={`must-win-card__details${isMinimal ? " must-win-card__details--minimal" : ""}`}>
+          <div className="must-win-card__detail must-win-card__detail--primary">
             <span className="must-win-card__label">Next action</span>
             <strong>{task.nextAction ?? "Add the first visible step"}</strong>
           </div>
           {task.fiveMinuteVersion ? (
-            <div>
+            <div className="must-win-card__detail">
               <span className="must-win-card__label">5-minute version</span>
               <strong>{task.fiveMinuteVersion}</strong>
             </div>
           ) : null}
           {task.likelyObstacle ? (
-            <div>
+            <div className="must-win-card__detail">
               <span className="must-win-card__label">Likely obstacle</span>
               <strong>{task.likelyObstacle}</strong>
             </div>
@@ -66,7 +72,7 @@ export function MustWinCard({
         </div>
 
         <div className="must-win-card__actions">
-          {!isStarted ? (
+          {!isStarted && !task.nextAction?.trim() ? (
             <button
               className="button button--primary button--small"
               type="button"
@@ -79,9 +85,21 @@ export function MustWinCard({
             >
               Start
             </button>
-          ) : (
+          ) : null}
+
+          {!isCompleted && task.nextAction?.trim() ? (
+            <FocusSessionLauncher
+              date={date}
+              task={task}
+              activeSession={activeFocusSession}
+              buttonClassName="button button--primary button--small"
+              activeChipClassName="must-win-card__action-chip"
+            />
+          ) : null}
+
+          {isStarted && !task.nextAction?.trim() ? (
             <span className="must-win-card__action-chip">Started</span>
-          )}
+          ) : null}
 
           {isStarted && !isAdvanced && !isCompleted ? (
             <button

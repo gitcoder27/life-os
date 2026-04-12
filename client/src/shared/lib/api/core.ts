@@ -61,6 +61,7 @@ export const queryKeys = {
   onboarding: ["onboarding"] as const,
   home: (date: string) => ["home", date] as const,
   homeQuote: ["home", "quote"] as const,
+  focusActive: ["focus", "active"] as const,
   score: (date: string) => ["score", "daily", date] as const,
   weeklyMomentum: (date: string) => ["score", "weekly-momentum", date] as const,
   dayPlan: (date: string) => ["planning", "day", date] as const,
@@ -232,6 +233,7 @@ export const apiRequest = async <TResponse>(
 export const invalidateCoreData = (queryClient: QueryClient, _date: string) => {
   void queryClient.invalidateQueries({ queryKey: ["tasks"] });
   void queryClient.invalidateQueries({ queryKey: ["home"] });
+  void queryClient.invalidateQueries({ queryKey: queryKeys.focusActive });
   void queryClient.invalidateQueries({ queryKey: ["score"] });
   void queryClient.invalidateQueries({ queryKey: ["planning", "day"] });
   void queryClient.invalidateQueries({ queryKey: queryKeys.habits });

@@ -78,6 +78,25 @@ enum TaskProgressState {
   ADVANCED
 }
 
+enum FocusSessionDepth {
+  DEEP
+  SHALLOW
+}
+
+enum FocusSessionStatus {
+  ACTIVE
+  COMPLETED
+  ABORTED
+}
+
+enum FocusSessionExitReason {
+  INTERRUPTED
+  LOW_ENERGY
+  UNCLEAR
+  SWITCHED_CONTEXT
+  DONE_ENOUGH
+}
+
 enum DayMode {
   NORMAL
   RESCUE
@@ -325,6 +344,7 @@ model User {
   monthlyReviews        MonthlyReview[]
   dailyScores           DailyScore[]
   notifications         Notification[]
+  focusSessions         FocusSession[]
 }
 
 model Session {
@@ -594,11 +614,33 @@ model Task {
   mealPrepSession   MealPrepSession?
   adminItems        AdminItem[]    @relation("AdminItemTask")
   recurrenceRule    RecurrenceRule? @relation(fields: [recurrenceRuleId], references: [id], onDelete: SetNull)
+  focusSessions     FocusSession[]
 
   @@index([userId, scheduledForDate, status])
   @@index([userId, status, originType, scheduledForDate, kind, createdAt, id])
   @@index([userId, kind, status, reminderAt, reminderTriggeredAt])
   @@index([userId, recurrenceRuleId, scheduledForDate])
+}
+
+model FocusSession {
+  id               String                 @id @default(uuid())
+  userId           String
+  taskId           String
+  depth            FocusSessionDepth
+  plannedMinutes   Int
+  startedAt        DateTime
+  endedAt          DateTime?
+  status           FocusSessionStatus     @default(ACTIVE)
+  exitReason       FocusSessionExitReason?
+  distractionNotes String?
+  completionNote   String?
+  createdAt        DateTime               @default(now())
+  updatedAt        DateTime               @updatedAt
+  user             User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  task             Task                   @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@index([userId, status, startedAt])
+  @@index([taskId, startedAt])
 }
 
 model TaskStuckEvent {

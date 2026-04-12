@@ -6,6 +6,7 @@ export * from "./onboarding.js";
 export * from "./home.js";
 export * from "./goals.js";
 export * from "./planning.js";
+export * from "./focus.js";
 export * from "./finance.js";
 export * from "./notifications.js";
 export * from "./habits.js";

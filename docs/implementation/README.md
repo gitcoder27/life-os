@@ -7,6 +7,7 @@ Current docs:
 - `Life-OS-CEO-Implementation-Brief.md`: executive summary of the behavioral operating system direction, with codebase-grounded implementation entry points for future agents and contributors
 - `Life-OS-Behavior-Change-Product-Strategy.md`: strategic product thesis for evolving Life OS from planning/tracking toward activation, continuity, recovery, and adaptation
 - `Life-OS-Implementation-Roadmap.md`: phased implementation roadmap for the behavioral operating system upgrade
+- `Life-OS-Next-2-Milestones-Implementation-Plan.md`: implementation handoff for the next two high-leverage milestones after the recent execution, recovery, and onboarding upgrades
 - `life-os-current-state-handoff.md`: current product and application brief covering screens, workflows, modules, data model, and system behavior for agent or contributor handoff
 - `application-gap-analysis-2026-04-07.md`: cross-app review of the current design, workflow, and systems gaps, with emphasis on finance and workflow coherence
 - `production-deployment.md`: the full production deployment guide

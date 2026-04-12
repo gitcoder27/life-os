@@ -28,9 +28,10 @@ import { useTodayData } from "./hooks/useTodayData";
 import { usePriorityDraft } from "./hooks/usePriorityDraft";
 import { useTaskActions } from "./hooks/useTaskActions";
 import { usePlannerActions } from "./hooks/usePlannerActions";
-import { useDayPlanQuery } from "../../shared/lib/api";
+import { useActiveFocusSessionQuery, useDayPlanQuery } from "../../shared/lib/api";
 import { isQuickCaptureReferenceTask } from "../../shared/lib/quickCapture";
 import { getOffsetDate } from "./helpers/date-helpers";
+import { FocusSessionPanel } from "./components/FocusSessionPanel";
 
 const ISO_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const isPlannerAssignableTask = (task: { kind: string }) => task.kind === "task";
@@ -55,6 +56,7 @@ export function TodayPage() {
   const isLivePlannerDate = plannerDate === data.today;
   const isEditablePlannerDate = plannerDate >= data.today;
   const plannerDayPlanQuery = useDayPlanQuery(plannerDate);
+  const activeFocusSessionQuery = useActiveFocusSessionQuery();
   const priorityDraft = usePriorityDraft(
     data.today,
     data.priorities,
@@ -64,6 +66,7 @@ export function TodayPage() {
   const plannerTaskActions = useTaskActions(plannerDate);
   const plannerActions = usePlannerActions(plannerDate);
   const plannerDayPlan = plannerDayPlanQuery.data;
+  const activeFocusSession = activeFocusSessionQuery.data?.session ?? null;
   const plannerExecutionTasks = useMemo(
     () => (plannerDayPlan?.tasks ?? []).filter((task) => !isQuickCaptureReferenceTask(task)),
     [plannerDayPlan?.tasks],
@@ -292,10 +295,17 @@ export function TodayPage() {
       ? priorityDraft.mutationError.message
       : null,
     activeTaskActions.mutationError,
+    activeFocusSessionQuery.error instanceof Error
+      ? activeFocusSessionQuery.error.message
+      : null,
     mode === "plan" ? plannerActions.mutationError : null,
   ]
     .filter((e): e is string => typeof e === "string" && e.length > 0)
     .join("; ");
+  const refetchEverything = () => {
+    data.refetchAll();
+    void activeFocusSessionQuery.refetch();
+  };
 
   const pendingPriorityCount = priorityDraft.draft.filter(
     (p) => p.status === "pending" && p.title.trim(),
@@ -305,6 +315,8 @@ export function TodayPage() {
   const rescueDeferredCandidates = data.executionTasks.filter(
     (task) => task.status === "pending" && task.id !== data.mustWinTask?.id,
   );
+  const showMustWinCard = Boolean(data.launch?.completedAt && data.mustWinTask);
+  const showRescueModeCard = Boolean(data.launch?.completedAt);
   const visibleExecutionTasks = isRescueMode
     ? []
     : data.executionTasks;
@@ -342,13 +354,15 @@ export function TodayPage() {
         />
 
         {allErrors ? (
-          <InlineErrorState message={allErrors} onRetry={data.refetchAll} />
+          <InlineErrorState message={allErrors} onRetry={refetchEverything} />
         ) : null}
       </div>
 
       {mode === "execute" ? (
         <div className="today-execute-v2">
           <div className="today-main-v2">
+            <FocusSessionPanel date={data.today} session={activeFocusSession} />
+
             {!data.launch?.completedAt ? (
               <>
                 <PreLaunchModeNotice
@@ -365,19 +379,27 @@ export function TodayPage() {
               </>
             ) : null}
 
-            {data.launch?.completedAt && data.mustWinTask ? (
-              <MustWinCard date={data.today} task={data.mustWinTask} />
-            ) : null}
+            {showMustWinCard || showRescueModeCard ? (
+              <div className="today-status-grid">
+                {showMustWinCard && data.mustWinTask ? (
+                  <MustWinCard
+                    date={data.today}
+                    task={data.mustWinTask}
+                    activeFocusSession={activeFocusSession}
+                  />
+                ) : null}
 
-            {data.launch?.completedAt ? (
-              <RescueModeCard
-                date={data.today}
-                launch={data.launch}
-                suggestion={data.rescueSuggestion}
-                mustWinTask={data.mustWinTask}
-                deferredCandidates={rescueDeferredCandidates}
-                taskActions={taskActions}
-              />
+                {showRescueModeCard ? (
+                  <RescueModeCard
+                    date={data.today}
+                    launch={data.launch}
+                    suggestion={data.rescueSuggestion}
+                    mustWinTask={data.mustWinTask}
+                    deferredCandidates={rescueDeferredCandidates}
+                    taskActions={taskActions}
+                  />
+                ) : null}
+              </div>
             ) : null}
 
             <ExecutionStream
@@ -388,6 +410,7 @@ export function TodayPage() {
               plannerBlocks={data.plannerBlocks}
               phase={phase}
               onSwitchToPlanner={() => setTodayMode("plan")}
+              activeFocusSession={activeFocusSession}
             />
 
             <RecoveryTray
