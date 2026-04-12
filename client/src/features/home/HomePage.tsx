@@ -61,6 +61,7 @@ export function HomePage() {
 
   const home = homeQuery.data;
   const score = scoreQuery.data ?? home.dailyScore;
+  const shouldShowDailyLaunch = !home.launch?.completedAt;
 
   // Derive action data
   const allTasks = home.tasks;
@@ -88,6 +89,13 @@ export function HomePage() {
   // Tasks beyond priorities
   const priorityIds = new Set(home.topPriorities.map((p) => p.id));
   const nonPriorityOpenTasks = openExecutionTasks.filter((t) => !priorityIds.has(t.id));
+  const atRiskLaneProps = {
+    sessionKey: home.date,
+    radarItems: home.accountabilityRadar.items,
+    attentionItems: home.attentionItems,
+    overdueCount: home.accountabilityRadar.overdueTaskCount,
+    staleInboxCount: home.accountabilityRadar.staleInboxCount,
+  };
 
   return (
     <div className="home-operator">
@@ -104,23 +112,15 @@ export function HomePage() {
 
       <div className="home-operator__core">
         <div className="home-operator__main-stack">
-          {!home.launch?.completedAt ? (
-            <>
-              <PreLaunchModeNotice
-                date={home.date}
-                launch={home.launch}
-                suggestion={home.rescueSuggestion}
-              />
-              <DailyLaunchCard
-                date={home.date}
-                tasks={executionTasks}
-                launch={home.launch}
-                mustWinTask={home.mustWinTask}
-              />
-            </>
+          {shouldShowDailyLaunch ? (
+            <PreLaunchModeNotice
+              date={home.date}
+              launch={home.launch}
+              suggestion={home.rescueSuggestion}
+            />
           ) : null}
 
-          {home.launch?.completedAt ? (
+          {!shouldShowDailyLaunch ? (
             <RescueModeCard
               date={home.date}
               launch={home.launch}
@@ -144,6 +144,10 @@ export function HomePage() {
             phase={home.phase}
           />
 
+          {shouldShowDailyLaunch ? (
+            <AtRiskLane {...atRiskLaneProps} />
+          ) : null}
+
           <GuidanceRail
             recovery={home.guidance.recovery}
             weeklyChallenge={home.guidance.weeklyChallenge}
@@ -151,13 +155,20 @@ export function HomePage() {
           />
         </div>
 
-        <AtRiskLane
-          sessionKey={home.date}
-          radarItems={home.accountabilityRadar.items}
-          attentionItems={home.attentionItems}
-          overdueCount={home.accountabilityRadar.overdueTaskCount}
-          staleInboxCount={home.accountabilityRadar.staleInboxCount}
-        />
+        <div className="home-operator__side-stack">
+          {!shouldShowDailyLaunch ? (
+            <AtRiskLane {...atRiskLaneProps} />
+          ) : null}
+
+          {shouldShowDailyLaunch ? (
+            <DailyLaunchCard
+              date={home.date}
+              tasks={executionTasks}
+              launch={home.launch}
+              mustWinTask={home.mustWinTask}
+            />
+          ) : null}
+        </div>
       </div>
 
       <div className="home-operator__middle">

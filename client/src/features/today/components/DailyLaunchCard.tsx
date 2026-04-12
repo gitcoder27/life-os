@@ -7,8 +7,16 @@ import {
   type TaskItem,
 } from "../../../shared/lib/api";
 
+const ENERGY_LEVELS = [
+  { value: "1", label: "Very low", short: "1" },
+  { value: "2", label: "Low", short: "2" },
+  { value: "3", label: "Steady", short: "3" },
+  { value: "4", label: "Good", short: "4" },
+  { value: "5", label: "Strong", short: "5" },
+] as const;
+
 const DERAILMENT_OPTIONS = [
-  { value: "", label: "No likely derailment" },
+  { value: "", label: "None" },
   { value: "unclear", label: "Unclear task" },
   { value: "too_big", label: "Too big" },
   { value: "avoidance", label: "Avoidance" },
@@ -91,69 +99,116 @@ export function DailyLaunchCard({
     updateTaskMutation.isPending ||
     upsertDayLaunchMutation.isPending;
 
+  const canSubmit = nextAction.trim() && (selectedTaskId || newTaskTitle.trim());
+
   return (
-    <section className="daily-launch-card">
-      <div className="daily-launch-card__header">
-        <div>
-          <p className="daily-launch-card__eyebrow">Daily Launch</p>
-          <h2 className="daily-launch-card__title">Set up the day before it drifts.</h2>
-        </div>
+    <section className="daily-launch">
+      <div className="daily-launch__header">
+        <span className="daily-launch__eyebrow">Daily Launch</span>
+        <h2 className="daily-launch__title">Set up the day before it drifts.</h2>
       </div>
 
-      <div className="daily-launch-card__grid">
-        <label className="field">
-          <span>Choose today's must-win</span>
-          <select value={selectedTaskId} onChange={(event) => setSelectedTaskId(event.target.value)}>
+      <div className="daily-launch__fields">
+        {/* Must-win selection */}
+        <div className="daily-launch__field">
+          <label className="daily-launch__label" htmlFor="dl-must-win">Must-win</label>
+          <select
+            id="dl-must-win"
+            className="daily-launch__select"
+            value={selectedTaskId}
+            onChange={(event) => setSelectedTaskId(event.target.value)}
+          >
             <option value="">Create a new must-win below</option>
             {selectableTasks.map((task) => (
               <option key={task.id} value={task.id}>{task.title}</option>
             ))}
           </select>
-        </label>
+        </div>
 
+        {/* New must-win (only when creating) */}
         {!selectedTaskId ? (
-          <label className="field">
-            <span>New must-win</span>
-            <input value={newTaskTitle} onChange={(event) => setNewTaskTitle(event.target.value)} placeholder="Finish the proposal intro" />
-          </label>
+          <div className="daily-launch__field">
+            <label className="daily-launch__label" htmlFor="dl-new-task">New must-win</label>
+            <input
+              id="dl-new-task"
+              className="daily-launch__input"
+              value={newTaskTitle}
+              onChange={(event) => setNewTaskTitle(event.target.value)}
+              placeholder="Finish the proposal intro"
+            />
+          </div>
         ) : null}
 
-        <label className="field">
-          <span>First visible step</span>
-          <input value={nextAction} onChange={(event) => setNextAction(event.target.value)} placeholder="Open the proposal and write the opening paragraph" />
-        </label>
+        {/* First visible step */}
+        <div className="daily-launch__field">
+          <label className="daily-launch__label" htmlFor="dl-next-action">First visible step</label>
+          <input
+            id="dl-next-action"
+            className="daily-launch__input"
+            value={nextAction}
+            onChange={(event) => setNextAction(event.target.value)}
+            placeholder="Open the proposal and write the opening paragraph"
+          />
+        </div>
 
-        <label className="field">
-          <span>Energy</span>
-          <select value={energyRating} onChange={(event) => setEnergyRating(event.target.value)}>
-            <option value="1">1 - Very low</option>
-            <option value="2">2 - Low</option>
-            <option value="3">3 - Steady</option>
-            <option value="4">4 - Good</option>
-            <option value="5">5 - Strong</option>
-          </select>
-        </label>
+        {/* Energy + Derailment row */}
+        <div className="daily-launch__row">
+          <div className="daily-launch__field daily-launch__field--compact">
+            <span className="daily-launch__label">Energy</span>
+            <div className="daily-launch__pills" role="radiogroup" aria-label="Energy rating">
+              {ENERGY_LEVELS.map((level) => (
+                <button
+                  key={level.value}
+                  type="button"
+                  className={`daily-launch__pill${energyRating === level.value ? " daily-launch__pill--active" : ""}`}
+                  onClick={() => setEnergyRating(level.value)}
+                  title={level.label}
+                  aria-label={`${level.label} energy`}
+                  aria-pressed={energyRating === level.value}
+                >
+                  {level.short}
+                </button>
+              ))}
+            </div>
+          </div>
 
-        <label className="field">
-          <span>Likely derailment</span>
-          <select value={likelyDerailmentReason} onChange={(event) => setLikelyDerailmentReason(event.target.value)}>
-            {DERAILMENT_OPTIONS.map((option) => (
-              <option key={option.value || "none"} value={option.value}>{option.label}</option>
-            ))}
-          </select>
-        </label>
+          <div className="daily-launch__field daily-launch__field--compact">
+            <span className="daily-launch__label">Risk</span>
+            <div className="daily-launch__chips">
+              {DERAILMENT_OPTIONS.map((option) => (
+                <button
+                  key={option.value || "none"}
+                  type="button"
+                  className={`daily-launch__chip${likelyDerailmentReason === option.value ? " daily-launch__chip--active" : ""}`}
+                  onClick={() => setLikelyDerailmentReason(option.value)}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
 
-        <label className="field">
-          <span>Note</span>
-          <input value={likelyDerailmentNote} onChange={(event) => setLikelyDerailmentNote(event.target.value)} placeholder="Meetings will cut the morning in half" />
-        </label>
+        {/* Derailment note (only when a risk is selected) */}
+        {likelyDerailmentReason ? (
+          <div className="daily-launch__field">
+            <label className="daily-launch__label" htmlFor="dl-note">Note</label>
+            <input
+              id="dl-note"
+              className="daily-launch__input"
+              value={likelyDerailmentNote}
+              onChange={(event) => setLikelyDerailmentNote(event.target.value)}
+              placeholder="Meetings will cut the morning in half"
+            />
+          </div>
+        ) : null}
       </div>
 
-      <div className="daily-launch-card__actions">
+      <div className="daily-launch__footer">
         <button
           className="button button--primary"
           type="button"
-          disabled={isBusy || !nextAction.trim() || (!selectedTaskId && !newTaskTitle.trim())}
+          disabled={isBusy || !canSubmit}
           onClick={() => void handleSave()}
         >
           {isBusy ? "Saving..." : "Complete launch"}
