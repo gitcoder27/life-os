@@ -331,6 +331,7 @@ export function TodayPage() {
   const plannerSidebarStyle = {
     top: `${stickyTop}px`,
   } as CSSProperties;
+  const showRescueModeStrip = Boolean(showRescueModeCard && isRescueMode && rescueDeferredCandidates.length === 0);
 
   return (
     <div className="today-layout today-layout--v2" style={todayLayoutStyle}>
@@ -380,16 +381,8 @@ export function TodayPage() {
             ) : null}
 
             {showMustWinCard || showRescueModeCard ? (
-              <div className="today-status-grid">
-                {showMustWinCard && data.mustWinTask ? (
-                  <MustWinCard
-                    date={data.today}
-                    task={data.mustWinTask}
-                    activeFocusSession={activeFocusSession}
-                  />
-                ) : null}
-
-                {showRescueModeCard ? (
+              <>
+                {showRescueModeStrip ? (
                   <RescueModeCard
                     date={data.today}
                     launch={data.launch}
@@ -397,9 +390,31 @@ export function TodayPage() {
                     mustWinTask={data.mustWinTask}
                     deferredCandidates={rescueDeferredCandidates}
                     taskActions={taskActions}
+                    strip
                   />
                 ) : null}
-              </div>
+
+                <div className="today-status-grid">
+                  {showMustWinCard && data.mustWinTask ? (
+                    <MustWinCard
+                      date={data.today}
+                      task={data.mustWinTask}
+                      activeFocusSession={activeFocusSession}
+                    />
+                  ) : null}
+
+                  {showRescueModeCard && !showRescueModeStrip ? (
+                    <RescueModeCard
+                      date={data.today}
+                      launch={data.launch}
+                      suggestion={data.rescueSuggestion}
+                      mustWinTask={data.mustWinTask}
+                      deferredCandidates={rescueDeferredCandidates}
+                      taskActions={taskActions}
+                    />
+                  ) : null}
+                </div>
+              </>
             ) : null}
 
             <ExecutionStream

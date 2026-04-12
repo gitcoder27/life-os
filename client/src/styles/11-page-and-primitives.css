@@ -919,6 +919,25 @@
   line-height: 1.45;
 }
 
+.rescue-mode-card__reason {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.55rem;
+}
+
+.rescue-mode-card__reason-label,
+.rescue-mode-card__effect {
+  font-size: var(--fs-micro);
+  color: var(--text-tertiary);
+}
+
+.rescue-mode-card__reason strong {
+  font-size: var(--fs-small);
+  color: var(--text);
+}
+
 .rescue-mode-card__focus {
   display: flex;
   flex-direction: column;
@@ -974,8 +993,21 @@
   margin-top: 0.75rem;
 }
 
+.rescue-mode-card__effect {
+  margin: 0.55rem 0 0;
+  line-height: 1.45;
+}
+
 .rescue-mode-card--compact .rescue-mode-card__defer-list {
   display: none;
+}
+
+.rescue-mode-card--suggested {
+  background: linear-gradient(180deg, rgba(217,153,58,0.06), rgba(255,255,255,0.02));
+}
+
+.rescue-mode-card--active {
+  background: linear-gradient(180deg, rgba(93,184,106,0.06), rgba(255,255,255,0.02));
 }
 
 .rescue-mode-card--minimal {
@@ -991,12 +1023,20 @@
   font-size: var(--fs-micro);
 }
 
+.rescue-mode-card--minimal .rescue-mode-card__reason {
+  margin-bottom: 0.45rem;
+}
+
 .rescue-mode-card--minimal .rescue-mode-card__focus {
   padding: 0.55rem 0.65rem;
 }
 
 .rescue-mode-card--minimal .rescue-mode-card__actions {
   margin-top: 0.65rem;
+}
+
+.rescue-mode-card--minimal .rescue-mode-card__effect {
+  margin-top: 0.45rem;
 }
 
 .must-win-card__eyebrow {
