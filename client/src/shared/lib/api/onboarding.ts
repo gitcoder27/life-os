@@ -46,7 +46,7 @@ type OnboardingCompleteRequest = {
   dailyWaterTargetMl: number;
   dailyReviewStartTime?: string | null;
   dailyReviewEndTime?: string | null;
-  lifePriorities: string[];
+  lifePriorities?: string[];
   goals: Array<{
     title: string;
     domain: "health" | "money" | "work_growth" | "home_admin" | "discipline" | "other";
@@ -67,7 +67,7 @@ type OnboardingCompleteRequest = {
       isRequired?: boolean;
     }>;
   }>;
-  expenseCategories: Array<{
+  expenseCategories?: Array<{
     name: string;
     color?: string | null;
   }>;

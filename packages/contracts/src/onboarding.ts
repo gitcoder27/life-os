@@ -91,11 +91,11 @@ export interface OnboardingCompleteRequest {
   dailyWaterTargetMl: number;
   dailyReviewStartTime?: string | null;
   dailyReviewEndTime?: string | null;
-  lifePriorities: string[];
+  lifePriorities?: string[];
   goals: OnboardingGoalInput[];
   habits: OnboardingHabitInput[];
   routines: OnboardingRoutineInput[];
-  expenseCategories: OnboardingExpenseCategoryInput[];
+  expenseCategories?: OnboardingExpenseCategoryInput[];
   mealTemplates?: OnboardingMealTemplateInput[];
   firstRecurringBill?: OnboardingRecurringBillInput | null;
   firstWeekStartDate: IsoDateString;

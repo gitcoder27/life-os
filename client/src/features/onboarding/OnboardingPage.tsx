@@ -1,104 +1,131 @@
-import { useState } from "react";
+import {
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import { Link, useNavigate } from "react-router-dom";
 
 import {
   getMonthStartDate,
   getTodayDate,
   getWeekStartDate,
-  parseAmountToMinor,
-  splitEntries,
   useCompleteOnboardingMutation,
+  useGoalsConfigQuery,
   useOnboardingStateQuery,
   useSessionQuery,
+  type GoalDomainItem,
+  type GoalDomainSystemKey,
 } from "../../shared/lib/api";
+import {
+  PageErrorState,
+  PageLoadingState,
+} from "../../shared/ui/PageState";
 import { SectionCard } from "../../shared/ui/SectionCard";
+import {
+  RoutineItemEditor,
+  createEmptyItem,
+  type RoutineItemEntry,
+} from "../habits/RoutineItemEditor";
 
 const onboardingSteps = [
   {
-    title: "Owner profile",
-    summary: "Set the identity and baseline settings this workspace will use.",
+    title: "Basics",
+    summary: "Keep the first-run setup light. Confirm the defaults and adjust only the pieces that matter now.",
   },
   {
-    title: "Life priorities",
-    summary: "Choose the areas this dashboard should optimize around first.",
+    title: "First focus",
+    summary: "Capture the few areas and starter goals you want Life OS to steer toward first.",
   },
   {
-    title: "Top goals",
-    summary: "Define the first three outcomes you want this system to track.",
+    title: "Daily rhythm",
+    summary: "Seed the routines and habits that make the rest of the workspace useful immediately.",
   },
   {
-    title: "Routines and habits",
-    summary: "Create the minimum recurring structure for your day.",
-  },
-  {
-    title: "Tracking defaults",
-    summary: "Set the defaults for water and expense tracking.",
-  },
-  {
-    title: "First recurring bill",
-    summary: "Optionally seed the first recurring bill so Finance starts with durable setup.",
-  },
-  {
-    title: "Review rhythm",
-    summary: "Choose when your review loop should reset and check in.",
+    title: "Finish",
+    summary: "Review the setup summary before creating your starter workspace.",
   },
 ] as const;
 
-type OnboardingValues = {
-  displayName: string;
-  lifePriorities: string;
-  monthlyTheme: string;
-  secondGoal: string;
-  thirdGoal: string;
-  morningRoutine: string;
-  eveningRoutine: string;
-  habits: string;
-  waterTargetMl: string;
-  expenseCategories: string;
-  firstRecurringBillEnabled: boolean;
-  firstRecurringBillTitle: string;
-  firstRecurringBillAmount: string;
-  firstRecurringBillDueOn: string;
-  firstRecurringBillCadence: "weekly" | "monthly";
-  firstRecurringBillCategory: string;
-  dailyReviewTime: string;
-  weekStartsOn: string;
+const fallbackGoalDomains: Array<{
+  key: GoalDomainSystemKey;
+  label: string;
+}> = [
+  { key: "health", label: "Health" },
+  { key: "money", label: "Money" },
+  { key: "work_growth", label: "Work & Growth" },
+  { key: "home_admin", label: "Home & Admin" },
+  { key: "discipline", label: "Discipline" },
+  { key: "other", label: "Other" },
+];
+
+const weekDayOptions = [
+  { value: "0", label: "Sunday" },
+  { value: "1", label: "Monday" },
+  { value: "2", label: "Tuesday" },
+  { value: "3", label: "Wednesday" },
+  { value: "4", label: "Thursday" },
+  { value: "5", label: "Friday" },
+  { value: "6", label: "Saturday" },
+];
+
+type TextListEntry = {
+  key: string;
+  value: string;
 };
 
-function normalizeTimeInput(value: string) {
-  const trimmed = value.trim().toLowerCase();
+type GoalDraft = {
+  key: string;
+  title: string;
+  domain: GoalDomainSystemKey;
+};
 
-  if (!trimmed) {
-    return "";
+type OnboardingValues = {
+  displayName: string;
+  weekStartsOn: string;
+  dailyReviewTime: string;
+  dailyWaterTargetMl: string;
+  focusAreas: TextListEntry[];
+  goals: GoalDraft[];
+  morningRoutine: RoutineItemEntry[];
+  eveningRoutine: RoutineItemEntry[];
+  habits: TextListEntry[];
+};
+
+let nextOnboardingKey = 1;
+
+function makeOnboardingKey() {
+  const key = `onboarding-${nextOnboardingKey}`;
+  nextOnboardingKey += 1;
+  return key;
+}
+
+function createTextListEntry(value = ""): TextListEntry {
+  return {
+    key: makeOnboardingKey(),
+    value,
+  };
+}
+
+function createGoalDraft(
+  defaultDomain: GoalDomainSystemKey,
+  title = "",
+): GoalDraft {
+  return {
+    key: makeOnboardingKey(),
+    title,
+    domain: defaultDomain,
+  };
+}
+
+function buildRoutineEntries(items: string[]) {
+  if (items.length === 0) {
+    return [createEmptyItem()];
   }
 
-  if (/^\d{2}:\d{2}$/.test(trimmed)) {
-    return trimmed;
-  }
-
-  const match = trimmed.match(/^(\d{1,2})(?::(\d{2}))?\s*(am|pm)$/);
-
-  if (!match) {
-    return value;
-  }
-
-  const hour = Number.parseInt(match[1] ?? "0", 10);
-  const minute = Number.parseInt(match[2] ?? "0", 10);
-
-  if (!Number.isFinite(hour) || !Number.isFinite(minute) || hour < 1 || hour > 12 || minute < 0 || minute > 59) {
-    return value;
-  }
-
-  const normalizedHour =
-    match[3] === "pm"
-      ? hour === 12
-        ? 12
-        : hour + 12
-      : hour === 12
-        ? 0
-        : hour;
-
-  return `${String(normalizedHour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
+  return items.map((title) => ({
+    ...createEmptyItem(),
+    title,
+  }));
 }
 
 function readFieldErrors(error: unknown) {
@@ -125,150 +152,413 @@ function readFieldErrors(error: unknown) {
     .filter((entry): entry is string => Boolean(entry));
 }
 
+function parseWaterTarget(value: string, fallback: number) {
+  const normalized = value.trim().toLowerCase();
+
+  if (!normalized) {
+    return fallback;
+  }
+
+  const numeric = Number.parseFloat(normalized.replace(/[^0-9.]/g, ""));
+
+  if (!Number.isFinite(numeric)) {
+    return fallback;
+  }
+
+  if (normalized.includes(" l") || normalized.endsWith("l")) {
+    return Math.round(numeric * 1000);
+  }
+
+  return Math.round(numeric);
+}
+
+function sanitizeTextEntries(entries: TextListEntry[]) {
+  return entries
+    .map((entry) => entry.value.trim())
+    .filter(Boolean);
+}
+
+function sanitizeRoutine(
+  name: string,
+  period: "morning" | "evening",
+  items: RoutineItemEntry[],
+) {
+  const sanitizedItems = items
+    .map((item) => ({
+      title: item.title.trim(),
+      isRequired: item.isRequired,
+    }))
+    .filter((item) => item.title);
+
+  if (sanitizedItems.length === 0) {
+    return null;
+  }
+
+  return {
+    name,
+    period,
+    items: sanitizedItems,
+  };
+}
+
+function buildGoalDomainOptions(domains?: GoalDomainItem[]) {
+  const configuredDomains = (domains ?? [])
+    .filter((domain) => !domain.isArchived && domain.systemKey)
+    .sort((left, right) => left.sortOrder - right.sortOrder)
+    .map((domain) => ({
+      key: domain.systemKey as GoalDomainSystemKey,
+      label: domain.name,
+    }));
+
+  return configuredDomains.length > 0 ? configuredDomains : fallbackGoalDomains;
+}
+
+function TextListEditor({
+  entries,
+  label,
+  hint,
+  emptyPlaceholder,
+  addLabel,
+  suggestions,
+  onChange,
+}: {
+  entries: TextListEntry[];
+  label: string;
+  hint?: string;
+  emptyPlaceholder: string;
+  addLabel: string;
+  suggestions?: string[];
+  onChange: (entries: TextListEntry[]) => void;
+}) {
+  function updateEntry(key: string, value: string) {
+    onChange(
+      entries.map((entry) => entry.key === key ? { ...entry, value } : entry),
+    );
+  }
+
+  function removeEntry(key: string) {
+    if (entries.length === 1) {
+      onChange([{ ...entries[0], value: "" }]);
+      return;
+    }
+
+    onChange(entries.filter((entry) => entry.key !== key));
+  }
+
+  function addEntry(initialValue = "") {
+    onChange([...entries, createTextListEntry(initialValue)]);
+  }
+
+  return (
+    <div className="onboarding-list-editor">
+      <div className="onboarding-list-editor__header">
+        <span className="onboarding-list-editor__label">{label}</span>
+        {hint ? (
+          <span className="onboarding-list-editor__hint">{hint}</span>
+        ) : null}
+      </div>
+
+      {suggestions && suggestions.length > 0 ? (
+        <div className="onboarding-suggestions">
+          {suggestions.map((suggestion) => {
+            const exists = entries.some(
+              (entry) => entry.value.trim().toLowerCase() === suggestion.toLowerCase(),
+            );
+
+            return (
+              <button
+                key={suggestion}
+                className={`onboarding-suggestions__chip${exists ? " onboarding-suggestions__chip--active" : ""}`}
+                type="button"
+                onClick={() => {
+                  if (!exists) {
+                    addEntry(suggestion);
+                  }
+                }}
+                disabled={exists}
+              >
+                {suggestion}
+              </button>
+            );
+          })}
+        </div>
+      ) : null}
+
+      <div className="onboarding-list-editor__rows">
+        {entries.map((entry, index) => (
+          <div key={entry.key} className="onboarding-list-row">
+            <span className="onboarding-list-row__index">{index + 1}</span>
+            <input
+              className="onboarding-list-row__input"
+              type="text"
+              value={entry.value}
+              placeholder={index === 0 ? emptyPlaceholder : "Add another"}
+              onChange={(event) => updateEntry(entry.key, event.target.value)}
+              maxLength={200}
+            />
+            <button
+              className="onboarding-list-row__remove"
+              type="button"
+              onClick={() => removeEntry(entry.key)}
+              aria-label={`Remove ${label.toLowerCase()} item ${index + 1}`}
+            >
+              Remove
+            </button>
+          </div>
+        ))}
+      </div>
+
+      <button
+        className="onboarding-list-editor__add"
+        type="button"
+        onClick={() => addEntry()}
+      >
+        + {addLabel}
+      </button>
+    </div>
+  );
+}
+
+function GoalListEditor({
+  goals,
+  domainOptions,
+  onChange,
+}: {
+  goals: GoalDraft[];
+  domainOptions: Array<{ key: GoalDomainSystemKey; label: string }>;
+  onChange: (goals: GoalDraft[]) => void;
+}) {
+  function updateGoal(key: string, patch: Partial<GoalDraft>) {
+    onChange(
+      goals.map((goal) => goal.key === key ? { ...goal, ...patch } : goal),
+    );
+  }
+
+  function removeGoal(key: string) {
+    if (goals.length === 1) {
+      onChange([{ ...goals[0], title: "" }]);
+      return;
+    }
+
+    onChange(goals.filter((goal) => goal.key !== key));
+  }
+
+  function addGoal() {
+    if (goals.length >= 3) {
+      return;
+    }
+
+    onChange([
+      ...goals,
+      createGoalDraft(domainOptions[0]?.key ?? "other"),
+    ]);
+  }
+
+  return (
+    <div className="onboarding-list-editor">
+      <div className="onboarding-list-editor__header">
+        <span className="onboarding-list-editor__label">Starter goals</span>
+        <span className="onboarding-list-editor__hint">Add up to 3 goals</span>
+      </div>
+
+      <div className="onboarding-goal-editor">
+        {goals.map((goal, index) => (
+          <div key={goal.key} className="onboarding-goal-row">
+            <span className="onboarding-list-row__index">{index + 1}</span>
+            <input
+              className="onboarding-goal-row__title"
+              type="text"
+              value={goal.title}
+              placeholder={index === 0 ? "Build a weekly operating rhythm" : "Another starter goal"}
+              onChange={(event) => updateGoal(goal.key, { title: event.target.value })}
+              maxLength={200}
+            />
+            <select
+              className="onboarding-goal-row__domain"
+              value={goal.domain}
+              onChange={(event) =>
+                updateGoal(goal.key, { domain: event.target.value as GoalDomainSystemKey })
+              }
+            >
+              {domainOptions.map((domain) => (
+                <option key={domain.key} value={domain.key}>
+                  {domain.label}
+                </option>
+              ))}
+            </select>
+            <button
+              className="onboarding-list-row__remove"
+              type="button"
+              onClick={() => removeGoal(goal.key)}
+              aria-label={`Remove goal ${index + 1}`}
+            >
+              Remove
+            </button>
+          </div>
+        ))}
+      </div>
+
+      <button
+        className="onboarding-list-editor__add"
+        type="button"
+        onClick={addGoal}
+        disabled={goals.length >= 3}
+      >
+        + Add goal
+      </button>
+    </div>
+  );
+}
+
 export function OnboardingPage() {
   const navigate = useNavigate();
   const today = getTodayDate();
   const sessionQuery = useSessionQuery();
   const onboardingQuery = useOnboardingStateQuery(true);
+  const goalsConfigQuery = useGoalsConfigQuery();
   const completeOnboardingMutation = useCompleteOnboardingMutation();
   const [activeStep, setActiveStep] = useState(0);
+  const [hasSeededDefaults, setHasSeededDefaults] = useState(false);
   const [values, setValues] = useState<OnboardingValues>({
     displayName: "",
-    lifePriorities: "",
-    monthlyTheme: "",
-    secondGoal: "",
-    thirdGoal: "",
-    morningRoutine: "",
-    eveningRoutine: "",
-    habits: "",
-    waterTargetMl: "",
-    expenseCategories: "",
-    firstRecurringBillEnabled: false,
-    firstRecurringBillTitle: "",
-    firstRecurringBillAmount: "",
-    firstRecurringBillDueOn: "",
-    firstRecurringBillCadence: "monthly",
-    firstRecurringBillCategory: "",
-    dailyReviewTime: "",
-    weekStartsOn: "",
+    weekStartsOn: "1",
+    dailyReviewTime: "20:00",
+    dailyWaterTargetMl: "2500",
+    focusAreas: [createTextListEntry("")],
+    goals: [createGoalDraft("other")],
+    morningRoutine: [createEmptyItem()],
+    eveningRoutine: [createEmptyItem()],
+    habits: [createTextListEntry("")],
   });
-  const step = onboardingSteps[activeStep];
+
   const defaults = onboardingQuery.data?.defaults;
-  const timezone = defaults?.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone ?? "UTC";
   const mutationFieldErrors = readFieldErrors(completeOnboardingMutation.error);
-  const financeCategoryOptions = (
-    splitEntries(values.expenseCategories).length
-      ? splitEntries(values.expenseCategories)
-      : defaults?.expenseCategorySuggestions?.slice(0, 6) ?? ["Groceries", "Dining", "Transport", "Utilities"]
-  ).map((name) => name.trim()).filter(Boolean);
+  const goalDomainOptions = useMemo(
+    () => buildGoalDomainOptions(goalsConfigQuery.data?.domains),
+    [goalsConfigQuery.data?.domains],
+  );
+  const focusAreaSuggestions = goalDomainOptions
+    .slice(0, 4)
+    .map((domain) => domain.label);
 
-  function setValue<Key extends keyof OnboardingValues>(key: Key, value: OnboardingValues[Key]) {
-    setValues((current) => ({
-      ...current,
-      [key]: value,
-    }));
-  }
-
-  function parseWaterTarget(value: string) {
-    const normalized = value.trim().toLowerCase();
-    if (!normalized) {
-      return defaults?.dailyWaterTargetMl ?? 2500;
+  useEffect(() => {
+    if (!defaults || hasSeededDefaults) {
+      return;
     }
 
-    const numeric = Number.parseFloat(normalized.replace(/[^0-9.]/g, ""));
-    if (!Number.isFinite(numeric)) {
-      return defaults?.dailyWaterTargetMl ?? 2500;
-    }
+    const morningDefaults =
+      defaults.routineTemplates.find((template) => template.period === "morning")?.items ?? [
+        "Review top 3 priorities",
+        "Drink water",
+        "Check calendar",
+      ];
+    const eveningDefaults =
+      defaults.routineTemplates.find((template) => template.period === "evening")?.items ?? [
+        "Daily review",
+        "Prep tomorrow",
+        "Tidy key space",
+      ];
+    const habitDefaults =
+      defaults.habitSuggestions.slice(0, 3);
 
-    if (normalized.includes(" l") || normalized.endsWith("l")) {
-      return Math.round(numeric * 1000);
-    }
+    setValues({
+      displayName: sessionQuery.data?.user?.displayName ?? "",
+      weekStartsOn: String(defaults.weekStartsOn ?? 1),
+      dailyReviewTime: defaults.dailyReviewStartTime ?? "20:00",
+      dailyWaterTargetMl: String(defaults.dailyWaterTargetMl ?? 2500),
+      focusAreas: [createTextListEntry("")],
+      goals: [createGoalDraft(goalDomainOptions[0]?.key ?? "other")],
+      morningRoutine: buildRoutineEntries(morningDefaults),
+      eveningRoutine: buildRoutineEntries(eveningDefaults),
+      habits: habitDefaults.length > 0
+        ? habitDefaults.map((habit) => createTextListEntry(habit))
+        : [createTextListEntry("")],
+    });
+    setHasSeededDefaults(true);
+  }, [
+    defaults,
+    goalDomainOptions,
+    hasSeededDefaults,
+    sessionQuery.data?.user?.displayName,
+  ]);
 
-    return Math.round(numeric);
-  }
-
-  async function handleComplete() {
-    const lifePriorities = splitEntries(values.lifePriorities).slice(0, 5);
-    const goalTitles = [values.monthlyTheme, values.secondGoal, values.thirdGoal]
-      .map((value) => value.trim())
-      .filter(Boolean);
-
-    const goals = (goalTitles.length ? goalTitles : ["Build the first working Life OS loop"]).map((title) => ({
-      title,
-      domain: "other" as const,
-    }));
-
-    const routineTemplates = defaults?.routineTemplates ?? [];
-    const morningItems = splitEntries(values.morningRoutine);
-    const eveningItems = splitEntries(values.eveningRoutine);
-    const habitItems = splitEntries(values.habits);
-
-    const routines = [
-      {
-        name: "Morning routine",
-        period: "morning" as const,
-        items: (morningItems.length
-          ? morningItems
-          : routineTemplates.find((template) => template.period === "morning")?.items ?? [
-              "Review priorities",
-              "Drink water",
-            ]).map((title) => ({ title })),
-      },
-      {
-        name: "Evening routine",
-        period: "evening" as const,
-        items: (eveningItems.length
-          ? eveningItems
-          : routineTemplates.find((template) => template.period === "evening")?.items ?? [
-              "Daily review",
-              "Prepare tomorrow",
-            ]).map((title) => ({ title })),
-      },
-    ];
-
-    const habits = (habitItems.length
-      ? habitItems
-      : defaults?.habitSuggestions?.slice(0, 3) ?? ["Morning planning", "Workout", "Hydration"]).map((title) => ({
-      title,
-      targetPerDay: 1,
-    }));
-
-    const expenseCategories = financeCategoryOptions.map((name) => ({ name }));
-    const firstRecurringBillTitle = values.firstRecurringBillTitle.trim();
-    const firstRecurringBill = values.firstRecurringBillEnabled && firstRecurringBillTitle && values.firstRecurringBillDueOn
-      ? {
-          title: firstRecurringBillTitle,
-          categoryName: values.firstRecurringBillCategory || financeCategoryOptions[0] || null,
-          defaultAmountMinor: parseAmountToMinor(values.firstRecurringBillAmount) ?? null,
-          cadence: values.firstRecurringBillCadence,
-          nextDueOn: values.firstRecurringBillDueOn,
-          remindDaysBefore: 3,
-        }
-      : null;
-
-    const reviewTime = normalizeTimeInput(values.dailyReviewTime);
-    const parsedWeekStartsOn = Number.parseInt(values.weekStartsOn || String(defaults?.weekStartsOn ?? 1), 10);
-
-    await completeOnboardingMutation.mutateAsync({
+  const focusAreas = useMemo(
+    () => sanitizeTextEntries(values.focusAreas).slice(0, 5),
+    [values.focusAreas],
+  );
+  const goals = useMemo(
+    () =>
+      values.goals
+        .map((goal) => ({
+          title: goal.title.trim(),
+          domain: goal.domain,
+        }))
+        .filter((goal) => goal.title)
+        .slice(0, 3),
+    [values.goals],
+  );
+  const habits = useMemo(
+    () =>
+      sanitizeTextEntries(values.habits)
+        .slice(0, 5)
+        .map((title) => ({
+          title,
+          targetPerDay: 1,
+        })),
+    [values.habits],
+  );
+  const routines = useMemo(
+    () =>
+      [
+        sanitizeRoutine("Morning routine", "morning", values.morningRoutine),
+        sanitizeRoutine("Evening routine", "evening", values.eveningRoutine),
+      ].filter((routine): routine is NonNullable<typeof routine> => Boolean(routine)),
+    [values.eveningRoutine, values.morningRoutine],
+  );
+  const summaryItems = useMemo(
+    () => ({
       displayName: values.displayName.trim() || sessionQuery.data?.user?.displayName || "Owner",
-      timezone,
+      weekStartsOn:
+        weekDayOptions.find((option) => option.value === values.weekStartsOn)?.label ?? "Monday",
+      dailyReviewTime: values.dailyReviewTime || defaults?.dailyReviewStartTime || "20:00",
+      dailyWaterTargetMl: parseWaterTarget(values.dailyWaterTargetMl, defaults?.dailyWaterTargetMl ?? 2500),
+      focusAreas,
+      goals,
+      routines,
+      habits,
+      timezone: defaults?.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone ?? "UTC",
       currencyCode: defaults?.currencyCode ?? "USD",
-      weekStartsOn: Number.isFinite(parsedWeekStartsOn) ? parsedWeekStartsOn : (defaults?.weekStartsOn ?? 1),
-      dailyWaterTargetMl: parseWaterTarget(values.waterTargetMl),
-      dailyReviewStartTime: (reviewTime || defaults?.dailyReviewStartTime) ?? "20:00",
-      dailyReviewEndTime: defaults?.dailyReviewEndTime ?? null,
-      lifePriorities: lifePriorities.length ? lifePriorities : ["Health", "Work growth", "Money"],
+    }),
+    [
+      defaults?.currencyCode,
+      defaults?.dailyReviewStartTime,
+      defaults?.dailyWaterTargetMl,
+      defaults?.timezone,
+      focusAreas,
       goals,
       habits,
       routines,
-      expenseCategories,
-      mealTemplates:
-        defaults?.mealTemplateSuggestions?.map((meal) => ({
-          name: meal.name,
-          mealSlot: meal.mealSlot,
-          description: meal.name,
-        })) ?? [],
-      firstRecurringBill,
+      sessionQuery.data?.user?.displayName,
+      values.dailyReviewTime,
+      values.dailyWaterTargetMl,
+      values.displayName,
+      values.weekStartsOn,
+    ],
+  );
+
+  async function handleComplete() {
+    await completeOnboardingMutation.mutateAsync({
+      displayName: summaryItems.displayName,
+      timezone: summaryItems.timezone,
+      currencyCode: summaryItems.currencyCode,
+      weekStartsOn: Number.parseInt(values.weekStartsOn || String(defaults?.weekStartsOn ?? 1), 10),
+      dailyWaterTargetMl: summaryItems.dailyWaterTargetMl,
+      dailyReviewStartTime: summaryItems.dailyReviewTime,
+      dailyReviewEndTime: defaults?.dailyReviewEndTime ?? null,
+      lifePriorities: focusAreas.length > 0 ? focusAreas : undefined,
+      goals,
+      habits,
+      routines,
       firstWeekStartDate: getWeekStartDate(today),
       firstMonthStartDate: getMonthStartDate(today),
     });
@@ -276,51 +566,47 @@ export function OnboardingPage() {
     navigate("/", { replace: true });
   }
 
+  if (onboardingQuery.isLoading && !onboardingQuery.data) {
+    return (
+      <PageLoadingState
+        title="Loading starter setup"
+        description="Pulling in your defaults so the setup can stay lightweight."
+      />
+    );
+  }
+
+  if (onboardingQuery.isError || !onboardingQuery.data) {
+    return (
+      <PageErrorState
+        title="Onboarding unavailable"
+        message={
+          onboardingQuery.error instanceof Error
+            ? onboardingQuery.error.message
+            : undefined
+        }
+        onRetry={() => void onboardingQuery.refetch()}
+      />
+    );
+  }
+
+  const step = onboardingSteps[activeStep];
+
   return (
-    <div className="auth-layout" style={{ alignItems: "start", paddingTop: "3rem" }}>
-      <div style={{ width: "min(100%, 48rem)" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", marginBottom: "1rem" }}>
-          <span
-            style={{
-              display: "inline-flex",
-              width: "2.4rem",
-              height: "2.4rem",
-              alignItems: "center",
-              justifyContent: "center",
-              borderRadius: "var(--r-sm)",
-              background: "linear-gradient(135deg, rgba(217,153,58,0.2), rgba(217,153,58,0.06))",
-              border: "1px solid rgba(217,153,58,0.25)",
-              color: "var(--accent-bright)",
-              fontFamily: "var(--font-display)",
-              fontSize: "1.1rem",
-              fontWeight: 600,
-            }}
-          >
-            L
-          </span>
-          <div>
+    <div className="auth-layout onboarding-shell">
+      <div className="onboarding-shell__panel">
+        <div className="onboarding-hero">
+          <div className="onboarding-hero__mark">L</div>
+          <div className="onboarding-hero__copy">
             <span className="page-eyebrow">Optional setup</span>
-            <div style={{ fontFamily: "var(--font-display)", fontSize: "1.5rem", fontWeight: 500, marginTop: "0.15rem" }}>
-              Starter setup
-            </div>
+            <h1 className="onboarding-hero__title">Starter setup</h1>
+            <p className="onboarding-hero__summary">
+              This setup stays intentionally short. You can skip it entirely, or use it to seed just enough structure to make the app useful right away.
+            </p>
           </div>
         </div>
 
-        <div
-          style={{
-            marginBottom: "1rem",
-            padding: "0.9rem 1rem",
-            borderRadius: "var(--r-md)",
-            border: "1px solid var(--line, rgba(255,255,255,0.08))",
-            background: "rgba(255,255,255,0.03)",
-          }}
-        >
-          <div className="page-eyebrow" style={{ marginBottom: "0.4rem" }}>How this works</div>
-          <div style={{ color: "var(--text-secondary)", lineHeight: 1.6 }}>
-            This optional wizard sets up your habits, routines, goals, and tracking defaults in one pass.
-            You can skip this entirely. Settings owns app preferences. Finance setup lives on Finance, and habits setup lives on Habits.
-            If you leave routines, habits, or categories blank, the app will create sensible starter defaults.
-          </div>
+        <div className="onboarding-note">
+          Settings still owns preferences. Finance and meal setup now live in their own spaces, so onboarding only asks for the few things that help the first week feel guided.
         </div>
 
         <div className="onboarding-stepper">
@@ -335,118 +621,81 @@ export function OnboardingPage() {
           ))}
         </div>
 
-        <SectionCard title={`${activeStep + 1}. ${step.title}`} subtitle={step.summary}>
+        <div className="onboarding-step-meta">
+          <span className="onboarding-step-meta__count">
+            Step {activeStep + 1} of {onboardingSteps.length}
+          </span>
+          <span className="onboarding-step-meta__title">{step.title}</span>
+        </div>
+
+        <SectionCard title={step.title} subtitle={step.summary}>
           {activeStep === 0 ? (
-            <div className="stack-form" style={{ paddingTop: "0.5rem" }}>
+            <div className="stack-form onboarding-section">
               <label className="field">
                 <span>Display name</span>
                 <input
                   placeholder="Owner"
                   type="text"
                   value={values.displayName}
-                  onChange={(event) => setValue("displayName", event.target.value)}
+                  onChange={(event) =>
+                    setValues((current) => ({
+                      ...current,
+                      displayName: event.target.value,
+                    }))
+                  }
                 />
               </label>
-              <div
-                style={{
-                  padding: "0.95rem 1rem",
-                  borderRadius: "var(--r-md)",
-                  border: "1px solid var(--line, rgba(255,255,255,0.08))",
-                  background: "rgba(255,255,255,0.03)",
-                }}
-              >
-                <div className="page-eyebrow" style={{ marginBottom: "0.4rem" }}>Detected defaults</div>
-                <div style={{ display: "grid", gap: "0.35rem", color: "var(--text-secondary)" }}>
-                  <div><strong style={{ color: "var(--text-primary)" }}>Timezone:</strong> {timezone}</div>
-                  <div><strong style={{ color: "var(--text-primary)" }}>Currency:</strong> {defaults?.currencyCode ?? "USD"}</div>
-                  <div><strong style={{ color: "var(--text-primary)" }}>Today:</strong> {today}</div>
+
+              <div className="onboarding-defaults-grid">
+                <div className="onboarding-default-card">
+                  <span className="page-eyebrow">Timezone</span>
+                  <strong>{summaryItems.timezone}</strong>
+                </div>
+                <div className="onboarding-default-card">
+                  <span className="page-eyebrow">Currency</span>
+                  <strong>{summaryItems.currencyCode}</strong>
+                </div>
+                <div className="onboarding-default-card">
+                  <span className="page-eyebrow">Today</span>
+                  <strong>{today}</strong>
                 </div>
               </div>
-            </div>
-          ) : null}
 
-          {activeStep === 1 ? (
-            <div className="stack-form" style={{ paddingTop: "0.5rem" }}>
-              <label className="field">
-                <span>Life priorities</span>
-                <textarea
-                  placeholder={"Health\nWork growth\nMoney"}
-                  rows={6}
-                  value={values.lifePriorities}
-                  onChange={(event) => setValue("lifePriorities", event.target.value)}
-                />
-              </label>
-              <p className="list__subtle">Enter 3 to 5 priorities, one per line. Example: `Health`, `Money`, `Family`, `Work growth`.</p>
-            </div>
-          ) : null}
+              <div className="onboarding-inline-grid">
+                <label className="field">
+                  <span>Week starts on</span>
+                  <select
+                    value={values.weekStartsOn}
+                    onChange={(event) =>
+                      setValues((current) => ({
+                        ...current,
+                        weekStartsOn: event.target.value,
+                      }))
+                    }
+                  >
+                    {weekDayOptions.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
 
-          {activeStep === 2 ? (
-            <div className="stack-form" style={{ paddingTop: "0.5rem" }}>
-              <label className="field">
-                <span>Primary goal</span>
-                <input
-                  placeholder="Build a stable weekly operating rhythm"
-                  type="text"
-                  value={values.monthlyTheme}
-                  onChange={(event) => setValue("monthlyTheme", event.target.value)}
-                />
-              </label>
-              <label className="field">
-                <span>Second goal</span>
-                <input
-                  placeholder="Log all major expenses this month"
-                  type="text"
-                  value={values.secondGoal}
-                  onChange={(event) => setValue("secondGoal", event.target.value)}
-                />
-              </label>
-              <label className="field">
-                <span>Third goal</span>
-                <input
-                  placeholder="Complete morning routine 5 days a week"
-                  type="text"
-                  value={values.thirdGoal}
-                  onChange={(event) => setValue("thirdGoal", event.target.value)}
-                />
-              </label>
-            </div>
-          ) : null}
+                <label className="field">
+                  <span>Daily review time</span>
+                  <input
+                    type="time"
+                    value={values.dailyReviewTime}
+                    onChange={(event) =>
+                      setValues((current) => ({
+                        ...current,
+                        dailyReviewTime: event.target.value,
+                      }))
+                    }
+                  />
+                </label>
+              </div>
 
-          {activeStep === 3 ? (
-            <div className="stack-form" style={{ paddingTop: "0.5rem" }}>
-              <label className="field">
-                <span>Morning routine</span>
-                <textarea
-                  placeholder={"Drink water\nReview priorities\nCheck calendar"}
-                  rows={5}
-                  value={values.morningRoutine}
-                  onChange={(event) => setValue("morningRoutine", event.target.value)}
-                />
-              </label>
-              <label className="field">
-                <span>Evening routine</span>
-                <textarea
-                  placeholder={"Daily review\nPrep tomorrow\nTidy desk"}
-                  rows={5}
-                  value={values.eveningRoutine}
-                  onChange={(event) => setValue("eveningRoutine", event.target.value)}
-                />
-              </label>
-              <label className="field">
-                <span>Daily habits</span>
-                <textarea
-                  placeholder={"Workout\nHydration\nEvening reset"}
-                  rows={4}
-                  value={values.habits}
-                  onChange={(event) => setValue("habits", event.target.value)}
-                />
-              </label>
-              <p className="list__subtle">Use one item per line. If you leave this blank, starter defaults will be created automatically.</p>
-            </div>
-          ) : null}
-
-          {activeStep === 4 ? (
-            <div className="stack-form" style={{ paddingTop: "0.5rem" }}>
               <label className="field">
                 <span>Daily water target</span>
                 <input
@@ -454,169 +703,202 @@ export function OnboardingPage() {
                   type="number"
                   min="250"
                   step="50"
-                  value={values.waterTargetMl}
-                  onChange={(event) => setValue("waterTargetMl", event.target.value)}
+                  value={values.dailyWaterTargetMl}
+                  onChange={(event) =>
+                    setValues((current) => ({
+                      ...current,
+                      dailyWaterTargetMl: event.target.value,
+                    }))
+                  }
                 />
               </label>
-              <p className="list__subtle">Enter milliliters. Example: `2500` means 2.5 liters.</p>
-              <label className="field">
-                <span>Expense categories</span>
-                <textarea
-                  placeholder={"Groceries\nDining\nTransport\nUtilities"}
-                  rows={6}
-                  value={values.expenseCategories}
-                  onChange={(event) => setValue("expenseCategories", event.target.value)}
-                />
-              </label>
-              <p className="list__subtle">One category per line. Leave blank to use the starter category set.</p>
             </div>
           ) : null}
 
-          {activeStep === 5 ? (
-            <div className="stack-form" style={{ paddingTop: "0.5rem" }}>
-              <div
-                style={{
-                  padding: "0.95rem 1rem",
-                  borderRadius: "var(--r-md)",
-                  border: "1px solid var(--line, rgba(255,255,255,0.08))",
-                  background: "rgba(255,255,255,0.03)",
-                  display: "grid",
-                  gap: "0.75rem",
-                }}
-              >
-                <label style={{ display: "flex", alignItems: "center", gap: "0.65rem", color: "var(--text-primary)" }}>
-                  <input
-                    type="checkbox"
-                    checked={values.firstRecurringBillEnabled}
-                    onChange={(event) => {
-                      const enabled = event.target.checked;
-                      setValues((current) => ({
-                        ...current,
-                        firstRecurringBillEnabled: enabled,
-                        firstRecurringBillDueOn: enabled && !current.firstRecurringBillDueOn ? today : current.firstRecurringBillDueOn,
-                        firstRecurringBillCategory:
-                          enabled && !current.firstRecurringBillCategory
-                            ? (financeCategoryOptions[0] ?? "")
-                            : current.firstRecurringBillCategory,
-                      }));
-                    }}
-                  />
-                  <span>Seed my first recurring bill</span>
-                </label>
-                <p className="list__subtle" style={{ margin: 0 }}>
-                  This is optional. It gives Finance an obvious recurring structure from day one, and you can manage it later from the Finance page.
-                </p>
-              </div>
+          {activeStep === 1 ? (
+            <div className="stack-form onboarding-section">
+              <TextListEditor
+                entries={values.focusAreas}
+                label="Focus areas"
+                hint="Optional, up to 5"
+                emptyPlaceholder="Health, work growth, money..."
+                addLabel="Add focus area"
+                suggestions={focusAreaSuggestions}
+                onChange={(entries) =>
+                  setValues((current) => ({
+                    ...current,
+                    focusAreas: entries,
+                  }))
+                }
+              />
 
-              {values.firstRecurringBillEnabled ? (
-                <>
-                  <label className="field">
-                    <span>Bill title</span>
-                    <input
-                      placeholder="Rent, internet, insurance"
-                      type="text"
-                      value={values.firstRecurringBillTitle}
-                      onChange={(event) => setValue("firstRecurringBillTitle", event.target.value)}
-                    />
-                  </label>
-                  <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap" }}>
-                    <label className="field" style={{ flex: "1 1 11rem" }}>
-                      <span>Expected amount</span>
-                      <input
-                        placeholder="0.00"
-                        inputMode="decimal"
-                        type="text"
-                        value={values.firstRecurringBillAmount}
-                        onChange={(event) => setValue("firstRecurringBillAmount", event.target.value)}
-                      />
-                    </label>
-                    <label className="field" style={{ flex: "1 1 11rem" }}>
-                      <span>Next due date</span>
-                      <input
-                        type="date"
-                        value={values.firstRecurringBillDueOn}
-                        onChange={(event) => setValue("firstRecurringBillDueOn", event.target.value)}
-                      />
-                    </label>
-                  </div>
-                  <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap" }}>
-                    <label className="field" style={{ flex: "1 1 11rem" }}>
-                      <span>Cadence</span>
-                      <select
-                        value={values.firstRecurringBillCadence}
-                        onChange={(event) => setValue("firstRecurringBillCadence", event.target.value as "weekly" | "monthly")}
-                      >
-                        <option value="monthly">Monthly</option>
-                        <option value="weekly">Weekly</option>
-                      </select>
-                    </label>
-                    <label className="field" style={{ flex: "1 1 11rem" }}>
-                      <span>Category</span>
-                      <select
-                        value={values.firstRecurringBillCategory}
-                        onChange={(event) => setValue("firstRecurringBillCategory", event.target.value)}
-                      >
-                        <option value="">Choose later</option>
-                        {financeCategoryOptions.map((category) => (
-                          <option key={category} value={category}>
-                            {category}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                  </div>
-                </>
+              <GoalListEditor
+                goals={values.goals}
+                domainOptions={goalDomainOptions}
+                onChange={(nextGoals) =>
+                  setValues((current) => ({
+                    ...current,
+                    goals: nextGoals,
+                  }))
+                }
+              />
+
+              {goalsConfigQuery.isError ? (
+                <p className="list__subtle">
+                  Goal domains could not load, so onboarding is using the default domain set for now.
+                </p>
               ) : null}
             </div>
           ) : null}
 
-          {activeStep === 6 ? (
-            <div className="stack-form" style={{ paddingTop: "0.5rem" }}>
-              <label className="field">
-                <span>Daily review time</span>
-                <input
-                  type="time"
-                  value={values.dailyReviewTime || defaults?.dailyReviewStartTime || "20:00"}
-                  onChange={(event) => setValue("dailyReviewTime", event.target.value)}
+          {activeStep === 2 ? (
+            <div className="stack-form onboarding-section">
+              <div className="onboarding-routine-block">
+                <div className="onboarding-routine-block__header">
+                  <span className="onboarding-routine-block__title">Morning routine</span>
+                  <span className="onboarding-routine-block__hint">
+                    Keep only the steps you want.
+                  </span>
+                </div>
+                <RoutineItemEditor
+                  items={values.morningRoutine}
+                  onChange={(items) =>
+                    setValues((current) => ({
+                      ...current,
+                      morningRoutine: items,
+                    }))
+                  }
                 />
-              </label>
-              <p className="list__subtle">Use 24-hour time. Example: `20:00` for 8:00 PM.</p>
-              <label className="field">
-                <span>Week starts on</span>
-                <select
-                  value={values.weekStartsOn || String(defaults?.weekStartsOn ?? 1)}
-                  onChange={(event) => setValue("weekStartsOn", event.target.value)}
-                >
-                  <option value="0">Sunday</option>
-                  <option value="1">Monday</option>
-                  <option value="2">Tuesday</option>
-                  <option value="3">Wednesday</option>
-                  <option value="4">Thursday</option>
-                  <option value="5">Friday</option>
-                  <option value="6">Saturday</option>
-                </select>
-              </label>
+              </div>
+
+              <div className="onboarding-routine-block">
+                <div className="onboarding-routine-block__header">
+                  <span className="onboarding-routine-block__title">Evening routine</span>
+                  <span className="onboarding-routine-block__hint">
+                    These can be edited later from Habits.
+                  </span>
+                </div>
+                <RoutineItemEditor
+                  items={values.eveningRoutine}
+                  onChange={(items) =>
+                    setValues((current) => ({
+                      ...current,
+                      eveningRoutine: items,
+                    }))
+                  }
+                />
+              </div>
+
+              <TextListEditor
+                entries={values.habits}
+                label="Starter habits"
+                hint="Optional, up to 5"
+                emptyPlaceholder="Workout"
+                addLabel="Add habit"
+                suggestions={defaults?.habitSuggestions ?? []}
+                onChange={(entries) =>
+                  setValues((current) => ({
+                    ...current,
+                    habits: entries,
+                  }))
+                }
+              />
+            </div>
+          ) : null}
+
+          {activeStep === 3 ? (
+            <div className="stack-form onboarding-section">
+              <div className="onboarding-summary-grid">
+                <div className="onboarding-summary-card">
+                  <span className="page-eyebrow">Profile</span>
+                  <strong>{summaryItems.displayName}</strong>
+                  <span>{summaryItems.timezone}</span>
+                  <span>{summaryItems.currencyCode}</span>
+                </div>
+                <div className="onboarding-summary-card">
+                  <span className="page-eyebrow">Review rhythm</span>
+                  <strong>{summaryItems.dailyReviewTime}</strong>
+                  <span>Week starts {summaryItems.weekStartsOn}</span>
+                  <span>{summaryItems.dailyWaterTargetMl} ml water target</span>
+                </div>
+                <div className="onboarding-summary-card">
+                  <span className="page-eyebrow">Setup counts</span>
+                  <strong>{summaryItems.goals.length} goals</strong>
+                  <span>{summaryItems.habits.length} habits</span>
+                  <span>{summaryItems.routines.length} routines</span>
+                </div>
+              </div>
+
+              <div className="onboarding-review-block">
+                <span className="onboarding-review-block__title">Focus areas</span>
+                {summaryItems.focusAreas.length > 0 ? (
+                  <div className="onboarding-review-tags">
+                    {summaryItems.focusAreas.map((focusArea) => (
+                      <span key={focusArea} className="onboarding-review-tag">
+                        {focusArea}
+                      </span>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="list__subtle">No focus areas added yet.</p>
+                )}
+              </div>
+
+              <div className="onboarding-review-block">
+                <span className="onboarding-review-block__title">Starter goals</span>
+                {summaryItems.goals.length > 0 ? (
+                  <ul className="onboarding-review-list">
+                    {summaryItems.goals.map((goal) => {
+                      const domainLabel =
+                        goalDomainOptions.find((option) => option.key === goal.domain)?.label ?? goal.domain;
+
+                      return (
+                        <li key={`${goal.title}-${goal.domain}`}>
+                          <strong>{goal.title}</strong>
+                          <span>{domainLabel}</span>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                ) : (
+                  <p className="list__subtle">No starter goals will be created.</p>
+                )}
+              </div>
+
+              <div className="onboarding-review-block">
+                <span className="onboarding-review-block__title">Daily rhythm</span>
+                <ul className="onboarding-review-list">
+                  <li>
+                    <strong>Morning routine</strong>
+                    <span>
+                      {summaryItems.routines.find((routine) => routine.period === "morning")?.items.length ?? 0} steps
+                    </span>
+                  </li>
+                  <li>
+                    <strong>Evening routine</strong>
+                    <span>
+                      {summaryItems.routines.find((routine) => routine.period === "evening")?.items.length ?? 0} steps
+                    </span>
+                  </li>
+                  <li>
+                    <strong>Habits</strong>
+                    <span>{summaryItems.habits.length} starter habits</span>
+                  </li>
+                </ul>
+              </div>
             </div>
           ) : null}
         </SectionCard>
 
         {completeOnboardingMutation.error ? (
-          <div
-            style={{
-              marginTop: "0.75rem",
-              padding: "0.9rem 1rem",
-              borderRadius: "var(--r-md)",
-              border: "1px solid rgba(232,143,143,0.35)",
-              background: "rgba(128,32,32,0.12)",
-            }}
-          >
-            <p className="list__subtle" style={{ color: "var(--danger, #e88f8f)", marginBottom: mutationFieldErrors.length ? "0.5rem" : 0 }}>
+          <div className="onboarding-error">
+            <p className="list__subtle onboarding-error__message">
               {completeOnboardingMutation.error instanceof Error
                 ? completeOnboardingMutation.error.message
                 : "Unable to complete onboarding."}
             </p>
-            {mutationFieldErrors.length ? (
-              <ul className="list__subtle" style={{ margin: 0, paddingLeft: "1.1rem", color: "var(--danger, #e88f8f)" }}>
+            {mutationFieldErrors.length > 0 ? (
+              <ul className="list__subtle onboarding-error__list">
                 {mutationFieldErrors.map((message) => (
                   <li key={message}>{message}</li>
                 ))}
@@ -625,35 +907,38 @@ export function OnboardingPage() {
           </div>
         ) : null}
 
-        <div className="button-row" style={{ marginTop: "1rem", justifyContent: "space-between" }}>
+        <div className="button-row onboarding-actions">
           <div className="button-row">
             <button
               className="button button--ghost"
               type="button"
               disabled={activeStep === 0}
-              onClick={() => setActiveStep((currentStep) => Math.max(0, currentStep - 1))}
+              onClick={() =>
+                setActiveStep((currentStep) => Math.max(0, currentStep - 1))
+              }
             >
               Back
             </button>
             <Link
               className="button button--ghost"
               to="/"
-              style={{ color: "var(--text-tertiary)" }}
             >
-              Skip, go to app
+              Skip to app
             </Link>
           </div>
+
           <div className="button-row">
-            <span className="list__subtle" style={{ alignSelf: "center" }}>
-              Step {activeStep + 1} of {onboardingSteps.length}
-            </span>
             {activeStep < onboardingSteps.length - 1 ? (
               <button
                 className="button button--primary"
                 type="button"
-                onClick={() => setActiveStep((currentStep) => Math.min(onboardingSteps.length - 1, currentStep + 1))}
+                onClick={() =>
+                  setActiveStep((currentStep) =>
+                    Math.min(onboardingSteps.length - 1, currentStep + 1),
+                  )
+                }
               >
-                Next
+                Continue
               </button>
             ) : (
               <button
@@ -662,7 +947,7 @@ export function OnboardingPage() {
                 onClick={() => void handleComplete()}
                 disabled={completeOnboardingMutation.isPending}
               >
-                {completeOnboardingMutation.isPending ? "Completing..." : "Complete setup"}
+                {completeOnboardingMutation.isPending ? "Creating workspace..." : "Start with this setup"}
               </button>
             )}
           </div>

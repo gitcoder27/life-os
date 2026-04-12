@@ -135,11 +135,11 @@ const onboardingCompletionSchema = z.object({
         : value,
     z.string().regex(/^\d{2}:\d{2}$/).nullable().optional(),
   ),
-  lifePriorities: z.array(z.string().min(1).max(200)).min(1).max(5),
+  lifePriorities: z.array(z.string().min(1).max(200)).max(5).optional(),
   goals: z.array(onboardingGoalSchema).max(10),
   habits: z.array(onboardingHabitSchema).max(20),
   routines: z.array(onboardingRoutineSchema).max(6),
-  expenseCategories: z.array(onboardingExpenseCategorySchema).max(20),
+  expenseCategories: z.array(onboardingExpenseCategorySchema).max(20).optional(),
   mealTemplates: z.array(onboardingMealTemplateSchema).max(20).optional(),
   firstRecurringBill: onboardingRecurringBillSchema.nullable().optional(),
   firstWeekStartDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
@@ -240,6 +240,8 @@ export const registerOnboardingRoutes: FastifyPluginAsync = async (app) => {
   app.post("/complete", async (request, reply) => {
     const user = requireAuthenticatedUser(request);
     const payload = parseOrThrow(onboardingCompletionSchema, request.body as OnboardingCompleteRequest);
+    const lifePriorities = payload.lifePriorities ?? [];
+    const expenseCategories = payload.expenseCategories;
     const completedAt = new Date().toISOString();
     const weekStartDate = parseIsoDate(payload.firstWeekStartDate as IsoDateString);
     const dailyReviewStartTime =
@@ -319,8 +321,8 @@ export const registerOnboardingRoutes: FastifyPluginAsync = async (app) => {
               targetDate: goal.targetDate ? parseIsoDate(goal.targetDate as IsoDateString) : null,
               notes:
                 goal.notes ??
-                (payload.lifePriorities.length > 0
-                  ? `Life priorities: ${payload.lifePriorities.join(", ")}`
+                (lifePriorities.length > 0
+                  ? `Life priorities: ${lifePriorities.join(", ")}`
                   : null),
               sortOrder: index + 1,
             };
@@ -377,14 +379,14 @@ export const registerOnboardingRoutes: FastifyPluginAsync = async (app) => {
         });
       }
 
-      await tx.expenseCategory.deleteMany({
-        where: {
-          userId: user.id,
-        },
-      });
-      if (payload.expenseCategories.length > 0) {
+      if (expenseCategories) {
+        await tx.expenseCategory.deleteMany({
+          where: {
+            userId: user.id,
+          },
+        });
         await tx.expenseCategory.createMany({
-          data: payload.expenseCategories.map((category, index) => ({
+          data: expenseCategories.map((category, index) => ({
             userId: user.id,
             name: category.name,
             color: category.color ?? null,
@@ -437,12 +439,12 @@ export const registerOnboardingRoutes: FastifyPluginAsync = async (app) => {
         });
       }
 
-      await tx.mealTemplate.deleteMany({
-        where: {
-          userId: user.id,
-        },
-      });
-      if ((payload.mealTemplates?.length ?? 0) > 0) {
+      if (payload.mealTemplates) {
+        await tx.mealTemplate.deleteMany({
+          where: {
+            userId: user.id,
+          },
+        });
         await tx.mealTemplate.createMany({
           data: (payload.mealTemplates ?? []).map((mealTemplate) => ({
             userId: user.id,
@@ -484,14 +486,14 @@ export const registerOnboardingRoutes: FastifyPluginAsync = async (app) => {
         },
         update: {
           cycleEndDate: getMonthEndDate(monthStartDate),
-          theme: payload.lifePriorities[0] ?? null,
+          theme: lifePriorities[0] ?? null,
         },
         create: {
           userId: user.id,
           cycleType: "MONTH",
           cycleStartDate: monthStartDate,
           cycleEndDate: getMonthEndDate(monthStartDate),
-          theme: payload.lifePriorities[0] ?? null,
+          theme: lifePriorities[0] ?? null,
         },
       });
     });
@@ -504,7 +506,7 @@ export const registerOnboardingRoutes: FastifyPluginAsync = async (app) => {
           goalCount: payload.goals.length,
           habitCount: payload.habits.length,
           routineCount: payload.routines.length,
-          expenseCategoryCount: payload.expenseCategories.length,
+          expenseCategoryCount: expenseCategories?.length ?? 0,
           mealTemplateCount: payload.mealTemplates?.length ?? 0,
           recurringBillSeeded: Boolean(payload.firstRecurringBill),
         },

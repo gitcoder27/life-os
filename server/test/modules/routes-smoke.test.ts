@@ -2915,7 +2915,7 @@ describe("module route smoke tests", () => {
     );
   });
 
-  it("completes onboarding payload", async () => {
+  it("completes lean onboarding payload", async () => {
     prisma.userPreference = {
       findUnique: vi.fn().mockResolvedValue(null),
       upsert: vi.fn().mockResolvedValue({}),
@@ -2959,27 +2959,6 @@ describe("module route smoke tests", () => {
       createMany: vi.fn().mockResolvedValue({}),
     } as any;
     prisma.routineItem = { createMany: vi.fn().mockResolvedValue({}) } as any;
-    prisma.expenseCategory = {
-      deleteMany: vi.fn().mockResolvedValue({}),
-      createMany: vi.fn().mockResolvedValue({}),
-      findMany: vi.fn().mockResolvedValue([
-        {
-          id: "cat-utilities",
-          name: "Utilities",
-        },
-      ]),
-      findFirst: vi.fn().mockResolvedValue({ id: "cat-1" }),
-    } as any;
-    prisma.recurringExpenseTemplate = {
-      create: vi.fn().mockResolvedValue({ id: "recurring-1" }),
-    } as any;
-    prisma.adminItem = {
-      create: vi.fn().mockResolvedValue({ id: "bill-1" }),
-    } as any;
-    prisma.mealTemplate = {
-      deleteMany: vi.fn().mockResolvedValue({}),
-      createMany: vi.fn().mockResolvedValue({}),
-    } as any;
     prisma.planningCycle = {
       upsert: vi.fn().mockResolvedValue({}),
     } as any;
@@ -3018,41 +2997,26 @@ describe("module route smoke tests", () => {
             items: [{ title: "Hydrate", isRequired: true }],
           },
         ],
-        expenseCategories: [{ name: "Utilities", color: "#111111" }],
-        mealTemplates: [{ name: "Breakfast", mealSlot: "breakfast", description: "Eggs" }],
-        firstRecurringBill: {
-          title: "Internet",
-          categoryName: "Utilities",
-          defaultAmountMinor: 6500,
-          cadence: "monthly",
-          nextDueOn: "2026-03-18",
-          remindDaysBefore: 3,
-        },
         firstWeekStartDate: "2026-03-09",
         firstMonthStartDate: "2026-03-01",
       },
     });
 
     expect(response.statusCode).toBe(202);
-    expect(prisma.recurringExpenseTemplate.create).toHaveBeenCalledWith(
+    expect(prisma.goal.createMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        data: expect.objectContaining({
-          title: "Internet",
-          expenseCategoryId: "cat-utilities",
-          recurrenceRule: "monthly",
-        }),
+        data: expect.arrayContaining([
+          expect.objectContaining({
+            title: "Save monthly",
+            domainId: "domain-money",
+          }),
+        ]),
       }),
     );
-    expect(prisma.adminItem.create).toHaveBeenCalledWith(
-      expect.objectContaining({
-        data: expect.objectContaining({
-          title: "Internet",
-          recurringExpenseTemplateId: "recurring-1",
-          expenseCategoryId: "cat-utilities",
-          itemType: "BILL",
-        }),
-      }),
-    );
+    expect(prisma.expenseCategory.deleteMany).not.toHaveBeenCalled();
+    expect(prisma.mealTemplate.deleteMany).not.toHaveBeenCalled();
+    expect(prisma.recurringExpenseTemplate.create).not.toHaveBeenCalled();
+    expect(prisma.adminItem.create).not.toHaveBeenCalled();
   });
 
   it("covers planning read and mutation endpoints", async () => {
