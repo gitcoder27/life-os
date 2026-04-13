@@ -13,6 +13,7 @@ import { useGoalTodayAction } from "./useGoalTodayAction";
 /* ── Helpers ── */
 
 const domainIcons: Record<string, string> = {
+  unassigned: "◌",
   health: "💪",
   money: "💰",
   work_growth: "🚀",

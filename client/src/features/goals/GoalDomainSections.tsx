@@ -2,6 +2,7 @@ import type { GoalOverviewItem } from "../../shared/lib/api";
 import { GoalCard } from "./GoalCard";
 
 const domainDisplayNames: Record<string, string> = {
+  unassigned: "Unassigned",
   health: "Vitalic Health",
   money: "Wealth Management",
   work_growth: "Professional Growth",
@@ -11,6 +12,7 @@ const domainDisplayNames: Record<string, string> = {
 };
 
 const domainEmojis: Record<string, string> = {
+  unassigned: "◌",
   health: "♥",
   money: "💼",
   work_growth: "🧠",

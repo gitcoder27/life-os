@@ -25,6 +25,7 @@ const ROOT_GAP = 64;
 const GOAL_DRAG_MIME = "application/x-life-os-goal-id";
 
 const domainEmojis: Record<string, string> = {
+  unassigned: "◌",
   health: "♥",
   money: "💼",
   work_growth: "🧠",

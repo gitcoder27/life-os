@@ -147,6 +147,8 @@ export function toPrismaGoalDomainSystemKey(
   systemKey: GoalDomainSystemKey,
 ): PrismaGoalDomainSystemKey {
   switch (systemKey) {
+    case "unassigned":
+      return "UNASSIGNED";
     case "health":
       return "HEALTH";
     case "money":
@@ -166,6 +168,8 @@ export function fromPrismaGoalDomainSystemKey(
   systemKey: PrismaGoalDomainSystemKey | null,
 ): GoalDomainSystemKey | null {
   switch (systemKey) {
+    case "UNASSIGNED":
+      return "unassigned";
     case "HEALTH":
       return "health";
     case "MONEY":

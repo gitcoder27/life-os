@@ -175,7 +175,7 @@ export const goalContextQuerySchema = z.object({
 
 const goalDomainConfigInputSchema = z.object({
   id: entityIdSchema.optional(),
-  systemKey: z.enum(["health", "money", "work_growth", "home_admin", "discipline", "other"]).nullable().optional(),
+  systemKey: z.enum(["unassigned", "health", "money", "work_growth", "home_admin", "discipline", "other"]).nullable().optional(),
   name: z.string().trim().min(1).max(80),
   isArchived: z.boolean().optional(),
 });

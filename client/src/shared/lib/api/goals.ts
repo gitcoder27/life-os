@@ -19,6 +19,7 @@ import type { TaskItem } from "./planning";
 /* ── Domain & Horizon config types ── */
 
 export type GoalDomainSystemKey =
+  | "unassigned"
   | "health"
   | "money"
   | "work_growth"

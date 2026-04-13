@@ -20,6 +20,7 @@ import { ensureGoalConfigSeeded } from "../planning/goal-config.js";
 import { toPrismaGoalDomainSystemKey } from "../planning/planning-mappers.js";
 
 const goalDomainSchema = z.enum([
+  "unassigned",
   "health",
   "money",
   "work_growth",

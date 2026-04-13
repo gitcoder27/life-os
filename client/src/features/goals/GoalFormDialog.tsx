@@ -97,8 +97,12 @@ export function GoalFormDialog({
 
   const activeDomains = domains.filter((d) => !d.isArchived);
   const activeHorizons = horizons.filter((h) => !h.isArchived);
-  const fallbackDomain = activeDomains.find((domain) => domain.id === form.domainId) ?? activeDomains[0] ?? null;
-  const effectiveDomainId = form.domainId || fallbackDomain?.id || "";
+  const defaultDomain =
+    activeDomains.find((domain) => domain.systemKey === "unassigned")
+    ?? activeDomains[0]
+    ?? null;
+  const fallbackDomain = activeDomains.find((domain) => domain.id === form.domainId) ?? defaultDomain;
+  const effectiveDomainId = form.domainId || defaultDomain?.id || "";
   const [advancedOpen, setAdvancedOpen] = useState(
     editing || !fallbackDomain || hasAdvancedDetails(form),
   );

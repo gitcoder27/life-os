@@ -488,6 +488,7 @@ const healthLabels: Record<string, string> = {
 };
 
 const domainLabels: Record<string, string> = {
+  unassigned: "Unassigned",
   health: "Health",
   money: "Money",
   work_growth: "Work & Growth",

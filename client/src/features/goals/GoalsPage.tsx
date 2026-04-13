@@ -2,6 +2,7 @@ import {
   useEffect,
   useState,
 } from "react";
+import { createPortal } from "react-dom";
 import { useLocation } from "react-router-dom";
 
 import {
@@ -52,7 +53,10 @@ export function GoalsPage() {
   const createGoalMutation = useCreateGoalMutation();
   const updateGoalMutation = useUpdateGoalMutation();
   const homeDestination = readHomeDestinationState(location.state);
-  const defaultDomainId = (workspaceQuery.data?.domains ?? []).find((domain) => !domain.isArchived)?.id ?? "";
+  const defaultDomainId =
+    (workspaceQuery.data?.domains ?? []).find((domain) => !domain.isArchived && domain.systemKey === "unassigned")?.id
+    ?? (workspaceQuery.data?.domains ?? []).find((domain) => !domain.isArchived)?.id
+    ?? "";
 
   useEffect(() => {
     if (homeDestination?.kind !== "goal_plan") {
@@ -95,7 +99,9 @@ export function GoalsPage() {
   /* ── Handlers ── */
 
   function openCreateGoal() {
-    const defaultDomain = domains.find((d) => !d.isArchived);
+    const defaultDomain =
+      domains.find((domain) => !domain.isArchived && domain.systemKey === "unassigned")
+      ?? domains.find((domain) => !domain.isArchived);
     setShowChildForm(false);
     setChildFormParent(null);
     setChildForm(emptyGoalForm());
@@ -261,8 +267,8 @@ export function GoalsPage() {
       )}
 
       {/* Shared goal form overlay */}
-      {showGoalForm && (
-        <div className="ghq-form-overlay">
+      {showGoalForm ? createPortal(
+        <div className="ghq-form-overlay" role="dialog" aria-modal="true" aria-label="Goal form">
           <div className="ghq-form-overlay__backdrop" onClick={() => {
             setShowGoalForm(false);
             setEditingGoalId(null);
@@ -282,8 +288,9 @@ export function GoalsPage() {
               }}
             />
           </div>
-        </div>
-      )}
+        </div>,
+        document.body,
+      ) : null}
     </div>
   );
 }

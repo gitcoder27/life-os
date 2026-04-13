@@ -10,6 +10,7 @@ import type {
 
 export type GoalDomain = string;
 export type GoalDomainSystemKey =
+  | "unassigned"
   | "health"
   | "money"
   | "work_growth"

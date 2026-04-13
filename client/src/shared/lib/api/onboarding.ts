@@ -49,7 +49,7 @@ type OnboardingCompleteRequest = {
   lifePriorities?: string[];
   goals: Array<{
     title: string;
-    domain: "health" | "money" | "work_growth" | "home_admin" | "discipline" | "other";
+    domain: "unassigned" | "health" | "money" | "work_growth" | "home_admin" | "discipline" | "other";
     targetDate?: string | null;
     notes?: string | null;
   }>;

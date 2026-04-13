@@ -70,6 +70,7 @@ function groupGoalsByDomain(
 }
 
 const domainEmojis: Record<string, string> = {
+  unassigned: "◌",
   health: "♥",
   money: "💼",
   work_growth: "🧠",

@@ -376,6 +376,7 @@
   flex-shrink: 0;
 }
 
+.goal-chip__dot--unassigned   { background: rgba(255, 255, 255, 0.38); }
 .goal-chip__dot--health       { background: var(--positive); }
 .goal-chip__dot--money        { background: #e0a832; }
 .goal-chip__dot--work_growth  { background: #7e9cd8; }

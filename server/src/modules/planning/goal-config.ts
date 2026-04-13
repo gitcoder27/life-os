@@ -17,6 +17,7 @@ export const DEFAULT_GOAL_DOMAINS: Array<{
   systemKey: GoalDomainSystemKey;
   name: string;
 }> = [
+  { systemKey: "unassigned", name: "Unassigned" },
   { systemKey: "health", name: "Health" },
   { systemKey: "money", name: "Money" },
   { systemKey: "work_growth", name: "Work & Growth" },
@@ -42,12 +43,18 @@ export function normalizeGoalConfigName(name: string) {
 }
 
 export async function ensureGoalConfigSeeded(prisma: Tx, userId: string) {
-  const [domainCount, horizonCount] = await Promise.all([
-    prisma.goalDomainConfig.count({ where: { userId } }),
-    prisma.goalHorizonConfig.count({ where: { userId } }),
+  const [existingDomains, existingHorizons] = await Promise.all([
+    prisma.goalDomainConfig.findMany({
+      where: { userId },
+      orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
+    }),
+    prisma.goalHorizonConfig.findMany({
+      where: { userId },
+      orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
+    }),
   ]);
 
-  if (domainCount === 0) {
+  if (existingDomains.length === 0) {
     await prisma.goalDomainConfig.createMany({
       data: DEFAULT_GOAL_DOMAINS.map((domain, index) => ({
         userId,
@@ -56,9 +63,28 @@ export async function ensureGoalConfigSeeded(prisma: Tx, userId: string) {
         sortOrder: index + 1,
       })),
     });
+  } else {
+    const missingDomains = DEFAULT_GOAL_DOMAINS.filter((domain) =>
+      !existingDomains.some((existingDomain) => existingDomain.systemKey === toPrismaGoalDomainSystemKey(domain.systemKey)));
+
+    if (missingDomains.length > 0) {
+      const nextSortOrder = existingDomains.reduce(
+        (maxSortOrder, domain) => Math.max(maxSortOrder, domain.sortOrder),
+        0,
+      ) + 1;
+
+      await prisma.goalDomainConfig.createMany({
+        data: missingDomains.map((domain, index) => ({
+          userId,
+          systemKey: toPrismaGoalDomainSystemKey(domain.systemKey),
+          name: domain.name,
+          sortOrder: nextSortOrder + index,
+        })),
+      });
+    }
   }
 
-  if (horizonCount === 0) {
+  if (existingHorizons.length === 0) {
     await prisma.goalHorizonConfig.createMany({
       data: DEFAULT_GOAL_HORIZONS.map((horizon, index) => ({
         userId,
@@ -68,6 +94,26 @@ export async function ensureGoalConfigSeeded(prisma: Tx, userId: string) {
         spanMonths: horizon.spanMonths,
       })),
     });
+  } else {
+    const missingHorizons = DEFAULT_GOAL_HORIZONS.filter((horizon) =>
+      !existingHorizons.some((existingHorizon) => existingHorizon.systemKey === toPrismaGoalHorizonSystemKey(horizon.systemKey)));
+
+    if (missingHorizons.length > 0) {
+      const nextSortOrder = existingHorizons.reduce(
+        (maxSortOrder, horizon) => Math.max(maxSortOrder, horizon.sortOrder),
+        0,
+      ) + 1;
+
+      await prisma.goalHorizonConfig.createMany({
+        data: missingHorizons.map((horizon, index) => ({
+          userId,
+          systemKey: toPrismaGoalHorizonSystemKey(horizon.systemKey),
+          name: horizon.name,
+          sortOrder: nextSortOrder + index,
+          spanMonths: horizon.spanMonths,
+        })),
+      });
+    }
   }
 }
 

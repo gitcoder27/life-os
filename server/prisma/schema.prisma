@@ -13,6 +13,7 @@ enum UserStatus {
 }
 
 enum GoalDomainSystemKey {
+  UNASSIGNED
   HEALTH
   MONEY
   WORK_GROWTH

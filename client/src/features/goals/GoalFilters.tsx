@@ -1,6 +1,7 @@
 import type { GoalDomain } from "../../shared/lib/api";
 
 const domainLabels: Record<string, string> = {
+  unassigned: "Unassigned",
   health: "Health",
   money: "Wealth",
   work_growth: "Growth",
