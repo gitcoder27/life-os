@@ -390,6 +390,11 @@ At a product level, this enhancement is successful when:
 - active goals feel aligned with actual weekly bandwidth
 - reviews show less repeated overcommitment caused by structurally unrealistic weeks
 
+### Implementation handoff docs
+
+- Backend: `docs/implementation/Life-OS-Weekly-Capacity-Planning-Backend-Agent-2026-04-18.md`
+- Frontend: `docs/implementation/Life-OS-Weekly-Capacity-Planning-Frontend-Agent-2026-04-18.md`
+
 ---
 
 ## Enhancement 3: Focus Sessions v2 - Execution Learning and Adaptation

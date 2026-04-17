@@ -17,7 +17,9 @@ import type {
   UpdateDayPrioritiesRequest,
   UpdateMonthFocusRequest,
   UpdatePriorityRequest,
+  UpdateWeekCapacityRequest,
   UpdateWeekPrioritiesRequest,
+  WeekCapacityMutationResponse,
   WeekPlanResponse,
 } from "@life-os/contracts";
 
@@ -47,7 +49,7 @@ import {
   toPrismaRescueReason,
   toPrismaTaskStuckReason,
 } from "./planning-mappers.js";
-import { goalWithMilestonesInclude, planningTaskInclude } from "./planning-record-shapes.js";
+import { goalSummaryInclude, goalWithMilestonesInclude, planningTaskInclude } from "./planning-record-shapes.js";
 import {
   assertNoPlannerBlockOverlap,
   ensurePlanningCycle,
@@ -71,8 +73,14 @@ import {
   updateDayPrioritiesSchema,
   updateMonthFocusSchema,
   updatePrioritySchema,
+  updateWeekCapacitySchema,
   updateWeekPrioritiesSchema,
 } from "./planning-schemas.js";
+import {
+  buildWeeklyCapacityModel,
+  getDefaultDeepWorkBlockTarget,
+  toPrismaWeeklyCapacityMode,
+} from "./weekly-capacity.js";
 
 const toPrismaPriorityStatus = (status: UpdatePriorityRequest["status"]) =>
   status === undefined
@@ -686,11 +694,14 @@ export const registerPlanningPlanRoutes: FastifyPluginAsync = async (app) => {
       cycleStartDate,
       cycleEndDate: getWeekEndDate(cycleStartDate),
     });
+    const weeklyCapacity = await buildWeeklyCapacityModel(app, cycle);
 
     const response: WeekPlanResponse = withGeneratedAt({
       startDate: parsedDate,
       endDate: toIsoDateString(cycle.cycleEndDate),
       priorities: cycle.priorities.map(serializePriority),
+      capacityProfile: weeklyCapacity.capacityProfile,
+      capacityAssessment: weeklyCapacity.capacityAssessment,
     });
 
     return reply.send(response);
@@ -712,6 +723,53 @@ export const registerPlanningPlanRoutes: FastifyPluginAsync = async (app) => {
 
     const response: PlanningPriorityMutationResponse = withGeneratedAt({
       priorities,
+    });
+
+    return reply.send(response);
+  });
+
+  app.put("/planning/weeks/:startDate/capacity", async (request, reply) => {
+    const user = requireAuthenticatedUser(request);
+    const { startDate } = request.params as { startDate: IsoDateString };
+    const parsedDate = parseOrThrow(isoDateSchema, startDate);
+    const payload = parseOrThrow(updateWeekCapacitySchema, request.body as UpdateWeekCapacityRequest);
+    const cycleStartDate = parseIsoDate(parsedDate);
+    const cycle = await ensurePlanningCycle(app, {
+      userId: user.id,
+      cycleType: "WEEK",
+      cycleStartDate,
+      cycleEndDate: getWeekEndDate(cycleStartDate),
+    });
+    const persistedTarget =
+      payload.deepWorkBlockTarget == null
+        ? getDefaultDeepWorkBlockTarget(payload.capacityMode)
+        : payload.deepWorkBlockTarget;
+    const updatedCycle = await app.prisma.planningCycle.update({
+      where: {
+        id: cycle.id,
+      },
+      data: {
+        weeklyCapacityMode: toPrismaWeeklyCapacityMode(payload.capacityMode),
+        weeklyDeepWorkBlockTarget: persistedTarget,
+      },
+      include: {
+        priorities: {
+          orderBy: {
+            slot: "asc",
+          },
+          include: {
+            goal: {
+              include: goalSummaryInclude,
+            },
+          },
+        },
+      },
+    });
+    const weeklyCapacity = await buildWeeklyCapacityModel(app, updatedCycle);
+
+    const response: WeekCapacityMutationResponse = withGeneratedAt({
+      capacityProfile: weeklyCapacity.capacityProfile,
+      capacityAssessment: weeklyCapacity.capacityAssessment,
     });
 
     return reply.send(response);

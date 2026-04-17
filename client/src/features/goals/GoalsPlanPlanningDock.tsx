@@ -1,4 +1,4 @@
-import type { GoalOverviewItem } from "../../shared/lib/api";
+import type { GoalOverviewItem, WeekPlanResponse } from "../../shared/lib/api";
 import type {
   PlanningDraft,
   PlanningItem,
@@ -8,6 +8,7 @@ import type {
   PlanningSlot,
 } from "./GoalsPlanTypes";
 import { GoalsPlanPlanningEditor } from "./GoalsPlanPlanningEditor";
+import { WeeklyCapacityCard } from "./WeeklyCapacityCard";
 
 const planningSlots: PlanningSlot[] = [1, 2, 3];
 
@@ -40,6 +41,7 @@ type DockProps = {
   activeGoals: GoalOverviewItem[];
   monthItems: DockItem[];
   weekItems: DockItem[];
+  weekPlan: WeekPlanResponse | null;
   selectedPlanningSelection: PlanningSelection | null;
   selectedPlanningItem: PlanningItem | null;
   planningDraft: PlanningDraft | null;
@@ -211,6 +213,7 @@ export const GoalsPlanPlanningDock = ({
   activeGoals,
   monthItems,
   weekItems,
+  weekPlan,
   selectedPlanningSelection,
   selectedPlanningItem,
   planningDraft,
@@ -267,6 +270,14 @@ export const GoalsPlanPlanningDock = ({
 
       {isOpen ? (
         <div className="ghq-plan-dock__body">
+          {weekPlan ? (
+            <WeeklyCapacityCard
+              weekStartDate={weekPlan.startDate}
+              capacityProfile={weekPlan.capacityProfile}
+              capacityAssessment={weekPlan.capacityAssessment}
+            />
+          ) : null}
+
           {selectedGoal ? (
             <>
               <div className="ghq-plan-dock__header">

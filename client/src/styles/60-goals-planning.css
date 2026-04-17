@@ -2849,6 +2849,188 @@
   font-size: var(--fs-small);
 }
 
+/* ── Weekly Capacity Card ── */
+
+.ghq-capacity {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  padding: 0.8rem 0.9rem;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.02);
+  position: relative;
+}
+
+.ghq-capacity--healthy {
+  border-color: rgba(93, 184, 106, 0.15);
+}
+
+.ghq-capacity--tight {
+  border-color: rgba(217, 153, 58, 0.2);
+  background: rgba(217, 153, 58, 0.03);
+}
+
+.ghq-capacity--overloaded {
+  border-color: rgba(201, 85, 76, 0.2);
+  background: rgba(201, 85, 76, 0.03);
+}
+
+.ghq-capacity__status {
+  display: flex;
+  gap: 0.5rem;
+  align-items: flex-start;
+}
+
+.ghq-capacity__status-icon {
+  flex-shrink: 0;
+  font-size: var(--fs-small);
+  line-height: 1.5;
+}
+
+.ghq-capacity--healthy .ghq-capacity__status-icon {
+  color: var(--positive);
+}
+
+.ghq-capacity--tight .ghq-capacity__status-icon {
+  color: var(--accent);
+}
+
+.ghq-capacity--overloaded .ghq-capacity__status-icon {
+  color: var(--negative);
+}
+
+.ghq-capacity__message {
+  margin: 0;
+  font-size: var(--fs-small);
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.ghq-capacity__control {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.ghq-capacity__label {
+  font-size: var(--fs-micro);
+  color: var(--text-tertiary);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+.ghq-capacity__modes {
+  display: flex;
+  gap: 2px;
+  padding: 2px;
+  border-radius: var(--r-xs);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border);
+}
+
+.ghq-capacity__mode-btn {
+  padding: 0.25rem 0.6rem;
+  border-radius: calc(var(--r-xs) - 2px);
+  border: none;
+  background: transparent;
+  color: var(--text-tertiary);
+  font-size: var(--fs-micro);
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--dur-fast) var(--ease);
+  white-space: nowrap;
+}
+
+.ghq-capacity__mode-btn:hover {
+  color: var(--text-secondary);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.ghq-capacity__mode-btn--active {
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.ghq-capacity__mode-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.ghq-capacity__stepper {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  border-radius: var(--r-xs);
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.04);
+  overflow: hidden;
+}
+
+.ghq-capacity__stepper-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 1.75rem;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: var(--fs-body);
+  font-weight: 600;
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease);
+}
+
+.ghq-capacity__stepper-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.ghq-capacity__stepper-btn:disabled {
+  color: var(--text-tertiary);
+  opacity: 0.4;
+  cursor: default;
+}
+
+.ghq-capacity__stepper-value {
+  min-width: 2rem;
+  text-align: center;
+  font-size: var(--fs-small);
+  font-weight: 600;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.ghq-capacity__cues {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.ghq-capacity__cue {
+  display: inline-block;
+  padding: 0.15rem 0.45rem;
+  border-radius: var(--r-pill);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-tertiary);
+  font-size: var(--fs-micro);
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.ghq-capacity__cue--signal {
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.ghq-capacity__saving {
+  font-size: var(--fs-micro);
+  color: var(--text-tertiary);
+  font-style: italic;
+}
+
 /* ── Planning Editor ── */
 
 .ghq-plan-editor {

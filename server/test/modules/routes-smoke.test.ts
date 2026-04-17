@@ -2947,6 +2947,7 @@ describe("module route smoke tests", () => {
     } as any;
     prisma.goalHorizonConfig = {
       count: vi.fn().mockResolvedValue(1),
+      findMany: vi.fn().mockResolvedValue([]),
       createMany: vi.fn().mockResolvedValue({}),
     } as any;
     prisma.habit = {
@@ -3022,8 +3023,13 @@ describe("module route smoke tests", () => {
   it("covers planning read and mutation endpoints", async () => {
     const planningCyclePayload = {
       id: "cycle-1",
-      cycleEndDate: new Date("2026-03-14T00:00:00.000Z"),
+      userId: "user-1",
+      cycleType: "WEEK",
+      cycleStartDate: new Date("2026-03-09T00:00:00.000Z"),
+      cycleEndDate: new Date("2026-03-15T00:00:00.000Z"),
       theme: "Health",
+      weeklyCapacityMode: null,
+      weeklyDeepWorkBlockTarget: null,
       priorities: [
         {
           id: "priority-1",
@@ -3172,6 +3178,19 @@ describe("module route smoke tests", () => {
     } as any;
     prisma.goalDomainConfig = {
       count: vi.fn().mockResolvedValue(1),
+      findMany: vi.fn().mockResolvedValue([
+        {
+          id: "domain-health",
+          userId: "user-1",
+          systemKey: "HEALTH",
+          name: "Health",
+          sortOrder: 1,
+          isArchived: false,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      ]),
+      createMany: vi.fn().mockResolvedValue({}),
       findFirst: vi.fn().mockImplementation(async ({ where }: any) =>
         where?.id === "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
           ? {
@@ -3196,10 +3215,20 @@ describe("module route smoke tests", () => {
             },
       ),
     } as any;
+    prisma.goalHorizonConfig = {
+      count: vi.fn().mockResolvedValue(1),
+      findMany: vi.fn().mockResolvedValue([]),
+      createMany: vi.fn().mockResolvedValue({}),
+    } as any;
     prisma.planningCycle = {
       upsert: vi.fn().mockResolvedValue(planningCyclePayload),
       findUniqueOrThrow: vi.fn().mockResolvedValue(planningCyclePayload),
-      update: vi.fn().mockResolvedValue({ id: "cycle-1", theme: "Focus" }),
+      update: vi.fn().mockResolvedValue({
+        ...planningCyclePayload,
+        weeklyCapacityMode: "STANDARD",
+        weeklyDeepWorkBlockTarget: 4,
+        theme: "Focus",
+      }),
     } as any;
     prisma.cyclePriority = {
       findMany: vi.fn().mockImplementation(async (args: any) => {
@@ -3549,6 +3578,13 @@ describe("module route smoke tests", () => {
         ],
       },
     });
+    const planningWeekCapacity = await app!.inject({
+      method: "PUT",
+      url: "/api/planning/weeks/2026-03-09/capacity",
+      payload: {
+        capacityMode: "standard",
+      },
+    });
     const planningMonth = await app!.inject({ method: "GET", url: "/api/planning/months/2026-03-01" });
     const planningMonthFocus = await app!.inject({
       method: "PUT",
@@ -3617,6 +3653,7 @@ describe("module route smoke tests", () => {
     expect(planningDayPriorities.statusCode).toBe(200);
     expect(planningWeek.statusCode).toBe(200);
     expect(planningWeekPriorities.statusCode).toBe(200);
+    expect(planningWeekCapacity.statusCode).toBe(200);
     expect(planningMonth.statusCode).toBe(200);
     expect(planningMonthFocus.statusCode).toBe(200);
     expect(taskTemplatesList.statusCode).toBe(200);
@@ -3656,6 +3693,17 @@ describe("module route smoke tests", () => {
         }),
         nextBestAction: "Complete milestone: Plan training block",
         suggestedPriorityTitle: "Plan training block",
+      }),
+    );
+    expect(JSON.parse(planningWeek.body)).toEqual(
+      expect.objectContaining({
+        capacityProfile: {
+          capacityMode: "standard",
+          deepWorkBlockTarget: 4,
+        },
+        capacityAssessment: expect.objectContaining({
+          status: "healthy",
+        }),
       }),
     );
     expect(JSON.parse(planningDay.body).plannerBlocks).toEqual([]);

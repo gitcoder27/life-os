@@ -290,6 +290,26 @@ export type WeekPlanResponse = {
     goal: LinkedGoal | null;
     completedAt: string | null;
   }>;
+  capacityProfile: {
+    capacityMode: "light" | "standard" | "heavy";
+    deepWorkBlockTarget: number;
+  };
+  capacityAssessment: {
+    status: "healthy" | "tight" | "overloaded";
+    plannedPriorityCount: number;
+    scheduledTaskCount: number;
+    estimatedMinutesTotal: number;
+    unsizedTaskCount: number;
+    focusGoalCount: number;
+    primaryMessage: string;
+    signals: Array<
+      | "too_many_priorities"
+      | "too_many_estimated_minutes"
+      | "too_many_unsized_tasks"
+      | "too_many_focus_goals"
+      | "deep_work_target_too_high"
+    >;
+  };
 };
 
 export type MonthPlanResponse = {
@@ -500,6 +520,34 @@ export const useUpdateGoalMilestonesMutation = (goalId: string) => {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.goalDetail(goalId) });
       invalidateGoals(queryClient);
+    },
+  });
+};
+
+export type WeekCapacityMutationResponse = {
+  generatedAt: string;
+  capacityProfile: WeekPlanResponse["capacityProfile"];
+  capacityAssessment: WeekPlanResponse["capacityAssessment"];
+};
+
+export const useUpdateWeekCapacityMutation = (weekStartDate: string) => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (payload: {
+      capacityMode: "light" | "standard" | "heavy";
+      deepWorkBlockTarget?: number | null;
+    }) =>
+      apiRequest<WeekCapacityMutationResponse>(`/api/planning/weeks/${weekStartDate}/capacity`, {
+        method: "PUT",
+        body: payload,
+      }),
+    meta: {
+      successMessage: "Week capacity updated.",
+      errorMessage: "Week capacity update failed.",
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["goals"] });
     },
   });
 };

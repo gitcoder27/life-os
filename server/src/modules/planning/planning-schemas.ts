@@ -14,6 +14,7 @@ import type {
   TaskProgressState,
   TaskStuckAction,
   TaskStuckReason,
+  UpdateWeekCapacityRequest,
   UpdateGoalDomainsRequest,
   UpdateGoalHorizonsRequest,
 } from "@life-os/contracts";
@@ -157,6 +158,13 @@ export const updateDayPrioritiesSchema = z.object({
 export const updateWeekPrioritiesSchema = z.object({
   priorities: z.array(priorityInputSchema).max(3),
 });
+
+export const weeklyCapacityModeSchema = z.enum(["light", "standard", "heavy"]);
+
+export const updateWeekCapacitySchema = z.object({
+  capacityMode: weeklyCapacityModeSchema,
+  deepWorkBlockTarget: z.number().int().min(0).max(10).nullable().optional(),
+}) as z.ZodType<UpdateWeekCapacityRequest>;
 
 export const updateMonthFocusSchema = z.object({
   theme: z.string().max(200).nullable(),

@@ -39,6 +39,14 @@ export interface TaskCommitmentGuidance {
   suggestedReasons: TaskCommitmentReason[];
   primaryMessage: string;
 }
+export type WeeklyCapacityMode = "light" | "standard" | "heavy";
+export type WeeklyCapacitySignal =
+  | "too_many_priorities"
+  | "too_many_estimated_minutes"
+  | "too_many_unsized_tasks"
+  | "too_many_focus_goals"
+  | "deep_work_target_too_high";
+export type WeeklyCapacityAssessmentStatus = "healthy" | "tight" | "overloaded";
 
 export interface RescueSuggestion {
   mode: Exclude<DayMode, "normal">;
@@ -146,10 +154,28 @@ export interface DayPlanResponse extends ApiMeta {
   plannerBlocks: DayPlannerBlockItem[];
 }
 
+export interface WeeklyCapacityProfile {
+  capacityMode: WeeklyCapacityMode;
+  deepWorkBlockTarget: number;
+}
+
+export interface WeeklyCapacityAssessment {
+  status: WeeklyCapacityAssessmentStatus;
+  plannedPriorityCount: number;
+  scheduledTaskCount: number;
+  estimatedMinutesTotal: number;
+  unsizedTaskCount: number;
+  focusGoalCount: number;
+  primaryMessage: string;
+  signals: WeeklyCapacitySignal[];
+}
+
 export interface WeekPlanResponse extends ApiMeta {
   startDate: IsoDateString;
   endDate: IsoDateString;
   priorities: PlanningPriorityItem[];
+  capacityProfile: WeeklyCapacityProfile;
+  capacityAssessment: WeeklyCapacityAssessment;
 }
 
 export interface MonthPlanResponse extends ApiMeta {
@@ -167,6 +193,11 @@ export interface UpdateWeekPrioritiesRequest {
   priorities: PlanningPriorityInput[];
 }
 
+export interface UpdateWeekCapacityRequest {
+  capacityMode: WeeklyCapacityMode;
+  deepWorkBlockTarget?: number | null;
+}
+
 export interface UpdateMonthFocusRequest {
   theme: string | null;
   topOutcomes: PlanningPriorityInput[];
@@ -174,6 +205,11 @@ export interface UpdateMonthFocusRequest {
 
 export interface PlanningPriorityMutationResponse extends ApiMeta {
   priorities: PlanningPriorityItem[];
+}
+
+export interface WeekCapacityMutationResponse extends ApiMeta {
+  capacityProfile: WeeklyCapacityProfile;
+  capacityAssessment: WeeklyCapacityAssessment;
 }
 
 export interface DayPlannerBlockMutationResponse extends ApiMeta {

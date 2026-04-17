@@ -66,6 +66,7 @@ import {
   updateGoalMilestonesSchema,
   updateGoalSchema,
 } from "./planning-schemas.js";
+import { buildWeeklyCapacityModel as buildWeekCapacityModel } from "./weekly-capacity.js";
 
 const goalMutationInclude = {
   domain: true,
@@ -269,6 +270,7 @@ export const registerPlanningGoalRoutes: FastifyPluginAsync = async (app) => {
       startDate: weekCycle.cycleStartDate.toISOString().slice(0, 10) as IsoDateString,
       endDate: weekCycle.cycleEndDate.toISOString().slice(0, 10) as IsoDateString,
       priorities: weekCycle.priorities.map(serializePriority),
+      ...(await buildWeekCapacityModel(app, weekCycle)),
       generatedAt,
     };
 

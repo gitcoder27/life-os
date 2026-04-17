@@ -1426,6 +1426,7 @@ export function GoalsPlanWorkspace({
                   activeGoals={activeGoals}
                   monthItems={monthDockItems}
                   weekItems={weekDockItems}
+                  weekPlan={weekPlan}
                   selectedPlanningSelection={selectedPlanningSelection}
                   selectedPlanningItem={selectedPlanningItem}
                   planningDraft={planningDraft}

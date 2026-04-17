@@ -188,6 +188,7 @@ export {
   useUpdateGoalMilestonesMutation,
   useUpdateGoalMutation,
   useUpdateMonthFocusMutation,
+  useUpdateWeekCapacityMutation,
   useUpdateWeekPrioritiesMutation,
 } from "./api/goals";
 export {

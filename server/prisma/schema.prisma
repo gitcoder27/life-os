@@ -300,6 +300,12 @@ enum RescueReason {
   MISSED_DAY
 }
 
+enum WeeklyCapacityMode {
+  LIGHT
+  STANDARD
+  HEAVY
+}
+
 enum NotificationSeverity {
   INFO
   WARNING
@@ -493,6 +499,8 @@ model PlanningCycle {
   cycleEndDate   DateTime
   status         PlanningCycleStatus @default(OPEN)
   theme          String?
+  weeklyCapacityMode WeeklyCapacityMode?
+  weeklyDeepWorkBlockTarget Int?
   createdAt      DateTime            @default(now())
   updatedAt      DateTime            @updatedAt
   user           User                @relation(fields: [userId], references: [id], onDelete: Cascade)
