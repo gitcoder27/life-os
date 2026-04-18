@@ -20,6 +20,7 @@ type InboxInspectorProps = {
   goalsLoading: boolean;
   isMutating: boolean;
   onClose: () => void;
+  onCommit: (date: string, protocol: ClarificationProtocol) => void;
   onDoToday: () => void;
   onSchedule: (date: string) => void;
   onLinkGoal: (goalId: string | null) => void;
@@ -28,6 +29,17 @@ type InboxInspectorProps = {
   onArchive: () => void;
   onUpdateTitle: (title: string) => void;
   onUpdateNotes: (notes: string | null) => void;
+  promptClarification?: boolean;
+  pendingCommitDate?: string | null;
+  onClarificationHandled?: () => void;
+};
+
+export type ClarificationProtocol = {
+  nextAction: string | null;
+  fiveMinuteVersion: string | null;
+  estimatedDurationMinutes: number | null;
+  likelyObstacle: string | null;
+  focusLengthMinutes: number | null;
 };
 
 function getTomorrowDate(isoDate: string) {
@@ -47,12 +59,25 @@ function getKindLabel(kind: TaskItem["kind"]) {
   }
 }
 
+function isTaskReady(item: TaskItem): boolean {
+  if (item.kind !== "task") return true;
+  if (item.commitmentGuidance) {
+    return item.commitmentGuidance.readiness === "ready";
+  }
+  return Boolean(item.nextAction?.trim());
+}
+
+function normalizeInspectorText(value: string | null | undefined) {
+  return value?.replace(/\s+/g, " ").trim() ?? "";
+}
+
 export function InboxInspector({
   item,
   activeGoals,
   goalsLoading,
   isMutating,
   onClose,
+  onCommit,
   onDoToday,
   onSchedule,
   onLinkGoal,
@@ -61,12 +86,27 @@ export function InboxInspector({
   onArchive,
   onUpdateTitle,
   onUpdateNotes,
+  promptClarification,
+  pendingCommitDate,
+  onClarificationHandled,
 }: InboxInspectorProps) {
   const today = getTodayDate();
   const tomorrow = getTomorrowDate(today);
 
   const displayTitle = getQuickCaptureDisplayText(item, item.title);
   const notesText = getQuickCaptureText(item, "");
+  const shouldShowNotes = (() => {
+    const normalizedNotes = normalizeInspectorText(notesText);
+    if (!normalizedNotes) {
+      return false;
+    }
+
+    return normalizedNotes !== normalizeInspectorText(displayTitle);
+  })();
+
+  const isTask = item.kind === "task";
+  const ready = isTaskReady(item);
+  const guidance = item.commitmentGuidance;
 
   // Editable title state
   const [isEditingTitle, setIsEditingTitle] = useState(false);
@@ -81,6 +121,22 @@ export function InboxInspector({
     getReminderDate(item.reminderAt) ?? tomorrow,
   );
 
+  // Clarification field state
+  const [nextAction, setNextAction] = useState(item.nextAction ?? "");
+  const [fiveMinuteVersion, setFiveMinuteVersion] = useState(item.fiveMinuteVersion ?? "");
+  const [estimatedMinutes, setEstimatedMinutes] = useState(
+    item.estimatedDurationMinutes ? String(item.estimatedDurationMinutes) : "",
+  );
+  const [likelyObstacle, setLikelyObstacle] = useState(item.likelyObstacle ?? "");
+  const [focusLength, setFocusLength] = useState(
+    item.focusLengthMinutes ? String(item.focusLengthMinutes) : "",
+  );
+  const [showOptionalFields, setShowOptionalFields] = useState(false);
+  const [showClarification, setShowClarification] = useState(!ready && isTask);
+
+  // Pending date from failed schedule attempt
+  const [pendingDate, setPendingDate] = useState<string | null>(null);
+
   // Reset all local state when the inspected item changes
   useEffect(() => {
     setIsEditingTitle(false);
@@ -88,7 +144,26 @@ export function InboxInspector({
     setIsEditingNotes(false);
     setEditNotes(getQuickCaptureText(item, ""));
     setScheduleDate(getReminderDate(item.reminderAt) ?? getTomorrowDate(getTodayDate()));
+    setNextAction(item.nextAction ?? "");
+    setFiveMinuteVersion(item.fiveMinuteVersion ?? "");
+    setEstimatedMinutes(item.estimatedDurationMinutes ? String(item.estimatedDurationMinutes) : "");
+    setLikelyObstacle(item.likelyObstacle ?? "");
+    setFocusLength(item.focusLengthMinutes ? String(item.focusLengthMinutes) : "");
+    setShowOptionalFields(false);
+    setPendingDate(null);
+
+    const taskReady = isTaskReady(item);
+    setShowClarification(!taskReady && item.kind === "task");
   }, [item.id, item.reminderAt, item.scheduledForDate, item.goalId]);
+
+  // Handle external prompt to clarify (from failed schedule attempt)
+  useEffect(() => {
+    if (promptClarification && isTask && !ready) {
+      setPendingDate(pendingCommitDate ?? today);
+      setShowClarification(true);
+      onClarificationHandled?.();
+    }
+  }, [pendingCommitDate, promptClarification, isTask, ready, onClarificationHandled, today]);
 
   function commitTitle() {
     setIsEditingTitle(false);
@@ -137,15 +212,57 @@ export function InboxInspector({
     }
   }
 
-  function handleScheduleClick() {
-    if (scheduleDate) {
-      onSchedule(scheduleDate);
+  function buildProtocol(): ClarificationProtocol {
+    return {
+      nextAction: nextAction.trim() || null,
+      fiveMinuteVersion: fiveMinuteVersion.trim() || null,
+      estimatedDurationMinutes: estimatedMinutes.trim() ? Number(estimatedMinutes) : null,
+      likelyObstacle: likelyObstacle.trim() || null,
+      focusLengthMinutes: focusLength.trim() ? Number(focusLength) : null,
+    };
+  }
+
+  function handleDoToday() {
+    if (!isTask) {
+      onDoToday();
+      return;
     }
+    const protocol = buildProtocol();
+    if (!protocol.nextAction && !ready) {
+      setPendingDate(today);
+      setShowClarification(true);
+      return;
+    }
+    onCommit(today, protocol);
+  }
+
+  function handleScheduleClick() {
+    if (!scheduleDate) return;
+    if (!isTask) {
+      onSchedule(scheduleDate);
+      return;
+    }
+    const protocol = buildProtocol();
+    if (!protocol.nextAction && !ready) {
+      setPendingDate(scheduleDate);
+      setShowClarification(true);
+      return;
+    }
+    onCommit(scheduleDate, protocol);
+  }
+
+  function handleClarifyAndCommit() {
+    const date = pendingDate ?? today;
+    const protocol = buildProtocol();
+    onCommit(date, protocol);
   }
 
   function handleGoalChange(goalId: string) {
     onLinkGoal(goalId || null);
   }
+
+  const hasNextAction = Boolean(nextAction.trim());
+  const hasSuggestedImprovements = isTask && guidance && guidance.suggestedReasons.length > 0;
 
   return (
     <div className="inbox-inspector">
@@ -208,7 +325,7 @@ export function InboxInspector({
             rows={4}
             autoFocus
           />
-        ) : (
+        ) : shouldShowNotes ? (
           <p
             className={`inbox-inspector__notes${!notesText ? " inbox-inspector__notes--empty" : ""}`}
             onClick={() => {
@@ -220,9 +337,132 @@ export function InboxInspector({
           >
             {notesText || "Add notes..."}
           </p>
-        )}
+        ) : null}
 
         <div className="inbox-inspector__divider" />
+
+        {/* Readiness + Clarification (tasks only) */}
+        {isTask && (
+          <>
+            <div className="inbox-inspector__section">
+              <div className={`inbox-inspector__readiness inbox-inspector__readiness--${ready ? "ready" : "needs-clarification"}`}>
+                <span className="inbox-inspector__readiness-icon">{ready ? "✓" : "○"}</span>
+                <span className="inbox-inspector__readiness-text">
+                  {guidance?.primaryMessage ?? (ready ? "Ready to schedule." : "Add the first visible step before scheduling.")}
+                </span>
+              </div>
+
+              {/* Show toggle to expand/collapse clarification when task is ready */}
+              {ready && !showClarification && hasSuggestedImprovements && (
+                <button
+                  className="inbox-inspector__text-btn"
+                  type="button"
+                  onClick={() => setShowClarification(true)}
+                  disabled={isMutating}
+                >
+                  Add optional details
+                </button>
+              )}
+            </div>
+
+            {showClarification && (
+              <div className="inbox-inspector__clarify">
+                <label className="inbox-inspector__field">
+                  <span className="inbox-inspector__field-label">
+                    Next visible action
+                    {!ready && <span className="inbox-inspector__field-required">*</span>}
+                  </span>
+                  <input
+                    className="inbox-inspector__field-input"
+                    type="text"
+                    value={nextAction}
+                    onChange={(e) => setNextAction(e.target.value)}
+                    placeholder="Open the file and write the first paragraph"
+                    disabled={isMutating}
+                    autoFocus={!ready}
+                  />
+                </label>
+
+                {showOptionalFields && (
+                  <>
+                    <label className="inbox-inspector__field">
+                      <span className="inbox-inspector__field-label">5-minute version</span>
+                      <input
+                        className="inbox-inspector__field-input"
+                        type="text"
+                        value={fiveMinuteVersion}
+                        onChange={(e) => setFiveMinuteVersion(e.target.value)}
+                        placeholder="Write three bullets"
+                        disabled={isMutating}
+                      />
+                    </label>
+                    <div className="inbox-inspector__field-pair">
+                      <label className="inbox-inspector__field">
+                        <span className="inbox-inspector__field-label">Estimated min</span>
+                        <input
+                          className="inbox-inspector__field-input"
+                          type="text"
+                          inputMode="numeric"
+                          value={estimatedMinutes}
+                          onChange={(e) => setEstimatedMinutes(e.target.value)}
+                          placeholder="45"
+                          disabled={isMutating}
+                        />
+                      </label>
+                      <label className="inbox-inspector__field">
+                        <span className="inbox-inspector__field-label">Focus length</span>
+                        <input
+                          className="inbox-inspector__field-input"
+                          type="text"
+                          inputMode="numeric"
+                          value={focusLength}
+                          onChange={(e) => setFocusLength(e.target.value)}
+                          placeholder="25"
+                          disabled={isMutating}
+                        />
+                      </label>
+                    </div>
+                    <label className="inbox-inspector__field">
+                      <span className="inbox-inspector__field-label">Likely obstacle</span>
+                      <input
+                        className="inbox-inspector__field-input"
+                        type="text"
+                        value={likelyObstacle}
+                        onChange={(e) => setLikelyObstacle(e.target.value)}
+                        placeholder="I keep avoiding the blank page"
+                        disabled={isMutating}
+                      />
+                    </label>
+                  </>
+                )}
+
+                {!showOptionalFields && (
+                  <button
+                    className="inbox-inspector__text-btn inbox-inspector__text-btn--subtle"
+                    type="button"
+                    onClick={() => setShowOptionalFields(true)}
+                    disabled={isMutating}
+                  >
+                    + Optional details
+                  </button>
+                )}
+
+                {pendingDate && hasNextAction && (
+                  <button
+                    className="button button--primary button--small"
+                    type="button"
+                    onClick={handleClarifyAndCommit}
+                    disabled={isMutating}
+                  >
+                    {pendingDate === today ? "Clarify & do today" : "Clarify & schedule"}
+                  </button>
+                )}
+              </div>
+            )}
+
+            <div className="inbox-inspector__divider" />
+          </>
+        )}
 
         {/* Schedule section */}
         <div className="inbox-inspector__section">
@@ -231,7 +471,7 @@ export function InboxInspector({
             <button
               className="button button--primary button--small"
               type="button"
-              onClick={onDoToday}
+              onClick={handleDoToday}
               disabled={isMutating}
             >
               Do today

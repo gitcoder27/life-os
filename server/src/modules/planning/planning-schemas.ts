@@ -1,5 +1,6 @@
 import type {
   BulkUpdateTasksRequest,
+  CommitTaskRequest,
   GoalMilestoneInput,
   GoalEngagementState,
   GoalStatus,
@@ -298,6 +299,15 @@ export const updateTaskSchema = z
     startedAt: isoDateTimeSchema.nullable().optional(),
   })
   .refine((value) => Object.keys(value).length > 0, "At least one field must be updated");
+
+export const commitTaskSchema = z.object({
+  scheduledForDate: isoDateSchema,
+  nextAction: taskProtocolTextSchema,
+  fiveMinuteVersion: taskProtocolTextSchema,
+  estimatedDurationMinutes: z.number().int().min(1).max(480).nullable().optional(),
+  likelyObstacle: taskProtocolTextSchema,
+  focusLengthMinutes: z.number().int().min(5).max(180).nullable().optional(),
+}) as z.ZodType<CommitTaskRequest>;
 
 export const upsertDayLaunchSchema = z
   .object({

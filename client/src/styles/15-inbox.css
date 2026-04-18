@@ -86,11 +86,6 @@
   min-width: 0;
 }
 
-/* When inspector is open, constrain list to leave room */
-.inbox-workspace--has-inspector .inbox-workspace__list {
-  max-width: none;
-}
-
 /* Queue */
 .inbox-queue {
   display: flex;
@@ -331,16 +326,21 @@
 
 /* ── Inspector panel ── */
 .inbox-inspector-backdrop {
-  display: none;
+  display: block;
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.42);
+  backdrop-filter: blur(2px);
+  z-index: 39;
 }
 
 .inbox-workspace__inspector {
-  width: 420px;
-  flex-shrink: 0;
-  margin-left: 1.5rem;
-  position: sticky;
+  width: min(420px, calc(100% - 3rem));
+  margin-left: 0;
+  position: fixed;
   top: 5rem;
-  z-index: 5;
+  right: 1.5rem;
+  z-index: 40;
   max-height: calc(100vh - 6rem);
   overflow-y: auto;
   border: 1px solid var(--border);
@@ -349,7 +349,8 @@
     radial-gradient(circle at top right, rgba(93, 184, 106, 0.04), transparent 40%),
     linear-gradient(180deg, var(--panel-elevated), var(--panel));
   box-shadow: var(--shadow-lg);
-  animation: slideInRight 0.3s var(--ease) both;
+  transform-origin: top right;
+  animation: scaleIn 0.18s var(--ease) both;
 }
 
 .inbox-workspace__inspector::-webkit-scrollbar {
@@ -520,6 +521,99 @@
 
 .inbox-inspector__text-btn--danger:hover {
   color: #e06b62;
+}
+
+.inbox-inspector__text-btn--subtle {
+  color: var(--text-tertiary);
+  font-size: var(--fs-small);
+}
+
+.inbox-inspector__text-btn--subtle:hover {
+  color: var(--text-secondary);
+}
+
+/* Readiness indicator */
+.inbox-inspector__readiness {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  padding: 0.5rem 0.65rem;
+  border-radius: var(--r-xs);
+  font-size: var(--fs-small);
+  line-height: 1.5;
+}
+
+.inbox-inspector__readiness--ready {
+  background: rgba(93, 184, 106, 0.08);
+  color: var(--positive);
+}
+
+.inbox-inspector__readiness--needs-clarification {
+  background: rgba(255, 193, 94, 0.08);
+  color: var(--warning, #d4a24e);
+}
+
+.inbox-inspector__readiness-icon {
+  flex-shrink: 0;
+  font-size: 0.85rem;
+  line-height: 1.5;
+}
+
+.inbox-inspector__readiness-text {
+  flex: 1;
+}
+
+/* Clarification fields */
+.inbox-inspector__clarify {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.inbox-inspector__field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.inbox-inspector__field-label {
+  font-size: var(--fs-micro);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-tertiary);
+}
+
+.inbox-inspector__field-required {
+  color: var(--warning, #d4a24e);
+  margin-left: 0.2rem;
+}
+
+.inbox-inspector__field-input {
+  font-size: var(--fs-body);
+  font-family: var(--font-body);
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border);
+  border-radius: var(--r-xs);
+  padding: 0.4rem 0.55rem;
+  outline: none;
+  transition: border-color var(--dur-fast) var(--ease), box-shadow var(--dur-fast) var(--ease);
+}
+
+.inbox-inspector__field-input:focus {
+  border-color: var(--border-focus);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.inbox-inspector__field-input::placeholder {
+  color: var(--text-tertiary);
+}
+
+.inbox-inspector__field-pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.5rem;
 }
 
 /* ── Bulk bar ── */
@@ -707,26 +801,10 @@
   line-height: 1.5;
 }
 
-/* Medium screens: overlay the inspector instead of side-by-side */
+/* Medium screens: keep the same overlay model, just reposition */
 @media (max-width: 960px) {
-  .inbox-inspector-backdrop {
-    display: block;
-    position: fixed;
-    inset: 0;
-    background: rgba(0, 0, 0, 0.55);
-    backdrop-filter: blur(4px);
-    z-index: 39;
-    animation: fadeIn 0.25s var(--ease) both;
-  }
-
-  .inbox-workspace--has-inspector .inbox-workspace__list {
-    max-width: none;
-  }
-
   .inbox-workspace__inspector {
     width: min(420px, calc(100% - 2rem));
-    margin-left: 0;
-    position: fixed;
     top: 50%;
     right: 1rem;
     left: auto;
@@ -734,7 +812,8 @@
     transform: translateY(-50%);
     max-height: calc(100vh - 4rem);
     z-index: 40;
-    animation: slideInRight 0.3s var(--ease) both;
+    transform-origin: right center;
+    animation: scaleIn 0.18s var(--ease) both;
   }
 }
 
@@ -749,6 +828,11 @@
     max-height: 100vh;
     border-radius: 0;
     animation: slideUp 0.35s var(--ease) both;
+  }
+
+  .inbox-inspector-backdrop {
+    background: rgba(0, 0, 0, 0.55);
+    backdrop-filter: blur(4px);
   }
 }
 

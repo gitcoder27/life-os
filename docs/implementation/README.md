@@ -8,6 +8,9 @@ Current docs:
 - `Life-OS-Behavior-Change-Product-Strategy.md`: strategic product thesis for evolving Life OS from planning/tracking toward activation, continuity, recovery, and adaptation
 - `Life-OS-Implementation-Roadmap.md`: phased implementation roadmap for the behavioral operating system upgrade
 - `Life-OS-Next-2-Milestones-Implementation-Plan.md`: implementation handoff for the next two high-leverage milestones after the recent execution, recovery, and onboarding upgrades
+- `Life-OS-Top-3-Next-Enhancements-2026-04-18.md`: strategic write-up of the next three highest-leverage product enhancements to consider, focused on problem framing and product value rather than implementation planning
+- `Life-OS-Clarification-Before-Commitment-Backend-Agent-2026-04-18.md`: backend-first implementation brief for adding commitment readiness and an inbox-specific commit flow for Clarification Before Commitment
+- `Life-OS-Clarification-Before-Commitment-Frontend-Agent-2026-04-18.md`: frontend implementation brief for the Inbox clarification workflow, assuming the backend contract is already in place
 - `life-os-current-state-handoff.md`: current product and application brief covering screens, workflows, modules, data model, and system behavior for agent or contributor handoff
 - `application-gap-analysis-2026-04-07.md`: cross-app review of the current design, workflow, and systems gaps, with emphasis on finance and workflow coherence
 - `production-deployment.md`: the full production deployment guide

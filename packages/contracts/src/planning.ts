@@ -25,6 +25,20 @@ export type TaskStuckReason =
 export type TaskStuckAction = "clarify" | "shrink" | "downgrade" | "reschedule" | "recover";
 export type DayMode = "normal" | "rescue" | "recovery";
 export type RescueReason = "overload" | "low_energy" | "interruption" | "missed_day";
+export type TaskCommitmentReadiness = "ready" | "needs_clarification";
+export type TaskCommitmentReason =
+  | "missing_next_action"
+  | "missing_five_minute_version"
+  | "missing_estimate"
+  | "missing_obstacle"
+  | "missing_focus_length";
+
+export interface TaskCommitmentGuidance {
+  readiness: TaskCommitmentReadiness;
+  blockingReasons: TaskCommitmentReason[];
+  suggestedReasons: TaskCommitmentReason[];
+  primaryMessage: string;
+}
 
 export interface RescueSuggestion {
   mode: Exclude<DayMode, "normal">;
@@ -73,6 +87,7 @@ export interface PlanningTaskItem {
   progressState: TaskProgressState;
   startedAt: string | null;
   lastStuckAt: string | null;
+  commitmentGuidance?: TaskCommitmentGuidance | null;
   completedAt: string | null;
   createdAt: string;
   updatedAt: string;
@@ -242,6 +257,15 @@ export interface UpdateTaskRequest {
   focusLengthMinutes?: number | null;
   progressState?: TaskProgressState;
   startedAt?: string | null;
+}
+
+export interface CommitTaskRequest {
+  scheduledForDate: IsoDateString;
+  nextAction?: string | null;
+  fiveMinuteVersion?: string | null;
+  estimatedDurationMinutes?: number | null;
+  likelyObstacle?: string | null;
+  focusLengthMinutes?: number | null;
 }
 
 export interface UpsertDayLaunchRequest {

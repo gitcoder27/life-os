@@ -20,6 +20,22 @@ import type {
   LinkedGoal,
 } from "./goals";
 
+export type TaskCommitmentReadiness = "ready" | "needs_clarification";
+
+export type TaskCommitmentReason =
+  | "missing_next_action"
+  | "missing_five_minute_version"
+  | "missing_estimate"
+  | "missing_obstacle"
+  | "missing_focus_length";
+
+export type TaskCommitmentGuidance = {
+  readiness: TaskCommitmentReadiness;
+  blockingReasons: TaskCommitmentReason[];
+  suggestedReasons: TaskCommitmentReason[];
+  primaryMessage: string;
+};
+
 export type TaskItem = {
   id: string;
   title: string;
@@ -42,6 +58,7 @@ export type TaskItem = {
   progressState: "not_started" | "started" | "advanced";
   startedAt: string | null;
   lastStuckAt: string | null;
+  commitmentGuidance?: TaskCommitmentGuidance | null;
   completedAt: string | null;
   createdAt: string;
   updatedAt: string;
@@ -691,6 +708,33 @@ export const useUpdateTaskMutation = (date: string) => {
     meta: {
       successMessage: "Task updated.",
       errorMessage: "Task update failed.",
+    },
+    onSuccess: () => invalidateCoreData(queryClient, date),
+  });
+};
+
+export type CommitTaskInput = {
+  taskId: string;
+  scheduledForDate: string;
+  nextAction?: string | null;
+  fiveMinuteVersion?: string | null;
+  estimatedDurationMinutes?: number | null;
+  likelyObstacle?: string | null;
+  focusLengthMinutes?: number | null;
+};
+
+export const useCommitTaskMutation = (date: string) => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ taskId, ...body }: CommitTaskInput) =>
+      apiRequest<TaskMutationResponse>(`/api/tasks/${taskId}/commit`, {
+        method: "POST",
+        body,
+      }),
+    meta: {
+      successMessage: "Task scheduled.",
+      errorMessage: "Task scheduling failed.",
     },
     onSuccess: () => invalidateCoreData(queryClient, date),
   });

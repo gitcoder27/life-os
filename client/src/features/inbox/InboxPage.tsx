@@ -1,9 +1,12 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 
 import { useAppFeedback } from "../../app/providers";
 import {
+  ApiClientError,
   getTodayDate,
   useBulkUpdateTasksMutation,
+  useCommitTaskMutation,
   useGoalsListQuery,
   useInboxQuery,
   useUpdateTaskMutation,
@@ -11,6 +14,7 @@ import {
   type TaskItem,
   type TaskListCounts,
 } from "../../shared/lib/api";
+import type { ClarificationProtocol } from "./InboxInspector";
 import { getQuickCaptureText } from "../../shared/lib/quickCapture";
 import {
   InlineErrorState,
@@ -55,6 +59,7 @@ export function InboxPage() {
   const { pushFeedback } = useAppFeedback();
   const goalsListQuery = useGoalsListQuery();
   const updateTaskMutation = useUpdateTaskMutation(today);
+  const commitTaskMutation = useCommitTaskMutation(today);
   const bulkSuccessMessageRef = useRef("Inbox updated.");
   const bulkUpdateTasksMutation = useBulkUpdateTasksMutation(today, {
     onSuccess: () => {
@@ -70,6 +75,8 @@ export function InboxPage() {
   const [loadedItems, setLoadedItems] = useState<TaskItem[]>([]);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [promptClarification, setPromptClarification] = useState(false);
+  const [pendingCommitDate, setPendingCommitDate] = useState<string | null>(null);
 
   const activeKind = activeFilter === "all" ? undefined : activeFilter;
   const inboxQuery = useInboxQuery({
@@ -90,7 +97,7 @@ export function InboxPage() {
   const filteredItems = loadedItems;
   const selectedItem = filteredItems.find((item) => item.id === selectedItemId) ?? null;
   const hasBulkSelection = checkedIds.size > 0;
-  const isMutating = updateTaskMutation.isPending || bulkUpdateTasksMutation.isPending;
+  const isMutating = updateTaskMutation.isPending || bulkUpdateTasksMutation.isPending || commitTaskMutation.isPending;
 
   // Reset on filter change
   useEffect(() => {
@@ -99,6 +106,8 @@ export function InboxPage() {
     setSelectedItemId(null);
     setCheckedIds(new Set());
     setIsLoadingMore(false);
+    setPromptClarification(false);
+    setPendingCommitDate(null);
   }, [activeKind]);
 
   // Sync loaded items from query
@@ -114,6 +123,8 @@ export function InboxPage() {
     const visibleIds = new Set(filteredItems.map((item) => item.id));
     if (selectedItemId && !visibleIds.has(selectedItemId)) {
       setSelectedItemId(null);
+      setPromptClarification(false);
+      setPendingCommitDate(null);
     }
     setCheckedIds((current) => {
       const cleaned = new Set([...current].filter((id) => visibleIds.has(id)));
@@ -125,6 +136,8 @@ export function InboxPage() {
   useEffect(() => {
     if (hasBulkSelection) {
       setSelectedItemId(null);
+      setPromptClarification(false);
+      setPendingCommitDate(null);
     }
   }, [hasBulkSelection]);
 
@@ -177,20 +190,51 @@ export function InboxPage() {
   // Single-item actions
   function handleDoToday(taskId: string) {
     const item = filteredItems.find((i) => i.id === taskId);
-    updateTaskMutation.mutate({
-      taskId,
-      scheduledForDate: today,
-      reminderAt: item?.kind === "reminder" ? today : undefined,
-    });
+    if (!item) return;
+    // Notes and reminders bypass commitment
+    if (item.kind !== "task") {
+      updateTaskMutation.mutate({
+        taskId,
+        scheduledForDate: today,
+        reminderAt: item.kind === "reminder" ? today : undefined,
+      });
+      return;
+    }
+    // Task with nextAction already → commit directly
+    if (item.nextAction?.trim()) {
+      commitTaskMutation.mutate({
+        taskId,
+        scheduledForDate: today,
+      });
+      return;
+    }
+    // Needs clarification → open inspector
+    setSelectedItemId(taskId);
+    setCheckedIds(new Set());
+    setPendingCommitDate(today);
+    setPromptClarification(true);
   }
 
   function handleSchedule(taskId: string, date: string) {
     const item = filteredItems.find((i) => i.id === taskId);
-    updateTaskMutation.mutate({
-      taskId,
-      scheduledForDate: date,
-      reminderAt: item?.kind === "reminder" ? date : undefined,
-    });
+    if (!item) return;
+    if (item.kind !== "task") {
+      updateTaskMutation.mutate({
+        taskId,
+        scheduledForDate: date,
+        reminderAt: item.kind === "reminder" ? date : undefined,
+      });
+      return;
+    }
+    if (item.nextAction?.trim()) {
+      commitTaskMutation.mutate({ taskId, scheduledForDate: date });
+      return;
+    }
+    // Needs clarification → open inspector
+    setSelectedItemId(taskId);
+    setCheckedIds(new Set());
+    setPendingCommitDate(date);
+    setPromptClarification(true);
   }
 
   function handleArchive(taskId: string) {
@@ -229,6 +273,58 @@ export function InboxPage() {
   function handleUpdateNotes(taskId: string, notes: string | null) {
     updateTaskMutation.mutate({ taskId, notes });
   }
+
+  function handleCommit(taskId: string, date: string, protocol: ClarificationProtocol) {
+    commitTaskMutation.mutate(
+      {
+        taskId,
+        scheduledForDate: date,
+        nextAction: protocol.nextAction,
+        fiveMinuteVersion: protocol.fiveMinuteVersion,
+        estimatedDurationMinutes: protocol.estimatedDurationMinutes,
+        likelyObstacle: protocol.likelyObstacle,
+        focusLengthMinutes: protocol.focusLengthMinutes,
+      },
+      {
+        onSuccess: () => {
+          setPromptClarification(false);
+          setPendingCommitDate(null);
+        },
+        onError: (error) => {
+          // If commit failed due to missing clarification, guide user
+          if (error instanceof ApiClientError && error.code === "VALIDATION_ERROR") {
+            setPendingCommitDate(date);
+            setPromptClarification(true);
+          }
+        },
+      },
+    );
+  }
+
+  const handleClarificationHandled = useCallback(() => {
+    setPromptClarification(false);
+  }, []);
+
+  const closeInspector = useCallback(() => {
+    setSelectedItemId(null);
+    setPromptClarification(false);
+    setPendingCommitDate(null);
+  }, []);
+
+  useEffect(() => {
+    if (!selectedItem || hasBulkSelection) {
+      return;
+    }
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        closeInspector();
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [closeInspector, hasBulkSelection, selectedItem]);
 
   // Bulk actions
   function runBulkAction(action: BulkUpdateTasksInput["action"]) {
@@ -314,7 +410,7 @@ export function InboxPage() {
 
       {mutationError && <InlineErrorState message={mutationError} onRetry={retryAll} />}
 
-      <div className={`inbox-workspace${selectedItem && !hasBulkSelection ? " inbox-workspace--has-inspector" : ""}`}>
+      <div className="inbox-workspace">
         <div className="inbox-workspace__list">
           {filteredItems.length > 0 ? (
             <div className="inbox-queue">
@@ -331,6 +427,8 @@ export function InboxPage() {
                   onSelect={() => {
                     setSelectedItemId(item.id);
                     setCheckedIds(new Set());
+                    setPromptClarification(false);
+                    setPendingCommitDate(null);
                   }}
                   onToggleCheck={() => toggleCheck(item.id)}
                   onDoToday={() => handleDoToday(item.id)}
@@ -372,33 +470,40 @@ export function InboxPage() {
             <InboxEmptyState />
           )}
         </div>
-
-        {selectedItem && !hasBulkSelection && (
-          <>
-            <div
-              className="inbox-inspector-backdrop"
-              onClick={() => setSelectedItemId(null)}
-            />
-            <div className="inbox-workspace__inspector">
-              <InboxInspector
-                item={selectedItem}
-                activeGoals={activeGoals}
-                goalsLoading={goalsListQuery.isLoading}
-                isMutating={isMutating}
-                onClose={() => setSelectedItemId(null)}
-                onDoToday={() => handleDoToday(selectedItem.id)}
-                onSchedule={(date) => handleSchedule(selectedItem.id, date)}
-                onLinkGoal={(goalId) => handleLinkGoal(selectedItem.id, goalId)}
-                onConvertToNote={() => handleConvertToNote(selectedItem.id)}
-                onConvertToReminder={() => handleConvertToReminder(selectedItem.id)}
-                onArchive={() => handleArchive(selectedItem.id)}
-                onUpdateTitle={(title) => handleUpdateTitle(selectedItem.id, title)}
-                onUpdateNotes={(notes) => handleUpdateNotes(selectedItem.id, notes)}
-              />
-            </div>
-          </>
-        )}
       </div>
+
+      {selectedItem && !hasBulkSelection
+        ? createPortal(
+            <>
+              <div
+                className="inbox-inspector-backdrop"
+                onClick={closeInspector}
+              />
+              <div className="inbox-workspace__inspector">
+                <InboxInspector
+                  item={selectedItem}
+                  activeGoals={activeGoals}
+                  goalsLoading={goalsListQuery.isLoading}
+                  isMutating={isMutating}
+                  onClose={closeInspector}
+                  onCommit={(date, protocol) => handleCommit(selectedItem.id, date, protocol)}
+                  onDoToday={() => handleDoToday(selectedItem.id)}
+                  onSchedule={(date) => handleSchedule(selectedItem.id, date)}
+                  onLinkGoal={(goalId) => handleLinkGoal(selectedItem.id, goalId)}
+                  onConvertToNote={() => handleConvertToNote(selectedItem.id)}
+                  onConvertToReminder={() => handleConvertToReminder(selectedItem.id)}
+                  onArchive={() => handleArchive(selectedItem.id)}
+                  onUpdateTitle={(title) => handleUpdateTitle(selectedItem.id, title)}
+                  onUpdateNotes={(notes) => handleUpdateNotes(selectedItem.id, notes)}
+                  promptClarification={promptClarification}
+                  pendingCommitDate={pendingCommitDate}
+                  onClarificationHandled={handleClarificationHandled}
+                />
+              </div>
+            </>,
+            document.body,
+          )
+        : null}
 
       {hasBulkSelection && (
         <InboxBulkBar

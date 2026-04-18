@@ -3,6 +3,7 @@ import type {
   BulkTaskMutationResponse,
   BulkUpdateTasksRequest,
   CarryForwardTaskRequest,
+  CommitTaskRequest,
   CreateTaskRequest,
   LogTaskStuckRequest,
   PlanningTaskItem,
@@ -26,6 +27,7 @@ import {
   toTaskReminderAt,
 } from "./planning-context.js";
 import {
+  fromPrismaTaskKind,
   serializeTask,
   toPrismaTaskKind,
   toPrismaTaskOriginType,
@@ -43,11 +45,17 @@ import {
 import {
   bulkUpdateTasksSchema,
   carryForwardTaskSchema,
+  commitTaskSchema,
   createTaskSchema,
   logTaskStuckSchema,
   taskListQuerySchema,
   updateTaskSchema,
 } from "./planning-schemas.js";
+import {
+  buildTaskCommitmentFieldErrors,
+  buildTaskCommitmentGuidance,
+  mergeTaskCommitmentRequest,
+} from "./task-commitment.js";
 import {
   buildTaskListCursorWhere,
   encodeTaskListCursor,
@@ -57,6 +65,20 @@ import {
 type PlanningTaskRecord = Prisma.TaskGetPayload<{
   include: typeof planningTaskInclude;
 }>;
+
+function serializeTaskWithCommitmentGuidance(task: PlanningTaskRecord): PlanningTaskItem {
+  return {
+    ...serializeTask(task),
+    commitmentGuidance: buildTaskCommitmentGuidance({
+      kind: fromPrismaTaskKind(task.kind),
+      nextAction: task.nextAction ?? null,
+      fiveMinuteVersion: task.fiveMinuteVersion ?? null,
+      estimatedDurationMinutes: task.estimatedDurationMinutes ?? null,
+      likelyObstacle: task.likelyObstacle ?? null,
+      focusLengthMinutes: task.focusLengthMinutes ?? null,
+    }),
+  };
+}
 
 function buildBulkTaskUpdateData(
   task: Pick<Task, "kind">,
@@ -290,7 +312,7 @@ export const registerPlanningTaskRoutes: FastifyPluginAsync = async (app) => {
     const nextCursor = limit && tasks.length > limit ? encodeTaskListCursor(page[page.length - 1]!) : null;
 
     const response: TasksResponse = withGeneratedAt({
-      tasks: page.map(serializeTask),
+      tasks: page.map(serializeTaskWithCommitmentGuidance),
       nextCursor,
       counts,
     });
@@ -331,7 +353,7 @@ export const registerPlanningTaskRoutes: FastifyPluginAsync = async (app) => {
     });
 
     const response: TaskMutationResponse = withGeneratedAt({
-      task: serializeTask(task),
+      task: serializeTaskWithCommitmentGuidance(task),
     });
 
     return reply.status(201).send(response);
@@ -473,14 +495,121 @@ export const registerPlanningTaskRoutes: FastifyPluginAsync = async (app) => {
       });
     });
 
-    const serializedTasksById = new Map(tasks.map((task) => [task.id, serializeTask(task)]));
+    const serializedTasksById = new Map(
+      tasks.map((task) => [task.id, serializeTaskWithCommitmentGuidance(task)]),
+    );
     const response: BulkTaskMutationResponse = withGeneratedAt({
       tasks:
         payload.action.type === "carry_forward"
-          ? tasks.map(serializeTask)
+          ? tasks.map(serializeTaskWithCommitmentGuidance)
           : payload.taskIds
               .map((taskId) => serializedTasksById.get(taskId))
               .filter((task): task is PlanningTaskItem => Boolean(task)),
+    });
+
+    return reply.send(response);
+  });
+
+  app.post("/tasks/:taskId/commit", async (request, reply) => {
+    const user = requireAuthenticatedUser(request);
+    const payload = parseOrThrow(commitTaskSchema, request.body as CommitTaskRequest);
+    const { taskId } = request.params as { taskId: string };
+    const timezone = await getUserTimezone(app, user.id);
+    const now = new Date();
+    const existingTask = await app.prisma.task.findFirst({
+      where: {
+        id: taskId,
+        userId: user.id,
+      },
+      include: planningTaskInclude,
+    });
+
+    if (!existingTask) {
+      throw new AppError({
+        statusCode: 404,
+        code: "NOT_FOUND",
+        message: "Task not found",
+      });
+    }
+
+    if (existingTask.status !== "PENDING") {
+      throw new AppError({
+        statusCode: 409,
+        code: "CONFLICT",
+        message: "Only pending tasks can be committed.",
+      });
+    }
+
+    const commitmentTask = mergeTaskCommitmentRequest(
+      {
+        kind: fromPrismaTaskKind(existingTask.kind),
+        nextAction: existingTask.nextAction ?? null,
+        fiveMinuteVersion: existingTask.fiveMinuteVersion ?? null,
+        estimatedDurationMinutes: existingTask.estimatedDurationMinutes ?? null,
+        likelyObstacle: existingTask.likelyObstacle ?? null,
+        focusLengthMinutes: existingTask.focusLengthMinutes ?? null,
+      },
+      payload,
+    );
+    const commitmentGuidance = buildTaskCommitmentGuidance(commitmentTask);
+
+    if (commitmentGuidance.readiness === "needs_clarification") {
+      throw new AppError({
+        statusCode: 400,
+        code: "VALIDATION_ERROR",
+        message: commitmentGuidance.primaryMessage,
+        fieldErrors: buildTaskCommitmentFieldErrors(commitmentGuidance),
+      });
+    }
+
+    const task = await app.prisma.$transaction(async (tx) => {
+      const staleCountBefore = await countStaleInboxTasks(tx, {
+        userId: user.id,
+        targetDate: now,
+        timezone,
+      });
+
+      await tx.task.update({
+        where: {
+          id: taskId,
+        },
+        data: {
+          scheduledForDate: parseIsoDate(payload.scheduledForDate),
+          dueAt: null,
+          reminderAt:
+            existingTask.kind === "REMINDER"
+              ? toTaskReminderAt(payload.scheduledForDate, timezone) ?? null
+              : undefined,
+          reminderTriggeredAt: existingTask.kind === "REMINDER" ? null : undefined,
+          nextAction: commitmentTask.nextAction,
+          fiveMinuteVersion: commitmentTask.fiveMinuteVersion,
+          estimatedDurationMinutes: commitmentTask.estimatedDurationMinutes,
+          likelyObstacle: commitmentTask.likelyObstacle,
+          focusLengthMinutes: commitmentTask.focusLengthMinutes,
+        },
+      });
+
+      await removePlannerAssignmentForTask(tx, taskId);
+
+      await recordInboxZeroIfEarned(tx, {
+        userId: user.id,
+        targetDate: now,
+        timezone,
+        staleCountBefore,
+        mutationSource: "task_update",
+        affectedTaskIds: [taskId],
+      });
+
+      return tx.task.findUniqueOrThrow({
+        where: {
+          id: taskId,
+        },
+        include: planningTaskInclude,
+      });
+    });
+
+    const response: TaskMutationResponse = withGeneratedAt({
+      task: serializeTaskWithCommitmentGuidance(task),
     });
 
     return reply.send(response);
@@ -635,7 +764,7 @@ export const registerPlanningTaskRoutes: FastifyPluginAsync = async (app) => {
     });
 
     const response: TaskMutationResponse = withGeneratedAt({
-      task: serializeTask(task),
+      task: serializeTaskWithCommitmentGuidance(task),
     });
 
     return reply.send(response);
@@ -693,7 +822,7 @@ export const registerPlanningTaskRoutes: FastifyPluginAsync = async (app) => {
     });
 
     const response: TaskMutationResponse = withGeneratedAt({
-      task: serializeTask(task),
+      task: serializeTaskWithCommitmentGuidance(task),
     });
 
     return reply.status(201).send(response);
@@ -755,7 +884,7 @@ export const registerPlanningTaskRoutes: FastifyPluginAsync = async (app) => {
     });
 
     const response: TaskMutationResponse = withGeneratedAt({
-      task: serializeTask(task),
+      task: serializeTaskWithCommitmentGuidance(task),
     });
 
     return reply.status(201).send(response);
