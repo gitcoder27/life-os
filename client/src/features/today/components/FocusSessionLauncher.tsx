@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import {
+  getWeekStartDate,
   useStartFocusSessionMutation,
+  useWeekPlanQuery,
   type FocusSessionDepth,
   type FocusSessionItem,
   type TaskItem,
@@ -29,11 +31,13 @@ export function FocusSessionLauncher({
   activeChipClassName = "must-win-card__action-chip",
 }: FocusSessionLauncherProps) {
   const startFocusSessionMutation = useStartFocusSessionMutation(date);
+  const weekPlanQuery = useWeekPlanQuery(getWeekStartDate(date));
   const [open, setOpen] = useState(false);
   const [depth, setDepth] = useState<FocusSessionDepth>("deep");
   const [plannedMinutes, setPlannedMinutes] = useState("25");
   const isSameTaskActive = activeSession?.taskId === task.id;
   const isAnotherTaskActive = Boolean(activeSession && activeSession.taskId !== task.id);
+  const weekPlan = weekPlanQuery.data;
 
   useEffect(() => {
     if (!open) {
@@ -56,6 +60,15 @@ export function FocusSessionLauncher({
     });
     setOpen(false);
   }
+
+  const deepBudgetMessage = weekPlan
+    ? weekPlan.capacityProgress.status === "over_budget"
+      ? `Deep focus counts toward this week. You are already ${weekPlan.capacityProgress.overBudgetBlocks} over budget.`
+      : weekPlan.capacityProgress.status === "at_budget"
+        ? "Deep focus counts toward this week. Another deep session will put the week over budget."
+        : `Deep focus counts toward this week. ${weekPlan.capacityProgress.remainingDeepBlocks} block${weekPlan.capacityProgress.remainingDeepBlocks === 1 ? "" : "s"} left.`
+    : "Deep focus counts toward this week's budget.";
+  const shallowBudgetMessage = "Shallow focus does not count toward this week's deep-work budget.";
 
   if (isSameTaskActive) {
     return <span className={activeChipClassName}>{activeLabel}</span>;
@@ -115,6 +128,9 @@ export function FocusSessionLauncher({
                         Shallow
                       </button>
                     </div>
+                    <p className="focus-session-sheet__budget-note">
+                      {depth === "deep" ? deepBudgetMessage : shallowBudgetMessage}
+                    </p>
                   </div>
 
                   <label className="field">

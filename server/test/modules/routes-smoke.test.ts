@@ -3486,6 +3486,9 @@ describe("module route smoke tests", () => {
     prisma.habit = {
       findMany: vi.fn().mockResolvedValue([]),
     } as any;
+    prisma.focusSession = {
+      count: vi.fn().mockResolvedValue(1),
+    } as any;
     prisma.taskTemplate = {
       findMany: vi.fn().mockResolvedValue([
         {
@@ -3703,6 +3706,10 @@ describe("module route smoke tests", () => {
         },
         capacityAssessment: expect.objectContaining({
           status: "healthy",
+        }),
+        capacityProgress: expect.objectContaining({
+          completedDeepBlocks: 1,
+          remainingDeepBlocks: 3,
         }),
       }),
     );

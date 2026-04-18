@@ -134,6 +134,9 @@ describe("weekly capacity routes", () => {
         return [];
       }),
     } as any;
+    prisma.focusSession = {
+      count: vi.fn().mockResolvedValue(1),
+    } as any;
 
     app = Fastify({ logger: false });
     app.decorate("prisma", prisma);
@@ -178,6 +181,13 @@ describe("weekly capacity routes", () => {
           unsizedTaskCount: 1,
           focusGoalCount: 2,
         }),
+        capacityProgress: {
+          completedDeepBlocks: 1,
+          remainingDeepBlocks: 3,
+          overBudgetBlocks: 0,
+          status: "within_budget",
+          message: "3 deep-work blocks remaining this week.",
+        },
       }),
     );
   });
@@ -206,6 +216,13 @@ describe("weekly capacity routes", () => {
         capacityProfile: {
           capacityMode: "light",
           deepWorkBlockTarget: 2,
+        },
+        capacityProgress: {
+          completedDeepBlocks: 1,
+          remainingDeepBlocks: 1,
+          overBudgetBlocks: 0,
+          status: "within_budget",
+          message: "1 deep-work block remaining this week.",
         },
       }),
     );
@@ -240,6 +257,10 @@ describe("weekly capacity routes", () => {
           },
           capacityAssessment: expect.objectContaining({
             status: "healthy",
+          }),
+          capacityProgress: expect.objectContaining({
+            completedDeepBlocks: 1,
+            remainingDeepBlocks: 3,
           }),
         }),
       }),

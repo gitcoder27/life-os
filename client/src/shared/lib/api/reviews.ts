@@ -160,6 +160,14 @@ export type WeeklyReviewResponse = {
     goalId: string | null;
     completedAt: string | null;
   }>;
+  capacitySummary: {
+    capacityMode: "light" | "standard" | "heavy";
+    plannedDeepWorkBlocks: number;
+    completedDeepBlocks: number;
+    overBudgetBlocks: number;
+    status: "within_budget" | "at_budget" | "over_budget";
+    message: string;
+  };
   submissionWindow: ReviewSubmissionWindow;
 };
 

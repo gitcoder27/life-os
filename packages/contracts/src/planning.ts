@@ -47,6 +47,7 @@ export type WeeklyCapacitySignal =
   | "too_many_focus_goals"
   | "deep_work_target_too_high";
 export type WeeklyCapacityAssessmentStatus = "healthy" | "tight" | "overloaded";
+export type WeeklyCapacityProgressStatus = "within_budget" | "at_budget" | "over_budget";
 
 export interface RescueSuggestion {
   mode: Exclude<DayMode, "normal">;
@@ -170,12 +171,21 @@ export interface WeeklyCapacityAssessment {
   signals: WeeklyCapacitySignal[];
 }
 
+export interface WeeklyCapacityProgress {
+  completedDeepBlocks: number;
+  remainingDeepBlocks: number;
+  overBudgetBlocks: number;
+  status: WeeklyCapacityProgressStatus;
+  message: string;
+}
+
 export interface WeekPlanResponse extends ApiMeta {
   startDate: IsoDateString;
   endDate: IsoDateString;
   priorities: PlanningPriorityItem[];
   capacityProfile: WeeklyCapacityProfile;
   capacityAssessment: WeeklyCapacityAssessment;
+  capacityProgress: WeeklyCapacityProgress;
 }
 
 export interface MonthPlanResponse extends ApiMeta {
@@ -210,6 +220,7 @@ export interface PlanningPriorityMutationResponse extends ApiMeta {
 export interface WeekCapacityMutationResponse extends ApiMeta {
   capacityProfile: WeeklyCapacityProfile;
   capacityAssessment: WeeklyCapacityAssessment;
+  capacityProgress: WeeklyCapacityProgress;
 }
 
 export interface DayPlannerBlockMutationResponse extends ApiMeta {

@@ -14,6 +14,8 @@ import type {
   ReviewHistoryResponse,
   ReviewHistorySummary,
   ReviewSubmissionWindow,
+  WeeklyCapacityMode,
+  WeeklyCapacityProgressStatus,
   WeeklyReviewHistoryTrendPoint,
 } from "@life-os/contracts";
 import type { Prisma } from "@prisma/client";
@@ -135,6 +137,15 @@ export interface ExistingWeeklyReview {
   completedAt: string;
 }
 
+export interface WeeklyCapacitySummary {
+  capacityMode: WeeklyCapacityMode;
+  plannedDeepWorkBlocks: number;
+  completedDeepBlocks: number;
+  overBudgetBlocks: number;
+  status: WeeklyCapacityProgressStatus;
+  message: string;
+}
+
 export interface ExistingMonthlyReview {
   monthVerdict: string;
   biggestWin: string;
@@ -180,6 +191,7 @@ export interface WeeklyReviewResponse {
   };
   existingReview: ExistingWeeklyReview | null;
   seededNextWeekPriorities: PlanningPriorityItem[];
+  capacitySummary: WeeklyCapacitySummary;
   submissionWindow: ReviewSubmissionWindow;
   generatedAt: string;
 }

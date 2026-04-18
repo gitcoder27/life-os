@@ -182,6 +182,7 @@ export {
   useGoalsConfigQuery,
   useGoalsDataQuery,
   useGoalsListQuery,
+  useWeekPlanQuery,
   useGoalsWorkspaceQuery,
   useUpdateGoalDomainsMutation,
   useUpdateGoalHorizonsMutation,

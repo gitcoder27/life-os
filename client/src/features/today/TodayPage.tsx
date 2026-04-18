@@ -32,6 +32,7 @@ import { useActiveFocusSessionQuery, useDayPlanQuery } from "../../shared/lib/ap
 import { isQuickCaptureReferenceTask } from "../../shared/lib/quickCapture";
 import { getOffsetDate } from "./helpers/date-helpers";
 import { FocusSessionPanel } from "./components/FocusSessionPanel";
+import { WeekDeepWorkStrip } from "./components/WeekDeepWorkStrip";
 
 const ISO_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const isPlannerAssignableTask = (task: { kind: string }) => task.kind === "task";
@@ -362,6 +363,7 @@ export function TodayPage() {
       {mode === "execute" ? (
         <div className="today-execute-v2">
           <div className="today-main-v2">
+            <WeekDeepWorkStrip weekPlan={data.weekPlan} />
             <FocusSessionPanel date={data.today} session={activeFocusSession} />
 
             {!data.launch?.completedAt ? (

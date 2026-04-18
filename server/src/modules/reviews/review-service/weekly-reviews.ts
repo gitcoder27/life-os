@@ -5,6 +5,11 @@ import { countWaterTargetHits } from "../../../lib/health/water.js";
 import { addDays, getWeekEndDate } from "../../../lib/time/cycle.js";
 import { toIsoDateString } from "../../../lib/time/date.js";
 import { getDateRangeWindowUtc, normalizeTimezone } from "../../../lib/time/user-time.js";
+import {
+  computeWeeklyCapacityProgress,
+  countCompletedDeepBlocksForWeek,
+  resolveWeeklyCapacityProfile,
+} from "../../planning/weekly-capacity.js";
 import { ensureCycle } from "../../scoring/service.js";
 import { resolveWeeklyReviewSubmissionWindow } from "../submission-window.js";
 
@@ -210,6 +215,20 @@ export async function getWeeklyReviewModel(
         completedAt: cycle.weeklyReview.completedAt.toISOString(),
       }
     : null;
+  const capacityProfile = resolveWeeklyCapacityProfile({
+    weeklyCapacityMode: cycle.weeklyCapacityMode,
+    weeklyDeepWorkBlockTarget: cycle.weeklyDeepWorkBlockTarget,
+  });
+  const completedDeepBlocks = await countCompletedDeepBlocksForWeek(prisma as any, {
+    userId,
+    startDate: startIsoDate,
+    endDate: effectiveEndIsoDate,
+    timezone,
+  });
+  const capacityProgress = computeWeeklyCapacityProgress({
+    capacityProfile,
+    completedDeepBlocks,
+  });
 
   const averageDailyScore =
     scores.length > 0 ? Math.round(scores.reduce((sum, score) => sum + score.scoreValue, 0) / scores.length) : 0;
@@ -270,6 +289,14 @@ export async function getWeeklyReviewModel(
     },
     existingReview,
     seededNextWeekPriorities: nextWeekCycle?.priorities.map(serializePriority) ?? [],
+    capacitySummary: {
+      capacityMode: capacityProfile.capacityMode,
+      plannedDeepWorkBlocks: capacityProfile.deepWorkBlockTarget,
+      completedDeepBlocks: capacityProgress.completedDeepBlocks,
+      overBudgetBlocks: capacityProgress.overBudgetBlocks,
+      status: capacityProgress.status,
+      message: capacityProgress.message,
+    },
     submissionWindow,
     generatedAt: new Date().toISOString(),
   };

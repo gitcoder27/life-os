@@ -310,6 +310,13 @@ export type WeekPlanResponse = {
       | "deep_work_target_too_high"
     >;
   };
+  capacityProgress: {
+    completedDeepBlocks: number;
+    remainingDeepBlocks: number;
+    overBudgetBlocks: number;
+    status: "within_budget" | "at_budget" | "over_budget";
+    message: string;
+  };
 };
 
 export type MonthPlanResponse = {
@@ -355,6 +362,13 @@ export const useGoalsWorkspaceQuery = (date: string) =>
       apiRequest<GoalsWorkspaceFullResponse>("/api/goals/workspace", {
         query: { date },
       }),
+    retry: false,
+  });
+
+export const useWeekPlanQuery = (weekStartDate: string) =>
+  useQuery({
+    queryKey: queryKeys.weekPlan(weekStartDate),
+    queryFn: () => apiRequest<WeekPlanResponse>(`/api/planning/weeks/${weekStartDate}`),
     retry: false,
   });
 
@@ -528,6 +542,7 @@ export type WeekCapacityMutationResponse = {
   generatedAt: string;
   capacityProfile: WeekPlanResponse["capacityProfile"];
   capacityAssessment: WeekPlanResponse["capacityAssessment"];
+  capacityProgress: WeekPlanResponse["capacityProgress"];
 };
 
 export const useUpdateWeekCapacityMutation = (weekStartDate: string) => {
@@ -547,6 +562,7 @@ export const useUpdateWeekCapacityMutation = (weekStartDate: string) => {
       errorMessage: "Week capacity update failed.",
     },
     onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.weekPlan(weekStartDate) });
       void queryClient.invalidateQueries({ queryKey: ["goals"] });
     },
   });

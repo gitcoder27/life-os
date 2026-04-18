@@ -1,5 +1,11 @@
 import type { ApiMeta, EntityId, IsoDateString } from "./common.js";
-import type { PlanningPriorityInput, PlanningPriorityItem, PlanningTaskItem } from "./planning.js";
+import type {
+  PlanningPriorityInput,
+  PlanningPriorityItem,
+  PlanningTaskItem,
+  WeeklyCapacityMode,
+  WeeklyCapacityProgressStatus,
+} from "./planning.js";
 import type { DailyScoreBreakdownResponse } from "./scoring.js";
 
 export type ReviewFrictionTag =
@@ -135,12 +141,22 @@ export interface ExistingWeeklyReview {
   completedAt: string;
 }
 
+export interface WeeklyCapacitySummary {
+  capacityMode: WeeklyCapacityMode;
+  plannedDeepWorkBlocks: number;
+  completedDeepBlocks: number;
+  overBudgetBlocks: number;
+  status: WeeklyCapacityProgressStatus;
+  message: string;
+}
+
 export interface WeeklyReviewResponse extends ApiMeta {
   startDate: IsoDateString;
   endDate: IsoDateString;
   summary: WeeklyReviewSummary;
   existingReview: ExistingWeeklyReview | null;
   seededNextWeekPriorities: PlanningPriorityItem[];
+  capacitySummary: WeeklyCapacitySummary;
   submissionWindow: ReviewSubmissionWindow;
 }
 

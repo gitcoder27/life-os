@@ -65,6 +65,7 @@ export const queryKeys = {
   score: (date: string) => ["score", "daily", date] as const,
   weeklyMomentum: (date: string) => ["score", "weekly-momentum", date] as const,
   dayPlan: (date: string) => ["planning", "day", date] as const,
+  weekPlan: (startDate: string) => ["planning", "week", startDate] as const,
   tasks: (filters: TaskQueryKeyFilters = {}) =>
     [
       "tasks",
@@ -236,6 +237,7 @@ export const invalidateCoreData = (queryClient: QueryClient, _date: string) => {
   void queryClient.invalidateQueries({ queryKey: queryKeys.focusActive });
   void queryClient.invalidateQueries({ queryKey: ["score"] });
   void queryClient.invalidateQueries({ queryKey: ["planning", "day"] });
+  void queryClient.invalidateQueries({ queryKey: ["planning", "week"] });
   void queryClient.invalidateQueries({ queryKey: queryKeys.habits });
   void queryClient.invalidateQueries({ queryKey: ["health"] });
   void queryClient.invalidateQueries({ queryKey: ["finance"] });

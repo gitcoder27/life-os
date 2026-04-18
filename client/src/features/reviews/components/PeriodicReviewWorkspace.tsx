@@ -140,6 +140,46 @@ const PromptComposer = ({
   </SectionCard>
 );
 
+const WeeklyCapacitySummaryPanel = ({
+  review,
+}: {
+  review: WeeklyReviewResponse;
+}) => {
+  const summary = review.capacitySummary;
+
+  return (
+    <SectionCard title="Deep work budget" subtitle="Read-only weekly capacity outcome">
+      <dl className="snapshot-list">
+        <div className="snapshot-list__row">
+          <dt>Week shape</dt>
+          <dd>{summary.capacityMode}</dd>
+        </div>
+        <div className="snapshot-list__row">
+          <dt>Planned blocks</dt>
+          <dd>{summary.plannedDeepWorkBlocks}</dd>
+        </div>
+        <div className="snapshot-list__row">
+          <dt>Completed blocks</dt>
+          <dd>{summary.completedDeepBlocks}</dd>
+        </div>
+        {summary.overBudgetBlocks > 0 ? (
+          <div className="snapshot-list__row">
+            <dt>Over budget</dt>
+            <dd>{summary.overBudgetBlocks}</dd>
+          </div>
+        ) : null}
+        <div className="snapshot-list__row">
+          <dt>Status</dt>
+          <dd>{summary.status.replaceAll("_", " ")}</dd>
+        </div>
+      </dl>
+      <p className="support-copy" style={{ marginTop: "0.75rem" }}>
+        {summary.message}
+      </p>
+    </SectionCard>
+  );
+};
+
 const WeeklyLockedReviewPanels = ({
   review,
   summaryItems,
@@ -249,6 +289,8 @@ const WeeklyLockedReviewPanels = ({
             />
           )}
         </SectionCard>
+
+        <WeeklyCapacitySummaryPanel review={review} />
       </div>
     </>
   );
@@ -478,6 +520,10 @@ export const PeriodicReviewWorkspace = (props: PeriodicReviewWorkspaceProps) => 
             focusHabitId={props.focusHabitId}
             setFocusHabitId={props.setFocusHabitId}
           />
+        ) : null}
+
+        {props.cadenceKey === "weekly" ? (
+          <WeeklyCapacitySummaryPanel review={props.review} />
         ) : null}
       </div>
 

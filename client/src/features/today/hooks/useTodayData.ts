@@ -1,10 +1,12 @@
 import { useMemo } from "react";
 import {
   getTodayDate,
+  getWeekStartDate,
   useDailyScoreQuery,
   useDayPlanQuery,
   useGoalsListQuery,
   useHealthDataQuery,
+  useWeekPlanQuery,
   useTasksQuery,
   type TaskItem,
   type DayPlannerBlockItem,
@@ -16,10 +18,12 @@ const isPlannerAssignableTask = (task: TaskItem) => task.kind === "task";
 
 export function useTodayData() {
   const today = getTodayDate();
+  const weekStart = getWeekStartDate(today);
   const overdueLookbackStart = getOffsetDate(today, -30);
   const yesterday = getOffsetDate(today, -1);
 
   const dayPlanQuery = useDayPlanQuery(today);
+  const weekPlanQuery = useWeekPlanQuery(weekStart);
   const overdueTasksQuery = useTasksQuery({
     from: overdueLookbackStart,
     to: yesterday,
@@ -92,6 +96,7 @@ export function useTodayData() {
 
   const refetchAll = () => {
     void dayPlanQuery.refetch();
+    void weekPlanQuery.refetch();
     void overdueTasksQuery.refetch();
     void healthQuery.refetch();
     void scoreQuery.refetch();
@@ -127,6 +132,8 @@ export function useTodayData() {
     healthQuery,
     goalsListQuery,
     dayPlanQuery,
+    weekPlan: weekPlanQuery.data ?? null,
+    weekPlanQuery,
     refetchAll,
   };
 }

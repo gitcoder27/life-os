@@ -47,6 +47,98 @@
   min-width: 0;
 }
 
+.week-deep-work-strip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.85rem;
+  padding: 0.7rem 0.9rem;
+  border-radius: var(--r);
+  border: 1px solid var(--border);
+  background: var(--panel);
+}
+
+.week-deep-work-strip--within_budget {
+  border-color: rgba(93, 184, 106, 0.16);
+}
+
+.week-deep-work-strip--at_budget {
+  border-color: rgba(217, 153, 58, 0.18);
+}
+
+.week-deep-work-strip--over_budget {
+  border-color: rgba(201, 85, 76, 0.2);
+}
+
+.week-deep-work-strip__copy {
+  display: flex;
+  flex-direction: column;
+  gap: 0.12rem;
+  min-width: 0;
+}
+
+.week-deep-work-strip__eyebrow {
+  font-size: var(--fs-micro);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-tertiary);
+  font-weight: 700;
+}
+
+.week-deep-work-strip__summary {
+  color: var(--text);
+  font-size: var(--fs-small);
+}
+
+.week-deep-work-strip__message {
+  color: var(--text-tertiary);
+  font-size: var(--fs-micro);
+}
+
+.week-deep-work-strip__meta {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.week-deep-work-strip__badge,
+.week-deep-work-strip__mode {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.18rem 0.55rem;
+  border-radius: var(--r-pill);
+  font-size: var(--fs-micro);
+  font-weight: 700;
+}
+
+.week-deep-work-strip__badge {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-secondary);
+}
+
+.week-deep-work-strip__badge--within_budget {
+  border-color: rgba(93, 184, 106, 0.18);
+  color: var(--positive);
+}
+
+.week-deep-work-strip__badge--at_budget {
+  border-color: rgba(217, 153, 58, 0.22);
+  color: var(--accent);
+}
+
+.week-deep-work-strip__badge--over_budget {
+  border-color: rgba(201, 85, 76, 0.22);
+  color: var(--negative);
+}
+
+.week-deep-work-strip__mode {
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--text-tertiary);
+}
+
 .reduced-day-strip {
   display: grid;
   grid-template-columns: minmax(0, 1.2fr) minmax(220px, 0.9fr) auto;
@@ -714,6 +806,13 @@
 .focus-session-choice-row {
   display: flex;
   gap: 0.55rem;
+}
+
+.focus-session-sheet__budget-note {
+  margin: 0.45rem 0 0;
+  font-size: var(--fs-micro);
+  color: var(--text-tertiary);
+  line-height: 1.45;
 }
 
 .focus-session-choice-row--wrap {
@@ -1530,6 +1629,15 @@
 
   .focus-session-choice-row {
     flex-wrap: wrap;
+  }
+
+  .week-deep-work-strip {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .week-deep-work-strip__meta {
+    justify-content: flex-start;
   }
 
   .today-status-grid {

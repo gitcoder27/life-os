@@ -1,11 +1,15 @@
 import type {
+  IsoDateString,
   WeeklyCapacityAssessment,
   WeeklyCapacityMode,
+  WeeklyCapacityProgress,
+  WeeklyCapacityProgressStatus,
   WeeklyCapacityProfile,
   WeeklyCapacitySignal,
 } from "@life-os/contracts";
 import type { PlanningCycle, WeeklyCapacityMode as PrismaWeeklyCapacityMode } from "@prisma/client";
 
+import { getDateRangeWindowUtc, normalizeTimezone } from "../../lib/time/user-time.js";
 import type { PlanningApp } from "./planning-types.js";
 
 type WeekPriorityInput = {
@@ -184,6 +188,10 @@ export function getDefaultDeepWorkBlockTarget(mode: WeeklyCapacityMode) {
   return DEFAULT_DEEP_WORK_BLOCK_TARGETS[mode];
 }
 
+function formatBlockCount(count: number) {
+  return `${count} deep-work block${count === 1 ? "" : "s"}`;
+}
+
 export function resolveWeeklyCapacityProfile(input: {
   weeklyCapacityMode: PrismaWeeklyCapacityMode | null | undefined;
   weeklyDeepWorkBlockTarget: number | null | undefined;
@@ -277,25 +285,98 @@ export function computeWeeklyCapacityAssessment(input: {
   };
 }
 
+export function computeWeeklyCapacityProgress(input: {
+  capacityProfile: WeeklyCapacityProfile;
+  completedDeepBlocks: number;
+}): WeeklyCapacityProgress {
+  const plannedDeepWorkBlocks = input.capacityProfile.deepWorkBlockTarget;
+  const completedDeepBlocks = input.completedDeepBlocks;
+  const remainingDeepBlocks = Math.max(plannedDeepWorkBlocks - completedDeepBlocks, 0);
+  const overBudgetBlocks = Math.max(completedDeepBlocks - plannedDeepWorkBlocks, 0);
+
+  let status: WeeklyCapacityProgressStatus = "within_budget";
+  let message = `${formatBlockCount(remainingDeepBlocks)} remaining this week.`;
+
+  if (plannedDeepWorkBlocks === 0 && completedDeepBlocks === 0) {
+    message = "No deep-work blocks planned this week.";
+  } else if (overBudgetBlocks > 0) {
+    status = "over_budget";
+    message = `${formatBlockCount(overBudgetBlocks)} over budget this week.`;
+  } else if (plannedDeepWorkBlocks > 0 && completedDeepBlocks === plannedDeepWorkBlocks) {
+    status = "at_budget";
+    message = "Deep-work budget reached for this week.";
+  }
+
+  return {
+    completedDeepBlocks,
+    remainingDeepBlocks,
+    overBudgetBlocks,
+    status,
+    message,
+  };
+}
+
+export async function countCompletedDeepBlocksForWeek(
+  prisma: Pick<PlanningApp["prisma"], "focusSession">,
+  input: {
+    userId: string;
+    startDate: IsoDateString;
+    endDate: IsoDateString;
+    timezone?: string | null;
+  },
+) {
+  const rangeWindow = getDateRangeWindowUtc(input.startDate, input.endDate, normalizeTimezone(input.timezone));
+
+  return prisma.focusSession.count({
+    where: {
+      userId: input.userId,
+      status: "COMPLETED",
+      depth: "DEEP",
+      endedAt: {
+        gte: rangeWindow.start,
+        lt: rangeWindow.end,
+      },
+    },
+  });
+}
+
 export async function buildWeeklyCapacityModel(app: PlanningApp, cycle: WeekCycleWithCapacity) {
   const capacityProfile = resolveWeeklyCapacityProfile({
     weeklyCapacityMode: cycle.weeklyCapacityMode,
     weeklyDeepWorkBlockTarget: cycle.weeklyDeepWorkBlockTarget,
   });
-  const tasks = await app.prisma.task.findMany({
-    where: {
-      userId: cycle.userId,
-      kind: "TASK",
-      status: "PENDING",
-      scheduledForDate: {
-        gte: cycle.cycleStartDate,
-        lte: cycle.cycleEndDate,
+  const startDate = cycle.cycleStartDate.toISOString().slice(0, 10) as IsoDateString;
+  const endDate = cycle.cycleEndDate.toISOString().slice(0, 10) as IsoDateString;
+  const [tasks, preferences] = await Promise.all([
+    app.prisma.task.findMany({
+      where: {
+        userId: cycle.userId,
+        kind: "TASK",
+        status: "PENDING",
+        scheduledForDate: {
+          gte: cycle.cycleStartDate,
+          lte: cycle.cycleEndDate,
+        },
       },
-    },
-    select: {
-      goalId: true,
-      estimatedDurationMinutes: true,
-    },
+      select: {
+        goalId: true,
+        estimatedDurationMinutes: true,
+      },
+    }),
+    app.prisma.userPreference.findUnique({
+      where: {
+        userId: cycle.userId,
+      },
+      select: {
+        timezone: true,
+      },
+    }),
+  ]);
+  const completedDeepBlocks = await countCompletedDeepBlocksForWeek(app.prisma, {
+    userId: cycle.userId,
+    startDate,
+    endDate,
+    timezone: preferences?.timezone ?? null,
   });
 
   return {
@@ -304,6 +385,10 @@ export async function buildWeeklyCapacityModel(app: PlanningApp, cycle: WeekCycl
       capacityProfile,
       priorities: cycle.priorities,
       tasks,
+    }),
+    capacityProgress: computeWeeklyCapacityProgress({
+      capacityProfile,
+      completedDeepBlocks,
     }),
   };
 }

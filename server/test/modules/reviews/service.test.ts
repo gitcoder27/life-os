@@ -502,6 +502,7 @@ describe("reviews service", () => {
         ]),
       },
       dailyReview: { findMany: vi.fn().mockResolvedValue([{ frictionTag: "low energy" }, { frictionTag: "poor planning" }]) },
+      focusSession: { count: vi.fn().mockResolvedValue(2) },
     } as any;
 
     const response = await getWeeklyReviewModel(prisma, "user-1", new Date("2026-03-14T00:00:00.000Z"));
@@ -512,6 +513,14 @@ describe("reviews service", () => {
     expect(response.summary.topFrictionTags).toHaveLength(2);
     expect(response.summary.topFrictionTags[0]).toEqual({ tag: "low energy", count: 1 });
     expect(response.summary.workoutsCompleted).toBe(1);
+    expect(response.capacitySummary).toEqual({
+      capacityMode: "standard",
+      plannedDeepWorkBlocks: 4,
+      completedDeepBlocks: 2,
+      overBudgetBlocks: 0,
+      status: "within_budget",
+      message: "2 deep-work blocks remaining this week.",
+    });
     expect(response.seededNextWeekPriorities).toEqual([
       expect.objectContaining({ id: "pr1", slot: 1, title: "Protect mornings" }),
     ]);

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   computeWeeklyCapacityAssessment,
+  computeWeeklyCapacityProgress,
   resolveWeeklyCapacityProfile,
 } from "../../../src/modules/planning/weekly-capacity.js";
 
@@ -128,5 +129,53 @@ describe("weekly capacity assessment", () => {
     });
 
     expect(result.focusGoalCount).toBe(3);
+  });
+
+  it("computes remaining deep-work budget while within range", () => {
+    expect(
+      computeWeeklyCapacityProgress({
+        capacityProfile: {
+          capacityMode: "standard",
+          deepWorkBlockTarget: 4,
+        },
+        completedDeepBlocks: 2,
+      }),
+    ).toEqual({
+      completedDeepBlocks: 2,
+      remainingDeepBlocks: 2,
+      overBudgetBlocks: 0,
+      status: "within_budget",
+      message: "2 deep-work blocks remaining this week.",
+    });
+  });
+
+  it("marks budget reached when completed deep work matches plan", () => {
+    expect(
+      computeWeeklyCapacityProgress({
+        capacityProfile: {
+          capacityMode: "light",
+          deepWorkBlockTarget: 2,
+        },
+        completedDeepBlocks: 2,
+      }).status,
+    ).toBe("at_budget");
+  });
+
+  it("marks over-budget when completed deep work exceeds the plan", () => {
+    expect(
+      computeWeeklyCapacityProgress({
+        capacityProfile: {
+          capacityMode: "heavy",
+          deepWorkBlockTarget: 6,
+        },
+        completedDeepBlocks: 8,
+      }),
+    ).toEqual({
+      completedDeepBlocks: 8,
+      remainingDeepBlocks: 0,
+      overBudgetBlocks: 2,
+      status: "over_budget",
+      message: "2 deep-work blocks over budget this week.",
+    });
   });
 });

@@ -702,6 +702,7 @@ export const registerPlanningPlanRoutes: FastifyPluginAsync = async (app) => {
       priorities: cycle.priorities.map(serializePriority),
       capacityProfile: weeklyCapacity.capacityProfile,
       capacityAssessment: weeklyCapacity.capacityAssessment,
+      capacityProgress: weeklyCapacity.capacityProgress,
     });
 
     return reply.send(response);
@@ -770,6 +771,7 @@ export const registerPlanningPlanRoutes: FastifyPluginAsync = async (app) => {
     const response: WeekCapacityMutationResponse = withGeneratedAt({
       capacityProfile: weeklyCapacity.capacityProfile,
       capacityAssessment: weeklyCapacity.capacityAssessment,
+      capacityProgress: weeklyCapacity.capacityProgress,
     });
 
     return reply.send(response);

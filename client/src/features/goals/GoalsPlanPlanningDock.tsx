@@ -275,6 +275,7 @@ export const GoalsPlanPlanningDock = ({
               weekStartDate={weekPlan.startDate}
               capacityProfile={weekPlan.capacityProfile}
               capacityAssessment={weekPlan.capacityAssessment}
+              capacityProgress={weekPlan.capacityProgress}
             />
           ) : null}
 
