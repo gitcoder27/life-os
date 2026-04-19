@@ -110,29 +110,23 @@ export function WorkspaceLaunchStrip({ today }: { today: string }) {
         <span className="workspace-launches__label">Frequent workspaces</span>
       </div>
 
-      <div className="workspace-launches__grid">
+      <div className="workspace-launches__rail">
         <Link
           to="/planner"
-          className={`workspace-launch workspace-launch--${plannerState.tone}`}
+          className={`workspace-launch workspace-launch--compact workspace-launch--${plannerState.tone}`}
         >
-          <div className="workspace-launch__meta">
-            <span>{plannerState.meta}</span>
-            <span className="workspace-launch__action">Open planner</span>
-          </div>
-          <h3 className="workspace-launch__title">{plannerState.title}</h3>
-          <p className="workspace-launch__detail">{plannerState.detail}</p>
+          <span className="workspace-launch__kicker">Planner</span>
+          <span className="workspace-launch__summary">{plannerState.detail}</span>
+          <span className="workspace-launch__action">Open</span>
         </Link>
 
         <Link
           to="/meals"
-          className={`workspace-launch workspace-launch--${mealsState.tone}`}
+          className={`workspace-launch workspace-launch--compact workspace-launch--${mealsState.tone}`}
         >
-          <div className="workspace-launch__meta">
-            <span>{mealsState.meta}</span>
-            <span className="workspace-launch__action">Open meals</span>
-          </div>
-          <h3 className="workspace-launch__title">{mealsState.title}</h3>
-          <p className="workspace-launch__detail">{mealsState.detail}</p>
+          <span className="workspace-launch__kicker">Meals</span>
+          <span className="workspace-launch__summary">{mealsState.detail}</span>
+          <span className="workspace-launch__action">Open</span>
         </Link>
       </div>
     </section>

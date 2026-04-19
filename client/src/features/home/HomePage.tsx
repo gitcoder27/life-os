@@ -102,8 +102,6 @@ export function HomePage() {
 
       <FocusSessionBanner session={activeFocusSessionQuery.data?.session ?? null} />
 
-      <WorkspaceLaunchStrip today={home.date} />
-
       <section className="home-desk__stage" aria-label="Today's focus">
         <FocusStage
           date={home.date}
@@ -135,6 +133,8 @@ export function HomePage() {
           inboxHasMore={inboxItems.length > 4}
         />
       </section>
+
+      <WorkspaceLaunchStrip today={home.date} />
 
       <GuidanceWhisper guidance={home.guidance} />
 
