@@ -31,6 +31,7 @@ export interface FocusSessionItem {
   task: FocusSessionTaskSummary;
   depth: FocusSessionDepth;
   plannedMinutes: number;
+  actualMinutes: number | null;
   startedAt: string;
   endedAt: string | null;
   status: FocusSessionStatus;
@@ -47,6 +48,39 @@ export interface ActiveFocusSessionResponse extends ApiMeta {
 
 export interface FocusSessionMutationResponse extends ApiMeta {
   session: FocusSessionItem;
+}
+
+export type FocusSessionSuggestedAdjustment =
+  | "keep_current_setup"
+  | "shorten_session"
+  | "clarify_next_action";
+
+export interface FocusSessionHistoryItem {
+  id: EntityId;
+  depth: FocusSessionDepth;
+  plannedMinutes: number;
+  actualMinutes: number | null;
+  status: FocusSessionStatus;
+  exitReason: FocusSessionExitReason | null;
+  endedAt: string | null;
+}
+
+export interface FocusTaskInsight {
+  taskId: EntityId;
+  totalSessions: number;
+  completedSessions: number;
+  abortedSessions: number;
+  averagePlannedMinutes: number | null;
+  averageActualMinutes: number | null;
+  mostCommonExitReason: FocusSessionExitReason | null;
+  recommendedPlannedMinutes: number | null;
+  suggestedAdjustment: FocusSessionSuggestedAdjustment;
+  summaryMessage: string;
+  recentSessions: FocusSessionHistoryItem[];
+}
+
+export interface FocusTaskInsightResponse extends ApiMeta {
+  insight: FocusTaskInsight;
 }
 
 export interface CreateFocusSessionRequest {

@@ -874,6 +874,69 @@
   font-size: var(--fs-small);
 }
 
+.focus-session-insight {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  padding: 0.75rem 0.9rem;
+  border-radius: var(--r-md);
+  border: 1px solid rgba(217, 153, 58, 0.22);
+  background: rgba(217, 153, 58, 0.08);
+}
+
+.focus-session-insight--clarify {
+  border-color: rgba(239, 147, 108, 0.28);
+  background: rgba(239, 147, 108, 0.08);
+}
+
+.focus-session-insight--shorten {
+  border-color: rgba(94, 176, 221, 0.28);
+  background: rgba(94, 176, 221, 0.08);
+}
+
+.focus-session-insight__label {
+  font-size: var(--fs-micro);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-tertiary);
+}
+
+.focus-session-insight__message {
+  margin: 0;
+  font-size: var(--fs-small);
+  line-height: 1.5;
+  color: var(--text);
+}
+
+.focus-session-insight__cta {
+  align-self: flex-start;
+}
+
+.focus-session-recap__body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  padding: 0.85rem 0.95rem;
+  border-radius: var(--r-md);
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.focus-session-recap__headline {
+  margin: 0;
+  font-size: var(--fs-micro);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--accent-bright);
+}
+
+.focus-session-recap__message {
+  margin: 0;
+  font-size: var(--fs-body);
+  line-height: 1.5;
+  color: var(--text);
+}
+
 /* ── Stream Task Row ────────────────────────────────── */
 
 .stream-task {

@@ -11,6 +11,40 @@ import {
 } from "./core";
 import type { LinkedGoal } from "./goals";
 
+export type FocusSessionSuggestedAdjustment =
+  | "keep_current_setup"
+  | "shorten_session"
+  | "clarify_next_action";
+
+export type FocusSessionHistoryItem = {
+  id: string;
+  depth: FocusSessionDepth;
+  plannedMinutes: number;
+  actualMinutes: number | null;
+  status: FocusSessionStatus;
+  exitReason: FocusSessionExitReason | null;
+  endedAt: string | null;
+};
+
+export type FocusTaskInsight = {
+  taskId: string;
+  totalSessions: number;
+  completedSessions: number;
+  abortedSessions: number;
+  averagePlannedMinutes: number | null;
+  averageActualMinutes: number | null;
+  mostCommonExitReason: FocusSessionExitReason | null;
+  recommendedPlannedMinutes: number | null;
+  suggestedAdjustment: FocusSessionSuggestedAdjustment;
+  summaryMessage: string;
+  recentSessions: FocusSessionHistoryItem[];
+};
+
+type FocusTaskInsightResponse = {
+  generatedAt: string;
+  insight: FocusTaskInsight;
+};
+
 export type FocusSessionDepth = "deep" | "shallow";
 export type FocusSessionStatus = "active" | "completed" | "aborted";
 export type FocusSessionExitReason =
@@ -40,6 +74,7 @@ export type FocusSessionItem = {
   task: FocusSessionTaskSummary;
   depth: FocusSessionDepth;
   plannedMinutes: number;
+  actualMinutes: number | null;
   startedAt: string;
   endedAt: string | null;
   status: FocusSessionStatus;
@@ -67,6 +102,22 @@ export const useActiveFocusSessionQuery = () =>
     retry: false,
     refetchInterval: 30_000,
     refetchIntervalInBackground: true,
+  });
+
+const focusTaskInsightQueryKey = (taskId: string) =>
+  ["focus", "task-insight", taskId] as const;
+
+export const useFocusTaskInsightQuery = (
+  taskId: string | null,
+  options?: { enabled?: boolean },
+) =>
+  useQuery({
+    queryKey: focusTaskInsightQueryKey(taskId ?? ""),
+    queryFn: () =>
+      apiRequest<FocusTaskInsightResponse>(`/api/focus/tasks/${taskId}/insights`),
+    enabled: Boolean(taskId) && options?.enabled !== false,
+    retry: false,
+    staleTime: 60_000,
   });
 
 export const useStartFocusSessionMutation = (date: string) => {
@@ -139,7 +190,12 @@ export const useCompleteFocusSessionMutation = (date: string) => {
       successMessage: "Focus session completed.",
       errorMessage: "Could not complete focus session.",
     },
-    onSuccess: () => invalidateCoreData(queryClient, date),
+    onSuccess: (data) => {
+      invalidateCoreData(queryClient, date);
+      void queryClient.invalidateQueries({
+        queryKey: focusTaskInsightQueryKey(data.session.taskId),
+      });
+    },
   });
 };
 
@@ -167,6 +223,11 @@ export const useAbortFocusSessionMutation = (date: string) => {
       successMessage: "Focus session ended.",
       errorMessage: "Could not end focus session.",
     },
-    onSuccess: () => invalidateCoreData(queryClient, date),
+    onSuccess: (data) => {
+      invalidateCoreData(queryClient, date);
+      void queryClient.invalidateQueries({
+        queryKey: focusTaskInsightQueryKey(data.session.taskId),
+      });
+    },
   });
 };

@@ -15,6 +15,10 @@ import {
   fromPrismaTaskStatus,
 } from "../planning/planning-mappers.js";
 import { planningTaskInclude } from "../planning/planning-record-shapes.js";
+import {
+  buildFocusTaskInsight,
+  getFocusSessionActualMinutes,
+} from "./focus-insights.js";
 
 const focusSessionInclude = {
   task: {
@@ -24,6 +28,20 @@ const focusSessionInclude = {
 
 type FocusSessionRecord = Prisma.FocusSessionGetPayload<{
   include: typeof focusSessionInclude;
+}>;
+
+const focusInsightSessionSelect = {
+  id: true,
+  depth: true,
+  plannedMinutes: true,
+  startedAt: true,
+  endedAt: true,
+  status: true,
+  exitReason: true,
+} as const;
+
+type FocusInsightSessionRecord = Prisma.FocusSessionGetPayload<{
+  select: typeof focusInsightSessionSelect;
 }>;
 
 function fromPrismaFocusSessionDepth(depth: "DEEP" | "SHALLOW"): FocusSessionDepth {
@@ -126,6 +144,7 @@ function serializeFocusSession(session: FocusSessionRecord): FocusSessionItem {
     },
     depth: fromPrismaFocusSessionDepth(session.depth),
     plannedMinutes: session.plannedMinutes,
+    actualMinutes: getFocusSessionActualMinutes(session.startedAt, session.endedAt),
     startedAt: session.startedAt.toISOString(),
     endedAt: session.endedAt?.toISOString() ?? null,
     status: fromPrismaFocusSessionStatus(session.status),
@@ -134,6 +153,18 @@ function serializeFocusSession(session: FocusSessionRecord): FocusSessionItem {
     completionNote: session.completionNote ?? null,
     createdAt: session.createdAt.toISOString(),
     updatedAt: session.updatedAt.toISOString(),
+  };
+}
+
+function serializeFocusInsightSession(session: FocusInsightSessionRecord) {
+  return {
+    id: session.id,
+    depth: fromPrismaFocusSessionDepth(session.depth),
+    plannedMinutes: session.plannedMinutes,
+    startedAt: session.startedAt,
+    endedAt: session.endedAt,
+    status: fromPrismaFocusSessionStatus(session.status),
+    exitReason: fromPrismaFocusSessionExitReason(session.exitReason),
   };
 }
 
@@ -167,6 +198,28 @@ function ensureTaskCanStartFocus(task: FocusSessionRecord["task"] | null) {
       statusCode: 400,
       code: "VALIDATION_ERROR",
       message: "Add a next action before starting a focus session.",
+    });
+  }
+
+  return task;
+}
+
+function ensureTaskBelongsToUserForFocus(
+  task: { id: string; kind: string } | null,
+) {
+  if (!task) {
+    throw new AppError({
+      statusCode: 404,
+      code: "NOT_FOUND",
+      message: "Task not found",
+    });
+  }
+
+  if (task.kind !== "TASK") {
+    throw new AppError({
+      statusCode: 400,
+      code: "BAD_REQUEST",
+      message: "Only tasks can use focus insights.",
     });
   }
 
@@ -220,6 +273,40 @@ export async function getActiveFocusSession(
   });
 
   return session ? serializeFocusSession(session) : null;
+}
+
+export async function getFocusTaskInsight(
+  prisma: Pick<Prisma.TransactionClient, "focusSession" | "task">,
+  userId: string,
+  taskId: string,
+) {
+  const task = ensureTaskBelongsToUserForFocus(await prisma.task.findFirst({
+    where: {
+      id: taskId,
+      userId,
+    },
+    select: {
+      id: true,
+      kind: true,
+    },
+  }));
+
+  const sessions = await prisma.focusSession.findMany({
+    where: {
+      userId,
+      taskId,
+      status: {
+        in: ["COMPLETED", "ABORTED"],
+      },
+    },
+    orderBy: {
+      endedAt: "desc",
+    },
+    take: 5,
+    select: focusInsightSessionSelect,
+  });
+
+  return buildFocusTaskInsight(task.id, sessions.map(serializeFocusInsightSession));
 }
 
 export async function createFocusSession(

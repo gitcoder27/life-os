@@ -45,14 +45,18 @@ export {
   useActiveFocusSessionQuery,
   useCaptureFocusDistractionMutation,
   useCompleteFocusSessionMutation,
+  useFocusTaskInsightQuery,
   useStartFocusSessionMutation,
 } from "./api/focus";
 export type {
   FocusSessionDepth,
   FocusSessionExitReason,
+  FocusSessionHistoryItem,
   FocusSessionItem,
   FocusSessionStatus,
+  FocusSessionSuggestedAdjustment,
   FocusSessionTaskOutcome,
+  FocusTaskInsight,
 } from "./api/focus";
 export {
   useHomeOverviewQuery,

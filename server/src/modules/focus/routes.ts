@@ -6,6 +6,7 @@ import type {
   CreateFocusSessionRequest,
   ActiveFocusSessionResponse,
   FocusSessionMutationResponse,
+  FocusTaskInsightResponse,
 } from "@life-os/contracts";
 
 import { requireAuthenticatedUser } from "../../lib/auth/require-auth.js";
@@ -17,12 +18,14 @@ import {
   completeFocusSession,
   createFocusSession,
   getActiveFocusSession,
+  getFocusTaskInsight,
 } from "./service.js";
 import {
   abortFocusSessionSchema,
   captureFocusDistractionSchema,
   completeFocusSessionSchema,
   createFocusSessionSchema,
+  focusTaskParamsSchema,
 } from "./focus-schemas.js";
 
 export const registerFocusRoutes: FastifyPluginAsync = async (app) => {
@@ -31,6 +34,20 @@ export const registerFocusRoutes: FastifyPluginAsync = async (app) => {
     const session = await getActiveFocusSession(app.prisma, user.id);
     const response: ActiveFocusSessionResponse = withGeneratedAt({
       session,
+    });
+
+    return reply.send(response);
+  });
+
+  app.get("/tasks/:taskId/insights", async (request, reply) => {
+    const user = requireAuthenticatedUser(request);
+    const { taskId } = parseOrThrow(
+      focusTaskParamsSchema,
+      request.params as { taskId: string },
+    );
+    const insight = await getFocusTaskInsight(app.prisma, user.id, taskId);
+    const response: FocusTaskInsightResponse = withGeneratedAt({
+      insight,
     });
 
     return reply.send(response);

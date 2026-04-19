@@ -2,12 +2,15 @@ import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import {
   getWeekStartDate,
+  useFocusTaskInsightQuery,
   useStartFocusSessionMutation,
   useWeekPlanQuery,
   type FocusSessionDepth,
   type FocusSessionItem,
   type TaskItem,
 } from "../../../shared/lib/api";
+import { FocusSessionInsightCard } from "./FocusSessionInsightCard";
+import { StartProtocolSheet } from "./StartProtocolSheet";
 
 type FocusSessionLauncherProps = {
   date: string;
@@ -33,11 +36,16 @@ export function FocusSessionLauncher({
   const startFocusSessionMutation = useStartFocusSessionMutation(date);
   const weekPlanQuery = useWeekPlanQuery(getWeekStartDate(date));
   const [open, setOpen] = useState(false);
+  const [protocolOpen, setProtocolOpen] = useState(false);
   const [depth, setDepth] = useState<FocusSessionDepth>("deep");
   const [plannedMinutes, setPlannedMinutes] = useState("25");
+  const [plannedMinutesAutoFilled, setPlannedMinutesAutoFilled] = useState(false);
   const isSameTaskActive = activeSession?.taskId === task.id;
   const isAnotherTaskActive = Boolean(activeSession && activeSession.taskId !== task.id);
   const weekPlan = weekPlanQuery.data;
+
+  const insightQuery = useFocusTaskInsightQuery(task.id, { enabled: open });
+  const insight = insightQuery.data?.insight ?? null;
 
   useEffect(() => {
     if (!open) {
@@ -46,7 +54,19 @@ export function FocusSessionLauncher({
 
     setDepth("deep");
     setPlannedMinutes(task.focusLengthMinutes ? String(task.focusLengthMinutes) : "25");
+    setPlannedMinutesAutoFilled(false);
   }, [open, task.focusLengthMinutes]);
+
+  useEffect(() => {
+    if (!open || !insight || plannedMinutesAutoFilled) {
+      return;
+    }
+
+    if (insight.recommendedPlannedMinutes && insight.recommendedPlannedMinutes > 0) {
+      setPlannedMinutes(String(insight.recommendedPlannedMinutes));
+      setPlannedMinutesAutoFilled(true);
+    }
+  }, [insight, open, plannedMinutesAutoFilled]);
 
   if (task.kind !== "task" || task.status !== "pending" || !task.nextAction?.trim()) {
     return null;
@@ -110,6 +130,13 @@ export function FocusSessionLauncher({
                     <strong>{task.nextAction}</strong>
                   </div>
 
+                  {insight ? (
+                    <FocusSessionInsightCard
+                      insight={insight}
+                      onOpenStartProtocol={() => setProtocolOpen(true)}
+                    />
+                  ) : null}
+
                   <div className="field">
                     <span>Session depth</span>
                     <div className="focus-session-choice-row">
@@ -137,7 +164,10 @@ export function FocusSessionLauncher({
                     <span>Planned minutes</span>
                     <input
                       value={plannedMinutes}
-                      onChange={(event) => setPlannedMinutes(event.target.value)}
+                      onChange={(event) => {
+                        setPlannedMinutes(event.target.value);
+                        setPlannedMinutesAutoFilled(true);
+                      }}
                       inputMode="numeric"
                       placeholder="25"
                     />
@@ -159,6 +189,13 @@ export function FocusSessionLauncher({
             document.body,
           )
         : null}
+
+      <StartProtocolSheet
+        open={protocolOpen}
+        date={date}
+        task={task}
+        onClose={() => setProtocolOpen(false)}
+      />
     </>
   );
 }

@@ -23,9 +23,10 @@ const focusSessionTaskOutcomeSchema = z.enum([
   "completed",
 ]) as z.ZodType<FocusSessionTaskOutcome>;
 const sessionNoteSchema = z.string().trim().min(1).max(500);
+const focusTaskIdSchema = z.string().uuid();
 
 export const createFocusSessionSchema = z.object({
-  taskId: z.string().uuid(),
+  taskId: focusTaskIdSchema,
   depth: focusSessionDepthSchema.optional(),
   plannedMinutes: z.number().int().min(5).max(180),
 }) as z.ZodType<CreateFocusSessionRequest>;
@@ -43,3 +44,7 @@ export const abortFocusSessionSchema = z.object({
   exitReason: focusSessionExitReasonSchema,
   note: z.string().trim().max(500).nullable().optional(),
 }) as z.ZodType<AbortFocusSessionRequest>;
+
+export const focusTaskParamsSchema = z.object({
+  taskId: focusTaskIdSchema,
+});

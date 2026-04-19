@@ -32,6 +32,7 @@ import { useActiveFocusSessionQuery, useDayPlanQuery } from "../../shared/lib/ap
 import { isQuickCaptureReferenceTask } from "../../shared/lib/quickCapture";
 import { getOffsetDate } from "./helpers/date-helpers";
 import { FocusSessionPanel } from "./components/FocusSessionPanel";
+import { StartProtocolSheet } from "./components/StartProtocolSheet";
 import { WeekDeepWorkStrip } from "./components/WeekDeepWorkStrip";
 
 const ISO_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
@@ -47,6 +48,7 @@ export function TodayPage() {
   const [topRailHeight, setTopRailHeight] = useState(0);
   const [stickyTop, setStickyTop] = useState(0);
   const [topRailElement, setTopRailElement] = useState<HTMLDivElement | null>(null);
+  const [clarifyTaskId, setClarifyTaskId] = useState<string | null>(null);
   const requestedMode = searchParams.get("mode");
   const rawPlannerDate = searchParams.get("planDate");
   const homeDestination = readHomeDestinationState(location.state);
@@ -364,7 +366,11 @@ export function TodayPage() {
         <div className="today-execute-v2">
           <div className="today-main-v2">
             <WeekDeepWorkStrip weekPlan={data.weekPlan} />
-            <FocusSessionPanel date={data.today} session={activeFocusSession} />
+            <FocusSessionPanel
+              date={data.today}
+              session={activeFocusSession}
+              onClarifyTask={(taskId) => setClarifyTaskId(taskId)}
+            />
 
             {!data.launch?.completedAt ? (
               <>
@@ -473,6 +479,17 @@ export function TodayPage() {
         open={todayTaskCaptureOpen}
         today={data.today}
         onClose={() => setTodayTaskCaptureOpen(false)}
+      />
+
+      <StartProtocolSheet
+        open={Boolean(clarifyTaskId)}
+        date={data.today}
+        task={
+          clarifyTaskId
+            ? data.executionTasks.find((task) => task.id === clarifyTaskId) ?? null
+            : null
+        }
+        onClose={() => setClarifyTaskId(null)}
       />
     </div>
   );
