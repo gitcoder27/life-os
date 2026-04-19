@@ -104,31 +104,32 @@ export function DailyLaunchCard({
   return (
     <section className="daily-launch">
       <div className="daily-launch__header">
-        <span className="daily-launch__eyebrow">Daily Launch</span>
-        <h2 className="daily-launch__title">Set up the day before it drifts.</h2>
+        <span className="daily-launch__eyebrow">Daily setup</span>
+        <h2 className="daily-launch__title">Pick one thing worth protecting.</h2>
+        <p className="daily-launch__intro">
+          Define the task, the first visible step, and the one thing most likely to get in the way.
+        </p>
       </div>
 
       <div className="daily-launch__fields">
-        {/* Must-win selection */}
         <div className="daily-launch__field">
-          <label className="daily-launch__label" htmlFor="dl-must-win">Must-win</label>
+          <label className="daily-launch__label" htmlFor="dl-must-win">Choose a task</label>
           <select
             id="dl-must-win"
             className="daily-launch__select"
             value={selectedTaskId}
             onChange={(event) => setSelectedTaskId(event.target.value)}
           >
-            <option value="">Create a new must-win below</option>
+            <option value="">Create a new task below</option>
             {selectableTasks.map((task) => (
               <option key={task.id} value={task.id}>{task.title}</option>
             ))}
           </select>
         </div>
 
-        {/* New must-win (only when creating) */}
         {!selectedTaskId ? (
           <div className="daily-launch__field">
-            <label className="daily-launch__label" htmlFor="dl-new-task">New must-win</label>
+            <label className="daily-launch__label" htmlFor="dl-new-task">New task</label>
             <input
               id="dl-new-task"
               className="daily-launch__input"
@@ -139,9 +140,8 @@ export function DailyLaunchCard({
           </div>
         ) : null}
 
-        {/* First visible step */}
         <div className="daily-launch__field">
-          <label className="daily-launch__label" htmlFor="dl-next-action">First visible step</label>
+          <label className="daily-launch__label" htmlFor="dl-next-action">First step</label>
           <input
             id="dl-next-action"
             className="daily-launch__input"
@@ -151,7 +151,6 @@ export function DailyLaunchCard({
           />
         </div>
 
-        {/* Energy + Derailment row */}
         <div className="daily-launch__row">
           <div className="daily-launch__field daily-launch__field--compact">
             <span className="daily-launch__label">Energy</span>
@@ -173,7 +172,7 @@ export function DailyLaunchCard({
           </div>
 
           <div className="daily-launch__field daily-launch__field--compact">
-            <span className="daily-launch__label">Risk</span>
+            <span className="daily-launch__label">Likely snag</span>
             <div className="daily-launch__chips">
               {DERAILMENT_OPTIONS.map((option) => (
                 <button
@@ -189,7 +188,6 @@ export function DailyLaunchCard({
           </div>
         </div>
 
-        {/* Derailment note (only when a risk is selected) */}
         {likelyDerailmentReason ? (
           <div className="daily-launch__field">
             <label className="daily-launch__label" htmlFor="dl-note">Note</label>
