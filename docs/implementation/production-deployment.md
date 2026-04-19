@@ -29,7 +29,8 @@ npm run deploy:prod
 
 The deploy script runs the full production flow for you:
 
-- fails if the production checkout has local git changes
+- restores `package-lock.json` first when that is the only local change
+- fails if the production checkout still has any other local git changes
 - confirms the server and client production CSRF cookie names match
 - runs `git pull --ff-only`
 - runs `npm ci`
@@ -73,6 +74,7 @@ sudo systemctl start life-os.service
 
 The production client build now reads `client/.env.production` via `vite build --mode production`.
 Keep `server/.env.production` `CSRF_COOKIE_NAME` and `client/.env.production` `VITE_CSRF_COOKIE_NAME` set to the same production value before every deploy.
+If `npm install` or another command rewrites only `package-lock.json` on the server, `npm run deploy:prod` now resets that file back to `HEAD` automatically before pulling.
 
 ## Optional but recommended verification
 

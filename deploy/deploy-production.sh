@@ -55,6 +55,28 @@ require_file() {
   fi
 }
 
+restore_lockfile_if_only_local_change() {
+  local tracked_changes
+  local non_lock_changes
+  local untracked_changes
+
+  tracked_changes="$(git diff --name-only HEAD --)"
+  untracked_changes="$(git ls-files --others --exclude-standard)"
+
+  if [[ -z "$tracked_changes" || -n "$untracked_changes" ]]; then
+    return
+  fi
+
+  non_lock_changes="$(printf '%s\n' "$tracked_changes" | grep -vx "package-lock.json" || true)"
+
+  if [[ -n "$non_lock_changes" ]]; then
+    return
+  fi
+
+  log "Restoring local package-lock.json drift before deploy"
+  git restore --source=HEAD --staged --worktree package-lock.json
+}
+
 read_env_value() {
   local path="$1"
   local key="$2"
@@ -70,6 +92,7 @@ require_clean_git_state() {
 
 require_file "server/.env.production"
 require_file "client/.env.production"
+restore_lockfile_if_only_local_change
 require_clean_git_state
 
 trap restore_service_on_error EXIT
