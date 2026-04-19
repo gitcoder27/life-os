@@ -21,26 +21,19 @@ export function MustWinCard({
   const isAdvanced = task.progressState === "advanced" || isCompleted;
   const isMinimal = isCompleted;
   const stateLabel = isCompleted
-    ? "Completed"
+    ? "Complete"
     : task.progressState === "advanced"
-      ? "Advanced"
+      ? "In progress"
       : task.progressState === "started"
         ? "Started"
-        : "Not started";
-  const stateDetail = isCompleted
-    ? "The must-win is done for today."
-    : task.progressState === "advanced"
-      ? "You have already made meaningful progress on the must-win."
-      : task.progressState === "started"
-        ? "The must-win has been started. Mark progress when you have moved it forward."
-        : "Start the must-win when you are ready to take the first visible step.";
+        : "Ready";
 
   return (
     <>
       <section className={`must-win-card${isMinimal ? " must-win-card--minimal" : ""}`}>
         <div className="must-win-card__header">
           <div>
-            <p className="must-win-card__eyebrow">Must-Win</p>
+            <p className="must-win-card__eyebrow">Your focus</p>
             <h2 className="must-win-card__title">{task.title}</h2>
           </div>
           <span className={`must-win-card__state must-win-card__state--${isCompleted ? "completed" : task.progressState}`}>
@@ -48,14 +41,10 @@ export function MustWinCard({
           </span>
         </div>
 
-        <p className="must-win-card__state-detail">
-          {isMinimal ? "Done for today." : stateDetail}
-        </p>
-
         <div className={`must-win-card__details${isMinimal ? " must-win-card__details--minimal" : ""}`}>
           <div className="must-win-card__detail must-win-card__detail--primary">
             <span className="must-win-card__label">Next action</span>
-            <strong>{task.nextAction ?? "Add the first visible step"}</strong>
+            <strong>{task.nextAction ?? "Define the first visible step"}</strong>
           </div>
           {task.fiveMinuteVersion ? (
             <div className="must-win-card__detail">
@@ -143,7 +132,7 @@ export function MustWinCard({
           )}
 
           <button className="button button--ghost button--small" type="button" onClick={() => setProtocolOpen(true)}>
-            Edit protocol
+            Protocol
           </button>
           {!isCompleted ? (
             <button className="button button--ghost button--small" type="button" onClick={() => setStuckOpen(true)}>

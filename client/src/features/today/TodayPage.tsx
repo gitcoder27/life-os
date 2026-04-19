@@ -318,26 +318,24 @@ export function TodayPage() {
   const rescueDeferredCandidates = data.executionTasks.filter(
     (task) => task.status === "pending" && task.id !== data.mustWinTask?.id,
   );
-  const showMustWinCard = Boolean(data.launch?.completedAt && data.mustWinTask);
-  const showRescueModeCard = Boolean(data.launch?.completedAt);
-  const visibleExecutionTasks = isRescueMode
-    ? []
-    : data.executionTasks;
+  const launchCompleted = Boolean(data.launch?.completedAt);
+  const showStage = launchCompleted;
+  const showAdvisory =
+    launchCompleted &&
+    (Boolean(data.rescueSuggestion) || isRescueMode || Boolean(data.weekPlan));
+  const visibleExecutionTasks = isRescueMode ? [] : data.executionTasks;
   const todayLayoutStyle = {
     "--today-top-rail-height": `${topRailHeight}px`,
     "--today-sticky-offset": `${stickyTop}px`,
   } as CSSProperties;
-  const todaySidebarStyle = {
-    top: `${stickyTop}px`,
-    maxHeight: `calc(100vh - ${stickyTop}px - 1.5rem)`,
-  } as CSSProperties;
   const plannerSidebarStyle = {
     top: `${stickyTop}px`,
   } as CSSProperties;
-  const showRescueModeStrip = Boolean(showRescueModeCard && isRescueMode && rescueDeferredCandidates.length === 0);
+
+  const deskClass = mode === "execute" ? "today-desk " : "";
 
   return (
-    <div className="today-layout today-layout--v2" style={todayLayoutStyle}>
+    <div className={`${deskClass}today-layout today-layout--v2`} style={todayLayoutStyle}>
       <div className="today-top-rail" ref={topRailRef}>
         <CommandBar
           mode={mode}
@@ -365,14 +363,13 @@ export function TodayPage() {
       {mode === "execute" ? (
         <div className="today-execute-v2">
           <div className="today-main-v2">
-            <WeekDeepWorkStrip weekPlan={data.weekPlan} />
             <FocusSessionPanel
               date={data.today}
               session={activeFocusSession}
               onClarifyTask={(taskId) => setClarifyTaskId(taskId)}
             />
 
-            {!data.launch?.completedAt ? (
+            {!launchCompleted ? (
               <>
                 <PreLaunchModeNotice
                   date={data.today}
@@ -388,41 +385,50 @@ export function TodayPage() {
               </>
             ) : null}
 
-            {showMustWinCard || showRescueModeCard ? (
-              <>
-                {showRescueModeStrip ? (
-                  <RescueModeCard
+            {showStage ? (
+              <section className="today-desk__stage" aria-label="Today's focus">
+                {data.mustWinTask ? (
+                  <MustWinCard
                     date={data.today}
-                    launch={data.launch}
-                    suggestion={data.rescueSuggestion}
-                    mustWinTask={data.mustWinTask}
-                    deferredCandidates={rescueDeferredCandidates}
-                    taskActions={taskActions}
-                    strip
+                    task={data.mustWinTask}
+                    activeFocusSession={activeFocusSession}
                   />
-                ) : null}
+                ) : (
+                  <TodayStageEmpty
+                    pendingTaskCount={pendingTaskCount}
+                    onAddTask={() => setTodayTaskCaptureOpen(true)}
+                    onPlanDay={() => setTodayMode("plan")}
+                  />
+                )}
 
-                <div className="today-status-grid">
-                  {showMustWinCard && data.mustWinTask ? (
-                    <MustWinCard
-                      date={data.today}
-                      task={data.mustWinTask}
-                      activeFocusSession={activeFocusSession}
+                <aside className="today-sidebar" aria-label="Quiet rail">
+                  {!isRescueMode ? (
+                    <FocusStack
+                      priorityDraft={priorityDraft}
+                      activeGoals={data.activeGoals}
+                      phase={phase}
                     />
                   ) : null}
+                  <DayNotes tasks={data.quickCaptureTasks} today={data.today} />
+                  <DailyEssentials
+                    currentDay={data.currentDay}
+                    phase={phase}
+                  />
+                </aside>
+              </section>
+            ) : null}
 
-                  {showRescueModeCard && !showRescueModeStrip ? (
-                    <RescueModeCard
-                      date={data.today}
-                      launch={data.launch}
-                      suggestion={data.rescueSuggestion}
-                      mustWinTask={data.mustWinTask}
-                      deferredCandidates={rescueDeferredCandidates}
-                      taskActions={taskActions}
-                    />
-                  ) : null}
-                </div>
-              </>
+            {showAdvisory ? (
+              <div className="today-advisory">
+                <RescueModeCard
+                  date={data.today}
+                  launch={data.launch}
+                  suggestion={data.rescueSuggestion}
+                  deferredCandidates={rescueDeferredCandidates}
+                  taskActions={taskActions}
+                />
+                <WeekDeepWorkStrip weekPlan={data.weekPlan} />
+              </div>
             ) : null}
 
             <ExecutionStream
@@ -441,21 +447,6 @@ export function TodayPage() {
               taskActions={taskActions}
             />
           </div>
-
-          <aside className="today-sidebar" style={todaySidebarStyle}>
-            {!isRescueMode ? (
-              <FocusStack
-                priorityDraft={priorityDraft}
-                activeGoals={data.activeGoals}
-                phase={phase}
-              />
-            ) : null}
-            <DayNotes tasks={data.quickCaptureTasks} today={data.today} />
-            <DailyEssentials
-              currentDay={data.currentDay}
-              phase={phase}
-            />
-          </aside>
         </div>
       ) : (
         <DayPlanner
@@ -491,6 +482,47 @@ export function TodayPage() {
         }
         onClose={() => setClarifyTaskId(null)}
       />
+    </div>
+  );
+}
+
+function TodayStageEmpty({
+  pendingTaskCount,
+  onAddTask,
+  onPlanDay,
+}: {
+  pendingTaskCount: number;
+  onAddTask: () => void;
+  onPlanDay: () => void;
+}) {
+  const headline = pendingTaskCount > 0
+    ? `${pendingTaskCount} task${pendingTaskCount === 1 ? "" : "s"} on the table`
+    : "All clear.";
+  const subline = pendingTaskCount > 0
+    ? "Pick one believable move and let the rest wait."
+    : "You have room. Set a direction before the day fills itself.";
+
+  return (
+    <div className="today-stage-empty">
+      <span className="today-stage-empty__eyebrow">Today</span>
+      <h2 className="today-stage-empty__headline">{headline}</h2>
+      <p className="today-stage-empty__subline">{subline}</p>
+      <div className="must-win-card__actions">
+        <button
+          className="button button--primary button--small"
+          type="button"
+          onClick={onAddTask}
+        >
+          Add task
+        </button>
+        <button
+          className="button button--ghost button--small"
+          type="button"
+          onClick={onPlanDay}
+        >
+          Plan the day
+        </button>
+      </div>
     </div>
   );
 }
