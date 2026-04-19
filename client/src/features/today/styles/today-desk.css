@@ -1167,6 +1167,36 @@
   font-size: 0.78rem;
 }
 
+.today-desk .reduced-day-strip__protected {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-top: 0.1rem;
+  min-width: 0;
+}
+
+.today-desk .reduced-day-strip__protected-label {
+  font-size: 0.66rem;
+  font-weight: 650;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--positive);
+  opacity: 0.9;
+}
+
+.today-desk .reduced-day-strip--suggested .reduced-day-strip__protected-label {
+  color: var(--accent-bright);
+}
+
+.today-desk .reduced-day-strip__protected-value {
+  color: var(--today-ink);
+  font-size: 0.88rem;
+  font-weight: 600;
+  line-height: 1.4;
+  min-width: 0;
+}
+
 .today-desk .reduced-day-strip__focus {
   display: none;
 }

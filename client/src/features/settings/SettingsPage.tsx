@@ -21,6 +21,7 @@ import {
   getCurrencyOptions,
   getTimezoneOptions,
 } from "../../shared/lib/localeOptions";
+import { landingPageOptions, type LandingPagePreference } from "../../shared/lib/landing-page";
 import { PageHeader } from "../../shared/ui/PageHeader";
 import {
   PageErrorState,
@@ -96,6 +97,7 @@ export function SettingsPage() {
     dailyWaterTargetMl: 2000,
     dailyReviewStartTime: "",
     dailyReviewEndTime: "",
+    defaultLandingPage: "home" as LandingPagePreference,
   });
 
   const [notifPrefs, setNotifPrefs] = useState<NotificationCategoryPreferences>(DEFAULT_NOTIF_PREFS);
@@ -120,6 +122,7 @@ export function SettingsPage() {
       dailyWaterTargetMl: preferences.dailyWaterTargetMl,
       dailyReviewStartTime: preferences.dailyReviewStartTime ?? "",
       dailyReviewEndTime: preferences.dailyReviewEndTime ?? "",
+      defaultLandingPage: preferences.defaultLandingPage,
     });
     if (preferences.notificationPreferences) {
       setNotifPrefs(preferences.notificationPreferences);
@@ -160,6 +163,7 @@ export function SettingsPage() {
       dailyWaterTargetMl: form.dailyWaterTargetMl,
       dailyReviewStartTime: form.dailyReviewStartTime || null,
       dailyReviewEndTime: form.dailyReviewEndTime || null,
+      defaultLandingPage: form.defaultLandingPage,
       notificationPreferences: notifPrefs,
     });
     setPreferredWeekStart(form.weekStartsOn);
@@ -350,6 +354,24 @@ export function SettingsPage() {
           </div>
         </SectionCard>
 
+        <SectionCard title="Startup" subtitle="Choose where the app should land after sign-in">
+          <div className="stack-form">
+            <label className="field">
+              <span>Default landing page</span>
+              <select
+                value={form.defaultLandingPage}
+                onChange={(e) => handleChange("defaultLandingPage", e.target.value)}
+              >
+                {landingPageOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label} - {option.description}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+        </SectionCard>
+
         <SectionCard title="Domain setup" subtitle="Global preferences stay here. Finance structure stays on Finance.">
           <div className="button-row button-row--wrap">
             <span className="support-copy">
@@ -464,7 +486,7 @@ export function SettingsPage() {
             <ul className="settings-danger-zone__list">
               <li>Deletes all captured tasks, plans, launches, templates, and review history.</li>
               <li>Deletes all habits, routines, goals, health logs, finance data, and notifications.</li>
-              <li>Keeps your login, display name, timezone, currency, week start, review window, and notification preferences.</li>
+              <li>Keeps your login, display name, timezone, currency, week start, review window, landing page, and notification preferences.</li>
             </ul>
             <label className="field">
               <span>Type RESET to continue</span>

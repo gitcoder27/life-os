@@ -2,6 +2,7 @@ import "./today.css";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useState, type CSSProperties } from "react";
 import {
   useLocation,
+  useNavigate,
   useSearchParams,
 } from "react-router-dom";
 import {
@@ -38,11 +39,23 @@ import { WeekDeepWorkStrip } from "./components/WeekDeepWorkStrip";
 const ISO_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const isPlannerAssignableTask = (task: { kind: string }) => task.kind === "task";
 
-export function TodayPage() {
+function toSearchString(params: URLSearchParams) {
+  const search = params.toString();
+  return search ? `?${search}` : "";
+}
+
+export function TodayPage({ routeMode }: { routeMode?: "execute" | "plan" }) {
   const location = useLocation();
+  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const data = useTodayData();
-  const [mode, setMode] = useState<"execute" | "plan">("execute");
+  const [mode, setMode] = useState<"execute" | "plan">(() => {
+    if (routeMode) {
+      return routeMode;
+    }
+
+    return searchParams.get("mode") === "plan" ? "plan" : "execute";
+  });
   const [plannerNow, setPlannerNow] = useState(() => new Date());
   const [todayTaskCaptureOpen, setTodayTaskCaptureOpen] = useState(false);
   const [topRailHeight, setTopRailHeight] = useState(0);
@@ -120,18 +133,37 @@ export function TodayPage() {
     setTopRailElement(node);
   }, []);
 
-  const setTodayMode = useCallback((nextMode: "execute" | "plan") => {
+  const navigateToMode = useCallback((nextMode: "execute" | "plan", replace = false) => {
     setMode(nextMode);
-    setSearchParams((current) => {
-      const next = new URLSearchParams(current);
-      if (nextMode === "plan") {
-        next.set("mode", "plan");
+    const next = new URLSearchParams(searchParams);
+    next.delete("mode");
+
+    if (nextMode === "plan") {
+      if (plannerDate === data.today) {
+        next.delete("planDate");
       } else {
-        next.delete("mode");
+        next.set("planDate", plannerDate);
       }
-      return next;
-    });
-  }, [setSearchParams]);
+
+      navigate(
+        {
+          pathname: "/planner",
+          search: toSearchString(next),
+        },
+        { replace },
+      );
+      return;
+    }
+
+    next.delete("planDate");
+    navigate(
+      {
+        pathname: "/today",
+        search: toSearchString(next),
+      },
+      { replace },
+    );
+  }, [data.today, navigate, plannerDate, searchParams]);
 
   useEffect(() => {
     const intervalId = window.setInterval(() => setPlannerNow(new Date()), 60_000);
@@ -139,6 +171,21 @@ export function TodayPage() {
   }, []);
 
   useEffect(() => {
+    if (routeMode === "plan") {
+      setMode("plan");
+      return;
+    }
+
+    if (routeMode === "execute") {
+      if (requestedMode === "plan") {
+        navigateToMode("plan", true);
+        return;
+      }
+
+      setMode("execute");
+      return;
+    }
+
     if (requestedMode === "execute" || requestedMode === "plan") {
       setMode((current) => (current === requestedMode ? current : requestedMode));
       return;
@@ -156,7 +203,7 @@ export function TodayPage() {
     if (homeDestination?.kind === "today_execute") {
       setMode("execute");
     }
-  }, [homeDestination?.kind, requestedMode, setSearchParams]);
+  }, [homeDestination?.kind, navigateToMode, requestedMode, routeMode, setSearchParams]);
 
   useLayoutEffect(() => {
     if (!topRailElement) {
@@ -339,7 +386,7 @@ export function TodayPage() {
       <div className="today-top-rail" ref={topRailRef}>
         <CommandBar
           mode={mode}
-          onModeChange={setTodayMode}
+          onModeChange={navigateToMode}
           plannerBlockCount={data.plannerBlocks.length}
           now={plannerNow}
           pendingPriorityCount={pendingPriorityCount}
@@ -352,7 +399,7 @@ export function TodayPage() {
           onAddTask={() => setTodayTaskCaptureOpen(true)}
           execution={todayPlannerExecution}
           topPriorityTitle={data.mustWinTask?.title ?? priorityDraft.draft.find((p) => p.status === "pending")?.title}
-          onSwitchToPlanner={() => setTodayMode("plan")}
+          onSwitchToPlanner={() => navigateToMode("plan")}
         />
 
         {allErrors ? (
@@ -397,7 +444,7 @@ export function TodayPage() {
                   <TodayStageEmpty
                     pendingTaskCount={pendingTaskCount}
                     onAddTask={() => setTodayTaskCaptureOpen(true)}
-                    onPlanDay={() => setTodayMode("plan")}
+                    onPlanDay={() => navigateToMode("plan")}
                   />
                 )}
 
@@ -424,6 +471,7 @@ export function TodayPage() {
                   date={data.today}
                   launch={data.launch}
                   suggestion={data.rescueSuggestion}
+                  mustWinTask={data.mustWinTask}
                   deferredCandidates={rescueDeferredCandidates}
                   taskActions={taskActions}
                 />
@@ -438,7 +486,7 @@ export function TodayPage() {
               taskActions={taskActions}
               plannerBlocks={data.plannerBlocks}
               phase={phase}
-              onSwitchToPlanner={() => setTodayMode("plan")}
+              onSwitchToPlanner={() => navigateToMode("plan")}
               activeFocusSession={activeFocusSession}
             />
 

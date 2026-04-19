@@ -27,6 +27,7 @@ export function RescueModeCard({
   date,
   launch,
   suggestion,
+  mustWinTask,
   deferredCandidates,
   taskActions,
 }: {
@@ -44,6 +45,12 @@ export function RescueModeCard({
   const reason = suggestion?.reason ?? launch?.rescueReason ?? null;
   const reasonLabel = getReasonLabel(reason);
   const detail = suggestion?.detail ?? "The day has been reduced so you can protect continuity and keep one thing alive.";
+  const protectedAction =
+    suggestion?.minimumViableAction
+    ?? mustWinTask?.fiveMinuteVersion
+    ?? mustWinTask?.nextAction
+    ?? mustWinTask?.title
+    ?? null;
 
   async function handleActivate() {
     if (!suggestion) {
@@ -67,8 +74,6 @@ export function RescueModeCard({
     return null;
   }
 
-  // Always render as a slim advisory strip in the redesigned Today.
-  // Never a boxed hero competitor.
   const eyebrow = isActive ? "Reduced day" : "Reduce today";
   const title = isActive
     ? "One action is protected for the day."
@@ -83,6 +88,14 @@ export function RescueModeCard({
         <span className="reduced-day-strip__detail">
           {isActive ? `Why this appeared: ${reasonLabel}` : detail}
         </span>
+        {protectedAction ? (
+          <span className="reduced-day-strip__protected">
+            <span className="reduced-day-strip__protected-label">
+              {isActive ? "Protected action" : "Minimum viable action"}
+            </span>
+            <span className="reduced-day-strip__protected-value">{protectedAction}</span>
+          </span>
+        ) : null}
       </div>
 
       <div className="reduced-day-strip__actions">

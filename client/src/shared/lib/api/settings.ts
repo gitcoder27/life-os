@@ -9,6 +9,7 @@ import type {
   NotificationCategoryPreference,
   NotificationCategoryPreferences,
 } from "./notifications";
+import type { LandingPagePreference } from "../landing-page";
 import {
   apiRequest,
   queryKeys,
@@ -28,6 +29,7 @@ type SettingsProfileResponse = {
     dailyWaterTargetMl: number;
     dailyReviewStartTime: string | null;
     dailyReviewEndTime: string | null;
+    defaultLandingPage: LandingPagePreference;
     notificationPreferences: NotificationCategoryPreferences;
   };
 };
@@ -40,6 +42,7 @@ type UpdateSettingsProfileRequest = {
   dailyWaterTargetMl?: number;
   dailyReviewStartTime?: string | null;
   dailyReviewEndTime?: string | null;
+  defaultLandingPage?: LandingPagePreference;
   notificationPreferences?: Partial<Record<NotificationCategory, Partial<NotificationCategoryPreference>>>;
 };
 

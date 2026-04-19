@@ -15,9 +15,11 @@ import { SettingsPage } from "../features/settings/SettingsPage";
 import { TodayPage } from "../features/today/TodayPage";
 import {
   useOnboardingStateQuery,
+  useSettingsProfileQuery,
   useSessionQuery,
 } from "../shared/lib/api";
 import { LoadingIndicator } from "../shared/ui/PageState";
+import { resolveLandingPagePath } from "../shared/lib/landing-page";
 import { AppShell } from "./shell/AppShell";
 
 function RouteLoading() {
@@ -82,6 +84,25 @@ function ProtectedRoute({
   return children;
 }
 
+function DefaultLandingRoute() {
+  const settingsQuery = useSettingsProfileQuery();
+
+  if (settingsQuery.isLoading && !settingsQuery.data) {
+    return <RouteLoading />;
+  }
+
+  if (settingsQuery.isError || !settingsQuery.data) {
+    return <Navigate to="/home" replace />;
+  }
+
+  return (
+    <Navigate
+      to={resolveLandingPagePath(settingsQuery.data.preferences.defaultLandingPage)}
+      replace
+    />
+  );
+}
+
 export const router = createBrowserRouter([
   {
     path: "/login",
@@ -109,6 +130,10 @@ export const router = createBrowserRouter([
     children: [
       {
         index: true,
+        element: <DefaultLandingRoute />,
+      },
+      {
+        path: "home",
         element: <HomePage />,
       },
       {
@@ -117,7 +142,11 @@ export const router = createBrowserRouter([
       },
       {
         path: "today",
-        element: <TodayPage />,
+        element: <TodayPage routeMode="execute" />,
+      },
+      {
+        path: "planner",
+        element: <TodayPage routeMode="plan" />,
       },
       {
         path: "habits",
@@ -129,6 +158,10 @@ export const router = createBrowserRouter([
       },
       {
         path: "health/meals",
+        element: <Navigate to="/meals" replace />,
+      },
+      {
+        path: "meals",
         element: <MealPlannerPage />,
       },
       {

@@ -20,6 +20,7 @@ import { FocusStage } from "./FocusStage";
 import { GuidanceWhisper } from "./GuidanceWhisper";
 import { QuietRail } from "./QuietRail";
 import { StatusStrip } from "./StatusStrip";
+import { WorkspaceLaunchStrip } from "./WorkspaceLaunchStrip";
 
 export function HomePage() {
   const today = getTodayDate();
@@ -100,6 +101,8 @@ export function HomePage() {
       />
 
       <FocusSessionBanner session={activeFocusSessionQuery.data?.session ?? null} />
+
+      <WorkspaceLaunchStrip today={home.date} />
 
       <section className="home-desk__stage" aria-label="Today's focus">
         <FocusStage

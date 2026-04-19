@@ -1,6 +1,8 @@
 import type { ApiMeta, ApiSuccess } from "./common.js";
 import type { NotificationCategoryPreferences } from "./notifications.js";
 
+export type LandingPagePreference = "home" | "today" | "planner" | "meals";
+
 export interface SettingsProfile {
   user: {
     id: string;
@@ -14,6 +16,7 @@ export interface SettingsProfile {
     dailyWaterTargetMl: number;
     dailyReviewStartTime: string | null;
     dailyReviewEndTime: string | null;
+    defaultLandingPage: LandingPagePreference;
     notificationPreferences: NotificationCategoryPreferences;
   };
 }
@@ -28,6 +31,7 @@ export interface UpdateSettingsProfileRequest {
   dailyWaterTargetMl?: number;
   dailyReviewStartTime?: string | null;
   dailyReviewEndTime?: string | null;
+  defaultLandingPage?: LandingPagePreference;
   notificationPreferences?: Partial<{
     [K in keyof NotificationCategoryPreferences]: Partial<NotificationCategoryPreferences[K]>;
   }>;

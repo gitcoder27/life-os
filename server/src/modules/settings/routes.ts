@@ -33,6 +33,7 @@ const supportedCurrencyCodes = new Set(
 );
 
 const CLIENT_TIMEZONE_HEADER = "x-client-timezone";
+const landingPageSchema = z.enum(["home", "today", "planner", "meals"]);
 
 const notificationPreferenceUpdateSchema = z
   .object({
@@ -91,6 +92,7 @@ const updateSettingsProfileSchema = z
     dailyWaterTargetMl: z.number().int().positive().max(20000).optional(),
     dailyReviewStartTime: reviewTimeSchema.optional(),
     dailyReviewEndTime: reviewTimeSchema.optional(),
+    defaultLandingPage: landingPageSchema.optional(),
     notificationPreferences: notificationPreferencesUpdateSchema.optional(),
   })
   .refine((value) => Object.keys(value).length > 0, "At least one field must be updated");
@@ -115,6 +117,7 @@ function toSettingsProfileResponse(input: {
     dailyWaterTargetMl: number | null;
     dailyReviewStartTime: string | null;
     dailyReviewEndTime: string | null;
+    defaultLandingPage: string | null;
     notificationPreferences: unknown;
   } | null;
   fallbackTimezone?: string | null;
@@ -128,6 +131,7 @@ function toSettingsProfileResponse(input: {
       dailyWaterTargetMl: input.preferences?.dailyWaterTargetMl ?? 2500,
       dailyReviewStartTime: input.preferences?.dailyReviewStartTime ?? null,
       dailyReviewEndTime: input.preferences?.dailyReviewEndTime ?? null,
+      defaultLandingPage: landingPageSchema.catch("home").parse(input.preferences?.defaultLandingPage),
       notificationPreferences: normalizeNotificationPreferences(
         input.preferences?.notificationPreferences,
       ),
@@ -162,6 +166,7 @@ export const registerSettingsRoutes: FastifyPluginAsync = async (app) => {
           dailyWaterTargetMl: true,
           dailyReviewStartTime: true,
           dailyReviewEndTime: true,
+          defaultLandingPage: true,
           notificationPreferences: true,
         },
       }),
@@ -188,6 +193,7 @@ export const registerSettingsRoutes: FastifyPluginAsync = async (app) => {
         },
         select: {
           notificationPreferences: true,
+          defaultLandingPage: true,
         },
       });
       const nextUser = await tx.user.update({
@@ -215,6 +221,7 @@ export const registerSettingsRoutes: FastifyPluginAsync = async (app) => {
           dailyWaterTargetMl: payload.dailyWaterTargetMl ?? 2500,
           dailyReviewStartTime: payload.dailyReviewStartTime ?? null,
           dailyReviewEndTime: payload.dailyReviewEndTime ?? null,
+          defaultLandingPage: payload.defaultLandingPage ?? "home",
           notificationPreferences: mergeNotificationPreferences(
             currentPreferences?.notificationPreferences,
             payload.notificationPreferences,
@@ -227,6 +234,7 @@ export const registerSettingsRoutes: FastifyPluginAsync = async (app) => {
           dailyWaterTargetMl: payload.dailyWaterTargetMl,
           dailyReviewStartTime: payload.dailyReviewStartTime,
           dailyReviewEndTime: payload.dailyReviewEndTime,
+          defaultLandingPage: payload.defaultLandingPage,
           notificationPreferences: payload.notificationPreferences
             ? mergeNotificationPreferences(
                 currentPreferences?.notificationPreferences,
@@ -241,6 +249,7 @@ export const registerSettingsRoutes: FastifyPluginAsync = async (app) => {
           dailyWaterTargetMl: true,
           dailyReviewStartTime: true,
           dailyReviewEndTime: true,
+          defaultLandingPage: true,
           notificationPreferences: true,
         },
       });
@@ -260,6 +269,7 @@ export const registerSettingsRoutes: FastifyPluginAsync = async (app) => {
         dailyWaterTargetMl: updatedPreferences.dailyWaterTargetMl,
         dailyReviewStartTime: updatedPreferences.dailyReviewStartTime,
         dailyReviewEndTime: updatedPreferences.dailyReviewEndTime,
+        defaultLandingPage: landingPageSchema.catch("home").parse(updatedPreferences.defaultLandingPage),
         notificationPreferences: normalizeNotificationPreferences(
           updatedPreferences.notificationPreferences,
         ),

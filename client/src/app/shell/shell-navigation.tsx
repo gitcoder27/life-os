@@ -38,6 +38,14 @@ const TodayIcon = (props: ShellIconProps) => (
   </ShellIcon>
 );
 
+const PlannerIcon = (props: ShellIconProps) => (
+  <ShellIcon {...props}>
+    <rect x="3.25" y="4.25" width="13.5" height="12.5" rx="2" />
+    <path d="M6 8.25h8M6 11h5.5M6 13.75h6.5" />
+    <circle cx="14.5" cy="11" r="1.25" fill="currentColor" stroke="none" />
+  </ShellIcon>
+);
+
 const HabitsIcon = (props: ShellIconProps) => (
   <ShellIcon {...props}>
     <path d="M6.5 5.5a4.5 4.5 0 0 1 7.4-1.66L15.5 5.5" />
@@ -50,6 +58,13 @@ const HealthIcon = (props: ShellIconProps) => (
   <ShellIcon {...props}>
     <path d="M10 16.5s-5.75-3.4-5.75-7.75a3.25 3.25 0 0 1 5.75-2.08A3.25 3.25 0 0 1 15.75 8.75C15.75 13.1 10 16.5 10 16.5Z" />
     <path d="M6.5 10h2l1-2.25L11 12h2.5" />
+  </ShellIcon>
+);
+
+const MealsIcon = (props: ShellIconProps) => (
+  <ShellIcon {...props}>
+    <path d="M6 3.5v5.75M4.75 3.5v5.75M7.25 3.5v5.75M6 9.25v7.25" />
+    <path d="M12.75 3.5v6a2 2 0 0 0 2 2h.5V16.5" />
   </ShellIcon>
 );
 
@@ -110,11 +125,13 @@ export type ShellNavItem = {
 };
 
 export const shellNavItems: readonly ShellNavItem[] = [
-  { to: "/", label: "Home", hint: "dashboard and direction", icon: HomeIcon },
+  { to: "/home", label: "Home", hint: "dashboard and direction", icon: HomeIcon },
   { to: "/inbox", label: "Inbox", hint: "capture triage", icon: InboxIcon },
   { to: "/today", label: "Today", hint: "daily execution workspace", icon: TodayIcon },
+  { to: "/planner", label: "Planner", hint: "timeline and day design", icon: PlannerIcon },
   { to: "/habits", label: "Habits", hint: "consistency system", icon: HabitsIcon },
   { to: "/health", label: "Health", hint: "body basics", icon: HealthIcon },
+  { to: "/meals", label: "Meals", hint: "weekly meal planning", icon: MealsIcon },
   { to: "/finance", label: "Finance", hint: "spend visibility", icon: FinanceIcon },
   { to: "/goals", label: "Goals", hint: "weekly and monthly direction", icon: GoalsIcon },
   { to: "/reviews/daily", label: "Reviews", hint: "reflection loop", icon: ReviewsIcon },

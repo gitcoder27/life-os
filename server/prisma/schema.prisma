@@ -386,6 +386,7 @@ model UserPreference {
   dailyReviewStartTime String?
   dailyReviewEndTime   String?
   dailyWaterTargetMl   Int      @default(2500)
+  defaultLandingPage   String   @default("home")
   notificationPreferences Json?
   defaultScoreEnabled  Boolean  @default(true)
   createdAt            DateTime @default(now())

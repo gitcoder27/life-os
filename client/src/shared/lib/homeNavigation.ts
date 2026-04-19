@@ -23,11 +23,12 @@ export function resolveHomeDestinationTarget(destination: HomeDestination): Home
   switch (destination.kind) {
     case "today_planning": {
       const search = new URLSearchParams();
-      search.set("mode", "plan");
-      search.set("planDate", destination.date);
+      if (destination.date) {
+        search.set("planDate", destination.date);
+      }
       return {
         to: {
-          pathname: "/today",
+          pathname: "/planner",
           search: toSearchString(search),
         },
       };
@@ -68,7 +69,7 @@ export function resolveHomeDestinationTarget(destination: HomeDestination): Home
       };
     case "health_focus":
       return {
-        to: "/health",
+        to: destination.surface === "meals" ? "/meals" : "/health",
         state: {
           homeDestination: destination,
         },

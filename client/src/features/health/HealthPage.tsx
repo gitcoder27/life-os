@@ -513,7 +513,7 @@ function HealthSubNav() {
         Basics
       </NavLink>
       <NavLink
-        to="/health/meals"
+        to="/meals"
         className={({ isActive }) =>
           `mp-subnav__link${isActive ? " mp-subnav__link--active" : ""}`
         }
