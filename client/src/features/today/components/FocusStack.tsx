@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import {
   DndContext,
   closestCenter,
@@ -12,19 +13,26 @@ import {
   sortableKeyboardCoordinates,
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
-import { PriorityCard } from "./PriorityCard";
+import { PriorityCard, type PriorityTaskOption } from "./PriorityCard";
 import type { usePriorityDraft } from "../hooks/usePriorityDraft";
 import type { DayPhase } from "../helpers/day-phase";
+import type { TaskItem } from "../../../shared/lib/api";
 
 type PriorityDraft = ReturnType<typeof usePriorityDraft>;
 
 export function FocusStack({
   priorityDraft,
   activeGoals,
+  tasks,
+  plannedTaskIds,
+  mustWinTaskId,
   phase,
 }: {
   priorityDraft: PriorityDraft;
   activeGoals: Array<{ id: string; title: string; status: string }>;
+  tasks: TaskItem[];
+  plannedTaskIds: Set<string>;
+  mustWinTaskId: string | null;
   phase: DayPhase;
 }) {
   const sensors = useSensors(
@@ -41,6 +49,32 @@ export function FocusStack({
   }
 
   const hasPriorities = priorityDraft.draft.length > 0;
+  const taskOptions = useMemo<PriorityTaskOption[]>(
+    () =>
+      tasks
+        .filter(
+          (task) =>
+            task.kind === "task" &&
+            task.status === "pending" &&
+            task.id !== mustWinTaskId,
+        )
+        .sort((left, right) => {
+          const plannedDelta =
+            Number(plannedTaskIds.has(right.id)) - Number(plannedTaskIds.has(left.id));
+          if (plannedDelta !== 0) {
+            return plannedDelta;
+          }
+
+          return left.title.localeCompare(right.title);
+        })
+        .map((task) => ({
+          id: task.id,
+          title: task.title,
+          goalId: task.goalId,
+          group: plannedTaskIds.has(task.id) ? "planned" : "unplanned",
+        })),
+    [mustWinTaskId, plannedTaskIds, tasks],
+  );
 
   return (
     <section className="focus-stack">
@@ -67,6 +101,8 @@ export function FocusStack({
                     onTitleChange={(title) => priorityDraft.updateTitle(index, title)}
                     onTitleBlur={priorityDraft.saveNow}
                     onGoalChange={(goalId) => priorityDraft.updateGoal(index, goalId)}
+                    taskOptions={taskOptions}
+                    onTaskFill={(taskFill) => priorityDraft.applyTaskFill(index, taskFill)}
                     onRemove={() => priorityDraft.removePriority(index)}
                     onStatusChange={(status) => {
                       if (item.id) priorityDraft.changeStatus(item.id, status);

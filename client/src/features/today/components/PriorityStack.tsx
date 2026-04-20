@@ -65,6 +65,8 @@ export function PriorityStack({
                   onTitleChange={(title) => priorityDraft.updateTitle(index, title)}
                   onTitleBlur={() => priorityDraft.scheduleSave()}
                   onGoalChange={(goalId) => priorityDraft.updateGoal(index, goalId)}
+                  taskOptions={[]}
+                  onTaskFill={() => undefined}
                   onRemove={() => priorityDraft.removePriority(index)}
                   onStatusChange={(status) => {
                     if (item.id) priorityDraft.changeStatus(item.id, status);

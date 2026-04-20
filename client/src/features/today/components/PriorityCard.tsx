@@ -2,9 +2,14 @@ import { useEffect, useRef, useState } from "react";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { GripIcon, CheckIcon, MoreIcon } from "../helpers/icons";
-import type { EditablePriority } from "../hooks/usePriorityDraft";
+import type { EditablePriority, PriorityTaskFill } from "../hooks/usePriorityDraft";
 
 const POINT_VALUES = [10, 8, 6];
+
+export type PriorityTaskOption = PriorityTaskFill & {
+  id: string;
+  group: "planned" | "unplanned";
+};
 
 function useClickOutside(
   ref: React.RefObject<HTMLElement | null>,
@@ -33,6 +38,8 @@ export function PriorityCard({
   onTitleChange,
   onTitleBlur,
   onGoalChange,
+  taskOptions,
+  onTaskFill,
   onRemove,
   onStatusChange,
 }: {
@@ -43,10 +50,13 @@ export function PriorityCard({
   onTitleChange: (title: string) => void;
   onTitleBlur: () => void;
   onGoalChange: (goalId: string) => void;
+  taskOptions: PriorityTaskOption[];
+  onTaskFill: (taskFill: PriorityTaskFill) => void;
   onRemove: () => void;
   onStatusChange: (status: "pending" | "completed" | "dropped") => void;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
+  const [taskPickerValue, setTaskPickerValue] = useState("");
   const menuRef = useRef<HTMLDivElement>(null);
   useClickOutside(menuRef, menuOpen, () => setMenuOpen(false));
 
@@ -58,6 +68,26 @@ export function PriorityCard({
   const isDropped = item.status === "dropped";
   const isSaved = Boolean(item.id);
   const points = POINT_VALUES[index] ?? 0;
+  const plannedTaskOptions = taskOptions.filter((task) => task.group === "planned");
+  const unplannedTaskOptions = taskOptions.filter((task) => task.group === "unplanned");
+
+  function handleTaskFill(taskId: string) {
+    if (!taskId) {
+      setTaskPickerValue("");
+      return;
+    }
+
+    const selectedTask = taskOptions.find((task) => task.id === taskId);
+    if (!selectedTask) {
+      return;
+    }
+
+    onTaskFill({
+      title: selectedTask.title,
+      goalId: selectedTask.goalId ?? null,
+    });
+    setTaskPickerValue("");
+  }
 
   return (
     <li
@@ -105,20 +135,47 @@ export function PriorityCard({
         <span className="today-priority-card__check today-priority-card__check--new" />
       )}
 
-      <input
-        className="today-priority-card__input"
-        type="text"
-        value={item.title}
-        placeholder="What's the focus?"
-        onChange={(e) => onTitleChange(e.target.value)}
-        onBlur={onTitleBlur}
-        onKeyDown={(e) => {
-          if (e.key !== "Enter" || e.nativeEvent.isComposing) return;
-          e.preventDefault();
-          onTitleBlur();
-        }}
-        aria-label={`Priority ${index + 1} title`}
-      />
+      <div className="today-priority-card__content">
+        <input
+          className="today-priority-card__input"
+          type="text"
+          value={item.title}
+          placeholder="What's the focus?"
+          onChange={(e) => onTitleChange(e.target.value)}
+          onBlur={onTitleBlur}
+          onKeyDown={(e) => {
+            if (e.key !== "Enter" || e.nativeEvent.isComposing) return;
+            e.preventDefault();
+            onTitleBlur();
+          }}
+          aria-label={`Priority ${index + 1} title`}
+        />
+
+        {taskOptions.length > 0 ? (
+          <select
+            className="today-priority-card__task-fill"
+            value={taskPickerValue}
+            onChange={(e) => handleTaskFill(e.target.value)}
+            aria-label={`Fill priority ${index + 1} from today's tasks`}
+          >
+            <option value="">Use today task…</option>
+            {plannedTaskOptions.length > 0 ? (
+              <optgroup label="Planned">
+                {plannedTaskOptions.map((task) => (
+                  <option key={task.id} value={task.id}>{task.title}</option>
+                ))}
+              </optgroup>
+            ) : null}
+            {unplannedTaskOptions.length > 0 ? (
+              <optgroup label="Unplanned">
+                {unplannedTaskOptions.map((task) => (
+                  <option key={task.id} value={task.id}>{task.title}</option>
+                ))}
+              </optgroup>
+            ) : null}
+          </select>
+        ) : null}
+      </div>
 
       {activeGoals.length > 0 ? (
         <select

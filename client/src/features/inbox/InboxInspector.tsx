@@ -227,13 +227,7 @@ export function InboxInspector({
       onDoToday();
       return;
     }
-    const protocol = buildProtocol();
-    if (!protocol.nextAction && !ready) {
-      setPendingDate(today);
-      setShowClarification(true);
-      return;
-    }
-    onCommit(today, protocol);
+    onCommit(today, buildProtocol());
   }
 
   function handleScheduleClick() {
@@ -242,13 +236,7 @@ export function InboxInspector({
       onSchedule(scheduleDate);
       return;
     }
-    const protocol = buildProtocol();
-    if (!protocol.nextAction && !ready) {
-      setPendingDate(scheduleDate);
-      setShowClarification(true);
-      return;
-    }
-    onCommit(scheduleDate, protocol);
+    onCommit(scheduleDate, buildProtocol());
   }
 
   function handleClarifyAndCommit() {
@@ -348,7 +336,7 @@ export function InboxInspector({
               <div className={`inbox-inspector__readiness inbox-inspector__readiness--${ready ? "ready" : "needs-clarification"}`}>
                 <span className="inbox-inspector__readiness-icon">{ready ? "✓" : "○"}</span>
                 <span className="inbox-inspector__readiness-text">
-                  {guidance?.primaryMessage ?? (ready ? "Ready to schedule." : "Add the first visible step before scheduling.")}
+                  {guidance?.primaryMessage ?? "Ready to schedule. Adding a first visible step can make starting easier."}
                 </span>
               </div>
 
@@ -368,10 +356,7 @@ export function InboxInspector({
             {showClarification && (
               <div className="inbox-inspector__clarify">
                 <label className="inbox-inspector__field">
-                  <span className="inbox-inspector__field-label">
-                    Next visible action
-                    {!ready && <span className="inbox-inspector__field-required">*</span>}
-                  </span>
+                  <span className="inbox-inspector__field-label">Next visible action (optional)</span>
                   <input
                     className="inbox-inspector__field-input"
                     type="text"
@@ -379,7 +364,7 @@ export function InboxInspector({
                     onChange={(e) => setNextAction(e.target.value)}
                     placeholder="Open the file and write the first paragraph"
                     disabled={isMutating}
-                    autoFocus={!ready}
+                    autoFocus={!hasNextAction}
                   />
                 </label>
 
@@ -447,14 +432,14 @@ export function InboxInspector({
                   </button>
                 )}
 
-                {pendingDate && hasNextAction && (
+                {pendingDate && (
                   <button
                     className="button button--primary button--small"
                     type="button"
                     onClick={handleClarifyAndCommit}
                     disabled={isMutating}
                   >
-                    {pendingDate === today ? "Clarify & do today" : "Clarify & schedule"}
+                    {pendingDate === today ? "Save details & do today" : "Save details & schedule"}
                   </button>
                 )}
               </div>

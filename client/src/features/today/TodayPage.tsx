@@ -453,6 +453,9 @@ export function TodayPage({ routeMode }: { routeMode?: "execute" | "plan" }) {
                     <FocusStack
                       priorityDraft={priorityDraft}
                       activeGoals={data.activeGoals}
+                      tasks={data.executionTasks}
+                      plannedTaskIds={data.plannedTaskIds}
+                      mustWinTaskId={data.mustWinTask?.id ?? null}
                       phase={phase}
                     />
                   ) : null}

@@ -14,6 +14,11 @@ export type EditablePriority = {
   status: "pending" | "completed" | "dropped";
 };
 
+export type PriorityTaskFill = {
+  title: string;
+  goalId?: string | null;
+};
+
 const PRIORITY_SLOTS: Array<1 | 2> = [1, 2];
 const AUTO_SAVE_DELAY = 800;
 
@@ -120,6 +125,21 @@ export function usePriorityDraft(today: string, priorities: ServerPriority[], da
     scheduleSave();
   }, [scheduleSave]);
 
+  const applyTaskFill = useCallback((index: number, taskFill: PriorityTaskFill) => {
+    setDraft((current) =>
+      current.map((item, i) =>
+        i === index
+          ? {
+              ...item,
+              title: taskFill.title,
+              goalId: taskFill.goalId ?? null,
+            }
+          : item,
+      ),
+    );
+    scheduleSave();
+  }, [scheduleSave]);
+
   const addPriority = useCallback(() => {
     setDraft((current) => {
       if (current.length >= 2) return current;
@@ -174,6 +194,7 @@ export function usePriorityDraft(today: string, priorities: ServerPriority[], da
     isMutating,
     updateTitle,
     updateGoal,
+    applyTaskFill,
     addPriority,
     removePriority,
     reorder,

@@ -572,6 +572,37 @@
   color: var(--text-tertiary);
 }
 
+.today-priority-card__content {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.today-priority-card__task-fill {
+  padding: 0.2rem 0.35rem;
+  border-radius: var(--r-xs);
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-tertiary);
+  font-size: var(--fs-micro);
+  min-width: 0;
+  transition: all var(--dur) var(--ease);
+  cursor: pointer;
+}
+
+.today-priority-card:hover .today-priority-card__task-fill,
+.today-priority-card__task-fill:focus {
+  border-color: var(--border);
+  color: var(--text-secondary);
+}
+
+.today-priority-card__task-fill:focus {
+  outline: none;
+  border-color: var(--border-focus);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
 /* Goal */
 .today-priority-card__goal {
   padding: 0.15rem 0.3rem;

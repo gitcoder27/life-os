@@ -47,6 +47,7 @@ export function DailyLaunchCard({
     () => tasks.filter((task) => task.status === "pending"),
     [tasks],
   );
+  const hasSelectableTasks = selectableTasks.length > 0;
   const [selectedTaskId, setSelectedTaskId] = useState("");
   const [newTaskTitle, setNewTaskTitle] = useState("");
   const [energyRating, setEnergyRating] = useState("3");
@@ -99,7 +100,7 @@ export function DailyLaunchCard({
     updateTaskMutation.isPending ||
     upsertDayLaunchMutation.isPending;
 
-  const canSubmit = nextAction.trim() && (selectedTaskId || newTaskTitle.trim());
+  const canSubmit = Boolean(selectedTaskId || newTaskTitle.trim());
 
   return (
     <section className="daily-launch">
@@ -107,29 +108,33 @@ export function DailyLaunchCard({
         <span className="daily-launch__eyebrow">Daily setup</span>
         <h2 className="daily-launch__title">Pick one thing worth protecting.</h2>
         <p className="daily-launch__intro">
-          Define the task, the first visible step, and the one thing most likely to get in the way.
+          Define the task, optionally name the first visible step, and note what is most likely to get in the way.
         </p>
       </div>
 
       <div className="daily-launch__fields">
-        <div className="daily-launch__field">
-          <label className="daily-launch__label" htmlFor="dl-must-win">Choose a task</label>
-          <select
-            id="dl-must-win"
-            className="daily-launch__select"
-            value={selectedTaskId}
-            onChange={(event) => setSelectedTaskId(event.target.value)}
-          >
-            <option value="">Create a new task below</option>
-            {selectableTasks.map((task) => (
-              <option key={task.id} value={task.id}>{task.title}</option>
-            ))}
-          </select>
-        </div>
+        {hasSelectableTasks ? (
+          <div className="daily-launch__field">
+            <label className="daily-launch__label" htmlFor="dl-must-win">Choose a task</label>
+            <select
+              id="dl-must-win"
+              className="daily-launch__select"
+              value={selectedTaskId}
+              onChange={(event) => setSelectedTaskId(event.target.value)}
+            >
+              <option value="">Create a new task below</option>
+              {selectableTasks.map((task) => (
+                <option key={task.id} value={task.id}>{task.title}</option>
+              ))}
+            </select>
+          </div>
+        ) : null}
 
         {!selectedTaskId ? (
           <div className="daily-launch__field">
-            <label className="daily-launch__label" htmlFor="dl-new-task">New task</label>
+            <label className="daily-launch__label" htmlFor="dl-new-task">
+              {hasSelectableTasks ? "New task" : "Task"}
+            </label>
             <input
               id="dl-new-task"
               className="daily-launch__input"
@@ -141,7 +146,7 @@ export function DailyLaunchCard({
         ) : null}
 
         <div className="daily-launch__field">
-          <label className="daily-launch__label" htmlFor="dl-next-action">First step</label>
+          <label className="daily-launch__label" htmlFor="dl-next-action">First step (optional)</label>
           <input
             id="dl-next-action"
             className="daily-launch__input"

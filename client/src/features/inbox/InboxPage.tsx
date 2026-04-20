@@ -200,19 +200,10 @@ export function InboxPage() {
       });
       return;
     }
-    // Task with nextAction already → commit directly
-    if (item.nextAction?.trim()) {
-      commitTaskMutation.mutate({
-        taskId,
-        scheduledForDate: today,
-      });
-      return;
-    }
-    // Needs clarification → open inspector
-    setSelectedItemId(taskId);
-    setCheckedIds(new Set());
-    setPendingCommitDate(today);
-    setPromptClarification(true);
+    commitTaskMutation.mutate({
+      taskId,
+      scheduledForDate: today,
+    });
   }
 
   function handleSchedule(taskId: string, date: string) {
@@ -226,15 +217,7 @@ export function InboxPage() {
       });
       return;
     }
-    if (item.nextAction?.trim()) {
-      commitTaskMutation.mutate({ taskId, scheduledForDate: date });
-      return;
-    }
-    // Needs clarification → open inspector
-    setSelectedItemId(taskId);
-    setCheckedIds(new Set());
-    setPendingCommitDate(date);
-    setPromptClarification(true);
+    commitTaskMutation.mutate({ taskId, scheduledForDate: date });
   }
 
   function handleArchive(taskId: string) {

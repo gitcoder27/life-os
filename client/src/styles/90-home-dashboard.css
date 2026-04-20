@@ -12,8 +12,7 @@
   --home-ink-faint: rgba(160, 149, 126, 0.58);
   --home-rail-inset: 1.75rem;
 
-  width: min(100%, 82rem);
-  margin: 0 auto;
+  width: 100%;
   padding: 0.25rem 0 4rem;
   display: flex;
   flex-direction: column;

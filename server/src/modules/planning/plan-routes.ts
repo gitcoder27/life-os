@@ -299,7 +299,7 @@ export const registerPlanningPlanRoutes: FastifyPluginAsync = async (app) => {
         });
       }
 
-      const isComplete = Boolean(nextEnergyRating && mustWinTask?.nextAction?.trim());
+      const isComplete = Boolean(nextEnergyRating && nextMustWinTaskId);
 
       return tx.dailyLaunch.upsert({
         where: {

@@ -26,6 +26,10 @@ function buildPrimaryMessage(input: {
     return "Add the first visible step before scheduling this task.";
   }
 
+  if (input.suggestedReasons.includes("missing_next_action")) {
+    return "Ready to schedule. Adding a first visible step can make starting easier.";
+  }
+
   if (input.suggestedReasons.length > 0) {
     return "Ready to schedule. Optional details can make starting easier.";
   }
@@ -47,7 +51,7 @@ export function buildTaskCommitmentGuidance(task: CommitmentTaskLike): TaskCommi
   const suggestedReasons: TaskCommitmentReason[] = [];
 
   if (!hasText(task.nextAction)) {
-    blockingReasons.push("missing_next_action");
+    suggestedReasons.push("missing_next_action");
   }
 
   if (!hasText(task.fiveMinuteVersion)) {
@@ -66,7 +70,7 @@ export function buildTaskCommitmentGuidance(task: CommitmentTaskLike): TaskCommi
     suggestedReasons.push("missing_focus_length");
   }
 
-  const readiness = blockingReasons.length > 0 ? "needs_clarification" : "ready";
+  const readiness: TaskCommitmentGuidance["readiness"] = "ready";
 
   return {
     readiness,
@@ -101,14 +105,5 @@ export function mergeTaskCommitmentRequest(
 export function buildTaskCommitmentFieldErrors(
   guidance: TaskCommitmentGuidance,
 ): ApiFieldError[] {
-  if (!guidance.blockingReasons.includes("missing_next_action")) {
-    return [];
-  }
-
-  return [
-    {
-      field: "nextAction",
-      message: "Add the first visible step before scheduling this task.",
-    },
-  ];
+  return [];
 }
