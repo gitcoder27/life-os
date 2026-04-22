@@ -17,7 +17,7 @@ import { AdvisoryStrip } from "./AdvisoryStrip";
 import { EssentialsBand } from "./EssentialsBand";
 import { FocusSessionBanner } from "./FocusSessionBanner";
 import { FocusStage } from "./FocusStage";
-import { GuidanceWhisper } from "./GuidanceWhisper";
+import { HomeFooter } from "./HomeFooter";
 import { QuietRail } from "./QuietRail";
 import { StatusStrip } from "./StatusStrip";
 import { WorkspaceLaunchStrip } from "./WorkspaceLaunchStrip";
@@ -135,9 +135,7 @@ export function HomePage() {
         />
       </section>
 
-      <WorkspaceLaunchStrip today={home.date} />
-
-      <GuidanceWhisper guidance={home.guidance} />
+      <WorkspaceLaunchStrip today={home.date} guidance={home.guidance} />
 
       <AdvisoryStrip
         date={home.date}
@@ -152,6 +150,8 @@ export function HomePage() {
         health={home.healthSummary}
         finance={home.financeSummary}
       />
+
+      <HomeFooter />
     </main>
   );
 }
