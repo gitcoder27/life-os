@@ -20,6 +20,7 @@ import {
   PageErrorState,
   PageLoadingState,
 } from "../../shared/ui/PageState";
+import { BrandMark } from "../../shared/ui/BrandMark";
 import { SectionCard } from "../../shared/ui/SectionCard";
 import {
   RoutineItemEditor,
@@ -595,7 +596,7 @@ export function OnboardingPage() {
     <div className="auth-layout onboarding-shell">
       <div className="onboarding-shell__panel">
         <div className="onboarding-hero">
-          <div className="onboarding-hero__mark">L</div>
+          <BrandMark className="onboarding-hero__mark" alt="" />
           <div className="onboarding-hero__copy">
             <span className="page-eyebrow">Optional setup</span>
             <h1 className="onboarding-hero__title">Starter setup</h1>

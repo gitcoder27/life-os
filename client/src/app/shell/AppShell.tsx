@@ -31,6 +31,7 @@ import {
   SettingsIcon,
   shellNavItems,
 } from "./shell-navigation";
+import { BrandMark } from "../../shared/ui/BrandMark";
 
 const SHELL_SIDEBAR_STORAGE_KEY = "lifeos:shell-sidebar";
 const SHELL_SIDEBAR_STORAGE_VERSION = 1;
@@ -295,7 +296,7 @@ export function AppShell() {
       <aside className="shell-sidebar" aria-label="Primary navigation">
         <div className="brand-block">
           <div className="brand-block__title-row">
-            <span className="brand-block__mark">L</span>
+            <BrandMark className="brand-block__mark" alt="" />
             <h1 className="brand-block__title">Life OS</h1>
             <button
               className="button button--ghost button--small shell-sidebar__toggle shell-collapsed-label"

@@ -1,3 +1,10 @@
+.brand-mark {
+  display: block;
+  max-width: 100%;
+  object-fit: contain;
+  border-radius: inherit;
+}
+
 /* ── Auth ── */
 
 .auth-layout {
@@ -20,6 +27,41 @@
   animation: scaleIn 0.5s var(--ease) both;
 }
 
+.auth-brand {
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+  margin-bottom: 0.65rem;
+}
+
+.auth-brand--loading {
+  margin-bottom: 0.1rem;
+}
+
+.auth-brand__mark {
+  width: 3rem;
+  height: 3rem;
+  flex-shrink: 0;
+  border-radius: 16px;
+  box-shadow:
+    0 14px 34px rgba(0, 0, 0, 0.3),
+    0 0 0 1px rgba(217,153,58,0.16);
+}
+
+.auth-brand__copy {
+  display: flex;
+  flex-direction: column;
+  gap: 0.18rem;
+  min-width: 0;
+}
+
+.auth-brand__name {
+  font-family: var(--font-display);
+  font-size: 1.18rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
 .auth-layout__panel--loading {
   display: flex;
   flex-direction: column;
@@ -40,6 +82,18 @@
   font-size: var(--fs-body);
   margin: 0.5rem 0 1.5rem;
   line-height: 1.6;
+}
+
+@media (max-width: 640px) {
+  .auth-brand__mark {
+    width: 2.7rem;
+    height: 2.7rem;
+    border-radius: 14px;
+  }
+
+  .auth-brand__name {
+    font-size: 1.05rem;
+  }
 }
 
 /* ── Capture Sheet ── */

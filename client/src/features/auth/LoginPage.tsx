@@ -1,6 +1,7 @@
 import { type FormEvent, useState } from "react";
 
 import { useLoginMutation } from "../../shared/lib/api";
+import { BrandMark } from "../../shared/ui/BrandMark";
 
 export function LoginPage() {
   const loginMutation = useLoginMutation();
@@ -15,26 +16,12 @@ export function LoginPage() {
   return (
     <div className="auth-layout">
       <div className="auth-layout__panel">
-        <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", marginBottom: "0.5rem" }}>
-          <span
-            style={{
-              display: "inline-flex",
-              width: "2.4rem",
-              height: "2.4rem",
-              alignItems: "center",
-              justifyContent: "center",
-              borderRadius: "var(--r-sm)",
-              background: "linear-gradient(135deg, rgba(217,153,58,0.2), rgba(217,153,58,0.06))",
-              border: "1px solid rgba(217,153,58,0.25)",
-              color: "var(--accent-bright)",
-              fontFamily: "var(--font-display)",
-              fontSize: "1.1rem",
-              fontWeight: 600,
-            }}
-          >
-            L
-          </span>
-          <span className="page-eyebrow">Secure account access</span>
+        <div className="auth-brand">
+          <BrandMark className="auth-brand__mark" alt="" />
+          <div className="auth-brand__copy">
+            <span className="page-eyebrow">Secure account access</span>
+            <span className="auth-brand__name">Life OS</span>
+          </div>
         </div>
         <h1 className="auth-layout__title">Sign in to Life OS</h1>
         <p className="auth-layout__copy">

@@ -18,6 +18,7 @@ import {
   useSettingsProfileQuery,
   useSessionQuery,
 } from "../shared/lib/api";
+import { BrandMark } from "../shared/ui/BrandMark";
 import { LoadingIndicator } from "../shared/ui/PageState";
 import { resolveLandingPagePath } from "../shared/lib/landing-page";
 import { AppShell } from "./shell/AppShell";
@@ -26,8 +27,14 @@ function RouteLoading() {
   return (
     <div className="auth-layout">
       <div className="auth-layout__panel auth-layout__panel--loading" role="status" aria-live="polite">
+        <div className="auth-brand auth-brand--loading">
+          <BrandMark className="auth-brand__mark" alt="" />
+          <div className="auth-brand__copy">
+            <span className="page-eyebrow">Connecting</span>
+            <span className="auth-brand__name">Life OS</span>
+          </div>
+        </div>
         <LoadingIndicator label="Connecting" />
-        <span className="page-eyebrow">Connecting</span>
         <h1 className="auth-layout__title">Checking your session</h1>
         <p className="auth-layout__copy">
           Syncing frontend state with the backend.
