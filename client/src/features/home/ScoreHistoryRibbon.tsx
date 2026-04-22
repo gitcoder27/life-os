@@ -40,6 +40,26 @@ function formatDayTitle(entry: ScoreHistoryDay) {
   return `${entry.date}: ${entry.value} (${suffix})`;
 }
 
+function formatTooltipMeta(entry: ScoreHistoryDay) {
+  if (entry.value === null) {
+    return entry.isToday ? "Live today" : "Unscored";
+  }
+
+  return entry.finalized ? entry.label : `Live · ${entry.label}`;
+}
+
+function getTooltipAlign(index: number, total: number) {
+  if (index <= 1) {
+    return "left";
+  }
+
+  if (index >= total - 2) {
+    return "right";
+  }
+
+  return "center";
+}
+
 export function ScoreHistoryRibbon({
   entries,
   size = "compact",
@@ -60,27 +80,55 @@ export function ScoreHistoryRibbon({
       aria-label={ariaLabel}
     >
       {entries
-        ? entries.map((entry, index) => (
-            <span
-              key={entry.date}
-              className="status-history-ribbon__day"
-              data-tone={getDayTone(entry)}
-              data-today={entry.isToday}
-              data-finalized={entry.finalized}
-              title={formatDayTitle(entry)}
-              aria-hidden="true"
-              style={{ "--history-index": index } as CSSProperties}
-            />
-          ))
+        ? entries.map((entry, index) => {
+            const align = getTooltipAlign(index, entries.length);
+
+            return (
+              <span
+                key={entry.date}
+                className="status-history-ribbon__day-wrap"
+                data-align={align}
+                data-size={size}
+                style={{ "--history-index": index } as CSSProperties}
+              >
+              <span
+                className="status-history-ribbon__tooltip"
+                role="presentation"
+              >
+                <span className="status-history-ribbon__tooltip-date">
+                  {entry.isToday ? "Today" : entry.date}
+                </span>
+                <span className="status-history-ribbon__tooltip-score">
+                  {entry.value ?? "—"}
+                </span>
+                <span className="status-history-ribbon__tooltip-meta">
+                  {formatTooltipMeta(entry)}
+                </span>
+              </span>
+              <span
+                className="status-history-ribbon__day"
+                data-tone={getDayTone(entry)}
+                data-today={entry.isToday}
+                data-finalized={entry.finalized}
+                aria-label={formatDayTitle(entry)}
+              />
+              </span>
+            );
+          })
         : placeholders.map((placeholder) => (
             <span
               key={placeholder.key}
-              className="status-history-ribbon__day"
-              data-tone="empty"
-              data-placeholder="true"
-              aria-hidden="true"
+              className="status-history-ribbon__day-wrap"
+              data-size={size}
               style={{ "--history-index": placeholder.index } as CSSProperties}
-            />
+            >
+              <span
+                className="status-history-ribbon__day"
+                data-tone="empty"
+                data-placeholder="true"
+                aria-hidden="true"
+              />
+            </span>
           ))}
     </div>
   );

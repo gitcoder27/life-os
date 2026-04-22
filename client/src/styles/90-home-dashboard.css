@@ -340,17 +340,25 @@
   align-items: center;
   gap: 0.26rem;
   width: 100%;
+  overflow: visible;
 }
 
 .home-desk .status-history-ribbon--expanded {
   gap: 0.28rem;
 }
 
+.home-desk .status-history-ribbon__day-wrap {
+  position: relative;
+  display: flex;
+  flex: 1 1 0;
+  min-width: 0.28rem;
+  justify-content: center;
+}
+
 .home-desk .status-history-ribbon__day {
   position: relative;
   display: block;
-  flex: 1 1 0;
-  min-width: 0.28rem;
+  width: 100%;
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.08);
   transition:
@@ -368,6 +376,10 @@
 
 .home-desk .status-history-ribbon--expanded .status-history-ribbon__day {
   height: 2.15rem;
+  min-width: 0.38rem;
+}
+
+.home-desk .status-history-ribbon--expanded .status-history-ribbon__day-wrap {
   min-width: 0.38rem;
 }
 
@@ -410,6 +422,124 @@
 .home-desk .status-history-ribbon__day[data-placeholder="true"] {
   opacity: 0.42;
   animation: none;
+}
+
+.home-desk .status-history-ribbon__tooltip {
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 0.52rem);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.08rem;
+  padding: 0.48rem 0.58rem 0.44rem;
+  border: 1px solid rgba(216, 166, 95, 0.12);
+  border-radius: 0.72rem;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.012)),
+    rgba(16, 15, 12, 0.96);
+  box-shadow:
+    0 10px 30px rgba(0, 0, 0, 0.22),
+    inset 0 1px 0 rgba(255, 255, 255, 0.025);
+  transform: translate(-50%, 0.3rem);
+  opacity: 0;
+  pointer-events: none;
+  white-space: nowrap;
+  transition:
+    opacity 180ms var(--ease),
+    transform 220ms var(--ease);
+  z-index: 4;
+}
+
+.home-desk .status-history-ribbon__day-wrap[data-size="compact"] .status-history-ribbon__tooltip {
+  top: calc(100% + 0.48rem);
+  bottom: auto;
+  transform: translate(-50%, -0.3rem);
+}
+
+.home-desk .status-history-ribbon__day-wrap[data-align="left"] .status-history-ribbon__tooltip {
+  left: 0;
+  transform: translate(0, 0.3rem);
+}
+
+.home-desk .status-history-ribbon__day-wrap[data-align="right"] .status-history-ribbon__tooltip {
+  left: auto;
+  right: 0;
+  transform: translate(0, 0.3rem);
+}
+
+.home-desk .status-history-ribbon__day-wrap[data-size="compact"][data-align="left"] .status-history-ribbon__tooltip,
+.home-desk .status-history-ribbon__day-wrap[data-size="compact"][data-align="right"] .status-history-ribbon__tooltip {
+  transform: translate(0, -0.3rem);
+}
+
+.home-desk .status-history-ribbon__day-wrap:hover .status-history-ribbon__tooltip {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+
+.home-desk .status-history-ribbon__day-wrap[data-align="left"]:hover .status-history-ribbon__tooltip,
+.home-desk .status-history-ribbon__day-wrap[data-align="right"]:hover .status-history-ribbon__tooltip {
+  transform: translate(0, 0);
+}
+
+.home-desk .status-history-ribbon--compact .status-history-ribbon__tooltip {
+  padding: 0.42rem 0.52rem 0.38rem;
+  border-radius: 0.65rem;
+}
+
+.home-desk .status-history-ribbon__tooltip::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: calc(100% - 0.02rem);
+  width: 0.48rem;
+  height: 0.48rem;
+  border-right: 1px solid rgba(216, 166, 95, 0.12);
+  border-bottom: 1px solid rgba(216, 166, 95, 0.12);
+  background: rgba(16, 15, 12, 0.96);
+  transform: translateX(-50%) rotate(45deg);
+}
+
+.home-desk .status-history-ribbon__day-wrap[data-size="compact"] .status-history-ribbon__tooltip::after {
+  top: auto;
+  bottom: calc(100% - 0.02rem);
+  border-right: 0;
+  border-bottom: 0;
+  border-left: 1px solid rgba(216, 166, 95, 0.12);
+  border-top: 1px solid rgba(216, 166, 95, 0.12);
+}
+
+.home-desk .status-history-ribbon__day-wrap[data-align="left"] .status-history-ribbon__tooltip::after {
+  left: 0.72rem;
+  transform: rotate(45deg);
+}
+
+.home-desk .status-history-ribbon__day-wrap[data-align="right"] .status-history-ribbon__tooltip::after {
+  left: auto;
+  right: 0.72rem;
+  transform: rotate(45deg);
+}
+
+.home-desk .status-history-ribbon__tooltip-date {
+  font-size: 0.6rem;
+  font-weight: 650;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--home-ink-faint);
+}
+
+.home-desk .status-history-ribbon__tooltip-score {
+  font-size: 0.92rem;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  color: var(--home-ink);
+}
+
+.home-desk .status-history-ribbon__tooltip-meta {
+  font-size: 0.7rem;
+  color: var(--home-ink-soft);
+  letter-spacing: 0.01em;
 }
 
 .home-desk .status-history-tray {
