@@ -75,7 +75,13 @@ export {
 } from "./api/onboarding";
 export {
   useDailyScoreQuery,
+  useScoreHistoryQuery,
   useWeeklyMomentumQuery,
+} from "./api/scoring";
+export type {
+  ScoreHistoryDay,
+  ScoreHistoryResponse,
+  ScoreHistorySummary,
 } from "./api/scoring";
 export {
   useApplyTaskTemplateMutation,

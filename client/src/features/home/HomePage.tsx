@@ -90,6 +90,7 @@ export function HomePage() {
   return (
     <main className="home-desk">
       <StatusStrip
+        date={home.date}
         score={score?.value ?? 0}
         scoreLabel={score?.label ?? "Loading"}
         buckets={scoreQuery.data?.buckets ?? null}

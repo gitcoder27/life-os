@@ -5,7 +5,7 @@ import { z } from "zod";
 import { requireAuthenticatedUser } from "../../lib/auth/require-auth.js";
 import { parseIsoDate } from "../../lib/time/cycle.js";
 import { parseOrThrow } from "../../lib/validation/parse.js";
-import { calculateDailyScore, getWeeklyMomentum } from "./service.js";
+import { calculateDailyScore, getScoreHistory, getWeeklyMomentum } from "./service.js";
 
 const isoDateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/) as unknown as z.ZodType<IsoDateString>;
 
@@ -28,5 +28,17 @@ export const registerScoringRoutes: FastifyPluginAsync = async (app) => {
     const momentum = await getWeeklyMomentum(app.prisma, user.id, parseIsoDate(query.endingOn));
 
     return reply.send(momentum);
+  });
+
+  app.get("/scores/history", async (request, reply) => {
+    const user = requireAuthenticatedUser(request);
+    const querySchema = z.object({
+      endingOn: isoDateSchema,
+      days: z.coerce.number().int().min(7).max(90).default(30),
+    });
+    const query = parseOrThrow(querySchema, request.query);
+    const history = await getScoreHistory(app.prisma, user.id, parseIsoDate(query.endingOn), query.days ?? 30);
+
+    return reply.send(history);
   });
 };

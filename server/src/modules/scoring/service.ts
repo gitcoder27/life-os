@@ -77,6 +77,28 @@ export interface WeeklyMomentumResponse {
   generatedAt: string;
 }
 
+export interface ScoreHistoryDayResponse {
+  date: string;
+  value: number | null;
+  label: ScoreLabel | null;
+  finalized: boolean;
+  isToday: boolean;
+}
+
+export interface ScoreHistoryResponse {
+  endingOn: string;
+  days: number;
+  entries: ScoreHistoryDayResponse[];
+  summary: {
+    consistencyRun: number;
+    solidPlusDays: number;
+    strongDays: number;
+    current7DayAverage: number | null;
+    previous7DayAverage: number | null;
+  };
+  generatedAt: string;
+}
+
 const SUPPORT_PRIORITY_POINTS: Record<number, number> = {
   1: 8,
   2: 6,
@@ -126,6 +148,56 @@ function getScoreLabel(value: number): ScoreLabel {
   }
 
   return "Off-Track Day";
+}
+
+function buildHistoryWindow(endingOn: Date, days: number): IsoDateString[] {
+  const windowDates: IsoDateString[] = [];
+
+  for (let offset = days - 1; offset >= 0; offset -= 1) {
+    windowDates.push(toIsoDateString(addDays(endingOn, -offset)) as IsoDateString);
+  }
+
+  return windowDates;
+}
+
+function averageFinalizedScores(entries: ScoreHistoryDayResponse[]) {
+  const finalizedValues = entries
+    .filter((entry) => entry.finalized && entry.value !== null)
+    .map((entry) => entry.value as number);
+
+  if (finalizedValues.length === 0) {
+    return null;
+  }
+
+  return Math.round(finalizedValues.reduce((sum, value) => sum + value, 0) / finalizedValues.length);
+}
+
+function buildScoreHistorySummary(entries: ScoreHistoryDayResponse[]) {
+  let consistencyRun = 0;
+  let foundMostRecentFinalizedDay = false;
+
+  for (let index = entries.length - 1; index >= 0; index -= 1) {
+    const entry = entries[index];
+    if (!entry.finalized) {
+      continue;
+    }
+
+    foundMostRecentFinalizedDay = true;
+    if ((entry.value ?? 0) >= 70) {
+      consistencyRun += 1;
+      continue;
+    }
+
+    break;
+  }
+
+  return {
+    consistencyRun: foundMostRecentFinalizedDay ? consistencyRun : 0,
+    solidPlusDays: entries.filter((entry) => entry.finalized && (entry.value ?? 0) >= 70).length,
+    strongDays: entries.filter((entry) => entry.finalized && (entry.value ?? 0) >= 85).length,
+    current7DayAverage: averageFinalizedScores(entries.slice(-7)),
+    previous7DayAverage: entries.length >= 14 ? averageFinalizedScores(entries.slice(-14, -7)) : null,
+  };
 }
 
 export async function ensureCycle(
@@ -804,6 +876,95 @@ export async function finalizeDailyScore(
   return {
     ...score,
     finalizedAt: finalizedAt.toISOString(),
+    generatedAt: new Date().toISOString(),
+  };
+}
+
+export async function getScoreHistory(
+  prisma: PrismaClient,
+  userId: string,
+  endingOn: Date,
+  days: number,
+): Promise<ScoreHistoryResponse> {
+  const boundedDays = Math.max(7, Math.min(days, 90));
+  const preferences = await prisma.userPreference.findUnique({
+    where: {
+      userId,
+    },
+  });
+  const timezone = normalizeTimezone(preferences?.timezone);
+  const now = new Date();
+  const todayIsoDate = getUserLocalDate(now, timezone) as IsoDateString;
+  const endingOnIsoDate = toIsoDateString(endingOn);
+  const windowDates = buildHistoryWindow(endingOn, boundedDays);
+  const windowStart = parseIsoDate(windowDates[0]);
+
+  const finalizedScores = await prisma.dailyScore.findMany({
+    where: {
+      userId,
+      finalizedAt: {
+        not: null,
+      },
+      planningCycle: {
+        cycleStartDate: {
+          gte: windowStart,
+          lte: endingOn,
+        },
+      },
+    },
+    include: {
+      planningCycle: true,
+    },
+  });
+
+  const finalizedScoresByDate = new Map(
+    finalizedScores.map((score) => [
+      toIsoDateString(score.planningCycle.cycleStartDate),
+      score,
+    ]),
+  );
+
+  const liveTodayScore =
+    windowDates.includes(todayIsoDate)
+      ? await calculateDailyScore(prisma, userId, parseIsoDate(todayIsoDate))
+      : null;
+
+  const entries = windowDates.map<ScoreHistoryDayResponse>((isoDate) => {
+    if (liveTodayScore && isoDate === todayIsoDate) {
+      return {
+        date: isoDate,
+        value: liveTodayScore.value,
+        label: liveTodayScore.label,
+        finalized: Boolean(liveTodayScore.finalizedAt),
+        isToday: true,
+      };
+    }
+
+    const finalizedScore = finalizedScoresByDate.get(isoDate);
+    if (finalizedScore) {
+      return {
+        date: isoDate,
+        value: finalizedScore.scoreValue,
+        label: finalizedScore.scoreBand as ScoreLabel,
+        finalized: true,
+        isToday: isoDate === todayIsoDate,
+      };
+    }
+
+    return {
+      date: isoDate,
+      value: null,
+      label: null,
+      finalized: false,
+      isToday: isoDate === todayIsoDate,
+    };
+  });
+
+  return {
+    endingOn: endingOnIsoDate,
+    days: boundedDays,
+    entries,
+    summary: buildScoreHistorySummary(entries),
     generatedAt: new Date().toISOString(),
   };
 }

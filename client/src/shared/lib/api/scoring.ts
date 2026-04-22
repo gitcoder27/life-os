@@ -42,6 +42,30 @@ export type WeeklyMomentumResponse = {
   }>;
 };
 
+export type ScoreHistoryDay = {
+  date: string;
+  value: number | null;
+  label: "Strong Day" | "Solid Day" | "Recovering Day" | "Off-Track Day" | null;
+  finalized: boolean;
+  isToday: boolean;
+};
+
+export type ScoreHistorySummary = {
+  consistencyRun: number;
+  solidPlusDays: number;
+  strongDays: number;
+  current7DayAverage: number | null;
+  previous7DayAverage: number | null;
+};
+
+export type ScoreHistoryResponse = {
+  generatedAt: string;
+  endingOn: string;
+  days: number;
+  entries: ScoreHistoryDay[];
+  summary: ScoreHistorySummary;
+};
+
 export const useDailyScoreQuery = (date: string) =>
   useQuery({
     queryKey: queryKeys.score(date),
@@ -57,4 +81,18 @@ export const useWeeklyMomentumQuery = (endingOn: string) =>
         query: { endingOn },
       }),
     retry: false,
+  });
+
+export const useScoreHistoryQuery = (endingOn: string, days: number, enabled = true) =>
+  useQuery({
+    queryKey: queryKeys.scoreHistory(endingOn, days),
+    queryFn: () =>
+      apiRequest<ScoreHistoryResponse>("/api/scores/history", {
+        query: {
+          endingOn,
+          days: String(days),
+        },
+      }),
+    retry: false,
+    enabled,
   });

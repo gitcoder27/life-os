@@ -7,6 +7,7 @@ import { createMockPrisma } from "../utils/mock-prisma.js";
 
 const scoringMock = {
   calculateDailyScore: vi.fn(),
+  getScoreHistory: vi.fn(),
   getWeeklyMomentum: vi.fn(),
   ensureCycle: vi.fn(),
   finalizeDailyScore: vi.fn(),
@@ -28,6 +29,7 @@ const notificationServiceMock = {
 
 vi.mock("../../src/modules/scoring/service.js", () => ({
   calculateDailyScore: (...args: unknown[]) => scoringMock.calculateDailyScore(...args),
+  getScoreHistory: (...args: unknown[]) => scoringMock.getScoreHistory(...args),
   getWeeklyMomentum: (...args: unknown[]) => scoringMock.getWeeklyMomentum(...args),
   ensureCycle: (...args: unknown[]) => scoringMock.ensureCycle(...args),
   finalizeDailyScore: (...args: unknown[]) => scoringMock.finalizeDailyScore(...args),
@@ -282,6 +284,19 @@ describe("module route smoke tests", () => {
       weeklyReviewBonus: 0,
       strongDayStreak: 2,
       dailyScores: [],
+      generatedAt: new Date().toISOString(),
+    });
+    scoringMock.getScoreHistory.mockResolvedValue({
+      endingOn: "2026-03-14",
+      days: 30,
+      entries: [],
+      summary: {
+        consistencyRun: 0,
+        solidPlusDays: 0,
+        strongDays: 0,
+        current7DayAverage: null,
+        previous7DayAverage: null,
+      },
       generatedAt: new Date().toISOString(),
     });
 
@@ -1494,6 +1509,13 @@ describe("module route smoke tests", () => {
 
     expect(response.statusCode).toBe(200);
     expect(scoringMock.getWeeklyMomentum).toHaveBeenCalled();
+  });
+
+  it("serves score history endpoint from mocked service", async () => {
+    const response = await app!.inject({ method: "GET", url: "/api/scores/history?endingOn=2026-03-14&days=30" });
+
+    expect(response.statusCode).toBe(200);
+    expect(scoringMock.getScoreHistory).toHaveBeenCalled();
   });
 
   it("serves scoring daily score endpoint from mocked service", async () => {

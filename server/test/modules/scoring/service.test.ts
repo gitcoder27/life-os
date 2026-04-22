@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   calculateDailyScore,
   ensureCycle,
+  getScoreHistory,
   getWeeklyMomentum,
 } from "../../../src/modules/scoring/service.js";
 
@@ -113,6 +114,71 @@ describe("scoring service", () => {
 
     expect(momentum.value).toBe(79);
     expect(momentum.strongDayStreak).toBe(2);
+  });
+
+  it("builds score history summaries from finalized days in the requested window", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-04-01T08:00:00.000Z"));
+
+    try {
+      const prisma = {
+        userPreference: {
+          findUnique: vi.fn().mockResolvedValue(null),
+        },
+        dailyScore: {
+          findMany: vi.fn().mockResolvedValue([
+            {
+              scoreValue: 77,
+              scoreBand: "Solid Day",
+              planningCycle: { cycleStartDate: new Date("2026-03-03T00:00:00.000Z") },
+            },
+            {
+              scoreValue: 69,
+              scoreBand: "Recovering Day",
+              planningCycle: { cycleStartDate: new Date("2026-03-05T00:00:00.000Z") },
+            },
+            {
+              scoreValue: 71,
+              scoreBand: "Solid Day",
+              planningCycle: { cycleStartDate: new Date("2026-03-08T00:00:00.000Z") },
+            },
+            {
+              scoreValue: 86,
+              scoreBand: "Strong Day",
+              planningCycle: { cycleStartDate: new Date("2026-03-10T00:00:00.000Z") },
+            },
+            {
+              scoreValue: 62,
+              scoreBand: "Recovering Day",
+              planningCycle: { cycleStartDate: new Date("2026-03-12T00:00:00.000Z") },
+            },
+            {
+              scoreValue: 74,
+              scoreBand: "Solid Day",
+              planningCycle: { cycleStartDate: new Date("2026-03-13T00:00:00.000Z") },
+            },
+            {
+              scoreValue: 88,
+              scoreBand: "Strong Day",
+              planningCycle: { cycleStartDate: new Date("2026-03-14T00:00:00.000Z") },
+            },
+          ]),
+        },
+      } as any;
+
+      const history = await getScoreHistory(prisma, "user-1", new Date("2026-03-14T00:00:00.000Z"), 14);
+
+      expect(history.entries).toHaveLength(14);
+      expect(history.summary).toMatchObject({
+        consistencyRun: 2,
+        solidPlusDays: 5,
+        strongDays: 2,
+        current7DayAverage: 76,
+        previous7DayAverage: 73,
+      });
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("returns zero score with zero-activity day context", async () => {

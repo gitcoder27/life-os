@@ -46,3 +46,26 @@ export interface WeeklyMomentumResponse extends ApiMeta {
   strongDayStreak: number;
   dailyScores: WeeklyMomentumDay[];
 }
+
+export interface ScoreHistoryDay {
+  date: IsoDateString;
+  value: number | null;
+  label: ScoreLabel | null;
+  finalized: boolean;
+  isToday: boolean;
+}
+
+export interface ScoreHistorySummary {
+  consistencyRun: number;
+  solidPlusDays: number;
+  strongDays: number;
+  current7DayAverage: number | null;
+  previous7DayAverage: number | null;
+}
+
+export interface ScoreHistoryResponse extends ApiMeta {
+  endingOn: IsoDateString;
+  days: number;
+  entries: ScoreHistoryDay[];
+  summary: ScoreHistorySummary;
+}

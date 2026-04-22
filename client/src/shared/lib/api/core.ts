@@ -63,6 +63,7 @@ export const queryKeys = {
   homeQuote: ["home", "quote"] as const,
   focusActive: ["focus", "active"] as const,
   score: (date: string) => ["score", "daily", date] as const,
+  scoreHistory: (date: string, days: number) => ["score", "history", date, days] as const,
   weeklyMomentum: (date: string) => ["score", "weekly-momentum", date] as const,
   dayPlan: (date: string) => ["planning", "day", date] as const,
   weekPlan: (startDate: string) => ["planning", "week", startDate] as const,
