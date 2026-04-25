@@ -605,7 +605,8 @@
 /* Strip old sidebar module chrome — blocks are typography-led */
 .today-desk .today-sidebar .focus-stack,
 .today-desk .today-sidebar .today-day-notes,
-.today-desk .today-sidebar .daily-essentials {
+.today-desk .today-sidebar .daily-essentials,
+.today-desk .today-sidebar .today-goal-nudges {
   all: unset;
   display: flex;
   flex-direction: column;
@@ -636,7 +637,8 @@
 
 .today-desk .today-sidebar .focus-stack__priorities-title,
 .today-desk .today-sidebar .today-day-notes .today-context-title,
-.today-desk .today-sidebar .daily-essentials__title {
+.today-desk .today-sidebar .daily-essentials__title,
+.today-desk .today-sidebar .today-goal-nudges .today-context-title {
   all: unset;
   font-size: 0.68rem;
   font-weight: 650;
@@ -648,6 +650,35 @@
 .today-desk .today-sidebar .daily-essentials__title {
   display: block;
   padding-bottom: 0.25rem;
+}
+
+.today-desk .today-sidebar .today-goal-nudges__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.today-desk .today-sidebar .today-goal-nudges__date {
+  color: var(--today-ink-faint);
+  font-size: 0.68rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.today-desk .today-sidebar .today-goal-nudges__list {
+  border-top: 1px solid var(--today-hairline);
+}
+
+.today-desk .today-sidebar .today-goal-nudge {
+  border-bottom: 1px solid var(--today-hairline);
+}
+
+.today-desk .today-sidebar .today-goal-nudge__title {
+  color: var(--today-ink);
+}
+
+.today-desk .today-sidebar .today-goal-nudge__reason {
+  color: var(--today-ink-faint);
 }
 
 .today-desk .today-sidebar .focus-stack__save {

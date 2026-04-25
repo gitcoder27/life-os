@@ -6,7 +6,6 @@ import { TimeBlocks } from "./TimeBlocks";
 import { DayNotes } from "./DayNotes";
 import { GoalNudges } from "./GoalNudges";
 import type { TaskItem, GoalNudgeItem, DayPlannerBlockItem } from "../../../shared/lib/api";
-import type { EditablePriority } from "../hooks/usePriorityDraft";
 import type { PlannerExecutionModel } from "../helpers/planner-execution";
 
 type HealthDay = {
@@ -22,7 +21,6 @@ export function ContextPanel({
   timedTasks,
   quickCaptureTasks,
   goalNudges,
-  priorityDraft,
   canAddGoalNudge,
   onAddGoalNudge,
   plannerBlocks,
@@ -35,7 +33,6 @@ export function ContextPanel({
   timedTasks: TaskItem[];
   quickCaptureTasks: TaskItem[];
   goalNudges: GoalNudgeItem[];
-  priorityDraft: EditablePriority[];
   canAddGoalNudge: boolean;
   onAddGoalNudge: (nudge: GoalNudgeItem) => void;
   plannerBlocks: DayPlannerBlockItem[];
@@ -59,10 +56,10 @@ export function ContextPanel({
       )}
       <DayNotes tasks={quickCaptureTasks} today={today} />
       <GoalNudges
+        date={today}
         nudges={goalNudges}
-        priorityDraft={priorityDraft}
-        canAdd={canAddGoalNudge}
-        onAdd={onAddGoalNudge}
+        onAdd={async (nudge) => onAddGoalNudge(nudge)}
+        isAdding={!canAddGoalNudge}
       />
     </aside>
   );

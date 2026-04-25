@@ -1,8 +1,6 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import type { GoalNudgeItem, LinkedGoal } from "../../../shared/lib/api";
-import { GoalProgressBar, HealthBadge } from "../../goals/GoalDetailPanel";
-import type { EditablePriority } from "../hooks/usePriorityDraft";
 
 function GoalChip({ goal }: { goal: LinkedGoal }) {
   return (
@@ -13,51 +11,89 @@ function GoalChip({ goal }: { goal: LinkedGoal }) {
   );
 }
 
+function healthLabel(health: GoalNudgeItem["health"]) {
+  switch (health) {
+    case "stalled":
+      return "stalled";
+    case "drifting":
+      return "drifting";
+    case "on_track":
+      return "steady";
+    case "achieved":
+      return "done";
+  }
+}
+
 export function GoalNudges({
+  date,
   nudges,
-  priorityDraft,
-  canAdd,
   onAdd,
+  isAdding,
 }: {
+  date: string;
   nudges: GoalNudgeItem[];
-  priorityDraft: EditablePriority[];
-  canAdd: boolean;
-  onAdd: (nudge: GoalNudgeItem) => void;
+  onAdd: (nudge: GoalNudgeItem) => Promise<void>;
+  isAdding: boolean;
 }) {
+  const [dismissed, setDismissed] = useState<Set<string>>(() => new Set());
+  const [pendingGoalId, setPendingGoalId] = useState<string | null>(null);
+
   const visible = useMemo(() => {
-    const linkedGoalIds = new Set(
-      priorityDraft.flatMap((p) => (p.goalId ? [p.goalId] : [])),
-    );
-    return nudges.filter((n) => !linkedGoalIds.has(n.goal.id));
-  }, [nudges, priorityDraft]);
+    return nudges.filter((nudge) => !dismissed.has(nudge.goal.id));
+  }, [dismissed, nudges]);
 
   if (visible.length === 0) return null;
 
+  async function handleAdd(nudge: GoalNudgeItem) {
+    setPendingGoalId(nudge.goal.id);
+    try {
+      await onAdd(nudge);
+      setDismissed((current) => new Set(current).add(nudge.goal.id));
+    } finally {
+      setPendingGoalId(null);
+    }
+  }
+
   return (
-    <div className="today-goal-nudges">
-      <h3 className="today-context-title">Goal Suggestions</h3>
-      <div className="today-goal-nudges__list">
+    <section className="today-goal-nudges" aria-label="Suggested from goals">
+      <div className="today-goal-nudges__header">
+        <h3 className="today-context-title">Suggested from goals</h3>
+        <span className="today-goal-nudges__date">{date}</span>
+      </div>
+      <ul className="today-goal-nudges__list">
         {visible.map((nudge) => (
-          <div key={nudge.goal.id} className="today-goal-nudge">
-            <div className="today-goal-nudge__top">
-              <GoalChip goal={nudge.goal} />
-              <HealthBadge health={nudge.health} />
+          <li key={nudge.goal.id} className="today-goal-nudge">
+            <div className="today-goal-nudge__body">
+              <div className="today-goal-nudge__meta">
+                <GoalChip goal={nudge.goal} />
+                <span className={`today-goal-nudge__health today-goal-nudge__health--${nudge.health}`}>
+                  {healthLabel(nudge.health)}
+                </span>
+              </div>
+              <p className="today-goal-nudge__title">{nudge.suggestedPriorityTitle}</p>
+              <p className="today-goal-nudge__reason">{nudge.nextBestAction}</p>
             </div>
-            <GoalProgressBar percent={nudge.progressPercent} achieved={nudge.health === "achieved"} />
-            <div className="today-goal-nudge__action">
-              <span className="today-goal-nudge__nba">→ {nudge.nextBestAction}</span>
+            <div className="today-goal-nudge__actions">
               <button
                 className="button button--ghost button--small"
                 type="button"
-                onClick={() => onAdd(nudge)}
-                disabled={!canAdd}
+                onClick={() => setDismissed((current) => new Set(current).add(nudge.goal.id))}
+                disabled={isAdding}
               >
-                {canAdd ? "+ Add" : "Full"}
+                Not today
+              </button>
+              <button
+                className="button button--primary button--small"
+                type="button"
+                onClick={() => void handleAdd(nudge)}
+                disabled={isAdding}
+              >
+                {pendingGoalId === nudge.goal.id ? "Adding..." : "Add task"}
               </button>
             </div>
-          </div>
+          </li>
         ))}
-      </div>
-    </div>
+      </ul>
+    </section>
   );
 }

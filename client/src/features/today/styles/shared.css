@@ -1302,50 +1302,108 @@
 /* ── Goal Nudges ─────────────────────────────────────── */
 
 .today-goal-nudges {
-  padding: 0.7rem 0.85rem;
-  border-radius: var(--r);
-  border: 1px solid rgba(216,166,95,0.12);
-  background: linear-gradient(180deg, var(--panel-elevated), var(--panel));
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+  padding: 0.1rem 0 0;
+}
+
+.today-goal-nudges__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.today-goal-nudges__date {
+  color: var(--text-tertiary);
+  font-size: var(--fs-micro);
+  font-variant-numeric: tabular-nums;
 }
 
 .today-goal-nudges__list {
   display: flex;
   flex-direction: column;
-  gap: 0.65rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border-top: 1px solid var(--border);
 }
 
 .today-goal-nudge {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.85rem;
+  padding: 0.75rem 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.today-goal-nudge__body {
   display: flex;
   flex-direction: column;
   gap: 0.35rem;
-  padding: 0.5rem;
-  border-radius: var(--r-sm);
-  border: 1px solid var(--border);
-  background: rgba(255,255,255,0.015);
-}
-
-.today-goal-nudge__top {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.5rem;
-}
-
-.today-goal-nudge__action {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.5rem;
-  margin-top: 0.15rem;
-}
-
-.today-goal-nudge__nba {
-  font-size: var(--fs-micro);
-  color: var(--text-secondary);
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+}
+
+.today-goal-nudge__meta {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.today-goal-nudge__health {
+  flex: none;
+  color: var(--text-tertiary);
+  font-size: var(--fs-micro);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.today-goal-nudge__health--stalled,
+.today-goal-nudge__health--drifting {
+  color: var(--warning);
+}
+
+.today-goal-nudge__health--on_track,
+.today-goal-nudge__health--achieved {
+  color: var(--positive);
+}
+
+.today-goal-nudge__title,
+.today-goal-nudge__reason {
+  margin: 0;
+}
+
+.today-goal-nudge__title {
+  color: var(--text-primary);
+  font-size: var(--fs-small);
+  font-weight: 650;
+  line-height: 1.35;
+}
+
+.today-goal-nudge__reason {
+  color: var(--text-tertiary);
+  font-size: var(--fs-micro);
+  line-height: 1.45;
+}
+
+.today-goal-nudge__actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  justify-content: flex-end;
+  align-self: center;
+}
+
+@media (max-width: 600px) {
+  .today-goal-nudge {
+    grid-template-columns: 1fr;
+  }
+
+  .today-goal-nudge__actions {
+    justify-content: flex-start;
+  }
 }
 
 /* ── Routines & Habits ────────────────────────────────── */

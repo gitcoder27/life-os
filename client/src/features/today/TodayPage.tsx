@@ -29,12 +29,18 @@ import { useTodayData } from "./hooks/useTodayData";
 import { usePriorityDraft } from "./hooks/usePriorityDraft";
 import { useTaskActions } from "./hooks/useTaskActions";
 import { usePlannerActions } from "./hooks/usePlannerActions";
-import { useActiveFocusSessionQuery, useDayPlanQuery } from "../../shared/lib/api";
+import {
+  useActiveFocusSessionQuery,
+  useCreateTaskMutation,
+  useDayPlanQuery,
+  type GoalNudgeItem,
+} from "../../shared/lib/api";
 import { isQuickCaptureReferenceTask } from "../../shared/lib/quickCapture";
 import { getOffsetDate } from "./helpers/date-helpers";
 import { FocusSessionPanel } from "./components/FocusSessionPanel";
 import { StartProtocolSheet } from "./components/StartProtocolSheet";
 import { WeekDeepWorkStrip } from "./components/WeekDeepWorkStrip";
+import { GoalNudges } from "./components/GoalNudges";
 
 const ISO_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const isPlannerAssignableTask = (task: { kind: string }) => task.kind === "task";
@@ -73,6 +79,10 @@ export function TodayPage({ routeMode }: { routeMode?: "execute" | "plan" }) {
   const isEditablePlannerDate = plannerDate >= data.today;
   const plannerDayPlanQuery = useDayPlanQuery(plannerDate);
   const activeFocusSessionQuery = useActiveFocusSessionQuery();
+  const createGoalTaskMutation = useCreateTaskMutation(data.today, {
+    successMessage: "Goal task added to Today.",
+    errorMessage: "Goal task could not be added.",
+  });
   const priorityDraft = usePriorityDraft(
     data.today,
     data.priorities,
@@ -348,6 +358,9 @@ export function TodayPage({ routeMode }: { routeMode?: "execute" | "plan" }) {
     activeFocusSessionQuery.error instanceof Error
       ? activeFocusSessionQuery.error.message
       : null,
+    createGoalTaskMutation.error instanceof Error
+      ? createGoalTaskMutation.error.message
+      : null,
     mode === "plan" ? plannerActions.mutationError : null,
   ]
     .filter((e): e is string => typeof e === "string" && e.length > 0)
@@ -356,6 +369,21 @@ export function TodayPage({ routeMode }: { routeMode?: "execute" | "plan" }) {
     data.refetchAll();
     void activeFocusSessionQuery.refetch();
   };
+
+  async function handleAddGoalNudge(nudge: GoalNudgeItem) {
+    await createGoalTaskMutation.mutateAsync({
+      title: nudge.suggestedPriorityTitle,
+      notes: nudge.nextBestAction,
+      kind: "task",
+      scheduledForDate: data.today,
+      goalId: nudge.goal.id,
+      originType: "manual",
+      nextAction: nudge.suggestedPriorityTitle,
+      fiveMinuteVersion: nudge.suggestedPriorityTitle,
+      estimatedDurationMinutes: 25,
+      focusLengthMinutes: 25,
+    });
+  }
 
   const pendingPriorityCount = priorityDraft.draft.filter(
     (p) => p.status === "pending" && p.title.trim(),
@@ -457,6 +485,14 @@ export function TodayPage({ routeMode }: { routeMode?: "execute" | "plan" }) {
                       plannedTaskIds={data.plannedTaskIds}
                       mustWinTaskId={data.mustWinTask?.id ?? null}
                       phase={phase}
+                    />
+                  ) : null}
+                  {!isRescueMode ? (
+                    <GoalNudges
+                      date={data.today}
+                      nudges={data.goalNudges}
+                      onAdd={handleAddGoalNudge}
+                      isAdding={createGoalTaskMutation.isPending}
                     />
                   ) : null}
                   <DayNotes tasks={data.quickCaptureTasks} today={data.today} />
