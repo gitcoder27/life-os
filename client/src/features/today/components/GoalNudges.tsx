@@ -29,11 +29,13 @@ export function GoalNudges({
   nudges,
   onAdd,
   isAdding,
+  compact = false,
 }: {
   date: string;
   nudges: GoalNudgeItem[];
   onAdd: (nudge: GoalNudgeItem) => Promise<void>;
   isAdding: boolean;
+  compact?: boolean;
 }) {
   const [dismissed, setDismissed] = useState<Set<string>>(() => new Set());
   const [pendingGoalId, setPendingGoalId] = useState<string | null>(null);
@@ -43,6 +45,7 @@ export function GoalNudges({
   }, [dismissed, nudges]);
 
   if (visible.length === 0) return null;
+  const leadNudge = visible[0];
 
   async function handleAdd(nudge: GoalNudgeItem) {
     setPendingGoalId(nudge.goal.id);
@@ -52,6 +55,49 @@ export function GoalNudges({
     } finally {
       setPendingGoalId(null);
     }
+  }
+
+  if (compact) {
+    const waitLabel = visible.length > 1 ? `+${visible.length - 1} more` : null;
+
+    return (
+      <section className="today-goal-nudges today-goal-nudges--compact" aria-label="Goal momentum suggestion">
+        <div className="today-rail-note today-rail-note--goal">
+          <div className="today-rail-note__header">
+            <span className="today-rail-note__label">Goal momentum</span>
+            {waitLabel ? (
+              <span className="today-rail-note__count">{waitLabel}</span>
+            ) : null}
+          </div>
+          <div className="today-rail-note__body">
+            <Link to="/goals" className="today-rail-note__title">
+              {leadNudge.goal.title}
+            </Link>
+            <span className="today-rail-note__detail">
+              {healthLabel(leadNudge.health)} · {leadNudge.suggestedPriorityTitle}
+            </span>
+          </div>
+          <div className="today-rail-note__actions">
+            <button
+              className="today-rail-link"
+              type="button"
+              onClick={() => setDismissed((current) => new Set(current).add(leadNudge.goal.id))}
+              disabled={isAdding}
+            >
+              Skip
+            </button>
+            <button
+              className="today-rail-link today-rail-link--strong"
+              type="button"
+              onClick={() => void handleAdd(leadNudge)}
+              disabled={isAdding}
+            >
+              {pendingGoalId === leadNudge.goal.id ? "Adding..." : "Add"}
+            </button>
+          </div>
+        </div>
+      </section>
+    );
   }
 
   return (

@@ -12,15 +12,12 @@ import {
 } from "../../shared/ui/PageState";
 import { readHomeDestinationState } from "../../shared/lib/homeNavigation";
 import { CommandBar } from "./components/CommandBar";
-import { FocusStack } from "./components/FocusStack";
 import { ExecutionStream } from "./components/ExecutionStream";
 import { DailyEssentials } from "./components/DailyEssentials";
-import { RecoveryTray } from "./components/RecoveryTray";
 import { DayPlanner } from "./components/DayPlanner";
 import { DayNotes } from "./components/DayNotes";
 import { TodayTaskCaptureSheet } from "./components/TodayTaskCaptureSheet";
 import { DailyLaunchCard } from "./components/DailyLaunchCard";
-import { MustWinCard } from "./components/MustWinCard";
 import { PreLaunchModeNotice } from "./components/PreLaunchModeNotice";
 import { RescueModeCard } from "./components/RescueModeCard";
 import { buildPlannerExecutionModel } from "./helpers/planner-execution";
@@ -37,10 +34,10 @@ import {
 } from "../../shared/lib/api";
 import { isQuickCaptureReferenceTask } from "../../shared/lib/quickCapture";
 import { getOffsetDate } from "./helpers/date-helpers";
-import { FocusSessionPanel } from "./components/FocusSessionPanel";
 import { StartProtocolSheet } from "./components/StartProtocolSheet";
 import { WeekDeepWorkStrip } from "./components/WeekDeepWorkStrip";
 import { GoalNudges } from "./components/GoalNudges";
+import { TaskInspectorPanel } from "./components/TaskInspectorPanel";
 
 const ISO_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const isPlannerAssignableTask = (task: { kind: string }) => task.kind === "task";
@@ -68,6 +65,7 @@ export function TodayPage({ routeMode }: { routeMode?: "execute" | "plan" }) {
   const [stickyTop, setStickyTop] = useState(0);
   const [topRailElement, setTopRailElement] = useState<HTMLDivElement | null>(null);
   const [clarifyTaskId, setClarifyTaskId] = useState<string | null>(null);
+  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const requestedMode = searchParams.get("mode");
   const rawPlannerDate = searchParams.get("planDate");
   const homeDestination = readHomeDestinationState(location.state);
@@ -137,11 +135,37 @@ export function TodayPage({ routeMode }: { routeMode?: "execute" | "plan" }) {
       }),
     [isLivePlannerDate, plannerBlocks, plannerNow, plannerUnplannedTasks],
   );
+  const selectableTasks = useMemo(
+    () => [...data.executionTasks, ...data.overdueTasks],
+    [data.executionTasks, data.overdueTasks],
+  );
+  const selectedTask = useMemo(
+    () => selectableTasks.find((task) => task.id === selectedTaskId) ?? null,
+    [selectableTasks, selectedTaskId],
+  );
+  const defaultSelectedTaskId =
+    activeFocusSession?.taskId ??
+    data.mustWinTask?.id ??
+    data.executionTasks.find((task) => task.status === "pending")?.id ??
+    data.overdueTasks.find((task) => task.status === "pending")?.id ??
+    null;
 
   const phase = getDayPhase(plannerNow);
   const topRailRef = useCallback((node: HTMLDivElement | null) => {
     setTopRailElement(node);
   }, []);
+
+  useEffect(() => {
+    if (mode !== "execute") {
+      return;
+    }
+
+    if (selectedTaskId && selectableTasks.some((task) => task.id === selectedTaskId)) {
+      return;
+    }
+
+    setSelectedTaskId(defaultSelectedTaskId);
+  }, [defaultSelectedTaskId, mode, selectableTasks, selectedTaskId]);
 
   const navigateToMode = useCallback((nextMode: "execute" | "plan", replace = false) => {
     setMode(nextMode);
@@ -394,11 +418,7 @@ export function TodayPage({ routeMode }: { routeMode?: "execute" | "plan" }) {
     (task) => task.status === "pending" && task.id !== data.mustWinTask?.id,
   );
   const launchCompleted = Boolean(data.launch?.completedAt);
-  const showStage = launchCompleted;
-  const showAdvisory =
-    launchCompleted &&
-    (Boolean(data.rescueSuggestion) || isRescueMode || Boolean(data.weekPlan));
-  const visibleExecutionTasks = isRescueMode ? [] : data.executionTasks;
+  const showRescueSupport = launchCompleted && (Boolean(data.rescueSuggestion) || isRescueMode);
   const todayLayoutStyle = {
     "--today-top-rail-height": `${topRailHeight}px`,
     "--today-sticky-offset": `${stickyTop}px`,
@@ -438,12 +458,6 @@ export function TodayPage({ routeMode }: { routeMode?: "execute" | "plan" }) {
       {mode === "execute" ? (
         <div className="today-execute-v2">
           <div className="today-main-v2">
-            <FocusSessionPanel
-              date={data.today}
-              session={activeFocusSession}
-              onClarifyTask={(taskId) => setClarifyTaskId(taskId)}
-            />
-
             {!launchCompleted ? (
               <>
                 <PreLaunchModeNotice
@@ -458,81 +472,68 @@ export function TodayPage({ routeMode }: { routeMode?: "execute" | "plan" }) {
                   mustWinTask={data.mustWinTask}
                 />
               </>
-            ) : null}
-
-            {showStage ? (
-              <section className="today-desk__stage" aria-label="Today's focus">
-                {data.mustWinTask ? (
-                  <MustWinCard
+            ) : (
+              <section className="today-workbench" aria-label="Today workbench">
+                <div className="today-workbench__queue">
+                  <ExecutionStream
                     date={data.today}
-                    task={data.mustWinTask}
+                    executionTasks={data.executionTasks}
+                    overdueTasks={data.overdueTasks}
+                    execution={todayPlannerExecution}
+                    taskActions={taskActions}
+                    plannerBlocks={data.plannerBlocks}
+                    onSwitchToPlanner={() => navigateToMode("plan")}
                     activeFocusSession={activeFocusSession}
+                    mustWinTaskId={data.mustWinTask?.id ?? null}
+                    selectedTaskId={selectedTaskId}
+                    onSelectTask={(task) => setSelectedTaskId(task.id)}
                   />
-                ) : (
-                  <TodayStageEmpty
-                    pendingTaskCount={pendingTaskCount}
+                </div>
+
+                <aside className="today-workbench__side" aria-label="Today context">
+                  <TaskInspectorPanel
+                    date={data.today}
+                    task={selectedTask}
+                    taskActions={taskActions}
+                    activeFocusSession={activeFocusSession}
                     onAddTask={() => setTodayTaskCaptureOpen(true)}
                     onPlanDay={() => navigateToMode("plan")}
+                    onClarifyTask={(taskId) => setClarifyTaskId(taskId)}
                   />
-                )}
 
-                <aside className="today-sidebar" aria-label="Quiet rail">
-                  {!isRescueMode ? (
-                    <FocusStack
-                      priorityDraft={priorityDraft}
-                      activeGoals={data.activeGoals}
-                      tasks={data.executionTasks}
-                      plannedTaskIds={data.plannedTaskIds}
-                      mustWinTaskId={data.mustWinTask?.id ?? null}
+                  <div className="today-workbench__support">
+                    {showRescueSupport ? (
+                      <RescueModeCard
+                        date={data.today}
+                        launch={data.launch}
+                        suggestion={data.rescueSuggestion}
+                        mustWinTask={data.mustWinTask}
+                        deferredCandidates={rescueDeferredCandidates}
+                        taskActions={taskActions}
+                        compact
+                      />
+                    ) : null}
+
+                    {!isRescueMode ? (
+                      <GoalNudges
+                        date={data.today}
+                        nudges={data.goalNudges}
+                        onAdd={handleAddGoalNudge}
+                        isAdding={createGoalTaskMutation.isPending}
+                        compact
+                      />
+                    ) : null}
+
+                    <DailyEssentials
+                      currentDay={data.currentDay}
                       phase={phase}
                     />
-                  ) : null}
-                  {!isRescueMode ? (
-                    <GoalNudges
-                      date={data.today}
-                      nudges={data.goalNudges}
-                      onAdd={handleAddGoalNudge}
-                      isAdding={createGoalTaskMutation.isPending}
-                    />
-                  ) : null}
-                  <DayNotes tasks={data.quickCaptureTasks} today={data.today} />
-                  <DailyEssentials
-                    currentDay={data.currentDay}
-                    phase={phase}
-                  />
+                    <WeekDeepWorkStrip weekPlan={data.weekPlan} />
+                    <DayNotes tasks={data.quickCaptureTasks} today={data.today} />
+                  </div>
                 </aside>
               </section>
-            ) : null}
-
-            {showAdvisory ? (
-              <div className="today-advisory">
-                <RescueModeCard
-                  date={data.today}
-                  launch={data.launch}
-                  suggestion={data.rescueSuggestion}
-                  mustWinTask={data.mustWinTask}
-                  deferredCandidates={rescueDeferredCandidates}
-                  taskActions={taskActions}
-                />
-                <WeekDeepWorkStrip weekPlan={data.weekPlan} />
-              </div>
-            ) : null}
-
-            <ExecutionStream
-              date={data.today}
-              executionTasks={visibleExecutionTasks}
-              execution={todayPlannerExecution}
-              taskActions={taskActions}
-              plannerBlocks={data.plannerBlocks}
-              phase={phase}
-              onSwitchToPlanner={() => navigateToMode("plan")}
-              activeFocusSession={activeFocusSession}
-            />
-
-            <RecoveryTray
-              overdueTasks={data.overdueTasks}
-              taskActions={taskActions}
-            />
+            )}
           </div>
         </div>
       ) : (
@@ -564,52 +565,11 @@ export function TodayPage({ routeMode }: { routeMode?: "execute" | "plan" }) {
         date={data.today}
         task={
           clarifyTaskId
-            ? data.executionTasks.find((task) => task.id === clarifyTaskId) ?? null
+            ? selectableTasks.find((task) => task.id === clarifyTaskId) ?? null
             : null
         }
         onClose={() => setClarifyTaskId(null)}
       />
-    </div>
-  );
-}
-
-function TodayStageEmpty({
-  pendingTaskCount,
-  onAddTask,
-  onPlanDay,
-}: {
-  pendingTaskCount: number;
-  onAddTask: () => void;
-  onPlanDay: () => void;
-}) {
-  const headline = pendingTaskCount > 0
-    ? `${pendingTaskCount} task${pendingTaskCount === 1 ? "" : "s"} on the table`
-    : "All clear.";
-  const subline = pendingTaskCount > 0
-    ? "Pick one believable move and let the rest wait."
-    : "You have room. Set a direction before the day fills itself.";
-
-  return (
-    <div className="today-stage-empty">
-      <span className="today-stage-empty__eyebrow">Today</span>
-      <h2 className="today-stage-empty__headline">{headline}</h2>
-      <p className="today-stage-empty__subline">{subline}</p>
-      <div className="must-win-card__actions">
-        <button
-          className="button button--primary button--small"
-          type="button"
-          onClick={onAddTask}
-        >
-          Add task
-        </button>
-        <button
-          className="button button--ghost button--small"
-          type="button"
-          onClick={onPlanDay}
-        >
-          Plan the day
-        </button>
-      </div>
     </div>
   );
 }

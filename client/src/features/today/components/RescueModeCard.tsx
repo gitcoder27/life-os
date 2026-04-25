@@ -30,6 +30,7 @@ export function RescueModeCard({
   mustWinTask,
   deferredCandidates,
   taskActions,
+  compact = false,
 }: {
   date: string;
   launch: DailyLaunchItem | null;
@@ -79,6 +80,59 @@ export function RescueModeCard({
     ? "One action is protected for the day."
     : "Consider shrinking the day before it slips.";
   const showDefer = isActive && deferredCandidates.length > 1 && taskActions;
+
+  if (compact) {
+    return (
+      <section className={`today-rail-note today-rail-note--reduce${isActive ? " today-rail-note--active" : " today-rail-note--suggested"}`}>
+        <div className="today-rail-note__header">
+          <span className="today-rail-note__label">{eyebrow}</span>
+          <div className="today-rail-note__actions">
+            {!isActive ? (
+              <button
+                className="today-rail-link today-rail-link--strong"
+                type="button"
+                disabled={upsertLaunchMutation.isPending}
+                onClick={() => void handleActivate()}
+              >
+                {upsertLaunchMutation.isPending ? "Saving..." : "Reduce"}
+              </button>
+            ) : (
+              <>
+                {showDefer ? (
+                  <button
+                    className="today-rail-link"
+                    type="button"
+                    disabled={taskActions.isPending}
+                    onClick={() =>
+                      void taskActions.moveTasksToTomorrow(deferredCandidates.map((task) => task.id))
+                    }
+                  >
+                    Defer {deferredCandidates.length}
+                  </button>
+                ) : null}
+                <button
+                  className="today-rail-link"
+                  type="button"
+                  disabled={upsertLaunchMutation.isPending}
+                  onClick={() => void handleExit()}
+                >
+                  {upsertLaunchMutation.isPending ? "Saving..." : "Full plan"}
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+        <div className="today-rail-note__body">
+          <strong className="today-rail-note__title">
+            {isActive ? "Reduced plan is active." : "Shrink the day?"}
+          </strong>
+          <span className="today-rail-note__detail">
+            {protectedAction ? `Keep: ${protectedAction}` : isActive ? reasonLabel : detail}
+          </span>
+        </div>
+      </section>
+    );
+  }
 
   return (
     <section className={`reduced-day-strip${isActive ? " reduced-day-strip--active" : " reduced-day-strip--suggested"}`}>

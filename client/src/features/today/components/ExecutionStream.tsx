@@ -6,7 +6,6 @@ import { formatTimeLabel, type FocusSessionItem, type TaskItem, type LinkedGoal,
 import { CheckIcon, MoreIcon } from "../helpers/icons";
 import type { PlannerExecutionModel } from "../helpers/planner-execution";
 import type { useTaskActions } from "../hooks/useTaskActions";
-import type { DayPhase } from "../helpers/day-phase";
 import { FocusSessionLauncher } from "./FocusSessionLauncher";
 import { StartProtocolSheet } from "./StartProtocolSheet";
 import { StuckFlowSheet } from "./StuckFlowSheet";
@@ -22,21 +21,27 @@ type StreamSection = {
 export function ExecutionStream({
   date,
   executionTasks,
+  overdueTasks = [],
   execution,
   taskActions,
   plannerBlocks,
-  phase,
   onSwitchToPlanner,
   activeFocusSession,
+  mustWinTaskId,
+  selectedTaskId,
+  onSelectTask,
 }: {
   date: string;
   executionTasks: TaskItem[];
+  overdueTasks?: TaskItem[];
   execution: PlannerExecutionModel;
   taskActions: TaskActions;
   plannerBlocks: DayPlannerBlockItem[];
-  phase: DayPhase;
   onSwitchToPlanner: () => void;
   activeFocusSession: FocusSessionItem | null;
+  mustWinTaskId?: string | null;
+  selectedTaskId?: string | null;
+  onSelectTask?: (task: TaskItem) => void;
 }) {
   const [showCompleted, setShowCompleted] = useState(false);
 
@@ -58,10 +63,13 @@ export function ExecutionStream({
   const laterTasks: TaskItem[] = [];
   const unplannedTasks: TaskItem[] = [];
   const completedTasks: TaskItem[] = [];
+  const pendingOverdueTasks = overdueTasks.filter((task) => task.status === "pending");
 
   for (const task of executionTasks) {
     if (task.status === "completed" || task.status === "dropped") {
       completedTasks.push(task);
+    } else if (task.id === mustWinTaskId) {
+      nowTasks.push(task);
     } else if (currentBlockTaskIds.has(task.id)) {
       nowTasks.push(task);
     } else if (taskBlockMap.has(task.id)) {
@@ -79,16 +87,19 @@ export function ExecutionStream({
 
   const sections: StreamSection[] = [];
   if (nowTasks.length > 0) sections.push({ key: "now", label: "Now", tasks: nowTasks });
+  if (pendingOverdueTasks.length > 0) sections.push({ key: "overdue", label: "Overdue", tasks: pendingOverdueTasks });
   if (laterTasks.length > 0) sections.push({ key: "later", label: "Later today", tasks: laterTasks });
   if (unplannedTasks.length > 0) sections.push({ key: "unplanned", label: "Unplanned", tasks: unplannedTasks });
 
-  const totalPending = nowTasks.length + laterTasks.length + unplannedTasks.length;
-  const totalAll = executionTasks.length;
+  const totalAll = executionTasks.length + pendingOverdueTasks.length;
 
   return (
     <section className="execution-stream">
       <div className="execution-stream__header">
-        <h2 className="execution-stream__title">Tasks</h2>
+        <div className="execution-stream__heading">
+          <p className="execution-stream__eyebrow">Today&apos;s work</p>
+          <h2 className="execution-stream__title">Task queue</h2>
+        </div>
         {totalAll > 0 ? (
           <div className="execution-stream__stats">
             <span className="execution-stream__counter">
@@ -121,6 +132,8 @@ export function ExecutionStream({
               taskBlockMap={taskBlockMap}
               onSwitchToPlanner={onSwitchToPlanner}
               activeFocusSession={activeFocusSession}
+              selectedTaskId={selectedTaskId}
+              onSelectTask={onSelectTask}
             />
           ))}
 
@@ -149,6 +162,8 @@ export function ExecutionStream({
                       taskActions={taskActions}
                       blockInfo={null}
                       activeFocusSession={activeFocusSession}
+                      selected={selectedTaskId === task.id}
+                      onSelectTask={onSelectTask}
                     />
                   ))}
                 </div>
@@ -168,6 +183,8 @@ function StreamSectionGroup({
   taskBlockMap,
   onSwitchToPlanner,
   activeFocusSession,
+  selectedTaskId,
+  onSelectTask,
 }: {
   section: StreamSection;
   date: string;
@@ -175,9 +192,12 @@ function StreamSectionGroup({
   taskBlockMap: Map<string, DayPlannerBlockItem>;
   onSwitchToPlanner: () => void;
   activeFocusSession: FocusSessionItem | null;
+  selectedTaskId?: string | null;
+  onSelectTask?: (task: TaskItem) => void;
 }) {
   const isNow = section.key === "now";
   const isUnplanned = section.key === "unplanned";
+  const isOverdue = section.key === "overdue";
 
   return (
     <div className={`execution-stream__section execution-stream__section--${section.key}`}>
@@ -207,6 +227,9 @@ function StreamSectionGroup({
               blockInfo={block}
               highlight={isNow}
               activeFocusSession={activeFocusSession}
+              selected={selectedTaskId === task.id}
+              isOverdue={isOverdue}
+              onSelectTask={onSelectTask}
             />
           );
         })}
@@ -222,6 +245,9 @@ function StreamTaskRow({
   blockInfo,
   highlight = false,
   activeFocusSession,
+  selected = false,
+  isOverdue = false,
+  onSelectTask,
 }: {
   date: string;
   task: TaskItem;
@@ -229,6 +255,9 @@ function StreamTaskRow({
   blockInfo: DayPlannerBlockItem | null;
   highlight?: boolean;
   activeFocusSession: FocusSessionItem | null;
+  selected?: boolean;
+  isOverdue?: boolean;
+  onSelectTask?: (task: TaskItem) => void;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [showReschedule, setShowReschedule] = useState(false);
@@ -247,8 +276,27 @@ function StreamTaskRow({
         "stream-task" +
         (isDone ? " stream-task--done" : "") +
         (isDropped ? " stream-task--dropped" : "") +
-        (highlight ? " stream-task--highlight" : "")
+        (highlight ? " stream-task--highlight" : "") +
+        (selected ? " stream-task--selected" : "") +
+        (isOverdue ? " stream-task--overdue" : "")
       }
+      onClick={(event) => {
+        const target = event.target as HTMLElement;
+        if (target.closest("button,a,input,select,textarea")) {
+          return;
+        }
+        onSelectTask?.(task);
+      }}
+      onKeyDown={(event) => {
+        if (!onSelectTask || (event.key !== "Enter" && event.key !== " ")) {
+          return;
+        }
+
+        event.preventDefault();
+        onSelectTask(task);
+      }}
+      tabIndex={onSelectTask ? 0 : undefined}
+      aria-current={selected ? "true" : undefined}
     >
       {/* Checkbox — the primary "Done" action */}
       <button
@@ -281,6 +329,9 @@ function StreamTaskRow({
             <span className="stream-task__block-badge">
               {formatTimeLabel(blockInfo.startsAt)} · {blockInfo.title || "Block"}
             </span>
+          ) : null}
+          {isOverdue ? (
+            <span className="stream-task__block-badge">Needs recovery</span>
           ) : null}
           {task.goal ? <GoalChip goal={task.goal} /> : null}
         </div>
