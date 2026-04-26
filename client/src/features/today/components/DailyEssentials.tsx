@@ -488,10 +488,11 @@ function EssentialRow({
       type="button"
       onClick={onToggle}
       aria-expanded={expanded}
+      aria-label={`${expanded ? "Collapse" : "Expand"} ${label}: ${value}`}
     >
       <span className="de-row__label">{label}</span>
       <span className="de-row__value">{value}</span>
-      <span className={`de-row__chevron${expanded ? " de-row__chevron--open" : ""}`}>▸</span>
+      <span className={`de-row__chevron${expanded ? " de-row__chevron--open" : ""}`} aria-hidden="true">▸</span>
     </button>
   );
 }

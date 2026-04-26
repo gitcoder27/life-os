@@ -225,24 +225,6 @@
   font-weight: 600;
 }
 
-.ghq-overview-flowbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-  padding: 0.9rem 1rem;
-  border-radius: var(--r);
-  border: 1px solid var(--border);
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.015));
-}
-
-.ghq-overview-flowbar__copy {
-  margin: 0;
-  color: var(--text-secondary);
-  font-size: var(--fs-small);
-  line-height: 1.5;
-}
-
 /* ── Overview Workspace ── */
 
 .ghq-overview {

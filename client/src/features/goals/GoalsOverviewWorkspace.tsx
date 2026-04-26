@@ -401,19 +401,6 @@ export function GoalsOverviewWorkspace({
         onChangeSort={setSortMode}
       />
 
-      <div className="ghq-overview-flowbar">
-        <p className="ghq-overview-flowbar__copy">
-          Overview is for review. Use Plan to edit hierarchy, month, and week alignment.
-        </p>
-        <button
-          className="button button--primary button--small"
-          type="button"
-          onClick={() => onSwitchToPlan(selectedGoalId ?? weeklyPlanGoalId ?? monthlyPlanGoalId)}
-        >
-          Open Plan
-        </button>
-      </div>
-
       {/* Main layout */}
       <div className="ghq-overview__body">
         <div className="ghq-overview__list">

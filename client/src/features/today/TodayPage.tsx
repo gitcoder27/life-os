@@ -19,7 +19,6 @@ import { DayNotes } from "./components/DayNotes";
 import { TodayTaskCaptureSheet } from "./components/TodayTaskCaptureSheet";
 import { DailyLaunchCard } from "./components/DailyLaunchCard";
 import { PreLaunchModeNotice } from "./components/PreLaunchModeNotice";
-import { RescueModeCard } from "./components/RescueModeCard";
 import { buildPlannerExecutionModel } from "./helpers/planner-execution";
 import { getDayPhase } from "./helpers/day-phase";
 import { useTodayData } from "./hooks/useTodayData";
@@ -466,12 +465,7 @@ export function TodayPage({ routeMode }: { routeMode?: "execute" | "plan" }) {
     (p) => p.status === "pending" && p.title.trim(),
   ).length;
   const pendingTaskCount = data.executionTasks.filter((t) => t.status === "pending").length;
-  const isRescueMode = data.launch?.dayMode === "rescue" || data.launch?.dayMode === "recovery";
-  const rescueDeferredCandidates = data.executionTasks.filter(
-    (task) => task.status === "pending" && task.id !== data.mustWinTask?.id,
-  );
   const launchCompleted = Boolean(data.launch?.completedAt);
-  const showRescueSupport = launchCompleted && (Boolean(data.rescueSuggestion) || isRescueMode);
   const todayLayoutStyle = {
     "--today-top-rail-height": `${topRailHeight}px`,
     "--today-sticky-offset": `${stickyTop}px`,
@@ -607,27 +601,13 @@ export function TodayPage({ routeMode }: { routeMode?: "execute" | "plan" }) {
                   />
 
                   <div className="today-workbench__support">
-                    {showRescueSupport ? (
-                      <RescueModeCard
-                        date={data.today}
-                        launch={data.launch}
-                        suggestion={data.rescueSuggestion}
-                        mustWinTask={data.mustWinTask}
-                        deferredCandidates={rescueDeferredCandidates}
-                        taskActions={taskActions}
-                        compact
-                      />
-                    ) : null}
-
-                    {!isRescueMode ? (
-                      <GoalNudges
-                        date={data.today}
-                        nudges={data.goalNudges}
-                        onAdd={handleAddGoalNudge}
-                        isAdding={createGoalTaskMutation.isPending}
-                        compact
-                      />
-                    ) : null}
+                    <GoalNudges
+                      date={data.today}
+                      nudges={data.goalNudges}
+                      onAdd={handleAddGoalNudge}
+                      isAdding={createGoalTaskMutation.isPending}
+                      compact
+                    />
 
                     <DailyEssentials
                       currentDay={data.currentDay}

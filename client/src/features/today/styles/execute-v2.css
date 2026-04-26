@@ -139,68 +139,6 @@
   color: var(--text-tertiary);
 }
 
-.reduced-day-strip {
-  display: grid;
-  grid-template-columns: minmax(0, 1.2fr) minmax(220px, 0.9fr) auto;
-  align-items: center;
-  gap: 0.85rem;
-  padding: 0.75rem 0.95rem;
-  border: 1px solid rgba(93, 184, 106, 0.16);
-  border-radius: var(--r-lg);
-  background: linear-gradient(180deg, rgba(93, 184, 106, 0.07), rgba(255, 255, 255, 0.02));
-  box-shadow: var(--shadow-sm);
-}
-
-.reduced-day-strip__copy {
-  display: flex;
-  flex-direction: column;
-  gap: 0.1rem;
-  min-width: 0;
-}
-
-.reduced-day-strip__eyebrow,
-.reduced-day-strip__focus-label {
-  font-size: var(--fs-micro);
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--positive);
-}
-
-.reduced-day-strip__title,
-.reduced-day-strip__focus-value {
-  color: var(--text);
-  font-size: var(--fs-body);
-}
-
-.reduced-day-strip__detail {
-  color: var(--text-tertiary);
-  font-size: var(--fs-small);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.reduced-day-strip__focus {
-  display: flex;
-  flex-direction: column;
-  gap: 0.15rem;
-  min-width: 0;
-  padding: 0.5rem 0.65rem;
-  border-radius: var(--r-sm);
-  background: rgba(255, 255, 255, 0.035);
-}
-
-.reduced-day-strip__focus-value {
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.reduced-day-strip__actions {
-  display: flex;
-  justify-content: flex-end;
-}
-
 /* ── Command Bar ────────────────────────────────────── */
 
 .command-bar {
@@ -1746,16 +1684,6 @@
 
   .today-status-grid {
     grid-template-columns: 1fr;
-  }
-
-  .reduced-day-strip {
-    grid-template-columns: 1fr;
-    align-items: flex-start;
-  }
-
-  .reduced-day-strip__detail,
-  .reduced-day-strip__focus-value {
-    white-space: normal;
   }
 
   .command-bar__left {

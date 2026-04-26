@@ -61,10 +61,10 @@ export function GoalNudges({
     const waitLabel = visible.length > 1 ? `+${visible.length - 1} more` : null;
 
     return (
-      <section className="today-goal-nudges today-goal-nudges--compact" aria-label="Goal momentum suggestion">
+      <section className="today-goal-nudges today-goal-nudges--compact" aria-label="Goal suggestion">
         <div className="today-rail-note today-rail-note--goal">
           <div className="today-rail-note__header">
-            <span className="today-rail-note__label">Goal momentum</span>
+            <span className="today-rail-note__label">Goal suggestion</span>
             {waitLabel ? (
               <span className="today-rail-note__count">{waitLabel}</span>
             ) : null}
@@ -74,7 +74,7 @@ export function GoalNudges({
               {leadNudge.goal.title}
             </Link>
             <span className="today-rail-note__detail">
-              {healthLabel(leadNudge.health)} · {leadNudge.suggestedPriorityTitle}
+              {healthLabel(leadNudge.health)}. Add {leadNudge.suggestedPriorityTitle} today.
             </span>
           </div>
           <div className="today-rail-note__actions">

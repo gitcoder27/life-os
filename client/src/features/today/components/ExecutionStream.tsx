@@ -31,6 +31,7 @@ type StreamSection = {
   key: string;
   label: string;
   tasks: TaskItem[];
+  note?: string;
 };
 
 type DragHandleProps = {
@@ -109,7 +110,14 @@ export function ExecutionStream({
 
   const sections: StreamSection[] = [];
   if (nowTasks.length > 0) sections.push({ key: "now", label: "Now", tasks: nowTasks });
-  if (pendingOverdueTasks.length > 0) sections.push({ key: "overdue", label: "Overdue", tasks: pendingOverdueTasks });
+  if (pendingOverdueTasks.length > 0) {
+    sections.push({
+      key: "overdue",
+      label: "Overdue",
+      tasks: pendingOverdueTasks,
+      note: "Review what still matters, then move or complete it.",
+    });
+  }
   if (laterTasks.length > 0) sections.push({ key: "later", label: "Later today", tasks: laterTasks });
   if (unplannedTasks.length > 0) sections.push({ key: "unplanned", label: "Unplanned", tasks: unplannedTasks });
 
@@ -120,16 +128,18 @@ export function ExecutionStream({
       <div className="execution-stream__header">
         <div className="execution-stream__heading">
           <p className="execution-stream__eyebrow">Today&apos;s work</p>
-          <h2 className="execution-stream__title">Task queue</h2>
-        </div>
-        {totalAll > 0 ? (
-          <div className="execution-stream__stats">
-            <span className="execution-stream__counter">
-              {completedTasks.length}/{totalAll} done
-            </span>
-            <MiniProgressRing percent={totalAll > 0 ? (completedTasks.length / totalAll) * 100 : 0} />
+          <div className="execution-stream__title-row">
+            <h2 className="execution-stream__title">Task queue</h2>
+            {totalAll > 0 ? (
+              <div className="execution-stream__stats">
+                <span className="execution-stream__counter">
+                  {completedTasks.length}/{totalAll} done
+                </span>
+                <MiniProgressRing percent={totalAll > 0 ? (completedTasks.length / totalAll) * 100 : 0} />
+              </div>
+            ) : null}
           </div>
-        ) : null}
+        </div>
       </div>
 
       {sections.length === 0 && completedTasks.length === 0 ? (
@@ -261,6 +271,9 @@ function StreamSectionGroup({
           </button>
         ) : null}
       </div>
+      {section.note ? (
+        <p className="execution-stream__section-note">{section.note}</p>
+      ) : null}
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
         <SortableContext items={section.tasks.map((task) => task.id)} strategy={verticalListSortingStrategy}>
           <div className="execution-stream__task-list">
@@ -441,9 +454,6 @@ function StreamTaskRow({
             <span className="stream-task__block-badge">
               {formatTimeLabel(blockInfo.startsAt)} · {blockInfo.title || "Block"}
             </span>
-          ) : null}
-          {isOverdue ? (
-            <span className="stream-task__block-badge">Needs recovery</span>
           ) : null}
           {task.goal ? <GoalChip goal={task.goal} /> : null}
         </div>

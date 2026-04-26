@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 
 import {
@@ -51,11 +51,39 @@ export function TaskInspectorPanel({
   const [protocolOpen, setProtocolOpen] = useState(false);
   const [stuckOpen, setStuckOpen] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
+  const moreRef = useRef<HTMLDivElement>(null);
   const isBusy = taskActions.isPending || updateTaskMutation.isPending;
 
   useEffect(() => {
     setMoreOpen(false);
   }, [task?.id]);
+
+  useEffect(() => {
+    if (!moreOpen) {
+      return;
+    }
+
+    function handlePointerDown(event: PointerEvent) {
+      if (moreRef.current?.contains(event.target as Node)) {
+        return;
+      }
+
+      setMoreOpen(false);
+    }
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setMoreOpen(false);
+      }
+    }
+
+    document.addEventListener("pointerdown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [moreOpen]);
 
   if (!task) {
     return (
@@ -172,7 +200,7 @@ export function TaskInspectorPanel({
             </button>
           ) : null}
 
-          <div className="task-inspector__more">
+          <div className="task-inspector__more" ref={moreRef}>
             <button
               className="task-inspector__text-action"
               type="button"
