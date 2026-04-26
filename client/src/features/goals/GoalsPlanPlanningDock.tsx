@@ -19,12 +19,6 @@ const getLanePrefix = (lane: PlanningLane) => {
   return "T";
 };
 
-const getLaneTitle = (lane: PlanningLane) => {
-  if (lane === "month") return "This month";
-  if (lane === "week") return "This week";
-  return "Today";
-};
-
 type DockItem = {
   id: string;
   slot: PlanningSlot;
@@ -213,13 +207,13 @@ const PlanningDockSlot = ({
         {slot}
       </span>
       <div className="ghq-plan-dock__slot-content">
-        <strong>{item?.title ?? (selectedGoal ? "Add selected goal" : "Empty slot")}</strong>
+        <strong>{item?.title ?? (selectedGoal ? "Use this slot" : "Empty")}</strong>
         <span>
           {item
-            ? "Focus item"
+            ? "Committed focus"
             : selectedGoal
-              ? `Use ${selectedGoal.title} here`
-              : "Select a goal to plan it"}
+              ? selectedGoal.title
+              : `${prefix}${slot} available`}
         </span>
       </div>
     </button>
@@ -260,124 +254,126 @@ export const GoalsPlanPlanningDock = ({
     { lane: "month", items: monthItems },
     { lane: "week", items: weekItems },
   ];
+  const selectedMonthSlot = selectedGoal
+    ? monthItems.find((item) => item.goalId === selectedGoal.id)?.slot ?? null
+    : null;
+  const selectedWeekSlot = selectedGoal
+    ? weekItems.find((item) => item.goalId === selectedGoal.id)?.slot ?? null
+    : null;
 
   return (
     <section className={`ghq-plan-dock${isOpen ? " ghq-plan-dock--open" : ""}`}>
       <div className="ghq-plan-dock__summary">
         <div className="ghq-plan-dock__summary-copy">
-          <span className="ghq-plan-dock__eyebrow">Focus board</span>
+          <span className="ghq-plan-dock__eyebrow">Month & Week Focus</span>
           <strong>
             Month {monthItems.length}/3 · Week {weekItems.length}/3
           </strong>
           <span>
             {selectedGoal
-              ? `${selectedGoal.title} is selected for planning.`
-              : "Build the tree first, then choose what deserves month or week focus."}
+              ? `Selected: ${selectedGoal.title}`
+              : "Select a goal when you are ready to commit it to this month or this week."}
           </span>
         </div>
         <div className="ghq-plan-dock__summary-actions">
-          <button className="button button--ghost button--small" type="button" onClick={onToggleOpen}>
-            {isOpen ? "Hide focus board" : "Open focus board"}
-          </button>
-          {isOpen ? (
-            <button className="button button--ghost button--small" type="button" onClick={onClose}>
-              Close
-            </button>
+          {selectedGoal ? (
+            <>
+              <button className="button button--primary button--small" type="button" onClick={() => onAddSelectedGoal("month")}>
+                {selectedMonthSlot ? `Open M${selectedMonthSlot}` : "Add to month"}
+              </button>
+              <button className="button button--ghost button--small" type="button" onClick={() => onAddSelectedGoal("week")}>
+                {selectedWeekSlot ? `Open W${selectedWeekSlot}` : "Add to week"}
+              </button>
+            </>
           ) : null}
+          <button className="button button--ghost button--small" type="button" onClick={isOpen ? onClose : onToggleOpen}>
+            {isOpen ? "Hide slots" : "Show slots"}
+          </button>
         </div>
       </div>
 
       {isOpen ? (
         <div className="ghq-plan-dock__body">
-          {weekPlan ? (
-            <WeeklyCapacityCard
-              weekStartDate={weekPlan.startDate}
-              capacityProfile={weekPlan.capacityProfile}
-              capacityAssessment={weekPlan.capacityAssessment}
-              capacityProgress={weekPlan.capacityProgress}
-            />
-          ) : null}
-
           {selectedGoal ? (
-            <>
-              <div className="ghq-plan-dock__header">
-                <div>
-                  <h3>{selectedGoal.title}</h3>
-                  <p>Choose whether this goal belongs in this month or this week. Keep the list small and intentional.</p>
-                </div>
+            <div className="ghq-plan-dock__commitment">
+              <div>
+                <span className="ghq-plan-dock__commitment-label">Planning</span>
+                <h3>{selectedGoal.title}</h3>
               </div>
-
-              <div className="ghq-plan-dock__lanes">
-                {laneDefinitions.map(({ lane, items }) => {
-                  const existingSlot = items.find((item) => item.goalId === selectedGoal.id)?.slot ?? null;
-
-                  return (
-                    <section key={lane} className="ghq-plan-dock__lane">
-                      <div className="ghq-plan-dock__lane-header">
-                        <div>
-                          <h4>{getLaneTitle(lane)}</h4>
-                          <span>{getLanePrefix(lane)}1-{getLanePrefix(lane)}3</span>
-                        </div>
-                        <button
-                          className="button button--ghost button--small"
-                          type="button"
-                          onClick={() => onAddSelectedGoal(lane)}
-                        >
-                          {existingSlot ? `Open ${getLanePrefix(lane)}${existingSlot}` : `Add to ${lane}`}
-                        </button>
-                      </div>
-                      <div className="ghq-plan-dock__slots">
-                        {planningSlots.map((slot) => (
-                          <PlanningDockSlot
-                            key={`${lane}-${slot}`}
-                            lane={lane}
-                            slot={slot}
-                            item={items.find((item) => item.slot === slot) ?? null}
-                            activeGoals={activeGoals}
-                            selectedGoal={selectedGoal}
-                            selectedPlanningSelection={selectedPlanningSelection}
-                            planningDraft={planningDraft}
-                            planningReplaceState={planningReplaceState}
-                            laneItems={items}
-                            onSelectSlot={onSelectSlot}
-                            onDropGoalToSlot={onDropGoalToSlot}
-                            onPlanningDraftChange={onPlanningDraftChange}
-                            onSavePlanningDraft={onSavePlanningDraft}
-                            onCancelPlanningDraft={onCancelPlanningDraft}
-                            onPlanningReplaceAction={onPlanningReplaceAction}
-                            onCancelPlanningReplace={onCancelPlanningReplace}
-                          />
-                        ))}
-                      </div>
-                    </section>
-                  );
-                })}
-              </div>
-
-              {planningError ? (
-                <div className="inline-state inline-state--error">{planningError}</div>
-              ) : null}
-
-              {selectedPlanningSelection && selectedPlanningItem ? (
-                <GoalsPlanPlanningEditor
-                  lane={selectedPlanningSelection.lane}
-                  item={selectedPlanningItem}
-                  activeGoals={activeGoals}
-                  getDuplicateCount={(goalId) => getDuplicateCount(selectedPlanningSelection.lane as Exclude<PlanningLane, "today">, goalId, selectedPlanningItem.slot)}
-                  availableSlots={getAvailableSlots(selectedPlanningSelection.lane as Exclude<PlanningLane, "today">, selectedPlanningItem.slot)}
-                  isPending={isLanePending(selectedPlanningSelection.lane as Exclude<PlanningLane, "today">)}
-                  errorMessage={getLaneErrorMessage(selectedPlanningSelection.lane as Exclude<PlanningLane, "today">)}
-                  onSave={onSaveSelectedItem}
-                  onRemove={onRemoveSelectedItem}
-                  onJumpToGoal={onJumpToGoal}
-                />
-              ) : null}
-            </>
+              <p>Choose a month outcome for bigger direction, or a week priority when this is ready for action.</p>
+            </div>
           ) : (
             <div className="ghq-plan-dock__empty">
-              <p>Select a goal from the graph to decide whether it belongs in this month or this week.</p>
+              <p>Select a goal on the canvas, then place it into a month or week slot.</p>
             </div>
           )}
+
+          <div className="ghq-plan-dock__lanes">
+            {laneDefinitions.map(({ lane, items }) => {
+              const isWeekLane = lane === "week";
+
+              return (
+                <section key={lane} className="ghq-plan-dock__lane">
+                  <div className="ghq-plan-dock__lane-header">
+                    <div>
+                      <h4>{lane === "month" ? "Monthly outcomes" : "Weekly priorities"}</h4>
+                      <span>{getLanePrefix(lane)}1-{getLanePrefix(lane)}3 · choose up to 3</span>
+                    </div>
+                  </div>
+                  <div className="ghq-plan-dock__slots">
+                    {planningSlots.map((slot) => (
+                      <PlanningDockSlot
+                        key={`${lane}-${slot}`}
+                        lane={lane}
+                        slot={slot}
+                        item={items.find((item) => item.slot === slot) ?? null}
+                        activeGoals={activeGoals}
+                        selectedGoal={selectedGoal}
+                        selectedPlanningSelection={selectedPlanningSelection}
+                        planningDraft={planningDraft}
+                        planningReplaceState={planningReplaceState}
+                        laneItems={items}
+                        onSelectSlot={onSelectSlot}
+                        onDropGoalToSlot={onDropGoalToSlot}
+                        onPlanningDraftChange={onPlanningDraftChange}
+                        onSavePlanningDraft={onSavePlanningDraft}
+                        onCancelPlanningDraft={onCancelPlanningDraft}
+                        onPlanningReplaceAction={onPlanningReplaceAction}
+                        onCancelPlanningReplace={onCancelPlanningReplace}
+                      />
+                    ))}
+                  </div>
+                  {isWeekLane && weekPlan ? (
+                    <WeeklyCapacityCard
+                      weekStartDate={weekPlan.startDate}
+                      capacityProfile={weekPlan.capacityProfile}
+                      capacityAssessment={weekPlan.capacityAssessment}
+                      capacityProgress={weekPlan.capacityProgress}
+                    />
+                  ) : null}
+                </section>
+              );
+            })}
+          </div>
+
+          {planningError ? (
+            <div className="inline-state inline-state--error">{planningError}</div>
+          ) : null}
+
+          {selectedPlanningSelection && selectedPlanningItem ? (
+            <GoalsPlanPlanningEditor
+              lane={selectedPlanningSelection.lane}
+              item={selectedPlanningItem}
+              activeGoals={activeGoals}
+              getDuplicateCount={(goalId) => getDuplicateCount(selectedPlanningSelection.lane as Exclude<PlanningLane, "today">, goalId, selectedPlanningItem.slot)}
+              availableSlots={getAvailableSlots(selectedPlanningSelection.lane as Exclude<PlanningLane, "today">, selectedPlanningItem.slot)}
+              isPending={isLanePending(selectedPlanningSelection.lane as Exclude<PlanningLane, "today">)}
+              errorMessage={getLaneErrorMessage(selectedPlanningSelection.lane as Exclude<PlanningLane, "today">)}
+              onSave={onSaveSelectedItem}
+              onRemove={onRemoveSelectedItem}
+              onJumpToGoal={onJumpToGoal}
+            />
+          ) : null}
         </div>
       ) : null}
     </section>

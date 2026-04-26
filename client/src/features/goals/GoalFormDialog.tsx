@@ -55,7 +55,6 @@ export function goalToFormData(goal: GoalOverviewItem): GoalFormData {
 
 function hasAdvancedDetails(form: GoalFormData) {
   return Boolean(
-    form.horizonId ||
     form.why.trim() ||
     form.targetDate ||
     form.notes.trim() ||
@@ -101,11 +100,8 @@ export function GoalFormDialog({
     activeDomains.find((domain) => domain.systemKey === "unassigned")
     ?? activeDomains[0]
     ?? null;
-  const fallbackDomain = activeDomains.find((domain) => domain.id === form.domainId) ?? defaultDomain;
   const effectiveDomainId = form.domainId || defaultDomain?.id || "";
-  const [advancedOpen, setAdvancedOpen] = useState(
-    editing || !fallbackDomain || hasAdvancedDetails(form),
-  );
+  const [advancedOpen, setAdvancedOpen] = useState(editing || hasAdvancedDetails(form));
   const canSubmit = Boolean(form.title.trim() && effectiveDomainId);
 
   return (
@@ -128,18 +124,33 @@ export function GoalFormDialog({
         />
       </label>
 
-      {!editing && (
-        <div className="ghq-form__quick-note">
-          <p>
-            Capture the goal first. You can add planning structure and context now or refine it later.
-          </p>
-          {fallbackDomain ? (
-            <span className="tag tag--neutral">Default domain: {fallbackDomain.name}</span>
-          ) : (
-            <span className="tag tag--warning">Create a domain in Settings before saving goals.</span>
-          )}
-        </div>
-      )}
+      <div className="ghq-form__row">
+        <label className="field">
+          <span>Domain</span>
+          <select
+            value={effectiveDomainId}
+            onChange={(e) => onChangeForm((p) => ({ ...p, domainId: e.target.value }))}
+          >
+            <option value="">Select domain</option>
+            {activeDomains.map((d) => (
+              <option key={d.id} value={d.id}>{d.name}</option>
+            ))}
+          </select>
+        </label>
+
+        <label className="field">
+          <span>Horizon</span>
+          <select
+            value={form.horizonId}
+            onChange={(e) => onChangeForm((p) => ({ ...p, horizonId: e.target.value }))}
+          >
+            <option value="">No horizon</option>
+            {activeHorizons.map((h) => (
+              <option key={h.id} value={h.id}>{h.name}</option>
+            ))}
+          </select>
+        </label>
+      </div>
 
       {!editing && (
         <button
@@ -153,34 +164,6 @@ export function GoalFormDialog({
 
       {(editing || advancedOpen) && (
         <div className="ghq-form__advanced">
-          <div className="ghq-form__row">
-            <label className="field">
-              <span>Domain</span>
-              <select
-                value={form.domainId}
-                onChange={(e) => onChangeForm((p) => ({ ...p, domainId: e.target.value }))}
-              >
-                <option value="">Select domain</option>
-                {activeDomains.map((d) => (
-                  <option key={d.id} value={d.id}>{d.name}</option>
-                ))}
-              </select>
-            </label>
-
-            <label className="field">
-              <span>Horizon</span>
-              <select
-                value={form.horizonId}
-                onChange={(e) => onChangeForm((p) => ({ ...p, horizonId: e.target.value }))}
-              >
-                <option value="">No horizon</option>
-                {activeHorizons.map((h) => (
-                  <option key={h.id} value={h.id}>{h.name}</option>
-                ))}
-              </select>
-            </label>
-          </div>
-
           <label className="field">
             <span>Engagement</span>
             <select

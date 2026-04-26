@@ -561,26 +561,6 @@
   background: var(--panel-elevated);
 }
 
-.ghq-form__quick-note {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.75rem;
-  flex-wrap: wrap;
-  padding: 0.65rem 0.8rem;
-  border-radius: var(--r-xs);
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.05);
-}
-
-.ghq-form__quick-note p {
-  margin: 0;
-  color: var(--text-secondary);
-  line-height: 1.5;
-  flex: 1;
-  min-width: 14rem;
-}
-
 .ghq-form__details-toggle {
   align-self: flex-start;
 }
@@ -2830,11 +2810,12 @@
   border: 1px solid var(--border);
   border-radius: var(--r);
   background:
-    linear-gradient(180deg, rgba(21, 19, 15, 0.96), rgba(17, 16, 13, 0.98));
+    linear-gradient(180deg, rgba(21, 19, 15, 0.92), rgba(17, 16, 13, 0.96));
   display: flex;
   flex-direction: column;
   gap: 0;
   z-index: 3;
+  overflow: hidden;
 }
 
 .ghq-plan-dock__summary {
@@ -2842,19 +2823,19 @@
   justify-content: space-between;
   gap: 1rem;
   align-items: center;
-  padding: 0.9rem 1rem;
+  padding: 0.95rem 1rem;
 }
 
 .ghq-plan-dock__summary-copy {
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 0.15rem;
+  gap: 0.18rem;
 }
 
 .ghq-plan-dock__summary-copy strong {
-  font-size: var(--fs-small);
-  color: var(--text-secondary);
+  font-size: 1rem;
+  color: var(--text);
 }
 
 .ghq-plan-dock__summary-copy span:last-child {
@@ -2867,22 +2848,27 @@
   gap: 0.45rem;
   flex-wrap: wrap;
   justify-content: flex-end;
+  align-items: center;
 }
 
 .ghq-plan-dock__body {
   display: flex;
   flex-direction: column;
-  gap: 1rem;
-  padding: 0 1rem 1rem;
+  gap: 1.1rem;
+  padding: 1rem;
   border-top: 1px solid rgba(255, 255, 255, 0.04);
+  background: rgba(255, 255, 255, 0.012);
 }
 
-.ghq-plan-dock__header {
+.ghq-plan-dock__commitment {
   display: flex;
   justify-content: space-between;
   gap: 1rem;
-  align-items: flex-start;
-  padding-top: 1rem;
+  align-items: center;
+  padding: 0.85rem 0.95rem;
+  border: 1px solid rgba(217, 153, 58, 0.16);
+  border-radius: var(--r-sm);
+  background: linear-gradient(135deg, rgba(217, 153, 58, 0.08), rgba(255, 255, 255, 0.02));
 }
 
 .ghq-plan-dock__eyebrow {
@@ -2895,26 +2881,39 @@
   text-transform: uppercase;
 }
 
-.ghq-plan-dock__header h3 {
+.ghq-plan-dock__commitment h3 {
   margin: 0;
   font-size: 1rem;
+  color: var(--text);
 }
 
-.ghq-plan-dock__header p {
-  margin: 0.15rem 0 0;
+.ghq-plan-dock__commitment p {
+  max-width: 42rem;
+  margin: 0;
   color: var(--text-tertiary);
   font-size: var(--fs-small);
+  line-height: 1.55;
+}
+
+.ghq-plan-dock__commitment-label {
+  display: block;
+  margin-bottom: 0.12rem;
+  color: var(--accent);
+  font-size: var(--fs-micro);
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 
 .ghq-plan-dock__lanes {
   display: grid;
-  gap: 0.85rem;
+  gap: 1rem;
 }
 
 .ghq-plan-dock__lane {
   display: flex;
   flex-direction: column;
-  gap: 0.45rem;
+  gap: 0.6rem;
 }
 
 .ghq-plan-dock__lane-header {
@@ -2926,7 +2925,8 @@
 
 .ghq-plan-dock__lane-header h4 {
   margin: 0;
-  font-size: var(--fs-small);
+  font-size: 0.98rem;
+  color: var(--text);
 }
 
 .ghq-plan-dock__lane-header span {
@@ -2941,20 +2941,21 @@
 .ghq-plan-dock__slots {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 0.7rem;
+  gap: 0.6rem;
 }
 
 .ghq-plan-dock__slot {
   width: 100%;
-  min-height: 92px;
-  padding: 0.7rem 0.8rem;
+  min-height: 78px;
+  padding: 0.65rem 0.75rem;
   border-radius: var(--r-sm);
   border: 1px solid var(--border);
-  background: var(--panel-elevated);
+  background: rgba(255, 255, 255, 0.025);
   display: flex;
   gap: 0.6rem;
   cursor: pointer;
   transition: all var(--dur-fast) var(--ease);
+  text-align: left;
 }
 
 .ghq-plan-dock__slot:hover {
@@ -2964,7 +2965,7 @@
 
 .ghq-plan-dock__slot--empty {
   border-style: dashed;
-  opacity: 0.86;
+  opacity: 0.78;
 }
 
 .ghq-plan-dock__slot--filled,
@@ -2991,7 +2992,8 @@
 .ghq-plan-dock__slot-badge {
   flex-shrink: 0;
   margin-top: 0.1rem;
-  padding: 0.16rem 0.38rem;
+  min-width: 2rem;
+  padding: 0.16rem 0.3rem;
   border-radius: var(--r-xs);
   background: rgba(255, 255, 255, 0.06);
   color: var(--text-tertiary);
@@ -2999,6 +3001,7 @@
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
+  text-align: center;
 }
 
 .ghq-plan-dock__slot-content {
@@ -3012,6 +3015,7 @@
 .ghq-plan-dock__slot-content strong {
   font-size: var(--fs-small);
   color: var(--text-secondary);
+  line-height: 1.3;
 }
 
 .ghq-plan-dock__slot-content span,
@@ -3041,9 +3045,15 @@
 }
 
 .ghq-plan-dock__empty {
-  padding: 1.1rem 0 0.35rem;
+  padding: 0.9rem 1rem;
+  border: 1px dashed rgba(255, 255, 255, 0.08);
+  border-radius: var(--r-sm);
   color: var(--text-tertiary);
   font-size: var(--fs-small);
+}
+
+.ghq-plan-dock__empty p {
+  margin: 0;
 }
 
 /* ── Weekly Capacity Card ── */
