@@ -149,7 +149,7 @@ export const registerPlanningPlanRoutes: FastifyPluginAsync = async (app) => {
           userId: user.id,
           scheduledForDate: cycleStartDate,
         },
-        orderBy: [{ status: "asc" }, { createdAt: "asc" }],
+        orderBy: [{ status: "asc" }, { todaySortOrder: "asc" }, { createdAt: "asc" }, { id: "asc" }],
         include: planningTaskInclude,
       }),
       app.prisma.goal.findMany({

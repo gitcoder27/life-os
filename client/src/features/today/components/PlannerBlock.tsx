@@ -57,6 +57,7 @@ export function PlannerBlock({
   onEditBlock,
   onDeleteBlock,
   onRemoveTask,
+  onToggleTaskStatus,
   onReorderTasks,
   onNudgeDuration,
   onDuplicateBlock,
@@ -95,6 +96,7 @@ export function PlannerBlock({
   }) => Promise<unknown> | void;
   onDeleteBlock: () => Promise<unknown> | void;
   onRemoveTask: (taskId: string) => void;
+  onToggleTaskStatus: (taskId: string, status: TaskItem["status"]) => void;
   onReorderTasks: (taskIds: string[]) => void;
   onNudgeDuration: (direction: -1 | 1) => void;
   onDuplicateBlock: () => void;
@@ -893,6 +895,12 @@ export function PlannerBlock({
                     onMoveTaskToBlock(bt.taskId, targetBlock);
                     setMovingTaskId(null);
                   }}
+                  onToggleStatus={() =>
+                    onToggleTaskStatus(
+                      bt.taskId,
+                      bt.task.status === "completed" ? "pending" : "completed",
+                    )
+                  }
                   onRemove={() => onRemoveTask(bt.taskId)}
                 />
               ))}
@@ -918,6 +926,7 @@ function SortablePlannerTaskRow({
   currentBlockId,
   onToggleMovePicker,
   onMoveToBlock,
+  onToggleStatus,
   onRemove,
 }: {
   item: DayPlannerBlockItem["tasks"][number];
@@ -929,6 +938,7 @@ function SortablePlannerTaskRow({
   currentBlockId: string;
   onToggleMovePicker: () => void;
   onMoveToBlock: (targetBlock: DayPlannerBlockItem) => void;
+  onToggleStatus: () => void;
   onRemove: () => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
@@ -959,9 +969,15 @@ function SortablePlannerTaskRow({
         ) : (
           <span className="planner-block__task-handle planner-block__task-handle--static" />
         )}
-        <span className="planner-block__task-check">
+        <button
+          className="planner-block__task-check"
+          type="button"
+          onClick={onToggleStatus}
+          disabled={readOnly || isPending}
+          aria-label={item.task.status === "completed" ? "Reopen task" : "Mark task complete"}
+        >
           {item.task.status === "completed" ? <CheckIcon /> : null}
-        </span>
+        </button>
         <span className="planner-block__task-title">{item.task.title}</span>
         {!readOnly ? (
           <div className="planner-block__task-actions">

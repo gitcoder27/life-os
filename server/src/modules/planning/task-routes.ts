@@ -7,6 +7,7 @@ import type {
   CreateTaskRequest,
   LogTaskStuckRequest,
   PlanningTaskItem,
+  ReorderTasksRequest,
   TaskMutationResponse,
   TasksResponse,
   UpdateTaskRequest,
@@ -48,6 +49,7 @@ import {
   commitTaskSchema,
   createTaskSchema,
   logTaskStuckSchema,
+  reorderTasksSchema,
   taskListQuerySchema,
   updateTaskSchema,
 } from "./planning-schemas.js";
@@ -146,6 +148,29 @@ function buildTaskProtocolData(
   };
 }
 
+async function getNextTodaySortOrder(
+  tx: Prisma.TransactionClient,
+  userId: string,
+  scheduledForDate: Date | null,
+) {
+  if (!scheduledForDate) {
+    return 0;
+  }
+
+  const lastTask = await tx.task.findFirst({
+    where: {
+      userId,
+      scheduledForDate,
+    },
+    orderBy: [{ todaySortOrder: "desc" }, { createdAt: "desc" }, { id: "desc" }],
+    select: {
+      todaySortOrder: true,
+    },
+  });
+
+  return (lastTask?.todaySortOrder ?? -1) + 1;
+}
+
 function getBulkInboxZeroMutationSource(action: BulkUpdateTasksRequest["action"]) {
   switch (action.type) {
     case "schedule":
@@ -172,20 +197,22 @@ async function carryForwardTask(
   },
 ) {
   const { hasPlannerAssignment, targetDate, task, timezone, userId } = input;
+  const targetScheduledForDate = parseIsoDate(targetDate);
 
   if (task.recurrenceRuleId) {
     const recurringTask = await applyRecurringTaskCarryForward(tx, userId, task, targetDate);
     if (recurringTask) {
       if (hasPlannerAssignment && recurringTask.id !== task.id) {
-        return tx.task.update({
-          where: {
-            id: recurringTask.id,
-          },
-          data: {
-            dueAt: null,
-          },
-          include: planningTaskInclude,
-        });
+      return tx.task.update({
+        where: {
+          id: recurringTask.id,
+        },
+        data: {
+          dueAt: null,
+          todaySortOrder: await getNextTodaySortOrder(tx, userId, targetScheduledForDate),
+        },
+        include: planningTaskInclude,
+      });
       }
 
       return recurringTask;
@@ -212,11 +239,12 @@ async function carryForwardTask(
           ? toTaskReminderAt(targetDate, timezone) ?? null
           : task.reminderAt,
       reminderTriggeredAt: null,
-      scheduledForDate: parseIsoDate(targetDate),
+      scheduledForDate: targetScheduledForDate,
       dueAt: hasPlannerAssignment ? null : task.dueAt,
       goalId: task.goalId,
       originType: "CARRY_FORWARD",
       carriedFromTaskId: task.id,
+      todaySortOrder: await getNextTodaySortOrder(tx, userId, targetScheduledForDate),
     },
     include: planningTaskInclude,
   });
@@ -275,7 +303,9 @@ export const registerPlanningTaskRoutes: FastifyPluginAsync = async (app) => {
       app.prisma.task.findMany({
         where: listWhere,
         take: limit ? limit + 1 : undefined,
-        orderBy: limit ? [{ createdAt: "desc" }, { id: "desc" }] : [{ scheduledForDate: "asc" }, { createdAt: "asc" }],
+        orderBy: limit
+          ? [{ createdAt: "desc" }, { id: "desc" }]
+          : [{ scheduledForDate: "asc" }, { todaySortOrder: "asc" }, { createdAt: "asc" }, { id: "asc" }],
         include: planningTaskInclude,
       }),
       includeSummary
@@ -326,6 +356,7 @@ export const registerPlanningTaskRoutes: FastifyPluginAsync = async (app) => {
     await assertOwnedGoalReference(app, user.id, payload.goalId);
     const timezone = await getUserTimezone(app, user.id);
     const task = await app.prisma.$transaction(async (tx) => {
+      const scheduledForDate = payload.scheduledForDate ? parseIsoDate(payload.scheduledForDate) : null;
       const createdTask = await tx.task.create({
         data: {
           userId: user.id,
@@ -334,10 +365,11 @@ export const registerPlanningTaskRoutes: FastifyPluginAsync = async (app) => {
           kind: toPrismaTaskKind(payload.kind ?? "task"),
           reminderAt:
             payload.kind === "reminder" ? (toTaskReminderAt(payload.reminderAt, timezone) ?? null) : null,
-          scheduledForDate: payload.scheduledForDate ? parseIsoDate(payload.scheduledForDate) : null,
+          scheduledForDate,
           dueAt: payload.dueAt ? new Date(payload.dueAt) : null,
           goalId: payload.goalId ?? null,
           originType: toPrismaTaskOriginType(payload.recurrence ? "recurring" : (payload.originType ?? "manual")),
+          todaySortOrder: await getNextTodaySortOrder(tx, user.id, scheduledForDate),
           ...buildTaskProtocolData(payload),
         },
       });
@@ -444,11 +476,24 @@ export const registerPlanningTaskRoutes: FastifyPluginAsync = async (app) => {
           continue;
         }
 
+        const updateData = {
+          ...buildBulkTaskUpdateData(task, payload.action, now, timezone),
+          ...(payload.action.type === "schedule"
+            ? {
+                todaySortOrder: await getNextTodaySortOrder(
+                  tx,
+                  user.id,
+                  parseIsoDate(payload.action.scheduledForDate),
+                ),
+              }
+            : {}),
+        };
+
         await tx.task.update({
           where: {
             id: taskId,
           },
-          data: buildBulkTaskUpdateData(task, payload.action, now, timezone),
+          data: updateData,
         });
         affectedTaskIds.add(taskId);
 
@@ -505,6 +550,74 @@ export const registerPlanningTaskRoutes: FastifyPluginAsync = async (app) => {
           : payload.taskIds
               .map((taskId) => serializedTasksById.get(taskId))
               .filter((task): task is PlanningTaskItem => Boolean(task)),
+    });
+
+    return reply.send(response);
+  });
+
+  app.put("/tasks/order", async (request, reply) => {
+    const user = requireAuthenticatedUser(request);
+    const payload = parseOrThrow(reorderTasksSchema, request.body as ReorderTasksRequest);
+    const uniqueTaskIds = new Set(payload.taskIds);
+
+    if (uniqueTaskIds.size !== payload.taskIds.length) {
+      throw new AppError({
+        statusCode: 400,
+        code: "VALIDATION_ERROR",
+        message: "Task order payload must include each task once.",
+      });
+    }
+
+    const tasks = await app.prisma.$transaction(async (tx) => {
+      const ownedTasks = await tx.task.findMany({
+        where: {
+          userId: user.id,
+          id: {
+            in: payload.taskIds,
+          },
+        },
+        select: {
+          id: true,
+        },
+      });
+
+      if (ownedTasks.length !== payload.taskIds.length) {
+        throw new AppError({
+          statusCode: 404,
+          code: "NOT_FOUND",
+          message: "One or more tasks were not found.",
+        });
+      }
+
+      await Promise.all(
+        payload.taskIds.map((taskId, index) =>
+          tx.task.update({
+            where: {
+              id: taskId,
+            },
+            data: {
+              todaySortOrder: index,
+            },
+          }),
+        ),
+      );
+
+      const updatedTasks = await tx.task.findMany({
+        where: {
+          userId: user.id,
+          id: {
+            in: payload.taskIds,
+          },
+        },
+        include: planningTaskInclude,
+      });
+      const updatedById = new Map(updatedTasks.map((task) => [task.id, task]));
+
+      return payload.taskIds.map((taskId) => updatedById.get(taskId)!);
+    });
+
+    const response: BulkTaskMutationResponse = withGeneratedAt({
+      tasks: tasks.map(serializeTaskWithCommitmentGuidance),
     });
 
     return reply.send(response);
@@ -568,14 +681,16 @@ export const registerPlanningTaskRoutes: FastifyPluginAsync = async (app) => {
         targetDate: now,
         timezone,
       });
+      const scheduledForDate = parseIsoDate(payload.scheduledForDate);
 
       await tx.task.update({
         where: {
           id: taskId,
         },
         data: {
-          scheduledForDate: parseIsoDate(payload.scheduledForDate),
+          scheduledForDate,
           dueAt: null,
+          todaySortOrder: await getNextTodaySortOrder(tx, user.id, scheduledForDate),
           reminderAt:
             existingTask.kind === "REMINDER"
               ? toTaskReminderAt(payload.scheduledForDate, timezone) ?? null
@@ -670,6 +785,12 @@ export const registerPlanningTaskRoutes: FastifyPluginAsync = async (app) => {
             timezone,
           })
         : 0;
+      const parsedScheduledForDate =
+        payload.scheduledForDate === undefined || payload.scheduledForDate === null
+          ? null
+          : parseIsoDate(payload.scheduledForDate);
+      const shouldAppendToSchedule =
+        parsedScheduledForDate !== null && payload.scheduledForDate !== existingScheduledForDate;
 
       await tx.task.update({
         where: {
@@ -688,7 +809,10 @@ export const registerPlanningTaskRoutes: FastifyPluginAsync = async (app) => {
               ? undefined
               : payload.scheduledForDate === null
                 ? null
-                : parseIsoDate(payload.scheduledForDate),
+                : parsedScheduledForDate,
+          todaySortOrder: shouldAppendToSchedule
+            ? await getNextTodaySortOrder(tx, user.id, parsedScheduledForDate)
+            : undefined,
           dueAt:
             payload.dueAt === undefined
               ? shouldClearPlannerDueAt

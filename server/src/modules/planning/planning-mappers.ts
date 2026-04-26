@@ -691,6 +691,7 @@ export function serializeTask(task: PlanningTaskRecord): PlanningTaskItem {
     likelyObstacle: task.likelyObstacle ?? null,
     focusLengthMinutes: task.focusLengthMinutes ?? null,
     progressState: fromPrismaTaskProgressState(task.progressState),
+    todaySortOrder: task.todaySortOrder,
     startedAt: task.startedAt?.toISOString() ?? null,
     lastStuckAt: task.lastStuckAt?.toISOString() ?? null,
     completedAt: task.completedAt?.toISOString() ?? null,

@@ -609,6 +609,7 @@ model Task {
   likelyObstacle    String?
   focusLengthMinutes Int?
   progressState     TaskProgressState @default(NOT_STARTED)
+  todaySortOrder    Int            @default(0)
   startedAt         DateTime?
   lastStuckAt       DateTime?
   completedAt       DateTime?
@@ -627,6 +628,7 @@ model Task {
   focusSessions     FocusSession[]
 
   @@index([userId, scheduledForDate, status])
+  @@index([userId, scheduledForDate, todaySortOrder, createdAt])
   @@index([userId, status, originType, scheduledForDate, kind, createdAt, id])
   @@index([userId, kind, status, reminderAt, reminderTriggeredAt])
   @@index([userId, recurrenceRuleId, scheduledForDate])

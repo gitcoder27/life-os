@@ -97,6 +97,7 @@ export {
   useLogTaskStuckMutation,
   useRemovePlannerBlockTaskMutation,
   useReorderPlannerBlocksMutation,
+  useReorderTasksMutation,
   useReplacePlannerBlockTasksMutation,
   useTasksQuery,
   useUpsertDayLaunchMutation,

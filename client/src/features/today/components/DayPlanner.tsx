@@ -714,6 +714,7 @@ export function DayPlanner({
                         onEditBlock={(updates) => actions.editBlock(segment.block!.id, updates)}
                         onDeleteBlock={() => actions.removeBlock(segment.block!)}
                         onRemoveTask={(taskId) => actions.removeTaskFromBlock(segment.block!.id, taskId)}
+                        onToggleTaskStatus={(taskId, status) => taskActions.changeStatus(taskId, status)}
                         onReorderTasks={(taskIds) => actions.reorderTasksInBlock(segment.block!, taskIds)}
                         onNudgeDuration={(direction) => handleNudgeBlock(segment.block!, direction)}
                         onDuplicateBlock={() => handleDuplicateBlock(segment.block!)}

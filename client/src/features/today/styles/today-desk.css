@@ -1987,8 +1987,8 @@
 /* Stream task row — hairlines, not boxes */
 .today-desk .stream-task {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto auto;
-  gap: 0.5rem 0.85rem;
+  grid-template-columns: auto auto minmax(0, 1fr) auto auto;
+  gap: 0.5rem 0.75rem;
   align-items: center;
   padding: 0.7rem 0;
   border-top: 1px solid var(--today-hairline);
@@ -2008,6 +2008,47 @@
 
 .today-desk .stream-task:hover {
   background: rgba(255, 255, 255, 0.02);
+}
+
+.today-desk .stream-task--dragging {
+  position: relative;
+  z-index: 4;
+  background: rgba(240, 192, 96, 0.055);
+  box-shadow: 0 0.5rem 2rem rgba(0, 0, 0, 0.25);
+}
+
+.today-desk .stream-task__drag-handle {
+  all: unset;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1rem;
+  height: 1.6rem;
+  color: var(--today-ink-faint);
+  cursor: grab;
+  opacity: 0;
+  transition:
+    color var(--dur) var(--ease),
+    opacity var(--dur) var(--ease);
+}
+
+.today-desk .stream-task:hover .stream-task__drag-handle,
+.today-desk .stream-task__drag-handle:focus-visible,
+.today-desk .stream-task--dragging .stream-task__drag-handle {
+  opacity: 1;
+}
+
+.today-desk .stream-task__drag-handle:hover {
+  color: var(--accent-bright);
+}
+
+.today-desk .stream-task__drag-handle:active {
+  cursor: grabbing;
+}
+
+.today-desk .stream-task__drag-handle:disabled {
+  cursor: default;
+  opacity: 0;
 }
 
 .today-desk .stream-task--highlight {
@@ -2848,7 +2889,7 @@
   }
 
   .today-desk .stream-task {
-    grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-columns: auto auto minmax(0, 1fr) auto;
     grid-template-rows: auto auto;
   }
 
@@ -2868,7 +2909,7 @@
   }
 
   .today-desk .stream-task__quick-actions {
-    grid-column: 2 / 4;
+    grid-column: 3 / 5;
     opacity: 1;
     justify-content: flex-start;
     padding-top: 0.2rem;

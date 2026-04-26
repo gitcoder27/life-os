@@ -94,6 +94,7 @@ export interface PlanningTaskItem {
   likelyObstacle: string | null;
   focusLengthMinutes: number | null;
   progressState: TaskProgressState;
+  todaySortOrder: number;
   startedAt: string | null;
   lastStuckAt: string | null;
   commitmentGuidance?: TaskCommitmentGuidance | null;
@@ -368,6 +369,10 @@ export type BulkUpdateTaskAction =
 export interface BulkUpdateTasksRequest {
   taskIds: EntityId[];
   action: BulkUpdateTaskAction;
+}
+
+export interface ReorderTasksRequest {
+  taskIds: EntityId[];
 }
 
 export interface CarryForwardTaskRequest {

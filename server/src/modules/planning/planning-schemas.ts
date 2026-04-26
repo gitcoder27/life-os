@@ -266,6 +266,10 @@ export const reorderDayPlannerBlocksSchema = z.object({
   blockIds: plannerBlockTaskIdsSchema,
 });
 
+export const reorderTasksSchema = z.object({
+  taskIds: plannerBlockTaskIdsSchema,
+});
+
 export const createTaskSchema = z.object({
   title: z.string().min(1).max(200),
   notes: z.string().max(4000).nullable().optional(),

@@ -56,6 +56,7 @@ export type TaskItem = {
   likelyObstacle: string | null;
   focusLengthMinutes: number | null;
   progressState: "not_started" | "started" | "advanced";
+  todaySortOrder: number;
   startedAt: string | null;
   lastStuckAt: string | null;
   commitmentGuidance?: TaskCommitmentGuidance | null;
@@ -357,6 +358,100 @@ export const useTaskStatusMutation = (date: string) => {
       errorMessage: "Task update failed.",
     },
     onSuccess: () => invalidateCoreData(queryClient, date),
+  });
+};
+
+type ReorderTasksMutationContext = {
+  previousDayPlan?: DayPlanResponse;
+  previousTaskQueries: Array<[readonly unknown[], TasksResponse | undefined]>;
+};
+
+const reorderTaskItems = (tasks: TaskItem[], taskIds: string[]) => {
+  const nextTaskIds = new Set(taskIds);
+  const orderedTasks = taskIds
+    .map((taskId, index) => {
+      const task = tasks.find((candidate) => candidate.id === taskId);
+      return task
+        ? {
+            ...task,
+            todaySortOrder: index,
+          }
+        : null;
+    })
+    .filter((task): task is TaskItem => task !== null);
+
+  if (orderedTasks.length <= 1) {
+    return tasks;
+  }
+
+  let nextIndex = 0;
+  return tasks.map((task) => {
+    if (!nextTaskIds.has(task.id)) {
+      return task;
+    }
+
+    return orderedTasks[nextIndex++] ?? task;
+  });
+};
+
+export const useReorderTasksMutation = (date: string) => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (taskIds: string[]) =>
+      apiRequest<BulkTaskMutationResponse>("/api/tasks/order", {
+        method: "PUT",
+        body: { taskIds },
+      }),
+    meta: {
+      errorMessage: "Task reorder failed.",
+    },
+    onMutate: async (taskIds): Promise<ReorderTasksMutationContext> => {
+      await Promise.all([
+        queryClient.cancelQueries({ queryKey: queryKeys.dayPlan(date) }),
+        queryClient.cancelQueries({ queryKey: ["tasks"] }),
+      ]);
+
+      const previousDayPlan = queryClient.getQueryData<DayPlanResponse>(queryKeys.dayPlan(date));
+      const previousTaskQueries = queryClient.getQueriesData<TasksResponse>({ queryKey: ["tasks"] });
+
+      queryClient.setQueryData<DayPlanResponse>(
+        queryKeys.dayPlan(date),
+        (current) =>
+          current
+            ? {
+                ...current,
+                tasks: reorderTaskItems(current.tasks, taskIds),
+              }
+            : current,
+      );
+      queryClient.setQueriesData<TasksResponse>(
+        { queryKey: ["tasks"] },
+        (current) =>
+          current
+            ? {
+                ...current,
+                tasks: reorderTaskItems(current.tasks, taskIds),
+              }
+            : current,
+      );
+
+      return { previousDayPlan, previousTaskQueries };
+    },
+    onError: (_error, _taskIds, context) => {
+      if (context?.previousDayPlan) {
+        queryClient.setQueryData<DayPlanResponse>(queryKeys.dayPlan(date), context.previousDayPlan);
+      }
+
+      for (const [queryKey, response] of context?.previousTaskQueries ?? []) {
+        queryClient.setQueryData(queryKey, response);
+      }
+    },
+    onSuccess: () => invalidateCoreData(queryClient, date),
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.dayPlan(date) });
+      void queryClient.invalidateQueries({ queryKey: ["tasks"] });
+    },
   });
 };
 

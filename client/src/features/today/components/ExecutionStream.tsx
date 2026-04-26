@@ -1,9 +1,24 @@
 import { useEffect, useRef, useState } from "react";
+import {
+  closestCenter,
+  DndContext,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  arrayMove,
+  SortableContext,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import { Link } from "react-router-dom";
 import { isRecurring } from "../../../shared/lib/recurrence";
 import { RecurrenceInfo } from "../../../shared/ui/RecurrenceBadge";
 import { formatTimeLabel, type FocusSessionItem, type TaskItem, type LinkedGoal, type DayPlannerBlockItem } from "../../../shared/lib/api";
-import { CheckIcon, MoreIcon } from "../helpers/icons";
+import { CheckIcon, GripIcon, MoreIcon } from "../helpers/icons";
 import type { PlannerExecutionModel } from "../helpers/planner-execution";
 import type { useTaskActions } from "../hooks/useTaskActions";
 import { FocusSessionLauncher } from "./FocusSessionLauncher";
@@ -16,6 +31,13 @@ type StreamSection = {
   key: string;
   label: string;
   tasks: TaskItem[];
+};
+
+type DragHandleProps = {
+  attributes: React.ButtonHTMLAttributes<HTMLButtonElement>;
+  listeners?: React.ButtonHTMLAttributes<HTMLButtonElement>;
+  setActivatorNodeRef: (node: HTMLButtonElement | null) => void;
+  disabled: boolean;
 };
 
 export function ExecutionStream({
@@ -198,6 +220,30 @@ function StreamSectionGroup({
   const isNow = section.key === "now";
   const isUnplanned = section.key === "unplanned";
   const isOverdue = section.key === "overdue";
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 6,
+      },
+    }),
+  );
+  const isSortable = section.tasks.length > 1;
+
+  function handleDragEnd(event: DragEndEvent) {
+    const { active, over } = event;
+    if (!over || active.id === over.id) {
+      return;
+    }
+
+    const oldIndex = section.tasks.findIndex((task) => task.id === active.id);
+    const newIndex = section.tasks.findIndex((task) => task.id === over.id);
+    if (oldIndex < 0 || newIndex < 0) {
+      return;
+    }
+
+    const reorderedTasks = arrayMove(section.tasks, oldIndex, newIndex);
+    taskActions.reorderTasks(reorderedTasks.map((task) => task.id));
+  }
 
   return (
     <div className={`execution-stream__section execution-stream__section--${section.key}`}>
@@ -215,26 +261,69 @@ function StreamSectionGroup({
           </button>
         ) : null}
       </div>
-      <div className="execution-stream__task-list">
-        {section.tasks.map((task) => {
-          const block = taskBlockMap.get(task.id) ?? null;
-          return (
-            <StreamTaskRow
-              key={task.id}
-              date={date}
-              task={task}
-              taskActions={taskActions}
-              blockInfo={block}
-              highlight={isNow}
-              activeFocusSession={activeFocusSession}
-              selected={selectedTaskId === task.id}
-              isOverdue={isOverdue}
-              onSelectTask={onSelectTask}
-            />
-          );
-        })}
-      </div>
+      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+        <SortableContext items={section.tasks.map((task) => task.id)} strategy={verticalListSortingStrategy}>
+          <div className="execution-stream__task-list">
+            {section.tasks.map((task) => {
+              const block = taskBlockMap.get(task.id) ?? null;
+              return (
+                <SortableStreamTaskRow
+                  key={task.id}
+                  date={date}
+                  task={task}
+                  taskActions={taskActions}
+                  blockInfo={block}
+                  highlight={isNow}
+                  activeFocusSession={activeFocusSession}
+                  selected={selectedTaskId === task.id}
+                  isOverdue={isOverdue}
+                  onSelectTask={onSelectTask}
+                  sortableDisabled={!isSortable || taskActions.isPending}
+                />
+              );
+            })}
+          </div>
+        </SortableContext>
+      </DndContext>
     </div>
+  );
+}
+
+function SortableStreamTaskRow({
+  sortableDisabled,
+  ...props
+}: Parameters<typeof StreamTaskRow>[0] & {
+  sortableDisabled: boolean;
+}) {
+  const {
+    attributes,
+    listeners,
+    setActivatorNodeRef,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({
+    id: props.task.id,
+    disabled: sortableDisabled,
+  });
+
+  return (
+    <StreamTaskRow
+      {...props}
+      dragHandleProps={{
+        attributes: attributes as React.ButtonHTMLAttributes<HTMLButtonElement>,
+        listeners: listeners as React.ButtonHTMLAttributes<HTMLButtonElement> | undefined,
+        setActivatorNodeRef,
+        disabled: sortableDisabled,
+      }}
+      isDragging={isDragging}
+      rowRef={setNodeRef}
+      rowStyle={{
+        transform: CSS.Transform.toString(transform),
+        transition,
+      }}
+    />
   );
 }
 
@@ -248,6 +337,10 @@ function StreamTaskRow({
   selected = false,
   isOverdue = false,
   onSelectTask,
+  dragHandleProps,
+  isDragging = false,
+  rowRef,
+  rowStyle,
 }: {
   date: string;
   task: TaskItem;
@@ -258,6 +351,10 @@ function StreamTaskRow({
   selected?: boolean;
   isOverdue?: boolean;
   onSelectTask?: (task: TaskItem) => void;
+  dragHandleProps?: DragHandleProps;
+  isDragging?: boolean;
+  rowRef?: (node: HTMLDivElement | null) => void;
+  rowStyle?: React.CSSProperties;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [showReschedule, setShowReschedule] = useState(false);
@@ -272,14 +369,17 @@ function StreamTaskRow({
 
   return (
     <div
+      ref={rowRef}
       className={
         "stream-task" +
         (isDone ? " stream-task--done" : "") +
         (isDropped ? " stream-task--dropped" : "") +
         (highlight ? " stream-task--highlight" : "") +
         (selected ? " stream-task--selected" : "") +
-        (isOverdue ? " stream-task--overdue" : "")
+        (isOverdue ? " stream-task--overdue" : "") +
+        (isDragging ? " stream-task--dragging" : "")
       }
+      style={rowStyle}
       onClick={(event) => {
         const target = event.target as HTMLElement;
         if (target.closest("button,a,input,select,textarea")) {
@@ -298,6 +398,18 @@ function StreamTaskRow({
       tabIndex={onSelectTask ? 0 : undefined}
       aria-current={selected ? "true" : undefined}
     >
+      <button
+        className="stream-task__drag-handle"
+        type="button"
+        ref={dragHandleProps?.setActivatorNodeRef}
+        disabled={!dragHandleProps || dragHandleProps.disabled}
+        aria-label={`Reorder ${task.title}`}
+        {...dragHandleProps?.attributes}
+        {...dragHandleProps?.listeners}
+      >
+        <GripIcon />
+      </button>
+
       {/* Checkbox — the primary "Done" action */}
       <button
         className={

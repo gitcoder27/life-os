@@ -3,6 +3,7 @@ import { useAppFeedback } from "../../../app/providers";
 import {
   useBulkUpdateTasksMutation,
   useCarryForwardTaskMutation,
+  useReorderTasksMutation,
   useTaskStatusMutation,
 } from "../../../shared/lib/api";
 import { getTomorrowDate } from "../helpers/date-helpers";
@@ -13,12 +14,14 @@ export function useTaskActions(today: string) {
   const updateTaskMutation = useTaskStatusMutation(today);
   const carryForwardMutation = useCarryForwardTaskMutation(today);
   const bulkUpdateTasksMutation = useBulkUpdateTasksMutation(today);
+  const reorderTasksMutation = useReorderTasksMutation(today);
   const [rescheduleDates, setRescheduleDates] = useState<Record<string, string>>({});
 
   const isPending =
     updateTaskMutation.isPending ||
     carryForwardMutation.isPending ||
-    bulkUpdateTasksMutation.isPending;
+    bulkUpdateTasksMutation.isPending ||
+    reorderTasksMutation.isPending;
 
   function getRescheduleDate(taskId: string) {
     return rescheduleDates[taskId] ?? tomorrow;
@@ -95,14 +98,24 @@ export function useTaskActions(today: string) {
     carryForwardMutation.mutate({ taskId, targetDate: date }, { onSuccess });
   }
 
+  function reorderTasks(taskIds: string[]) {
+    if (taskIds.length < 2) {
+      return;
+    }
+
+    reorderTasksMutation.mutate(taskIds);
+  }
+
   const mutationError =
     updateTaskMutation.error instanceof Error
       ? updateTaskMutation.error.message
       : carryForwardMutation.error instanceof Error
         ? carryForwardMutation.error.message
         : bulkUpdateTasksMutation.error instanceof Error
-          ? bulkUpdateTasksMutation.error.message
-        : null;
+        ? bulkUpdateTasksMutation.error.message
+        : reorderTasksMutation.error instanceof Error
+          ? reorderTasksMutation.error.message
+          : null;
 
   return {
     isPending,
@@ -117,6 +130,7 @@ export function useTaskActions(today: string) {
     moveTasksToToday,
     moveToTomorrow,
     moveTasksToTomorrow,
+    reorderTasks,
     reschedule,
     tomorrow,
   };
