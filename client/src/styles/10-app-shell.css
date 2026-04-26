@@ -214,6 +214,7 @@
 }
 
 .shell-nav__label {
+  flex: 1;
   font-weight: 500;
   font-size: var(--fs-small);
   min-width: 0;
@@ -224,6 +225,54 @@
     opacity var(--dur) var(--ease),
     max-width var(--dur-slow) var(--ease),
     transform var(--dur-slow) var(--ease);
+}
+
+.shell-nav__meta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.85rem;
+  height: 1.32rem;
+  margin-left: auto;
+  padding: 0 0.45rem;
+  border-radius: var(--r-pill);
+  border: 1px solid transparent;
+  font-size: 0.66rem;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 0;
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition:
+    opacity var(--dur) var(--ease),
+    transform var(--dur-slow) var(--ease),
+    min-width var(--dur-slow) var(--ease),
+    width var(--dur-slow) var(--ease),
+    height var(--dur-slow) var(--ease),
+    padding var(--dur-slow) var(--ease),
+    background var(--dur) var(--ease),
+    border-color var(--dur) var(--ease),
+    color var(--dur) var(--ease);
+}
+
+.shell-nav__meta--attention {
+  color: #0f0d08;
+  border-color: rgba(240, 192, 96, 0.18);
+  background: linear-gradient(180deg, var(--accent-bright), var(--accent));
+  box-shadow: 0 5px 14px rgba(217, 153, 58, 0.18);
+}
+
+.shell-nav__meta--clear {
+  color: var(--positive);
+  border-color: rgba(93, 184, 106, 0.2);
+  background: var(--positive-soft);
+}
+
+.shell-nav__meta--loading {
+  color: var(--text-tertiary);
+  border-color: var(--border);
+  background: rgba(255, 255, 255, 0.03);
+  box-shadow: none;
 }
 
 /* ── Sidebar Footer ── */
@@ -370,6 +419,27 @@
   max-width: 0;
   transform: translateX(-8px);
   pointer-events: none;
+}
+
+.shell--sidebar-collapsed .shell-nav__meta {
+  position: absolute;
+  top: 0.28rem;
+  right: 0.28rem;
+  min-width: 1.08rem;
+  width: auto;
+  height: 1.08rem;
+  margin-left: 0;
+  padding: 0 0.25rem;
+  border-radius: var(--r-pill);
+  font-size: 0.55rem;
+  transform: translate(18%, -18%);
+  box-shadow: 0 0 0 2px var(--bg-deep);
+}
+
+.shell--sidebar-collapsed .shell-nav__meta--clear {
+  color: #0f0d08;
+  background: var(--positive);
+  border-color: rgba(93, 184, 106, 0.36);
 }
 
 .shell--sidebar-collapsed .shell-sidebar__action-text {

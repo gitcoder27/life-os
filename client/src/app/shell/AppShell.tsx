@@ -20,6 +20,7 @@ import {
   setPreferredTimezone,
   setPreferredWeekStart,
   useHomeOverviewQuery,
+  useInboxQuery,
   useNotificationsQuery,
   useSessionQuery,
   useSettingsProfileQuery,
@@ -86,6 +87,8 @@ function navClass(isActive: boolean) {
   return `shell-nav__link${isActive ? " shell-nav__link--active" : ""}`;
 }
 
+const formatShellInboxCount = (count: number) => (count > 99 ? "99+" : String(count));
+
 const toTitleCaseToken = (value: string) => {
   if (!value) {
     return value;
@@ -130,10 +133,25 @@ export function AppShell() {
   const homeQuery = useHomeOverviewQuery(today);
   const settingsQuery = useSettingsProfileQuery();
   const notificationsQuery = useNotificationsQuery();
+  const inboxSummaryQuery = useInboxQuery({
+    limit: 1,
+    includeSummary: true,
+  });
   const userEmail = sessionQuery.data?.user?.email ?? "owner@life-os";
   const greeting = homeQuery.data?.greeting ?? "Good day";
   const greetingName = formatGreetingName(sessionQuery.data?.user?.displayName, userEmail);
   const headerGreeting = greetingName ? `${greeting}, ${greetingName}` : greeting;
+  const inboxCount = inboxSummaryQuery.data?.counts?.all;
+  const hasInboxSummary = typeof inboxCount === "number";
+  const isInboxSummaryLoading = inboxSummaryQuery.isLoading && !hasInboxSummary;
+  const isInboxSummaryUnavailable = inboxSummaryQuery.isError && !hasInboxSummary;
+  const inboxStatusLabel = isInboxSummaryLoading
+    ? "Inbox status loading"
+    : isInboxSummaryUnavailable
+      ? "Inbox status unavailable"
+      : hasInboxSummary && inboxCount > 0
+        ? `${inboxCount} inbox item${inboxCount === 1 ? "" : "s"} waiting`
+        : "Inbox zero";
 
   const unreadCount = useMemo(() => {
     if (!notificationsQuery.data) return 0;
@@ -320,14 +338,23 @@ export function AppShell() {
         <nav className="shell-nav">
           {shellNavItems.map((item) => {
             const Icon = item.icon;
+            const isInboxItem = item.to === "/inbox";
+            const inboxBadgeText = isInboxSummaryLoading
+              ? "..."
+              : hasInboxSummary && inboxCount > 0
+                ? formatShellInboxCount(inboxCount)
+                : sidebarCollapsed
+                  ? "0"
+                  : "Zero";
+            const shouldShowInboxBadge = isInboxItem && (hasInboxSummary || isInboxSummaryLoading);
 
             return (
               <NavLink
                 key={item.to}
                 className={({ isActive }) => navClass(isActive)}
                 to={item.to}
-                aria-label={sidebarCollapsed ? item.label : undefined}
-                data-shell-label={item.label}
+                aria-label={isInboxItem ? inboxStatusLabel : sidebarCollapsed ? item.label : undefined}
+                data-shell-label={isInboxItem ? inboxStatusLabel : item.label}
                 onMouseEnter={handleCollapsedTooltipMouseEnter}
                 onMouseLeave={hideCollapsedTooltip}
                 onFocus={handleCollapsedTooltipFocus}
@@ -337,6 +364,18 @@ export function AppShell() {
                   <Icon />
                 </span>
                 <span className="shell-nav__label">{item.label}</span>
+                {shouldShowInboxBadge ? (
+                  <span
+                    className={`shell-nav__meta shell-nav__meta--inbox${
+                      hasInboxSummary && inboxCount > 0
+                        ? " shell-nav__meta--attention"
+                        : " shell-nav__meta--clear"
+                    }${isInboxSummaryLoading ? " shell-nav__meta--loading" : ""}`}
+                    aria-hidden="true"
+                  >
+                    {inboxBadgeText}
+                  </span>
+                ) : null}
               </NavLink>
             );
           })}
@@ -422,15 +461,30 @@ export function AppShell() {
         </main>
 
         <nav className="mobile-nav">
-          {shellNavItems.slice(0, 5).map((item) => (
-            <NavLink
-              key={item.to}
-              className={({ isActive }) => navClass(isActive)}
-              to={item.to}
-            >
-              <span className="shell-nav__label">{item.label}</span>
-            </NavLink>
-          ))}
+          {shellNavItems.slice(0, 5).map((item) => {
+            const isInboxItem = item.to === "/inbox";
+
+            return (
+              <NavLink
+                key={item.to}
+                className={({ isActive }) => navClass(isActive)}
+                to={item.to}
+                aria-label={isInboxItem ? inboxStatusLabel : undefined}
+              >
+                <span className="shell-nav__label">{item.label}</span>
+                {isInboxItem && hasInboxSummary ? (
+                  <span
+                    className={`shell-nav__meta shell-nav__meta--inbox${
+                      inboxCount > 0 ? " shell-nav__meta--attention" : " shell-nav__meta--clear"
+                    }`}
+                    aria-hidden="true"
+                  >
+                    {formatShellInboxCount(inboxCount)}
+                  </span>
+                ) : null}
+              </NavLink>
+            );
+          })}
         </nav>
 
         <button

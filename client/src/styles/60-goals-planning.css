@@ -1813,16 +1813,51 @@
 .ghq-graph__toolbar {
   right: 1rem;
   justify-content: flex-end;
-  padding: 0.35rem;
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  border-radius: var(--r);
-  background: rgba(17, 16, 13, 0.72);
-  box-shadow: var(--shadow-sm);
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
+  gap: 0.6rem;
   transition:
     opacity var(--dur-fast) var(--ease),
     transform var(--dur-fast) var(--ease);
+}
+
+.ghq-graph__toolbar-group {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.35rem;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: var(--r);
+  background: rgba(17, 16, 13, 0.74);
+  box-shadow: var(--shadow-sm);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+}
+
+.ghq-graph__toolbar-group--selection {
+  border-color: rgba(217, 153, 58, 0.2);
+  background: rgba(30, 24, 15, 0.9);
+}
+
+.ghq-graph__toolbar-label {
+  padding: 0 0.35rem 0 0.2rem;
+  color: var(--accent);
+  font-size: var(--fs-micro);
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.ghq-graph__toolbar-group--selection .button--primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #120d05;
+  box-shadow: 0 8px 18px rgba(217, 153, 58, 0.18);
+}
+
+.ghq-graph__toolbar-group--selection .button--primary:hover {
+  background: var(--accent-bright);
+  border-color: var(--accent-bright);
+  color: #120d05;
 }
 
 .ghq-graph__search input,
@@ -3360,6 +3395,10 @@
 
   .ghq-graph__toolbar {
     justify-content: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .ghq-graph__toolbar-group {
     flex-wrap: wrap;
   }
 

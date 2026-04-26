@@ -1134,57 +1134,67 @@ export const GoalsPlanGraphView = ({
         <span className="ghq-graph__match-count">{filterMatchCount} shown</span>
       </div>
       <div className="ghq-graph__toolbar">
-        <button
-          className="button button--ghost button--small ghq-graph__toolbar-btn"
-          type="button"
-          onClick={onExpandAll}
-        >
-          Expand all
-        </button>
-        <button
-          className="button button--ghost button--small ghq-graph__toolbar-btn"
-          type="button"
-          onClick={onCollapseAll}
-        >
-          Collapse all
-        </button>
         {selectedGoalId ? (
+          <div className="ghq-graph__toolbar-group ghq-graph__toolbar-group--selection" aria-label="Selected goal actions">
+            <span className="ghq-graph__toolbar-label">Selected</span>
+            <button
+              className="button button--primary button--small ghq-graph__toolbar-btn"
+              type="button"
+              onClick={() => onOpenDetails(selectedGoalId)}
+            >
+              Open details
+            </button>
+            <button
+              className="button button--ghost button--small ghq-graph__toolbar-btn"
+              type="button"
+              onClick={() => onOpenPlanning(selectedGoalId)}
+            >
+              Open plan
+            </button>
+            <button
+              className="button button--ghost button--small ghq-graph__toolbar-btn"
+              type="button"
+              onClick={isFocusMode ? onExitFocusMode : onEnterFocusMode}
+              aria-pressed={isFocusMode}
+            >
+              {isFocusMode ? "Exit focus" : "Focus"}
+            </button>
+          </div>
+        ) : null}
+        <div className="ghq-graph__toolbar-group ghq-graph__toolbar-group--view" aria-label="Canvas view actions">
           <button
             className="button button--ghost button--small ghq-graph__toolbar-btn"
             type="button"
-            onClick={() => onOpenPlanning(selectedGoalId)}
+            onClick={onExpandAll}
           >
-            Open plan
+            Expand
           </button>
-        ) : null}
-        {selectedGoalId ? (
           <button
             className="button button--ghost button--small ghq-graph__toolbar-btn"
             type="button"
-            onClick={isFocusMode ? onExitFocusMode : onEnterFocusMode}
-            aria-pressed={isFocusMode}
+            onClick={onCollapseAll}
           >
-            {isFocusMode ? "Exit focus" : "Focus branch"}
+            Collapse
           </button>
-        ) : null}
-        {selectedGoalId ? (
+          {selectedGoalId ? (
+            <button
+              className="button button--ghost button--small ghq-graph__toolbar-btn"
+              type="button"
+              onClick={onClearSelection}
+            >
+              Clear
+            </button>
+          ) : null}
           <button
-            className="button button--ghost button--small ghq-graph__toolbar-btn"
+            className="button button--ghost button--small ghq-graph__expand-btn"
             type="button"
-            onClick={onClearSelection}
+            onClick={onToggleExpandedCanvas}
+            aria-label={isExpanded ? "Exit expanded graph view" : "Expand graph view"}
+            aria-pressed={isExpanded}
           >
-            Clear selection
+            {isExpanded ? "Canvas off" : "Canvas"}
           </button>
-        ) : null}
-        <button
-          className="button button--ghost button--small ghq-graph__expand-btn"
-          type="button"
-          onClick={onToggleExpandedCanvas}
-          aria-label={isExpanded ? "Exit expanded graph view" : "Expand graph view"}
-          aria-pressed={isExpanded}
-        >
-          {isExpanded ? "Collapse canvas" : "Expand canvas"}
-        </button>
+        </div>
       </div>
 
       <ReactFlowProvider>
