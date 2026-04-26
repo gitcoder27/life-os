@@ -72,6 +72,8 @@ type PlannerGapQuickAddSlot = {
   heightPercent: number;
 };
 
+const QUICK_ADD_BLOCK_DURATION_MINUTES = 60;
+
 export function DayPlanner({
   date,
   todayDate,
@@ -853,10 +855,11 @@ function buildPlannerGapQuickAddSlots(
 ): PlannerGapQuickAddSlot[] {
   const totalDuration = Math.max(segment.durationMinutes, 1);
   const slots: PlannerGapQuickAddSlot[] = [];
-  let slotStartMinutes = segment.startMinutes;
+  let slotStartMinutes = Math.ceil(segment.startMinutes / QUICK_ADD_BLOCK_DURATION_MINUTES)
+    * QUICK_ADD_BLOCK_DURATION_MINUTES;
 
-  while (slotStartMinutes < segment.endMinutes) {
-    const slotEndMinutes = Math.min(slotStartMinutes + 60, segment.endMinutes);
+  while (slotStartMinutes + QUICK_ADD_BLOCK_DURATION_MINUTES <= segment.endMinutes) {
+    const slotEndMinutes = slotStartMinutes + QUICK_ADD_BLOCK_DURATION_MINUTES;
     const startTime = minutesToTimeString(slotStartMinutes);
     const endTime = minutesToTimeString(slotEndMinutes);
     const startsAt = buildPlannerDateTime(date, startTime, timezoneOffset);
@@ -866,13 +869,13 @@ function buildPlannerGapQuickAddSlots(
       id: `${segment.id}-${slotStartMinutes}`,
       startTime,
       endTime,
-      durationLabel: formatDurationMinutes(slotEndMinutes - slotStartMinutes),
+      durationLabel: formatDurationMinutes(QUICK_ADD_BLOCK_DURATION_MINUTES),
       label: `${formatTimeLabel(startsAt)} – ${formatTimeLabel(endsAt)}`,
       topPercent: ((slotStartMinutes - segment.startMinutes) / totalDuration) * 100,
-      heightPercent: ((slotEndMinutes - slotStartMinutes) / totalDuration) * 100,
+      heightPercent: (QUICK_ADD_BLOCK_DURATION_MINUTES / totalDuration) * 100,
     });
 
-    slotStartMinutes = slotEndMinutes;
+    slotStartMinutes += QUICK_ADD_BLOCK_DURATION_MINUTES;
   }
 
   return slots;

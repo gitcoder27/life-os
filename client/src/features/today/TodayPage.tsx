@@ -38,6 +38,14 @@ import { StartProtocolSheet } from "./components/StartProtocolSheet";
 import { WeekDeepWorkStrip } from "./components/WeekDeepWorkStrip";
 import { GoalNudges } from "./components/GoalNudges";
 import { TaskInspectorPanel } from "./components/TaskInspectorPanel";
+import {
+  clearStoredWorkbenchRailWidth,
+  clampWorkbenchRailWidth,
+  DEFAULT_WORKBENCH_RAIL_WIDTH,
+  readStoredWorkbenchRailWidth,
+  WORKBENCH_RAIL_WIDTH_STEP,
+  writeStoredWorkbenchRailWidth,
+} from "./helpers/workbench-layout";
 
 const ISO_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const isPlannerAssignableTask = (task: { kind: string }) => task.kind === "task";
@@ -66,6 +74,9 @@ export function TodayPage({ routeMode }: { routeMode?: "execute" | "plan" }) {
   const [topRailElement, setTopRailElement] = useState<HTMLDivElement | null>(null);
   const [clarifyTaskId, setClarifyTaskId] = useState<string | null>(null);
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
+  const [workbenchRailWidth, setWorkbenchRailWidth] = useState(readStoredWorkbenchRailWidth);
+  const [workbenchResizing, setWorkbenchResizing] = useState(false);
+  const [workbenchElement, setWorkbenchElement] = useState<HTMLElement | null>(null);
   const requestedMode = searchParams.get("mode");
   const rawPlannerDate = searchParams.get("planDate");
   const homeDestination = readHomeDestinationState(location.state);
@@ -154,6 +165,9 @@ export function TodayPage({ routeMode }: { routeMode?: "execute" | "plan" }) {
   const topRailRef = useCallback((node: HTMLDivElement | null) => {
     setTopRailElement(node);
   }, []);
+  const workbenchRef = useCallback((node: HTMLElement | null) => {
+    setWorkbenchElement(node);
+  }, []);
 
   useEffect(() => {
     if (mode !== "execute") {
@@ -166,6 +180,45 @@ export function TodayPage({ routeMode }: { routeMode?: "execute" | "plan" }) {
 
     setSelectedTaskId(defaultSelectedTaskId);
   }, [defaultSelectedTaskId, mode, selectableTasks, selectedTaskId]);
+
+  useEffect(() => {
+    if (!workbenchResizing) {
+      return;
+    }
+
+    function stopResizing() {
+      setWorkbenchResizing(false);
+    }
+
+    window.addEventListener("pointerup", stopResizing);
+    window.addEventListener("blur", stopResizing);
+    return () => {
+      window.removeEventListener("pointerup", stopResizing);
+      window.removeEventListener("blur", stopResizing);
+    };
+  }, [workbenchResizing]);
+
+  const updateWorkbenchRailWidth = useCallback((nextWidth: number, persist = true) => {
+    const clampedWidth = clampWorkbenchRailWidth(nextWidth);
+    setWorkbenchRailWidth(clampedWidth);
+    if (persist) {
+      writeStoredWorkbenchRailWidth(clampedWidth);
+    }
+  }, []);
+
+  const resizeWorkbenchRailFromPointer = useCallback((clientX: number) => {
+    if (!workbenchElement) {
+      return;
+    }
+
+    const bounds = workbenchElement.getBoundingClientRect();
+    updateWorkbenchRailWidth(bounds.right - clientX);
+  }, [updateWorkbenchRailWidth, workbenchElement]);
+
+  const resetWorkbenchRailWidth = useCallback(() => {
+    clearStoredWorkbenchRailWidth();
+    setWorkbenchRailWidth(DEFAULT_WORKBENCH_RAIL_WIDTH);
+  }, []);
 
   const navigateToMode = useCallback((nextMode: "execute" | "plan", replace = false) => {
     setMode(nextMode);
@@ -422,6 +475,7 @@ export function TodayPage({ routeMode }: { routeMode?: "execute" | "plan" }) {
   const todayLayoutStyle = {
     "--today-top-rail-height": `${topRailHeight}px`,
     "--today-sticky-offset": `${stickyTop}px`,
+    "--today-workbench-rail-width": `${workbenchRailWidth}px`,
   } as CSSProperties;
   const plannerSidebarStyle = {
     top: `${stickyTop}px`,
@@ -473,7 +527,11 @@ export function TodayPage({ routeMode }: { routeMode?: "execute" | "plan" }) {
                 />
               </>
             ) : (
-              <section className="today-workbench" aria-label="Today workbench">
+              <section
+                className={`today-workbench${workbenchResizing ? " today-workbench--resizing" : ""}`}
+                aria-label="Today workbench"
+                ref={workbenchRef}
+              >
                 <div className="today-workbench__queue">
                   <ExecutionStream
                     date={data.today}
@@ -489,6 +547,53 @@ export function TodayPage({ routeMode }: { routeMode?: "execute" | "plan" }) {
                     onSelectTask={(task) => setSelectedTaskId(task.id)}
                   />
                 </div>
+
+                <div
+                  className="today-workbench__resize"
+                  role="separator"
+                  tabIndex={0}
+                  aria-label="Resize today context column"
+                  aria-orientation="vertical"
+                  aria-valuemin={320}
+                  aria-valuemax={544}
+                  aria-valuenow={workbenchRailWidth}
+                  title="Drag to resize. Double-click to reset."
+                  onPointerDown={(event) => {
+                    event.preventDefault();
+                    event.currentTarget.setPointerCapture(event.pointerId);
+                    setWorkbenchResizing(true);
+                    resizeWorkbenchRailFromPointer(event.clientX);
+                  }}
+                  onPointerMove={(event) => {
+                    if (!workbenchResizing) {
+                      return;
+                    }
+                    resizeWorkbenchRailFromPointer(event.clientX);
+                  }}
+                  onPointerUp={(event) => {
+                    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+                      event.currentTarget.releasePointerCapture(event.pointerId);
+                    }
+                    setWorkbenchResizing(false);
+                  }}
+                  onDoubleClick={resetWorkbenchRailWidth}
+                  onKeyDown={(event) => {
+                    if (event.key === "ArrowLeft") {
+                      event.preventDefault();
+                      updateWorkbenchRailWidth(workbenchRailWidth + WORKBENCH_RAIL_WIDTH_STEP);
+                      return;
+                    }
+                    if (event.key === "ArrowRight") {
+                      event.preventDefault();
+                      updateWorkbenchRailWidth(workbenchRailWidth - WORKBENCH_RAIL_WIDTH_STEP);
+                      return;
+                    }
+                    if (event.key === "Home") {
+                      event.preventDefault();
+                      resetWorkbenchRailWidth();
+                    }
+                  }}
+                />
 
                 <aside className="today-workbench__side" aria-label="Today context">
                   <TaskInspectorPanel
