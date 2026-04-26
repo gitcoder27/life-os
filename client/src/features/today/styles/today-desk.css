@@ -12,7 +12,7 @@
   --today-ink-soft: var(--text-secondary);
   --today-ink-faint: rgba(177, 166, 142, 0.72);
   --today-ink-muted: rgba(160, 149, 126, 0.58);
-  --today-rail-inset: 1.75rem;
+  --today-rail-inset: 0.85rem;
 }
 
 /* Layout: page flows top to bottom with strong rhythm */
@@ -311,7 +311,7 @@
 .today-desk .today-workbench {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 0 minmax(20rem, var(--today-workbench-rail-width, 24rem));
-  column-gap: clamp(1.2rem, 2.2vw, 2rem);
+  column-gap: clamp(0.75rem, 1.45vw, 1.25rem);
   row-gap: 1.75rem;
   align-items: start;
   width: 100%;
@@ -394,7 +394,7 @@
   gap: 1.35rem;
   max-height: calc(100vh - var(--today-sticky-offset) - 1rem);
   min-width: 0;
-  padding-left: clamp(0.75rem, 1.5vw, var(--today-rail-inset));
+  padding-left: var(--today-rail-inset);
   padding-right: 0.85rem;
   overflow-y: auto;
   scrollbar-gutter: stable both-edges;
