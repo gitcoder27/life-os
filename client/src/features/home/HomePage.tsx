@@ -13,7 +13,6 @@ import {
   PageLoadingState,
 } from "../../shared/ui/PageState";
 
-import { AdvisoryStrip } from "./AdvisoryStrip";
 import { EssentialsBand } from "./EssentialsBand";
 import { FocusSessionBanner } from "./FocusSessionBanner";
 import { FocusStage } from "./FocusStage";
@@ -136,13 +135,6 @@ export function HomePage() {
       </section>
 
       <WorkspaceLaunchStrip today={home.date} guidance={home.guidance} />
-
-      <AdvisoryStrip
-        date={home.date}
-        launch={home.launch}
-        suggestion={home.rescueSuggestion}
-        mustWinTask={home.mustWinTask}
-      />
 
       <EssentialsBand
         routines={home.routineSummary}
