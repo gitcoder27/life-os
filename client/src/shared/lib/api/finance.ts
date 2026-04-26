@@ -39,6 +39,8 @@ type FinanceSummaryResponse = {
 export type FinanceAccountType = "bank" | "cash" | "wallet" | "other";
 export type FinanceTransactionType = "income" | "expense" | "transfer" | "adjustment";
 export type RecurringIncomeStatus = "active" | "paused" | "archived";
+export type CreditCardStatus = "active" | "archived";
+export type LoanStatus = "active" | "paid_off" | "archived";
 
 export type FinanceBillCompletionMode = "pay_and_log" | "mark_paid_only";
 export type FinanceBillReconciliationStatus =
@@ -111,6 +113,42 @@ export type RecurringIncomeItem = {
   updatedAt: string;
 };
 
+export type CreditCardItem = {
+  id: string;
+  paymentAccountId: string | null;
+  name: string;
+  issuer: string | null;
+  currencyCode: string;
+  creditLimitMinor: number;
+  outstandingBalanceMinor: number;
+  statementDay: number | null;
+  paymentDueDay: number | null;
+  minimumDueMinor: number | null;
+  utilizationPercent: number;
+  status: CreditCardStatus;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type LoanItem = {
+  id: string;
+  paymentAccountId: string | null;
+  name: string;
+  lender: string | null;
+  currencyCode: string;
+  principalAmountMinor: number | null;
+  outstandingBalanceMinor: number;
+  emiAmountMinor: number;
+  interestRateBps: number | null;
+  dueDay: number | null;
+  startOn: string | null;
+  endOn: string | null;
+  progressPercent: number;
+  status: LoanStatus;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type FinanceDashboardResponse = {
   generatedAt: string;
   month: string;
@@ -120,6 +158,8 @@ export type FinanceDashboardResponse = {
   plannedIncomeMinor: number | null;
   totalSpentMinor: number;
   upcomingDueMinor: number;
+  debtDueMinor: number;
+  debtOutstandingMinor: number;
   safeToSpendMinor: number;
   accountCount: number;
   transactionCount: number;
@@ -127,6 +167,8 @@ export type FinanceDashboardResponse = {
   accounts: FinanceAccountItem[];
   recentTransactions: FinanceTransactionItem[];
   recurringIncome: RecurringIncomeItem[];
+  creditCards: CreditCardItem[];
+  loans: LoanItem[];
 };
 
 export type FinancePaceStatus = "no_plan" | "on_pace" | "slightly_heavy" | "off_track";
@@ -325,6 +367,16 @@ type FinanceTransactionMutationResponse = {
 type RecurringIncomeMutationResponse = {
   generatedAt: string;
   recurringIncome: RecurringIncomeItem;
+};
+
+type CreditCardMutationResponse = {
+  generatedAt: string;
+  creditCard: CreditCardItem;
+};
+
+type LoanMutationResponse = {
+  generatedAt: string;
+  loan: LoanItem;
 };
 
 type CategoryMutationResponse = {
@@ -722,6 +774,130 @@ export const useCreateRecurringIncomeMutation = (todayDate: string) => {
   });
 };
 
+export const useCreateCreditCardMutation = (todayDate: string) => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (payload: {
+      name: string;
+      issuer?: string | null;
+      paymentAccountId?: string | null;
+      creditLimitMinor: number;
+      outstandingBalanceMinor?: number;
+      statementDay?: number | null;
+      paymentDueDay?: number | null;
+      minimumDueMinor?: number | null;
+      currencyCode?: string;
+      status?: CreditCardStatus;
+    }) =>
+      apiRequest<CreditCardMutationResponse>("/api/finance/credit-cards", {
+        method: "POST",
+        body: payload,
+      }),
+    meta: {
+      successMessage: "Card added.",
+      errorMessage: "Card creation failed.",
+    },
+    onSuccess: () => invalidateCoreData(queryClient, todayDate),
+  });
+};
+
+export const useUpdateCreditCardMutation = (todayDate: string) => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      creditCardId,
+      ...payload
+    }: {
+      creditCardId: string;
+      name?: string;
+      issuer?: string | null;
+      paymentAccountId?: string | null;
+      creditLimitMinor?: number;
+      outstandingBalanceMinor?: number;
+      statementDay?: number | null;
+      paymentDueDay?: number | null;
+      minimumDueMinor?: number | null;
+      currencyCode?: string;
+      status?: CreditCardStatus;
+    }) =>
+      apiRequest<CreditCardMutationResponse>(`/api/finance/credit-cards/${creditCardId}`, {
+        method: "PATCH",
+        body: payload,
+      }),
+    meta: {
+      successMessage: "Card updated.",
+      errorMessage: "Card update failed.",
+    },
+    onSuccess: () => invalidateCoreData(queryClient, todayDate),
+  });
+};
+
+export const useCreateLoanMutation = (todayDate: string) => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (payload: {
+      name: string;
+      lender?: string | null;
+      paymentAccountId?: string | null;
+      principalAmountMinor?: number | null;
+      outstandingBalanceMinor: number;
+      emiAmountMinor: number;
+      interestRateBps?: number | null;
+      dueDay?: number | null;
+      startOn?: string | null;
+      endOn?: string | null;
+      currencyCode?: string;
+      status?: LoanStatus;
+    }) =>
+      apiRequest<LoanMutationResponse>("/api/finance/loans", {
+        method: "POST",
+        body: payload,
+      }),
+    meta: {
+      successMessage: "Loan added.",
+      errorMessage: "Loan creation failed.",
+    },
+    onSuccess: () => invalidateCoreData(queryClient, todayDate),
+  });
+};
+
+export const useUpdateLoanMutation = (todayDate: string) => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      loanId,
+      ...payload
+    }: {
+      loanId: string;
+      name?: string;
+      lender?: string | null;
+      paymentAccountId?: string | null;
+      principalAmountMinor?: number | null;
+      outstandingBalanceMinor?: number;
+      emiAmountMinor?: number;
+      interestRateBps?: number | null;
+      dueDay?: number | null;
+      startOn?: string | null;
+      endOn?: string | null;
+      currencyCode?: string;
+      status?: LoanStatus;
+    }) =>
+      apiRequest<LoanMutationResponse>(`/api/finance/loans/${loanId}`, {
+        method: "PATCH",
+        body: payload,
+      }),
+    meta: {
+      successMessage: "Loan updated.",
+      errorMessage: "Loan update failed.",
+    },
+    onSuccess: () => invalidateCoreData(queryClient, todayDate),
+  });
+};
+
 export const useCreateBillMutation = (todayDate: string) => {
   const queryClient = useQueryClient();
 
@@ -759,6 +935,7 @@ export const usePayAndLogBillMutation = (todayDate: string) => {
       currencyCode?: string;
       description?: string | null;
       expenseCategoryId?: string | null;
+      accountId?: string | null;
     }) =>
       apiRequest<FinanceBillMutationResponse>(`/api/finance/bills/${billId}/pay-and-log`, {
         method: "POST",

@@ -64,6 +64,8 @@ export async function resetWorkspaceData(
 
   await tx.financeMonthPlan.deleteMany({ where: { userId } });
   await tx.recurringIncomeTemplate.deleteMany({ where: { userId } });
+  await tx.creditCard.deleteMany({ where: { userId } });
+  await tx.loan.deleteMany({ where: { userId } });
   await tx.financeTransaction.deleteMany({ where: { userId } });
   await tx.financeAccount.deleteMany({ where: { userId } });
   await tx.expense.deleteMany({ where: { userId } });

@@ -265,6 +265,17 @@ enum RecurringIncomeStatus {
   ARCHIVED
 }
 
+enum CreditCardStatus {
+  ACTIVE
+  ARCHIVED
+}
+
+enum LoanStatus {
+  ACTIVE
+  PAID_OFF
+  ARCHIVED
+}
+
 enum AdminItemType {
   BILL
   ADMIN
@@ -366,6 +377,8 @@ model User {
   financeAccounts       FinanceAccount[]
   financeTransactions   FinanceTransaction[]
   recurringIncomeTemplates RecurringIncomeTemplate[]
+  creditCards           CreditCard[]
+  loans                 Loan[]
   recurringExpenseTemplates RecurringExpenseTemplate[]
   expenses              Expense[]
   adminItems            AdminItem[]
@@ -981,6 +994,8 @@ model FinanceAccount {
   transactions         FinanceTransaction[]  @relation("FinanceTransactionAccount")
   transferTransactions FinanceTransaction[]  @relation("FinanceTransactionTransferAccount")
   recurringIncomeTemplates RecurringIncomeTemplate[]
+  creditCards          CreditCard[]
+  loans                Loan[]
 
   @@index([userId, archivedAt])
 }
@@ -1025,6 +1040,50 @@ model RecurringIncomeTemplate {
   account        FinanceAccount        @relation(fields: [accountId], references: [id], onDelete: Cascade)
 
   @@index([userId, status, nextExpectedOn])
+}
+
+model CreditCard {
+  id                      String           @id @default(uuid())
+  userId                  String
+  paymentAccountId        String?
+  name                    String
+  issuer                  String?
+  currencyCode            String
+  creditLimitMinor        Int
+  outstandingBalanceMinor Int              @default(0)
+  statementDay            Int?
+  paymentDueDay           Int?
+  minimumDueMinor         Int?
+  status                  CreditCardStatus @default(ACTIVE)
+  createdAt               DateTime         @default(now())
+  updatedAt               DateTime         @updatedAt
+  user                    User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  paymentAccount          FinanceAccount?  @relation(fields: [paymentAccountId], references: [id], onDelete: SetNull)
+
+  @@index([userId, status])
+}
+
+model Loan {
+  id                      String          @id @default(uuid())
+  userId                  String
+  paymentAccountId        String?
+  name                    String
+  lender                  String?
+  currencyCode            String
+  principalAmountMinor    Int?
+  outstandingBalanceMinor Int             @default(0)
+  emiAmountMinor          Int
+  interestRateBps         Int?
+  dueDay                  Int?
+  startOn                 DateTime?
+  endOn                   DateTime?
+  status                  LoanStatus      @default(ACTIVE)
+  createdAt               DateTime        @default(now())
+  updatedAt               DateTime        @updatedAt
+  user                    User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  paymentAccount          FinanceAccount? @relation(fields: [paymentAccountId], references: [id], onDelete: SetNull)
+
+  @@index([userId, status])
 }
 
 model RecurringExpenseTemplate {

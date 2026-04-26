@@ -13,9 +13,11 @@ import {
   type FinanceTransactionType,
   useCreateBillMutation,
   useCreateCategoryMutation,
+  useCreateCreditCardMutation,
   useCreateExpenseMutation,
   useCreateFinanceAccountMutation,
   useCreateFinanceTransactionMutation,
+  useCreateLoanMutation,
   useCreateRecurringExpenseMutation,
   useCreateRecurringIncomeMutation,
   useDismissBillMutation,
@@ -24,8 +26,10 @@ import {
   usePayAndLogBillMutation,
   useRescheduleBillMutation,
   useUpdateCategoryMutation,
+  useUpdateCreditCardMutation,
   useUpdateFinanceGoalMutation,
   useUpdateFinanceMonthPlanMutation,
+  useUpdateLoanMutation,
   useUpdateRecurringExpenseMutation,
 } from "../../shared/lib/api";
 import {
@@ -44,8 +48,8 @@ import { buildRecurrenceInput } from "../../shared/ui/RecurrenceEditor";
 import { FinanceInsightsPanel } from "./FinanceInsightsPanel";
 import { FinancePlanPanel } from "./FinancePlanPanel";
 
-type CockpitTab = "overview" | "transactions" | "bills" | "accounts";
-type SetupTab = "accounts" | "income" | "categories" | "recurring";
+type CockpitTab = "overview" | "transactions" | "bills" | "accounts" | "debt";
+type SetupTab = "accounts" | "income" | "cards" | "loans" | "categories" | "recurring";
 
 type AccountForm = {
   name: string;
@@ -74,6 +78,7 @@ type BillPaymentForm = {
   paidOn: string;
   amount: string;
   categoryId: string;
+  accountId: string;
   description: string;
 };
 
@@ -94,6 +99,26 @@ type RecurringBillForm = {
   amount: string;
   categoryId: string;
   nextDueOn: string;
+};
+
+type CreditCardForm = {
+  name: string;
+  issuer: string;
+  paymentAccountId: string;
+  creditLimit: string;
+  outstandingBalance: string;
+  minimumDue: string;
+  paymentDueDay: string;
+};
+
+type LoanForm = {
+  name: string;
+  lender: string;
+  paymentAccountId: string;
+  principalAmount: string;
+  outstandingBalance: string;
+  emiAmount: string;
+  dueDay: string;
 };
 
 const emptyAccountForm: AccountForm = {
@@ -168,6 +193,10 @@ export function FinancePage() {
   const createAccountMutation = useCreateFinanceAccountMutation(today);
   const createTransactionMutation = useCreateFinanceTransactionMutation(today);
   const createIncomeMutation = useCreateRecurringIncomeMutation(today);
+  const createCreditCardMutation = useCreateCreditCardMutation(today);
+  const updateCreditCardMutation = useUpdateCreditCardMutation(today);
+  const createLoanMutation = useCreateLoanMutation(today);
+  const updateLoanMutation = useUpdateLoanMutation(today);
   const createBillMutation = useCreateBillMutation(today);
   const createExpenseMutation = useCreateExpenseMutation(today);
   const payAndLogBillMutation = usePayAndLogBillMutation(today);
@@ -207,6 +236,7 @@ export function FinancePage() {
     paidOn: today,
     amount: "",
     categoryId: "",
+    accountId: "",
     description: "",
   });
   const [incomeForm, setIncomeForm] = useState<IncomeForm>({
@@ -222,6 +252,24 @@ export function FinancePage() {
     categoryId: "",
     nextDueOn: today,
   });
+  const [creditCardForm, setCreditCardForm] = useState<CreditCardForm>({
+    name: "",
+    issuer: "",
+    paymentAccountId: "",
+    creditLimit: "",
+    outstandingBalance: "",
+    minimumDue: "",
+    paymentDueDay: "",
+  });
+  const [loanForm, setLoanForm] = useState<LoanForm>({
+    name: "",
+    lender: "",
+    paymentAccountId: "",
+    principalAmount: "",
+    outstandingBalance: "",
+    emiAmount: "",
+    dueDay: "",
+  });
 
   const openBills = bills
     .filter((bill) => bill.status === "pending" || bill.status === "rescheduled")
@@ -229,6 +277,8 @@ export function FinancePage() {
   const paidBills = bills.filter((bill) => bill.status === "done");
   const dueNow = openBills.filter((bill) => daysUntil(bill.dueOn) <= 7);
   const recentTransactions = dashboard?.recentTransactions ?? [];
+  const activeCreditCards = dashboard?.creditCards.filter((card) => card.status === "active") ?? [];
+  const activeLoans = dashboard?.loans.filter((loan) => loan.status === "active") ?? [];
 
   const categoryMap = useMemo(
     () => new Map(categories.map((category) => [category.id, category])),
@@ -351,6 +401,7 @@ export function FinancePage() {
       amount: bill.amountMinor != null ? String(bill.amountMinor / 100) : "",
       description: bill.title,
       categoryId: bill.expenseCategoryId ?? "",
+      accountId: activeAccounts[0]?.id ?? "",
     });
     setPayingBillId(bill.id);
   }
@@ -362,6 +413,7 @@ export function FinancePage() {
       amountMinor: billPaymentForm.amount ? parseAmountToMinor(billPaymentForm.amount) : null,
       description: billPaymentForm.description || bill.title,
       expenseCategoryId: billPaymentForm.categoryId || null,
+      accountId: billPaymentForm.accountId || null,
       currencyCode: currency,
     });
     setPayingBillId(null);
@@ -400,6 +452,57 @@ export function FinancePage() {
       remindDaysBefore: 3,
     });
     setRecurringBillForm({ title: "", amount: "", categoryId: "", nextDueOn: today });
+  }
+
+  async function handleCreateCreditCard() {
+    const creditLimitMinor = parseAmountToMinor(creditCardForm.creditLimit);
+    if (!creditCardForm.name.trim() || !creditLimitMinor) return;
+
+    await createCreditCardMutation.mutateAsync({
+      name: creditCardForm.name.trim(),
+      issuer: creditCardForm.issuer || null,
+      paymentAccountId: creditCardForm.paymentAccountId || null,
+      creditLimitMinor,
+      outstandingBalanceMinor: parseAmountToMinor(creditCardForm.outstandingBalance) ?? 0,
+      minimumDueMinor: creditCardForm.minimumDue ? parseAmountToMinor(creditCardForm.minimumDue) : null,
+      paymentDueDay: creditCardForm.paymentDueDay ? Number(creditCardForm.paymentDueDay) : null,
+      currencyCode: currency,
+    });
+    setCreditCardForm({
+      name: "",
+      issuer: "",
+      paymentAccountId: "",
+      creditLimit: "",
+      outstandingBalance: "",
+      minimumDue: "",
+      paymentDueDay: "",
+    });
+  }
+
+  async function handleCreateLoan() {
+    const outstandingBalanceMinor = parseAmountToMinor(loanForm.outstandingBalance);
+    const emiAmountMinor = parseAmountToMinor(loanForm.emiAmount);
+    if (!loanForm.name.trim() || !outstandingBalanceMinor || !emiAmountMinor) return;
+
+    await createLoanMutation.mutateAsync({
+      name: loanForm.name.trim(),
+      lender: loanForm.lender || null,
+      paymentAccountId: loanForm.paymentAccountId || null,
+      principalAmountMinor: loanForm.principalAmount ? parseAmountToMinor(loanForm.principalAmount) : null,
+      outstandingBalanceMinor,
+      emiAmountMinor,
+      dueDay: loanForm.dueDay ? Number(loanForm.dueDay) : null,
+      currencyCode: currency,
+    });
+    setLoanForm({
+      name: "",
+      lender: "",
+      paymentAccountId: "",
+      principalAmount: "",
+      outstandingBalance: "",
+      emiAmount: "",
+      dueDay: "",
+    });
   }
 
   return (
@@ -450,6 +553,10 @@ export function FinancePage() {
           <span className="fc-label">Due</span>
           <strong>{formatMinorCurrency(dashboard?.upcomingDueMinor ?? 0, currency)}</strong>
         </div>
+        <div className="fc-metric">
+          <span className="fc-label">Debt due</span>
+          <strong>{formatMinorCurrency(dashboard?.debtDueMinor ?? 0, currency)}</strong>
+        </div>
         <div className="fc-metric fc-metric--safe">
           <span className="fc-label">Safe</span>
           <strong>{formatMinorCurrency(dashboard?.safeToSpendMinor ?? 0, currency)}</strong>
@@ -459,14 +566,14 @@ export function FinancePage() {
       <div className="fc__body">
         <main className="fc-workbench">
           <nav className="fc-tabs" aria-label="Finance sections">
-            {(["overview", "transactions", "bills", "accounts"] as const).map((item) => (
+            {(["overview", "transactions", "bills", "accounts", "debt"] as const).map((item) => (
               <button
                 key={item}
                 className={`fc-tab${tab === item ? " fc-tab--active" : ""}`}
                 type="button"
                 onClick={() => setTab(item)}
               >
-                {item === "overview" ? "Overview" : item === "transactions" ? "Transactions" : item === "bills" ? "Bills" : "Accounts"}
+                {item === "overview" ? "Overview" : item === "transactions" ? "Transactions" : item === "bills" ? "Bills" : item === "accounts" ? "Accounts" : "Debt"}
               </button>
             ))}
           </nav>
@@ -572,6 +679,18 @@ export function FinancePage() {
               </div>
 
               <div className="fc-section-head">
+                <h2>Debt</h2>
+                <button className="button button--ghost button--small" type="button" onClick={() => setTab("debt")}>Open</button>
+              </div>
+              <DebtSummary
+                creditCards={activeCreditCards}
+                loans={activeLoans}
+                currency={currency}
+                outstandingMinor={dashboard?.debtOutstandingMinor ?? 0}
+                dueMinor={dashboard?.debtDueMinor ?? 0}
+              />
+
+              <div className="fc-section-head">
                 <h2>Upcoming</h2>
                 <button className="button button--ghost button--small" type="button" onClick={() => setTab("bills")}>Bills</button>
               </div>
@@ -598,6 +717,7 @@ export function FinancePage() {
                       paymentForm={billPaymentForm}
                       setPaymentForm={setBillPaymentForm}
                       categories={activeCategories}
+                      accounts={activeAccounts}
                       onPayAndLog={handlePayAndLogBill}
                       isPaying={payAndLogBillMutation.isPending}
                     />
@@ -688,6 +808,7 @@ export function FinancePage() {
                       paymentForm={billPaymentForm}
                       setPaymentForm={setBillPaymentForm}
                       categories={activeCategories}
+                      accounts={activeAccounts}
                       onPayAndLog={handlePayAndLogBill}
                       isPaying={payAndLogBillMutation.isPending}
                     />
@@ -720,6 +841,32 @@ export function FinancePage() {
               )}
             </section>
           ) : null}
+
+          {tab === "debt" ? (
+            <section className="fc-panel">
+              <div className="fc-section-head">
+                <h2>Debt</h2>
+                <div className="button-row button-row--tight">
+                  <button className="button button--primary button--small" type="button" onClick={() => openSetup("cards")}>Add card</button>
+                  <button className="button button--ghost button--small" type="button" onClick={() => openSetup("loans")}>Add loan</button>
+                </div>
+              </div>
+              <DebtSummary
+                creditCards={activeCreditCards}
+                loans={activeLoans}
+                currency={currency}
+                outstandingMinor={dashboard?.debtOutstandingMinor ?? 0}
+                dueMinor={dashboard?.debtDueMinor ?? 0}
+              />
+              <DebtList
+                creditCards={activeCreditCards}
+                loans={activeLoans}
+                currency={currency}
+                onArchiveCard={(cardId) => void updateCreditCardMutation.mutateAsync({ creditCardId: cardId, status: "archived" })}
+                onArchiveLoan={(loanId) => void updateLoanMutation.mutateAsync({ loanId, status: "archived" })}
+              />
+            </section>
+          ) : null}
         </main>
 
         <aside className="fc-rail">
@@ -738,10 +885,10 @@ export function FinancePage() {
           />
           <section className="fc-debt-next">
             <div>
-              <span className="fc-label">Next</span>
-              <strong>Cards and loans</strong>
+              <span className="fc-label">Debt due</span>
+              <strong>{formatMinorCurrency(dashboard?.debtDueMinor ?? 0, currency)}</strong>
             </div>
-            <span>Planned</span>
+            <button className="button button--ghost button--small" type="button" onClick={() => setTab("debt")}>Debt</button>
           </section>
           <FinanceInsightsPanel
             insights={insights}
@@ -762,9 +909,9 @@ export function FinancePage() {
               <button className="button button--ghost button--small" type="button" onClick={() => setShowSetup(false)}>Close</button>
             </div>
             <div className="setup-drawer__tabs">
-              {(["accounts", "income", "categories", "recurring"] as const).map((item) => (
+              {(["accounts", "income", "cards", "loans", "categories", "recurring"] as const).map((item) => (
                 <button key={item} className={`feed__tab${setupTab === item ? " feed__tab--active" : ""}`} type="button" onClick={() => setSetupTab(item)}>
-                  {item === "accounts" ? "Accounts" : item === "income" ? "Income" : item === "categories" ? "Categories" : "Bills"}
+                  {item === "accounts" ? "Accounts" : item === "income" ? "Income" : item === "cards" ? "Cards" : item === "loans" ? "Loans" : item === "categories" ? "Categories" : "Bills"}
                 </button>
               ))}
             </div>
@@ -814,6 +961,80 @@ export function FinancePage() {
                     <input type="date" value={incomeForm.nextExpectedOn} onChange={(event) => setIncomeForm((form) => ({ ...form, nextExpectedOn: event.target.value }))} />
                   </label>
                   <button className="button button--primary button--small" type="button" disabled={createIncomeMutation.isPending} onClick={() => void handleCreateIncome()}>Add income</button>
+                </div>
+              ) : null}
+
+              {setupTab === "cards" ? (
+                <div className="stack-form">
+                  <label className="field">
+                    <span>Card</span>
+                    <input type="text" value={creditCardForm.name} onChange={(event) => setCreditCardForm((form) => ({ ...form, name: event.target.value }))} />
+                  </label>
+                  <label className="field">
+                    <span>Issuer</span>
+                    <input type="text" value={creditCardForm.issuer} onChange={(event) => setCreditCardForm((form) => ({ ...form, issuer: event.target.value }))} />
+                  </label>
+                  <label className="field">
+                    <span>Pay from</span>
+                    <select value={creditCardForm.paymentAccountId} onChange={(event) => setCreditCardForm((form) => ({ ...form, paymentAccountId: event.target.value }))}>
+                      <option value="">None</option>
+                      {activeAccounts.map((account) => <option key={account.id} value={account.id}>{account.name}</option>)}
+                    </select>
+                  </label>
+                  <label className="field">
+                    <span>Limit</span>
+                    <input type="text" inputMode="decimal" value={creditCardForm.creditLimit} onChange={(event) => setCreditCardForm((form) => ({ ...form, creditLimit: event.target.value }))} />
+                  </label>
+                  <label className="field">
+                    <span>Outstanding</span>
+                    <input type="text" inputMode="decimal" value={creditCardForm.outstandingBalance} onChange={(event) => setCreditCardForm((form) => ({ ...form, outstandingBalance: event.target.value }))} />
+                  </label>
+                  <label className="field">
+                    <span>Minimum due</span>
+                    <input type="text" inputMode="decimal" value={creditCardForm.minimumDue} onChange={(event) => setCreditCardForm((form) => ({ ...form, minimumDue: event.target.value }))} />
+                  </label>
+                  <label className="field">
+                    <span>Due day</span>
+                    <input type="number" min={1} max={31} value={creditCardForm.paymentDueDay} onChange={(event) => setCreditCardForm((form) => ({ ...form, paymentDueDay: event.target.value }))} />
+                  </label>
+                  <button className="button button--primary button--small" type="button" disabled={createCreditCardMutation.isPending} onClick={() => void handleCreateCreditCard()}>Add card</button>
+                </div>
+              ) : null}
+
+              {setupTab === "loans" ? (
+                <div className="stack-form">
+                  <label className="field">
+                    <span>Loan</span>
+                    <input type="text" value={loanForm.name} onChange={(event) => setLoanForm((form) => ({ ...form, name: event.target.value }))} />
+                  </label>
+                  <label className="field">
+                    <span>Lender</span>
+                    <input type="text" value={loanForm.lender} onChange={(event) => setLoanForm((form) => ({ ...form, lender: event.target.value }))} />
+                  </label>
+                  <label className="field">
+                    <span>Pay from</span>
+                    <select value={loanForm.paymentAccountId} onChange={(event) => setLoanForm((form) => ({ ...form, paymentAccountId: event.target.value }))}>
+                      <option value="">None</option>
+                      {activeAccounts.map((account) => <option key={account.id} value={account.id}>{account.name}</option>)}
+                    </select>
+                  </label>
+                  <label className="field">
+                    <span>Principal</span>
+                    <input type="text" inputMode="decimal" value={loanForm.principalAmount} onChange={(event) => setLoanForm((form) => ({ ...form, principalAmount: event.target.value }))} />
+                  </label>
+                  <label className="field">
+                    <span>Outstanding</span>
+                    <input type="text" inputMode="decimal" value={loanForm.outstandingBalance} onChange={(event) => setLoanForm((form) => ({ ...form, outstandingBalance: event.target.value }))} />
+                  </label>
+                  <label className="field">
+                    <span>EMI</span>
+                    <input type="text" inputMode="decimal" value={loanForm.emiAmount} onChange={(event) => setLoanForm((form) => ({ ...form, emiAmount: event.target.value }))} />
+                  </label>
+                  <label className="field">
+                    <span>Due day</span>
+                    <input type="number" min={1} max={31} value={loanForm.dueDay} onChange={(event) => setLoanForm((form) => ({ ...form, dueDay: event.target.value }))} />
+                  </label>
+                  <button className="button button--primary button--small" type="button" disabled={createLoanMutation.isPending} onClick={() => void handleCreateLoan()}>Add loan</button>
                 </div>
               ) : null}
 
@@ -887,6 +1108,128 @@ export function FinancePage() {
   );
 }
 
+function DebtSummary({
+  creditCards,
+  loans,
+  currency,
+  outstandingMinor,
+  dueMinor,
+}: {
+  creditCards: Array<{
+    id: string;
+    outstandingBalanceMinor: number;
+    creditLimitMinor: number;
+    utilizationPercent: number;
+  }>;
+  loans: Array<{
+    id: string;
+    outstandingBalanceMinor: number;
+    emiAmountMinor: number;
+  }>;
+  currency: string;
+  outstandingMinor: number;
+  dueMinor: number;
+}) {
+  if (creditCards.length === 0 && loans.length === 0) {
+    return <EmptyState title="No debt tracked" description="Add cards or loans from setup." />;
+  }
+
+  const totalLimitMinor = creditCards.reduce((sum, card) => sum + card.creditLimitMinor, 0);
+  const totalCardOutstandingMinor = creditCards.reduce((sum, card) => sum + card.outstandingBalanceMinor, 0);
+  const utilization = totalLimitMinor > 0 ? Math.round((totalCardOutstandingMinor / totalLimitMinor) * 100) : 0;
+
+  return (
+    <div className="fc-debt-summary">
+      <div>
+        <span className="fc-label">Outstanding</span>
+        <strong>{formatMinorCurrency(outstandingMinor, currency)}</strong>
+      </div>
+      <div>
+        <span className="fc-label">This month</span>
+        <strong>{formatMinorCurrency(dueMinor, currency)}</strong>
+      </div>
+      <div>
+        <span className="fc-label">Card use</span>
+        <strong>{utilization}%</strong>
+      </div>
+    </div>
+  );
+}
+
+function DebtList({
+  creditCards,
+  loans,
+  currency,
+  onArchiveCard,
+  onArchiveLoan,
+}: {
+  creditCards: Array<{
+    id: string;
+    name: string;
+    issuer: string | null;
+    outstandingBalanceMinor: number;
+    creditLimitMinor: number;
+    minimumDueMinor: number | null;
+    paymentDueDay: number | null;
+    utilizationPercent: number;
+  }>;
+  loans: Array<{
+    id: string;
+    name: string;
+    lender: string | null;
+    outstandingBalanceMinor: number;
+    emiAmountMinor: number;
+    dueDay: number | null;
+    progressPercent: number;
+  }>;
+  currency: string;
+  onArchiveCard: (cardId: string) => void;
+  onArchiveLoan: (loanId: string) => void;
+}) {
+  if (creditCards.length === 0 && loans.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="fc-list">
+      {creditCards.map((card) => (
+        <div key={card.id} className="fc-row">
+          <div className="fc-row__dot fc-row__dot--transfer" />
+          <div className="fc-row__main">
+            <strong>{card.name}</strong>
+            <span>
+              {card.issuer ?? "Credit card"} · {card.utilizationPercent}% used
+              {card.paymentDueDay ? ` · due ${card.paymentDueDay}` : ""}
+            </span>
+          </div>
+          <span className="fc-row__amount">{formatMinorCurrency(card.outstandingBalanceMinor, currency)}</span>
+          <div className="fc-row__actions">
+            <span className="fc-muted">{formatMinorCurrency(card.minimumDueMinor ?? 0, currency)} due</span>
+            <button className="button button--ghost button--small" type="button" onClick={() => onArchiveCard(card.id)}>Archive</button>
+          </div>
+        </div>
+      ))}
+      {loans.map((loan) => (
+        <div key={loan.id} className="fc-row">
+          <div className="fc-row__dot fc-row__dot--expense" />
+          <div className="fc-row__main">
+            <strong>{loan.name}</strong>
+            <span>
+              {loan.lender ?? "Loan"} · {loan.progressPercent}% paid
+              {loan.dueDay ? ` · due ${loan.dueDay}` : ""}
+            </span>
+          </div>
+          <span className="fc-row__amount">{formatMinorCurrency(loan.outstandingBalanceMinor, currency)}</span>
+          <div className="fc-row__actions">
+            <span className="fc-muted">{formatMinorCurrency(loan.emiAmountMinor, currency)} EMI</span>
+            <button className="button button--ghost button--small" type="button" onClick={() => onArchiveLoan(loan.id)}>Archive</button>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function TransactionList({
   transactions,
   currency,
@@ -952,6 +1295,7 @@ function BillRow({
   paymentForm,
   setPaymentForm,
   categories,
+  accounts,
   onPayAndLog,
   isPaying,
 }: {
@@ -970,6 +1314,7 @@ function BillRow({
   paymentForm: BillPaymentForm;
   setPaymentForm: Dispatch<SetStateAction<BillPaymentForm>>;
   categories: Array<{ id: string; name: string }>;
+  accounts: Array<{ id: string; name: string }>;
   onPayAndLog: (bill: FinanceBillItem) => Promise<void>;
   isPaying: boolean;
 }) {
@@ -1015,6 +1360,13 @@ function BillRow({
               <select value={paymentForm.categoryId} onChange={(event) => setPaymentForm((form) => ({ ...form, categoryId: event.target.value }))}>
                 <option value="">None</option>
                 {categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}
+              </select>
+            </label>
+            <label className="field">
+              <span>Account</span>
+              <select value={paymentForm.accountId} onChange={(event) => setPaymentForm((form) => ({ ...form, accountId: event.target.value }))}>
+                <option value="">Legacy only</option>
+                {accounts.map((account) => <option key={account.id} value={account.id}>{account.name}</option>)}
               </select>
             </label>
             <label className="field fc-field--wide">

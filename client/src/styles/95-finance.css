@@ -53,7 +53,7 @@
 
 .fc-snapshot {
   display: grid;
-  grid-template-columns: minmax(13rem, 1.4fr) repeat(4, minmax(8rem, 1fr));
+  grid-template-columns: minmax(13rem, 1.4fr) repeat(5, minmax(7.4rem, 1fr));
   border-top: 1px solid var(--border);
   border-bottom: 1px solid var(--border);
   background:
@@ -385,6 +385,28 @@
   font-weight: 650;
   text-transform: uppercase;
   letter-spacing: 0.08em;
+}
+
+.fc-debt-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+}
+
+.fc-debt-summary > div {
+  display: flex;
+  flex-direction: column;
+  gap: 0.18rem;
+  min-height: 4.6rem;
+  padding: 0.8rem 0.9rem;
+  border-right: 1px solid var(--border);
+}
+
+.fc-debt-summary strong {
+  font-size: var(--fs-body);
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
 }
 
 .setup-drawer--money {

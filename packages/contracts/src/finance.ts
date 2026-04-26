@@ -18,6 +18,8 @@ export type FinanceContributionFit = "on_track" | "tight" | "needs_plan";
 export type FinanceAccountType = "bank" | "cash" | "wallet" | "other";
 export type FinanceTransactionType = "income" | "expense" | "transfer" | "adjustment";
 export type RecurringIncomeStatus = "active" | "paused" | "archived";
+export type CreditCardStatus = "active" | "archived";
+export type LoanStatus = "active" | "paid_off" | "archived";
 
 export interface ExpenseItem {
   id: EntityId;
@@ -107,6 +109,42 @@ export interface RecurringIncomeItem {
   updatedAt: string;
 }
 
+export interface CreditCardItem {
+  id: EntityId;
+  paymentAccountId: EntityId | null;
+  name: string;
+  issuer: string | null;
+  currencyCode: string;
+  creditLimitMinor: number;
+  outstandingBalanceMinor: number;
+  statementDay: number | null;
+  paymentDueDay: number | null;
+  minimumDueMinor: number | null;
+  utilizationPercent: number;
+  status: CreditCardStatus;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface LoanItem {
+  id: EntityId;
+  paymentAccountId: EntityId | null;
+  name: string;
+  lender: string | null;
+  currencyCode: string;
+  principalAmountMinor: number | null;
+  outstandingBalanceMinor: number;
+  emiAmountMinor: number;
+  interestRateBps: number | null;
+  dueDay: number | null;
+  startOn: IsoDateString | null;
+  endOn: IsoDateString | null;
+  progressPercent: number;
+  status: LoanStatus;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface FinanceDashboardResponse extends ApiMeta {
   month: IsoMonthString;
   currencyCode: string;
@@ -115,6 +153,8 @@ export interface FinanceDashboardResponse extends ApiMeta {
   plannedIncomeMinor: number | null;
   totalSpentMinor: number;
   upcomingDueMinor: number;
+  debtDueMinor: number;
+  debtOutstandingMinor: number;
   safeToSpendMinor: number;
   accountCount: number;
   transactionCount: number;
@@ -122,6 +162,8 @@ export interface FinanceDashboardResponse extends ApiMeta {
   accounts: FinanceAccountItem[];
   recentTransactions: FinanceTransactionItem[];
   recurringIncome: RecurringIncomeItem[];
+  creditCards: CreditCardItem[];
+  loans: LoanItem[];
 }
 
 export interface CreateFinanceAccountRequest {
@@ -206,6 +248,90 @@ export interface RecurringIncomeResponse extends ApiMeta {
 
 export interface RecurringIncomeMutationResponse extends ApiMeta {
   recurringIncome: RecurringIncomeItem;
+}
+
+export interface CreateCreditCardRequest {
+  name: string;
+  issuer?: string | null;
+  paymentAccountId?: EntityId | null;
+  creditLimitMinor: number;
+  outstandingBalanceMinor?: number;
+  statementDay?: number | null;
+  paymentDueDay?: number | null;
+  minimumDueMinor?: number | null;
+  currencyCode?: string;
+  status?: CreditCardStatus;
+}
+
+export interface UpdateCreditCardRequest {
+  name?: string;
+  issuer?: string | null;
+  paymentAccountId?: EntityId | null;
+  creditLimitMinor?: number;
+  outstandingBalanceMinor?: number;
+  statementDay?: number | null;
+  paymentDueDay?: number | null;
+  minimumDueMinor?: number | null;
+  currencyCode?: string;
+  status?: CreditCardStatus;
+}
+
+export interface CreditCardsResponse extends ApiMeta {
+  creditCards: CreditCardItem[];
+}
+
+export interface CreditCardMutationResponse extends ApiMeta {
+  creditCard: CreditCardItem;
+}
+
+export interface PayCreditCardRequest {
+  accountId?: EntityId | null;
+  amountMinor: number;
+  paidOn: IsoDateString;
+}
+
+export interface CreateLoanRequest {
+  name: string;
+  lender?: string | null;
+  paymentAccountId?: EntityId | null;
+  principalAmountMinor?: number | null;
+  outstandingBalanceMinor: number;
+  emiAmountMinor: number;
+  interestRateBps?: number | null;
+  dueDay?: number | null;
+  startOn?: IsoDateString | null;
+  endOn?: IsoDateString | null;
+  currencyCode?: string;
+  status?: LoanStatus;
+}
+
+export interface UpdateLoanRequest {
+  name?: string;
+  lender?: string | null;
+  paymentAccountId?: EntityId | null;
+  principalAmountMinor?: number | null;
+  outstandingBalanceMinor?: number;
+  emiAmountMinor?: number;
+  interestRateBps?: number | null;
+  dueDay?: number | null;
+  startOn?: IsoDateString | null;
+  endOn?: IsoDateString | null;
+  currencyCode?: string;
+  status?: LoanStatus;
+}
+
+export interface LoansResponse extends ApiMeta {
+  loans: LoanItem[];
+}
+
+export interface LoanMutationResponse extends ApiMeta {
+  loan: LoanItem;
+}
+
+export interface PayLoanRequest {
+  accountId?: EntityId | null;
+  amountMinor: number;
+  paidOn: IsoDateString;
 }
 
 export interface FinanceMonthPlanCategoryWatchItem {
@@ -378,6 +504,7 @@ export interface CompleteFinanceBillWithExpenseRequest {
   currencyCode?: string;
   description?: string | null;
   expenseCategoryId?: EntityId | null;
+  accountId?: EntityId | null;
 }
 
 export interface CompleteFinanceBillRequest {

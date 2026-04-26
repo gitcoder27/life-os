@@ -2,11 +2,16 @@ import type { FastifyPluginAsync } from "fastify";
 import type {
   CompleteFinanceBillRequest,
   CompleteFinanceBillWithExpenseRequest,
+  CreateCreditCardRequest,
   CreateFinanceAccountRequest,
   CreateFinanceBillRequest,
   CreateFinanceTransactionRequest,
+  CreateLoanRequest,
   CreateExpenseCategoryRequest,
   CreateRecurringIncomeRequest,
+  CreditCardItem,
+  CreditCardMutationResponse,
+  CreditCardsResponse,
   DeleteExpenseResponse,
   ExpenseCategoryItem,
   ExpenseCategoryMutationResponse,
@@ -29,6 +34,11 @@ import type {
   IsoDateString,
   IsoMonthString,
   LinkFinanceBillExpenseRequest,
+  LoanItem,
+  LoanMutationResponse,
+  LoansResponse,
+  PayCreditCardRequest,
+  PayLoanRequest,
   RecurrenceInput,
   RecurringIncomeItem,
   RecurringIncomeMutationResponse,
@@ -36,14 +46,18 @@ import type {
   RecurringExpenseMutationResponse,
   RescheduleFinanceBillRequest,
   UpdateFinanceAccountRequest,
+  UpdateCreditCardRequest,
   UpdateFinanceGoalRequest,
   UpdateFinanceMonthPlanRequest,
   UpdateFinanceTransactionRequest,
+  UpdateLoanRequest,
   UpdateExpenseCategoryRequest,
   UpdateRecurringIncomeRequest,
   UpdateRecurringExpenseRequest,
 } from "@life-os/contracts";
 import type {
+  CreditCard,
+  CreditCardStatus as PrismaCreditCardStatus,
   ExpenseCategory,
   Expense,
   FinanceAccount,
@@ -53,6 +67,8 @@ import type {
   FinanceTransactionType as PrismaFinanceTransactionType,
   ExpenseSource as PrismaExpenseSource,
   GoalStatus as PrismaGoalStatus,
+  Loan,
+  LoanStatus as PrismaLoanStatus,
   RecurringIncomeStatus as PrismaRecurringIncomeStatus,
   RecurringIncomeTemplate,
   RecurringExpenseStatus as PrismaRecurringExpenseStatus,
@@ -81,6 +97,8 @@ type RecurringExpenseStatus = "active" | "paused" | "archived";
 type FinanceAccountType = "bank" | "cash" | "wallet" | "other";
 type FinanceTransactionType = "income" | "expense" | "transfer" | "adjustment";
 type RecurringIncomeStatus = "active" | "paused" | "archived";
+type CreditCardStatus = "active" | "archived";
+type LoanStatus = "active" | "paid_off" | "archived";
 
 interface ExpenseItem {
   id: string;
@@ -176,6 +194,8 @@ const recurringExpenseStatusSchema = z.enum(["active", "paused", "archived"]);
 const financeAccountTypeSchema = z.enum(["bank", "cash", "wallet", "other"]);
 const financeTransactionTypeSchema = z.enum(["income", "expense", "transfer", "adjustment"]);
 const recurringIncomeStatusSchema = z.enum(["active", "paused", "archived"]);
+const creditCardStatusSchema = z.enum(["active", "archived"]);
+const loanStatusSchema = z.enum(["active", "paid_off", "archived"]);
 const recurrenceExceptionActionSchema = z.enum(["skip", "do_once", "reschedule"]);
 const recurrenceRuleSchema = z.object({
   frequency: z.enum(["daily", "weekly", "monthly_nth_weekday", "interval"]),
@@ -278,6 +298,68 @@ const updateRecurringIncomeSchema = z.object({
   status: recurringIncomeStatusSchema.optional(),
 }).refine((value) => Object.keys(value).length > 0, "At least one field must be updated");
 
+const createCreditCardSchema = z.object({
+  name: z.string().min(1).max(120),
+  issuer: z.string().max(120).nullable().optional(),
+  paymentAccountId: z.string().uuid().nullable().optional(),
+  creditLimitMinor: z.number().int().positive(),
+  outstandingBalanceMinor: z.number().int().nonnegative().optional(),
+  statementDay: z.number().int().min(1).max(31).nullable().optional(),
+  paymentDueDay: z.number().int().min(1).max(31).nullable().optional(),
+  minimumDueMinor: z.number().int().nonnegative().nullable().optional(),
+  currencyCode: z.string().length(3).optional(),
+  status: creditCardStatusSchema.optional(),
+});
+
+const updateCreditCardSchema = z.object({
+  name: z.string().min(1).max(120).optional(),
+  issuer: z.string().max(120).nullable().optional(),
+  paymentAccountId: z.string().uuid().nullable().optional(),
+  creditLimitMinor: z.number().int().positive().optional(),
+  outstandingBalanceMinor: z.number().int().nonnegative().optional(),
+  statementDay: z.number().int().min(1).max(31).nullable().optional(),
+  paymentDueDay: z.number().int().min(1).max(31).nullable().optional(),
+  minimumDueMinor: z.number().int().nonnegative().nullable().optional(),
+  currencyCode: z.string().length(3).optional(),
+  status: creditCardStatusSchema.optional(),
+}).refine((value) => Object.keys(value).length > 0, "At least one field must be updated");
+
+const createLoanSchema = z.object({
+  name: z.string().min(1).max(120),
+  lender: z.string().max(120).nullable().optional(),
+  paymentAccountId: z.string().uuid().nullable().optional(),
+  principalAmountMinor: z.number().int().positive().nullable().optional(),
+  outstandingBalanceMinor: z.number().int().nonnegative(),
+  emiAmountMinor: z.number().int().positive(),
+  interestRateBps: z.number().int().nonnegative().nullable().optional(),
+  dueDay: z.number().int().min(1).max(31).nullable().optional(),
+  startOn: isoDateSchema.nullable().optional(),
+  endOn: isoDateSchema.nullable().optional(),
+  currencyCode: z.string().length(3).optional(),
+  status: loanStatusSchema.optional(),
+});
+
+const updateLoanSchema = z.object({
+  name: z.string().min(1).max(120).optional(),
+  lender: z.string().max(120).nullable().optional(),
+  paymentAccountId: z.string().uuid().nullable().optional(),
+  principalAmountMinor: z.number().int().positive().nullable().optional(),
+  outstandingBalanceMinor: z.number().int().nonnegative().optional(),
+  emiAmountMinor: z.number().int().positive().optional(),
+  interestRateBps: z.number().int().nonnegative().nullable().optional(),
+  dueDay: z.number().int().min(1).max(31).nullable().optional(),
+  startOn: isoDateSchema.nullable().optional(),
+  endOn: isoDateSchema.nullable().optional(),
+  currencyCode: z.string().length(3).optional(),
+  status: loanStatusSchema.optional(),
+}).refine((value) => Object.keys(value).length > 0, "At least one field must be updated");
+
+const payDebtSchema = z.object({
+  accountId: z.string().uuid().nullable().optional(),
+  amountMinor: z.number().int().positive(),
+  paidOn: isoDateSchema,
+});
+
 const createFinanceBillSchema = z.object({
   title: z.string().min(1).max(200),
   dueOn: isoDateSchema,
@@ -297,6 +379,7 @@ const completeFinanceBillWithExpenseSchema = z.object({
   currencyCode: z.string().length(3).optional(),
   description: z.string().max(4000).nullable().optional(),
   expenseCategoryId: z.string().uuid().nullable().optional(),
+  accountId: z.string().uuid().nullable().optional(),
 });
 
 const rescheduleFinanceBillSchema = z.object({
@@ -567,6 +650,54 @@ function fromPrismaRecurringIncomeStatus(status: PrismaRecurringIncomeStatus): R
   throw new Error(`Unsupported recurring income status: ${status satisfies never}`);
 }
 
+function toPrismaCreditCardStatus(status: CreditCardStatus): PrismaCreditCardStatus {
+  switch (status) {
+    case "active":
+      return "ACTIVE";
+    case "archived":
+      return "ARCHIVED";
+  }
+
+  throw new Error(`Unsupported credit card status: ${status satisfies never}`);
+}
+
+function fromPrismaCreditCardStatus(status: PrismaCreditCardStatus): CreditCardStatus {
+  switch (status) {
+    case "ACTIVE":
+      return "active";
+    case "ARCHIVED":
+      return "archived";
+  }
+
+  throw new Error(`Unsupported credit card status: ${status satisfies never}`);
+}
+
+function toPrismaLoanStatus(status: LoanStatus): PrismaLoanStatus {
+  switch (status) {
+    case "active":
+      return "ACTIVE";
+    case "paid_off":
+      return "PAID_OFF";
+    case "archived":
+      return "ARCHIVED";
+  }
+
+  throw new Error(`Unsupported loan status: ${status satisfies never}`);
+}
+
+function fromPrismaLoanStatus(status: PrismaLoanStatus): LoanStatus {
+  switch (status) {
+    case "ACTIVE":
+      return "active";
+    case "PAID_OFF":
+      return "paid_off";
+    case "ARCHIVED":
+      return "archived";
+  }
+
+  throw new Error(`Unsupported loan status: ${status satisfies never}`);
+}
+
 function toPrismaFinanceGoalType(
   goalType: NonNullable<UpdateFinanceGoalRequest["goalType"]>,
 ): PrismaFinanceGoalType {
@@ -711,6 +842,56 @@ function serializeRecurringIncome(income: RecurringIncomeTemplate): RecurringInc
     status: fromPrismaRecurringIncomeStatus(income.status),
     createdAt: income.createdAt.toISOString(),
     updatedAt: income.updatedAt.toISOString(),
+  };
+}
+
+function serializeCreditCard(card: CreditCard): CreditCardItem {
+  return {
+    id: card.id,
+    paymentAccountId: card.paymentAccountId,
+    name: card.name,
+    issuer: card.issuer,
+    currencyCode: card.currencyCode,
+    creditLimitMinor: card.creditLimitMinor,
+    outstandingBalanceMinor: card.outstandingBalanceMinor,
+    statementDay: card.statementDay,
+    paymentDueDay: card.paymentDueDay,
+    minimumDueMinor: card.minimumDueMinor,
+    utilizationPercent: card.creditLimitMinor > 0
+      ? Math.min(Math.round((card.outstandingBalanceMinor / card.creditLimitMinor) * 100), 999)
+      : 0,
+    status: fromPrismaCreditCardStatus(card.status),
+    createdAt: card.createdAt.toISOString(),
+    updatedAt: card.updatedAt.toISOString(),
+  };
+}
+
+function serializeLoan(loan: Loan): LoanItem {
+  const paidMinor =
+    loan.principalAmountMinor != null
+      ? Math.max(loan.principalAmountMinor - loan.outstandingBalanceMinor, 0)
+      : 0;
+
+  return {
+    id: loan.id,
+    paymentAccountId: loan.paymentAccountId,
+    name: loan.name,
+    lender: loan.lender,
+    currencyCode: loan.currencyCode,
+    principalAmountMinor: loan.principalAmountMinor,
+    outstandingBalanceMinor: loan.outstandingBalanceMinor,
+    emiAmountMinor: loan.emiAmountMinor,
+    interestRateBps: loan.interestRateBps,
+    dueDay: loan.dueDay,
+    startOn: loan.startOn ? toIsoDateString(loan.startOn) : null,
+    endOn: loan.endOn ? toIsoDateString(loan.endOn) : null,
+    progressPercent:
+      loan.principalAmountMinor != null && loan.principalAmountMinor > 0
+        ? Math.min(Math.round((paidMinor / loan.principalAmountMinor) * 100), 100)
+        : 0,
+    status: fromPrismaLoanStatus(loan.status),
+    createdAt: loan.createdAt.toISOString(),
+    updatedAt: loan.updatedAt.toISOString(),
   };
 }
 
@@ -917,7 +1098,7 @@ async function buildFinanceDashboard(
   const { monthStart, nextMonthStart } = getMonthBounds(month);
   const currencyCode = await getUserCurrencyCode(app, userId);
 
-  const [accounts, transactions, monthPlan, recurringIncome, legacyExpenses, upcomingBills, overdueBills] = await Promise.all([
+  const [accounts, transactions, monthPlan, recurringIncome, creditCards, loans, legacyExpenses, upcomingBills, overdueBills] = await Promise.all([
     buildFinanceAccountItems(app, userId),
     app.prisma.financeTransaction.findMany({
       where: {
@@ -946,6 +1127,20 @@ async function buildFinanceDashboard(
         },
       },
       orderBy: [{ nextExpectedOn: "asc" }, { createdAt: "asc" }],
+    }),
+    app.prisma.creditCard.findMany({
+      where: {
+        userId,
+        status: "ACTIVE",
+      },
+      orderBy: [{ paymentDueDay: "asc" }, { createdAt: "asc" }],
+    }),
+    app.prisma.loan.findMany({
+      where: {
+        userId,
+        status: "ACTIVE",
+      },
+      orderBy: [{ dueDay: "asc" }, { createdAt: "asc" }],
     }),
     app.prisma.expense.findMany({
       where: {
@@ -1012,6 +1207,12 @@ async function buildFinanceDashboard(
   const legacySpentMinor = legacyExpenses.reduce((sum, expense) => sum + expense.amountMinor, 0);
   const upcomingOpenBills = [...overdueBills, ...upcomingBills];
   const upcomingDueMinor = upcomingOpenBills.reduce((sum, bill) => sum + (bill.amountMinor ?? 0), 0);
+  const cardDueMinor = creditCards.reduce((sum, card) => sum + (card.minimumDueMinor ?? 0), 0);
+  const loanDueMinor = loans.reduce((sum, loan) => sum + loan.emiAmountMinor, 0);
+  const debtDueMinor = cardDueMinor + loanDueMinor;
+  const debtOutstandingMinor =
+    creditCards.reduce((sum, card) => sum + card.outstandingBalanceMinor, 0)
+    + loans.reduce((sum, loan) => sum + loan.outstandingBalanceMinor, 0);
   const cashAvailableMinor = accounts
     .filter((account) => !account.archivedAt)
     .reduce((sum, account) => sum + account.currentBalanceMinor, 0);
@@ -1025,7 +1226,9 @@ async function buildFinanceDashboard(
     plannedIncomeMinor: monthPlan?.plannedIncomeMinor ?? null,
     totalSpentMinor,
     upcomingDueMinor,
-    safeToSpendMinor: cashAvailableMinor - upcomingDueMinor,
+    debtDueMinor,
+    debtOutstandingMinor,
+    safeToSpendMinor: cashAvailableMinor - upcomingDueMinor - debtDueMinor,
     accountCount: accounts.filter((account) => !account.archivedAt).length,
     transactionCount: transactions.length + legacyExpenses.length,
     upcomingBills: upcomingOpenBills.map(serializeFinanceBill),
@@ -1049,6 +1252,8 @@ async function buildFinanceDashboard(
       })),
     ].sort((left, right) => right.occurredOn.localeCompare(left.occurredOn) || right.createdAt.localeCompare(left.createdAt)).slice(0, 30),
     recurringIncome: recurringIncome.map(serializeRecurringIncome),
+    creditCards: creditCards.map(serializeCreditCard),
+    loans: loans.map(serializeLoan),
   };
 }
 
@@ -1988,6 +2193,316 @@ export const registerFinanceRoutes: FastifyPluginAsync = async (app) => {
     return reply.send(response);
   });
 
+  app.get("/credit-cards", async (request, reply) => {
+    const user = requireAuthenticatedUser(request);
+    const creditCards = await app.prisma.creditCard.findMany({
+      where: {
+        userId: user.id,
+      },
+      orderBy: [{ status: "asc" }, { paymentDueDay: "asc" }, { createdAt: "asc" }],
+    });
+
+    const response: CreditCardsResponse = withGeneratedAt({
+      creditCards: creditCards.map(serializeCreditCard),
+    });
+
+    return reply.send(response);
+  });
+
+  app.post("/credit-cards", async (request, reply) => {
+    const user = requireAuthenticatedUser(request);
+    const payload = parseOrThrow(createCreditCardSchema, request.body as CreateCreditCardRequest);
+
+    await assertOwnedFinanceAccount(app, user.id, payload.paymentAccountId);
+
+    const creditCard = await app.prisma.creditCard.create({
+      data: {
+        userId: user.id,
+        paymentAccountId: payload.paymentAccountId ?? null,
+        name: payload.name.trim(),
+        issuer: payload.issuer ?? null,
+        currencyCode: payload.currencyCode ?? (await getUserCurrencyCode(app, user.id)),
+        creditLimitMinor: payload.creditLimitMinor,
+        outstandingBalanceMinor: payload.outstandingBalanceMinor ?? 0,
+        statementDay: payload.statementDay ?? null,
+        paymentDueDay: payload.paymentDueDay ?? null,
+        minimumDueMinor: payload.minimumDueMinor ?? null,
+        status: toPrismaCreditCardStatus(payload.status ?? "active"),
+      },
+    });
+
+    const response: CreditCardMutationResponse = withGeneratedAt({
+      creditCard: serializeCreditCard(creditCard),
+    });
+
+    return reply.status(201).send(response);
+  });
+
+  app.patch("/credit-cards/:creditCardId", async (request, reply) => {
+    const user = requireAuthenticatedUser(request);
+    const { creditCardId } = request.params as { creditCardId: string };
+    const payload = parseOrThrow(updateCreditCardSchema, request.body as UpdateCreditCardRequest);
+    const existing = await app.prisma.creditCard.findFirst({
+      where: {
+        id: creditCardId,
+        userId: user.id,
+      },
+    });
+
+    if (!existing) {
+      throw new AppError({
+        statusCode: 404,
+        code: "NOT_FOUND",
+        message: "Credit card not found",
+      });
+    }
+
+    await assertOwnedFinanceAccount(app, user.id, payload.paymentAccountId);
+
+    const creditCard = await app.prisma.creditCard.update({
+      where: {
+        id: existing.id,
+      },
+      data: {
+        paymentAccountId: payload.paymentAccountId,
+        name: payload.name?.trim(),
+        issuer: payload.issuer,
+        currencyCode: payload.currencyCode,
+        creditLimitMinor: payload.creditLimitMinor,
+        outstandingBalanceMinor: payload.outstandingBalanceMinor,
+        statementDay: payload.statementDay,
+        paymentDueDay: payload.paymentDueDay,
+        minimumDueMinor: payload.minimumDueMinor,
+        status: payload.status ? toPrismaCreditCardStatus(payload.status) : undefined,
+      },
+    });
+
+    const response: CreditCardMutationResponse = withGeneratedAt({
+      creditCard: serializeCreditCard(creditCard),
+    });
+
+    return reply.send(response);
+  });
+
+  app.post("/credit-cards/:creditCardId/pay", async (request, reply) => {
+    const user = requireAuthenticatedUser(request);
+    const { creditCardId } = request.params as { creditCardId: string };
+    const payload = parseOrThrow(payDebtSchema, request.body as PayCreditCardRequest);
+    const existing = await app.prisma.creditCard.findFirst({
+      where: {
+        id: creditCardId,
+        userId: user.id,
+      },
+    });
+
+    if (!existing) {
+      throw new AppError({
+        statusCode: 404,
+        code: "NOT_FOUND",
+        message: "Credit card not found",
+      });
+    }
+
+    const accountId = payload.accountId ?? existing.paymentAccountId;
+    await assertOwnedFinanceAccount(app, user.id, accountId);
+    if (!accountId) {
+      throw new AppError({
+        statusCode: 400,
+        code: "BAD_REQUEST",
+        message: "Payment account is required",
+      });
+    }
+
+    const creditCard = await app.prisma.$transaction(async (tx) => {
+      await tx.financeTransaction.create({
+        data: {
+          userId: user.id,
+          accountId,
+          transactionType: "EXPENSE",
+          amountMinor: payload.amountMinor,
+          currencyCode: existing.currencyCode,
+          occurredOn: parseIsoDate(payload.paidOn),
+          description: `${existing.name} payment`,
+        },
+      });
+
+      return tx.creditCard.update({
+        where: {
+          id: existing.id,
+        },
+        data: {
+          outstandingBalanceMinor: Math.max(existing.outstandingBalanceMinor - payload.amountMinor, 0),
+          minimumDueMinor:
+            existing.minimumDueMinor == null
+              ? null
+              : Math.max(existing.minimumDueMinor - payload.amountMinor, 0),
+        },
+      });
+    });
+
+    const response: CreditCardMutationResponse = withGeneratedAt({
+      creditCard: serializeCreditCard(creditCard),
+    });
+
+    return reply.send(response);
+  });
+
+  app.get("/loans", async (request, reply) => {
+    const user = requireAuthenticatedUser(request);
+    const loans = await app.prisma.loan.findMany({
+      where: {
+        userId: user.id,
+      },
+      orderBy: [{ status: "asc" }, { dueDay: "asc" }, { createdAt: "asc" }],
+    });
+
+    const response: LoansResponse = withGeneratedAt({
+      loans: loans.map(serializeLoan),
+    });
+
+    return reply.send(response);
+  });
+
+  app.post("/loans", async (request, reply) => {
+    const user = requireAuthenticatedUser(request);
+    const payload = parseOrThrow(createLoanSchema, request.body as CreateLoanRequest);
+
+    await assertOwnedFinanceAccount(app, user.id, payload.paymentAccountId);
+
+    const loan = await app.prisma.loan.create({
+      data: {
+        userId: user.id,
+        paymentAccountId: payload.paymentAccountId ?? null,
+        name: payload.name.trim(),
+        lender: payload.lender ?? null,
+        currencyCode: payload.currencyCode ?? (await getUserCurrencyCode(app, user.id)),
+        principalAmountMinor: payload.principalAmountMinor ?? null,
+        outstandingBalanceMinor: payload.outstandingBalanceMinor,
+        emiAmountMinor: payload.emiAmountMinor,
+        interestRateBps: payload.interestRateBps ?? null,
+        dueDay: payload.dueDay ?? null,
+        startOn: payload.startOn ? parseIsoDate(payload.startOn) : null,
+        endOn: payload.endOn ? parseIsoDate(payload.endOn) : null,
+        status: toPrismaLoanStatus(payload.status ?? "active"),
+      },
+    });
+
+    const response: LoanMutationResponse = withGeneratedAt({
+      loan: serializeLoan(loan),
+    });
+
+    return reply.status(201).send(response);
+  });
+
+  app.patch("/loans/:loanId", async (request, reply) => {
+    const user = requireAuthenticatedUser(request);
+    const { loanId } = request.params as { loanId: string };
+    const payload = parseOrThrow(updateLoanSchema, request.body as UpdateLoanRequest);
+    const existing = await app.prisma.loan.findFirst({
+      where: {
+        id: loanId,
+        userId: user.id,
+      },
+    });
+
+    if (!existing) {
+      throw new AppError({
+        statusCode: 404,
+        code: "NOT_FOUND",
+        message: "Loan not found",
+      });
+    }
+
+    await assertOwnedFinanceAccount(app, user.id, payload.paymentAccountId);
+
+    const loan = await app.prisma.loan.update({
+      where: {
+        id: existing.id,
+      },
+      data: {
+        paymentAccountId: payload.paymentAccountId,
+        name: payload.name?.trim(),
+        lender: payload.lender,
+        currencyCode: payload.currencyCode,
+        principalAmountMinor: payload.principalAmountMinor,
+        outstandingBalanceMinor: payload.outstandingBalanceMinor,
+        emiAmountMinor: payload.emiAmountMinor,
+        interestRateBps: payload.interestRateBps,
+        dueDay: payload.dueDay,
+        startOn: payload.startOn ? parseIsoDate(payload.startOn) : payload.startOn === null ? null : undefined,
+        endOn: payload.endOn ? parseIsoDate(payload.endOn) : payload.endOn === null ? null : undefined,
+        status: payload.status ? toPrismaLoanStatus(payload.status) : undefined,
+      },
+    });
+
+    const response: LoanMutationResponse = withGeneratedAt({
+      loan: serializeLoan(loan),
+    });
+
+    return reply.send(response);
+  });
+
+  app.post("/loans/:loanId/pay", async (request, reply) => {
+    const user = requireAuthenticatedUser(request);
+    const { loanId } = request.params as { loanId: string };
+    const payload = parseOrThrow(payDebtSchema, request.body as PayLoanRequest);
+    const existing = await app.prisma.loan.findFirst({
+      where: {
+        id: loanId,
+        userId: user.id,
+      },
+    });
+
+    if (!existing) {
+      throw new AppError({
+        statusCode: 404,
+        code: "NOT_FOUND",
+        message: "Loan not found",
+      });
+    }
+
+    const accountId = payload.accountId ?? existing.paymentAccountId;
+    await assertOwnedFinanceAccount(app, user.id, accountId);
+    if (!accountId) {
+      throw new AppError({
+        statusCode: 400,
+        code: "BAD_REQUEST",
+        message: "Payment account is required",
+      });
+    }
+
+    const loan = await app.prisma.$transaction(async (tx) => {
+      await tx.financeTransaction.create({
+        data: {
+          userId: user.id,
+          accountId,
+          transactionType: "EXPENSE",
+          amountMinor: payload.amountMinor,
+          currencyCode: existing.currencyCode,
+          occurredOn: parseIsoDate(payload.paidOn),
+          description: `${existing.name} EMI`,
+        },
+      });
+
+      const nextOutstandingMinor = Math.max(existing.outstandingBalanceMinor - payload.amountMinor, 0);
+      return tx.loan.update({
+        where: {
+          id: existing.id,
+        },
+        data: {
+          outstandingBalanceMinor: nextOutstandingMinor,
+          status: nextOutstandingMinor === 0 ? "PAID_OFF" : existing.status,
+        },
+      });
+    });
+
+    const response: LoanMutationResponse = withGeneratedAt({
+      loan: serializeLoan(loan),
+    });
+
+    return reply.send(response);
+  });
+
   app.get("/month-plan", async (request, reply) => {
     const user = requireAuthenticatedUser(request);
     const query = parseOrThrow(
@@ -2427,7 +2942,10 @@ export const registerFinanceRoutes: FastifyPluginAsync = async (app) => {
     const existingBill = await findOwnedFinanceBill(app, user.id, billId);
     const expenseCategoryId = payload.expenseCategoryId ?? existingBill.expenseCategoryId ?? null;
 
-    await assertOwnedExpenseCategory(app, user.id, expenseCategoryId);
+    await Promise.all([
+      assertOwnedExpenseCategory(app, user.id, expenseCategoryId),
+      assertOwnedFinanceAccount(app, user.id, payload.accountId),
+    ]);
 
     const amountMinor = resolveBillExpenseAmount(existingBill.amountMinor, payload.amountMinor);
     if (!amountMinor) {
@@ -2501,6 +3019,21 @@ export const registerFinanceRoutes: FastifyPluginAsync = async (app) => {
               recurringExpenseTemplateId: bill.recurringExpenseTemplateId ?? null,
             },
           });
+          if (payload.accountId) {
+            await tx.financeTransaction.create({
+              data: {
+                userId: user.id,
+                accountId: payload.accountId,
+                transactionType: "EXPENSE",
+                amountMinor,
+                currencyCode,
+                occurredOn: paidAt,
+                description: payload.description ?? bill.title,
+                expenseCategoryId,
+                billId: bill.id,
+              },
+            });
+          }
 
           const updatedBill = await tx.adminItem.update({
             where: {
@@ -2546,6 +3079,21 @@ export const registerFinanceRoutes: FastifyPluginAsync = async (app) => {
           recurringExpenseTemplateId: bill.recurringExpenseTemplateId ?? null,
         },
       });
+      if (payload.accountId) {
+        await tx.financeTransaction.create({
+          data: {
+            userId: user.id,
+            accountId: payload.accountId,
+            transactionType: "EXPENSE",
+            amountMinor,
+            currencyCode,
+            occurredOn: paidAt,
+            description: payload.description ?? bill.title,
+            expenseCategoryId,
+            billId: bill.id,
+          },
+        });
+      }
 
       const updatedBill = await tx.adminItem.update({
         where: {
