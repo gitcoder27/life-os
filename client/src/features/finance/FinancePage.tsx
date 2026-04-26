@@ -24,6 +24,8 @@ import {
   useFinanceDataQuery,
   useMarkBillPaidMutation,
   usePayAndLogBillMutation,
+  usePayCreditCardMutation,
+  usePayLoanMutation,
   useRescheduleBillMutation,
   useUpdateCategoryMutation,
   useUpdateCreditCardMutation,
@@ -195,8 +197,10 @@ export function FinancePage() {
   const createIncomeMutation = useCreateRecurringIncomeMutation(today);
   const createCreditCardMutation = useCreateCreditCardMutation(today);
   const updateCreditCardMutation = useUpdateCreditCardMutation(today);
+  const payCreditCardMutation = usePayCreditCardMutation(today);
   const createLoanMutation = useCreateLoanMutation(today);
   const updateLoanMutation = useUpdateLoanMutation(today);
+  const payLoanMutation = usePayLoanMutation(today);
   const createBillMutation = useCreateBillMutation(today);
   const createExpenseMutation = useCreateExpenseMutation(today);
   const payAndLogBillMutation = usePayAndLogBillMutation(today);
@@ -502,6 +506,38 @@ export function FinancePage() {
       outstandingBalance: "",
       emiAmount: "",
       dueDay: "",
+    });
+  }
+
+  async function handlePayCreditCard(card: {
+    id: string;
+    paymentAccountId: string | null;
+    outstandingBalanceMinor: number;
+    minimumDueMinor: number | null;
+  }) {
+    const amountMinor = card.minimumDueMinor ?? card.outstandingBalanceMinor;
+    if (!card.paymentAccountId || amountMinor <= 0) return;
+
+    await payCreditCardMutation.mutateAsync({
+      creditCardId: card.id,
+      accountId: card.paymentAccountId,
+      amountMinor,
+      paidOn: today,
+    });
+  }
+
+  async function handlePayLoan(loan: {
+    id: string;
+    paymentAccountId: string | null;
+    emiAmountMinor: number;
+  }) {
+    if (!loan.paymentAccountId || loan.emiAmountMinor <= 0) return;
+
+    await payLoanMutation.mutateAsync({
+      loanId: loan.id,
+      accountId: loan.paymentAccountId,
+      amountMinor: loan.emiAmountMinor,
+      paidOn: today,
     });
   }
 
@@ -864,6 +900,9 @@ export function FinancePage() {
                 currency={currency}
                 onArchiveCard={(cardId) => void updateCreditCardMutation.mutateAsync({ creditCardId: cardId, status: "archived" })}
                 onArchiveLoan={(loanId) => void updateLoanMutation.mutateAsync({ loanId, status: "archived" })}
+                onPayCard={(card) => void handlePayCreditCard(card)}
+                onPayLoan={(loan) => void handlePayLoan(loan)}
+                isPaying={payCreditCardMutation.isPending || payLoanMutation.isPending}
               />
             </section>
           ) : null}
@@ -1162,11 +1201,15 @@ function DebtList({
   currency,
   onArchiveCard,
   onArchiveLoan,
+  onPayCard,
+  onPayLoan,
+  isPaying,
 }: {
   creditCards: Array<{
     id: string;
     name: string;
     issuer: string | null;
+    paymentAccountId: string | null;
     outstandingBalanceMinor: number;
     creditLimitMinor: number;
     minimumDueMinor: number | null;
@@ -1177,6 +1220,7 @@ function DebtList({
     id: string;
     name: string;
     lender: string | null;
+    paymentAccountId: string | null;
     outstandingBalanceMinor: number;
     emiAmountMinor: number;
     dueDay: number | null;
@@ -1185,6 +1229,18 @@ function DebtList({
   currency: string;
   onArchiveCard: (cardId: string) => void;
   onArchiveLoan: (loanId: string) => void;
+  onPayCard: (card: {
+    id: string;
+    paymentAccountId: string | null;
+    outstandingBalanceMinor: number;
+    minimumDueMinor: number | null;
+  }) => void;
+  onPayLoan: (loan: {
+    id: string;
+    paymentAccountId: string | null;
+    emiAmountMinor: number;
+  }) => void;
+  isPaying: boolean;
 }) {
   if (creditCards.length === 0 && loans.length === 0) {
     return null;
@@ -1205,6 +1261,14 @@ function DebtList({
           <span className="fc-row__amount">{formatMinorCurrency(card.outstandingBalanceMinor, currency)}</span>
           <div className="fc-row__actions">
             <span className="fc-muted">{formatMinorCurrency(card.minimumDueMinor ?? 0, currency)} due</span>
+            <button
+              className="button button--primary button--small"
+              type="button"
+              disabled={!card.paymentAccountId || (card.minimumDueMinor ?? card.outstandingBalanceMinor) <= 0 || isPaying}
+              onClick={() => onPayCard(card)}
+            >
+              Pay due
+            </button>
             <button className="button button--ghost button--small" type="button" onClick={() => onArchiveCard(card.id)}>Archive</button>
           </div>
         </div>
@@ -1222,6 +1286,14 @@ function DebtList({
           <span className="fc-row__amount">{formatMinorCurrency(loan.outstandingBalanceMinor, currency)}</span>
           <div className="fc-row__actions">
             <span className="fc-muted">{formatMinorCurrency(loan.emiAmountMinor, currency)} EMI</span>
+            <button
+              className="button button--primary button--small"
+              type="button"
+              disabled={!loan.paymentAccountId || loan.emiAmountMinor <= 0 || isPaying}
+              onClick={() => onPayLoan(loan)}
+            >
+              Pay EMI
+            </button>
             <button className="button button--ghost button--small" type="button" onClick={() => onArchiveLoan(loan.id)}>Archive</button>
           </div>
         </div>

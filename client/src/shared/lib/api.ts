@@ -168,6 +168,8 @@ export {
   useLinkBillExpenseMutation,
   useMarkBillPaidMutation,
   usePayAndLogBillMutation,
+  usePayCreditCardMutation,
+  usePayLoanMutation,
   useRescheduleBillMutation,
   useUpdateCategoryMutation,
   useUpdateCreditCardMutation,

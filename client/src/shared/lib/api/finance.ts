@@ -834,6 +834,31 @@ export const useUpdateCreditCardMutation = (todayDate: string) => {
   });
 };
 
+export const usePayCreditCardMutation = (todayDate: string) => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      creditCardId,
+      ...payload
+    }: {
+      creditCardId: string;
+      accountId?: string | null;
+      amountMinor: number;
+      paidOn: string;
+    }) =>
+      apiRequest<CreditCardMutationResponse>(`/api/finance/credit-cards/${creditCardId}/pay`, {
+        method: "POST",
+        body: payload,
+      }),
+    meta: {
+      successMessage: "Card payment logged.",
+      errorMessage: "Card payment failed.",
+    },
+    onSuccess: () => invalidateCoreData(queryClient, todayDate),
+  });
+};
+
 export const useCreateLoanMutation = (todayDate: string) => {
   const queryClient = useQueryClient();
 
@@ -893,6 +918,31 @@ export const useUpdateLoanMutation = (todayDate: string) => {
     meta: {
       successMessage: "Loan updated.",
       errorMessage: "Loan update failed.",
+    },
+    onSuccess: () => invalidateCoreData(queryClient, todayDate),
+  });
+};
+
+export const usePayLoanMutation = (todayDate: string) => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      loanId,
+      ...payload
+    }: {
+      loanId: string;
+      accountId?: string | null;
+      amountMinor: number;
+      paidOn: string;
+    }) =>
+      apiRequest<LoanMutationResponse>(`/api/finance/loans/${loanId}/pay`, {
+        method: "POST",
+        body: payload,
+      }),
+    meta: {
+      successMessage: "EMI logged.",
+      errorMessage: "EMI payment failed.",
     },
     onSuccess: () => invalidateCoreData(queryClient, todayDate),
   });
