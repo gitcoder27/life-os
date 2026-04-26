@@ -340,6 +340,21 @@ body.planner-dragging-cursor * {
   z-index: 8;
 }
 
+.planner__sidebar-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  max-height: calc(100vh - var(--today-sticky-offset) - 1.5rem);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-right: 0.15rem;
+}
+
+.planner__sidebar-stack > .unplanned-lane {
+  max-height: none;
+  overflow: visible;
+}
+
 .planner-block__task-handle--static {
   cursor: default;
   opacity: 0;

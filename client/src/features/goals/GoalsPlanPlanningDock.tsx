@@ -11,6 +11,7 @@ import { GoalsPlanPlanningEditor } from "./GoalsPlanPlanningEditor";
 import { WeeklyCapacityCard } from "./WeeklyCapacityCard";
 
 const planningSlots: PlanningSlot[] = [1, 2, 3];
+const GOAL_DRAG_MIME = "application/x-life-os-goal-id";
 
 const getLanePrefix = (lane: PlanningLane) => {
   if (lane === "month") return "M";
@@ -52,6 +53,7 @@ type DockProps = {
   onClose: () => void;
   onAddSelectedGoal: (lane: Exclude<PlanningLane, "today">) => void;
   onSelectSlot: (lane: Exclude<PlanningLane, "today">, slot: PlanningSlot) => void;
+  onDropGoalToSlot: (lane: Exclude<PlanningLane, "today">, slot: PlanningSlot, goalId: string) => void;
   onPlanningDraftChange: (updates: Partial<PlanningDraft>) => void;
   onSavePlanningDraft: () => void;
   onCancelPlanningDraft: () => void;
@@ -77,6 +79,7 @@ type SlotCardProps = {
   planningReplaceState: PlanningReplaceState | null;
   laneItems: DockItem[];
   onSelectSlot: (lane: Exclude<PlanningLane, "today">, slot: PlanningSlot) => void;
+  onDropGoalToSlot: (lane: Exclude<PlanningLane, "today">, slot: PlanningSlot, goalId: string) => void;
   onPlanningDraftChange: (updates: Partial<PlanningDraft>) => void;
   onSavePlanningDraft: () => void;
   onCancelPlanningDraft: () => void;
@@ -95,6 +98,7 @@ const PlanningDockSlot = ({
   planningReplaceState,
   laneItems,
   onSelectSlot,
+  onDropGoalToSlot,
   onPlanningDraftChange,
   onSavePlanningDraft,
   onCancelPlanningDraft,
@@ -189,6 +193,20 @@ const PlanningDockSlot = ({
       className={`ghq-plan-dock__slot${item ? " ghq-plan-dock__slot--filled" : " ghq-plan-dock__slot--empty"}${isSelected ? " ghq-plan-dock__slot--selected" : ""}`}
       type="button"
       onClick={() => onSelectSlot(lane, slot)}
+      onDragOver={(event) => {
+        if (event.dataTransfer.types.includes(GOAL_DRAG_MIME)) {
+          event.preventDefault();
+        }
+      }}
+      onDrop={(event) => {
+        const goalId = event.dataTransfer.getData(GOAL_DRAG_MIME);
+        if (!goalId) {
+          return;
+        }
+
+        event.preventDefault();
+        onDropGoalToSlot(lane, slot, goalId);
+      }}
     >
       <span className="ghq-plan-dock__slot-badge">
         {prefix}
@@ -224,6 +242,7 @@ export const GoalsPlanPlanningDock = ({
   onClose,
   onAddSelectedGoal,
   onSelectSlot,
+  onDropGoalToSlot,
   onPlanningDraftChange,
   onSavePlanningDraft,
   onCancelPlanningDraft,
@@ -321,6 +340,7 @@ export const GoalsPlanPlanningDock = ({
                             planningReplaceState={planningReplaceState}
                             laneItems={items}
                             onSelectSlot={onSelectSlot}
+                            onDropGoalToSlot={onDropGoalToSlot}
                             onPlanningDraftChange={onPlanningDraftChange}
                             onSavePlanningDraft={onSavePlanningDraft}
                             onCancelPlanningDraft={onCancelPlanningDraft}

@@ -125,6 +125,18 @@ export function TodayPage({ routeMode }: { routeMode?: "execute" | "plan" }) {
       ),
     [plannerExecutionTasks, plannerTaskIds],
   );
+  const plannerRecoveryTasks = useMemo(
+    () =>
+      isLivePlannerDate
+        ? data.overdueTasks.filter(
+            (task) =>
+              task.status === "pending" &&
+              isPlannerAssignableTask(task) &&
+              !plannerTaskIds.has(task.id),
+          )
+        : [],
+    [data.overdueTasks, isLivePlannerDate, plannerTaskIds],
+  );
   const todayPlannerExecution = useMemo(
     () =>
       buildPlannerExecutionModel({
@@ -630,6 +642,7 @@ export function TodayPage({ routeMode }: { routeMode?: "execute" | "plan" }) {
           isHistoryDate={isPastPlannerDate}
           blocks={plannerBlocks}
           unplannedTasks={plannerUnplannedTasks}
+          recoveryTasks={plannerRecoveryTasks}
           execution={plannerExecution}
           actions={plannerActions}
           taskActions={plannerTaskActions}

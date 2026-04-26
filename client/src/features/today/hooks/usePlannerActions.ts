@@ -75,10 +75,10 @@ export function usePlannerActions(date: string) {
     await createBlock.mutateAsync(payload);
   }
 
-  function assignTaskToBlock(block: DayPlannerBlockItem, taskId: string) {
+  async function assignTaskToBlock(block: DayPlannerBlockItem, taskId: string) {
     const existingTaskIds = block.tasks.map((bt) => bt.taskId);
     if (existingTaskIds.includes(taskId)) return;
-    replaceBlockTasks.mutate({
+    await replaceBlockTasks.mutateAsync({
       blockId: block.id,
       taskIds: [...existingTaskIds, taskId],
     });
@@ -144,10 +144,10 @@ export function usePlannerActions(date: string) {
     replaceBlockTasks.mutate({ blockId: block.id, taskIds });
   }
 
-  function moveTaskToBlock(targetBlock: DayPlannerBlockItem, taskId: string) {
+  async function moveTaskToBlock(targetBlock: DayPlannerBlockItem, taskId: string) {
     const targetTaskIds = targetBlock.tasks.map((bt) => bt.taskId);
     if (targetTaskIds.includes(taskId)) return;
-    replaceBlockTasks.mutate({
+    await replaceBlockTasks.mutateAsync({
       blockId: targetBlock.id,
       taskIds: [...targetTaskIds, taskId],
     });

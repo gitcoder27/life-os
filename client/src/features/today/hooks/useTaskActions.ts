@@ -57,6 +57,11 @@ export function useTaskActions(today: string) {
     carryForwardMutation.mutate({ taskId, targetDate: today }, { onSuccess });
   }
 
+  async function moveToTodayAndReturn(taskId: string) {
+    const response = await carryForwardMutation.mutateAsync({ taskId, targetDate: today });
+    return response.task;
+  }
+
   function moveToTomorrow(taskId: string, onSuccess?: () => void) {
     carryForwardMutation.mutate({ taskId, targetDate: tomorrow }, { onSuccess });
   }
@@ -127,6 +132,7 @@ export function useTaskActions(today: string) {
     carryForward,
     carryForwardTasks,
     moveToToday,
+    moveToTodayAndReturn,
     moveTasksToToday,
     moveToTomorrow,
     moveTasksToTomorrow,

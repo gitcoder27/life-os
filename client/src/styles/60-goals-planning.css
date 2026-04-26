@@ -1783,29 +1783,76 @@
   transition: stroke 200ms ease;
 }
 
+.ghq-graph .react-flow__node:has(.graph-goal-node__menu) {
+  z-index: 1000 !important;
+}
+
+.ghq-graph__workbar,
 .ghq-graph__toolbar {
   position: absolute;
   top: 1rem;
-  right: 1rem;
   z-index: 7;
-  opacity: 0;
-  transform: translateY(-6px);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  max-width: calc(100% - 2rem);
+}
+
+.ghq-graph__workbar {
+  left: 1rem;
+  flex-wrap: wrap;
+  padding: 0.35rem;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: var(--r);
+  background: rgba(17, 16, 13, 0.84);
+  box-shadow: var(--shadow-sm);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+}
+
+.ghq-graph__toolbar {
+  right: 1rem;
+  justify-content: flex-end;
+  padding: 0.35rem;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: var(--r);
+  background: rgba(17, 16, 13, 0.72);
+  box-shadow: var(--shadow-sm);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
   transition:
     opacity var(--dur-fast) var(--ease),
     transform var(--dur-fast) var(--ease);
 }
 
-.ghq-plan__graph:hover .ghq-graph__toolbar,
-.ghq-plan__graph:focus-within .ghq-graph__toolbar,
-.ghq-graph--expanded .ghq-graph__toolbar {
-  opacity: 1;
-  transform: translateY(0);
+.ghq-graph__search input,
+.ghq-graph__select {
+  height: 2rem;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: var(--r-xs);
+  background: rgba(255, 255, 255, 0.035);
+  color: var(--text-secondary);
+  font-size: var(--fs-small);
 }
 
-.ghq-graph__toolbar {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
+.ghq-graph__search input {
+  width: min(15rem, 26vw);
+  padding: 0 0.65rem;
+}
+
+.ghq-graph__select {
+  max-width: 10rem;
+  padding: 0 0.5rem;
+}
+
+.ghq-graph__match-count {
+  padding: 0 0.4rem;
+  color: var(--text-tertiary);
+  font-size: var(--fs-micro);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  white-space: nowrap;
 }
 
 .ghq-graph__notice {
@@ -1821,10 +1868,20 @@
   z-index: 5;
 }
 
+.ghq-graph__notice--error {
+  background: rgba(110, 34, 27, 0.92);
+  border-color: rgba(220, 111, 102, 0.28);
+}
+
+.ghq-graph__notice--success {
+  background: rgba(34, 78, 47, 0.9);
+  border-color: rgba(127, 217, 138, 0.25);
+}
+
 .ghq-graph__notice p {
   margin: 0;
   font-size: var(--fs-small);
-  color: #ffd3ce;
+  color: var(--text);
 }
 
 .ghq-graph__expand-btn {
@@ -1841,6 +1898,43 @@
   box-shadow: var(--shadow-sm);
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
+}
+
+.ghq-graph__viewport-controls {
+  position: absolute;
+  right: 1rem;
+  bottom: 1rem;
+  z-index: 7;
+  display: flex;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: var(--r);
+  background: rgba(17, 16, 13, 0.82);
+  box-shadow: var(--shadow-sm);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+}
+
+.ghq-graph__viewport-controls button {
+  min-width: 2.15rem;
+  height: 2.15rem;
+  padding: 0 0.65rem;
+  border: none;
+  border-right: 1px solid rgba(255, 255, 255, 0.06);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: var(--fs-small);
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.ghq-graph__viewport-controls button:last-child {
+  border-right: none;
+}
+
+.ghq-graph__viewport-controls button:hover {
+  background: rgba(217, 153, 58, 0.12);
+  color: var(--accent);
 }
 
 /* ── Graph: Goal Node ── */
@@ -1879,6 +1973,11 @@
 .graph-goal-node--dimmed {
   opacity: 0.28;
   pointer-events: auto;
+}
+
+.graph-goal-node--spotlight {
+  border-color: rgba(217, 153, 58, 0.78);
+  box-shadow: 0 0 0 1px rgba(217, 153, 58, 0.24), 0 12px 24px rgba(217, 153, 58, 0.08);
 }
 
 .graph-goal-node--drop-target {
@@ -1928,6 +2027,33 @@
   align-items: center;
   justify-content: center;
   cursor: pointer;
+}
+
+.graph-goal-node__quick-add,
+.graph-goal-node__menu-trigger {
+  width: 1.35rem;
+  min-width: 1.35rem;
+  height: 1.35rem;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--r-xs);
+  background: rgba(255, 255, 255, 0.035);
+  color: var(--text-secondary);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  opacity: 0.74;
+  transition:
+    opacity var(--dur-fast) var(--ease),
+    background var(--dur-fast) var(--ease),
+    color var(--dur-fast) var(--ease);
+}
+
+.graph-goal-node__quick-add:hover,
+.graph-goal-node__menu-trigger:hover {
+  opacity: 1;
+  background: rgba(217, 153, 58, 0.12);
+  color: var(--accent);
 }
 
 .graph-goal-node__meta {
@@ -2006,6 +2132,43 @@
   margin-top: 0.1rem;
   font-size: var(--fs-micro);
   color: var(--accent);
+}
+
+.graph-goal-node__menu {
+  position: absolute;
+  top: 2.25rem;
+  right: 0.6rem;
+  z-index: 10;
+  min-width: 10.5rem;
+  padding: 0.35rem;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--r-sm);
+  background: rgba(17, 16, 13, 0.98);
+  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.28);
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+
+.graph-goal-node__menu button {
+  width: 100%;
+  padding: 0.5rem 0.6rem;
+  border: none;
+  border-radius: var(--r-xs);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: var(--fs-small);
+  text-align: left;
+  cursor: pointer;
+}
+
+.graph-goal-node__menu button:hover {
+  background: rgba(255, 255, 255, 0.045);
+  color: var(--text);
+}
+
+.graph-goal-node__menu .graph-goal-node__menu-danger {
+  color: #dba09a;
 }
 
 /* ── Graph: Inline Planner ── */
@@ -2547,11 +2710,15 @@
   line-height: 1.6;
 }
 
+.ghq-graph-empty__content .button {
+  margin-top: 1rem;
+}
+
 /* ── Graph: Hint Overlay ── */
 
 .ghq-graph__hint {
   position: absolute;
-  top: 1rem;
+  top: 4.9rem;
   left: 50%;
   transform: translateX(-50%);
   padding: 0.4rem 1rem;
@@ -2613,6 +2780,13 @@
   display: flex;
   flex-wrap: wrap;
   gap: 0.5rem;
+}
+
+.ghq-inspector__helper-copy {
+  margin: 0.55rem 0 0;
+  color: var(--text-tertiary);
+  font-size: var(--fs-small);
+  line-height: 1.5;
 }
 
 /* ── Planning Dock ── */
@@ -2750,6 +2924,7 @@
 
 .ghq-plan-dock__slot:hover {
   border-color: rgba(217, 153, 58, 0.22);
+  transform: translateY(-1px);
 }
 
 .ghq-plan-dock__slot--empty {
@@ -2765,6 +2940,11 @@
 .ghq-plan-dock__slot--selected {
   border-color: rgba(217, 153, 58, 0.72);
   box-shadow: 0 0 0 1px rgba(217, 153, 58, 0.18);
+}
+
+.ghq-plan-dock__slot:focus-visible {
+  outline: 2px solid rgba(217, 153, 58, 0.75);
+  outline-offset: 2px;
 }
 
 .ghq-plan-dock__slot--draft,
@@ -3168,6 +3348,38 @@
     min-height: 300px;
   }
 
+  .ghq-graph__workbar,
+  .ghq-graph__toolbar {
+    position: relative;
+    top: auto;
+    left: auto;
+    right: auto;
+    margin: 0.65rem;
+    max-width: calc(100% - 1.3rem);
+  }
+
+  .ghq-graph__toolbar {
+    justify-content: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .ghq-graph__search input {
+    width: min(16rem, 100%);
+  }
+
+  .ghq-graph__select {
+    max-width: none;
+  }
+
+  .ghq-graph__hint {
+    top: 7rem;
+    max-width: calc(100% - 2rem);
+  }
+
+  .ghq-graph__hint p {
+    white-space: normal;
+  }
+
   .ghq-plan__graph-stage--with-inspector .ghq-plan__graph {
     border-right: none;
     border-bottom: 1px solid var(--border);
@@ -3247,6 +3459,22 @@
 
   .ap-goal-card__plan-link {
     opacity: 1;
+  }
+
+  .ghq-graph__workbar {
+    align-items: stretch;
+  }
+
+  .ghq-graph__workbar .button,
+  .ghq-graph__search,
+  .ghq-graph__search input,
+  .ghq-graph__select {
+    width: 100%;
+  }
+
+  .ghq-graph__viewport-controls {
+    right: 0.75rem;
+    bottom: 0.75rem;
   }
 
   .inactive-goal-row__actions {

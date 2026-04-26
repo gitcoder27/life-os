@@ -82,6 +82,7 @@ export function DayPlanner({
   isHistoryDate,
   blocks,
   unplannedTasks,
+  recoveryTasks = [],
   execution,
   actions,
   taskActions,
@@ -96,6 +97,7 @@ export function DayPlanner({
   isHistoryDate: boolean;
   blocks: DayPlannerBlockItem[];
   unplannedTasks: TaskItem[];
+  recoveryTasks?: TaskItem[];
   execution: PlannerExecutionModel;
   actions: PlannerActions;
   taskActions: TaskActions;
@@ -135,10 +137,18 @@ export function DayPlanner({
   );
   const hoursValidation = validatePlannerVisibleHours(hoursDraft);
   const isCleanupPending = actions.isPending || taskActions.isPending;
-  const hasHistoryContent = orderedBlocks.length > 0 || unplannedTasks.length > 0;
+  const plannerAssignableTasks = useMemo(
+    () => [...recoveryTasks, ...unplannedTasks],
+    [recoveryTasks, unplannedTasks],
+  );
+  const recoveryTaskIds = useMemo(
+    () => new Set(recoveryTasks.map((task) => task.id)),
+    [recoveryTasks],
+  );
+  const hasHistoryContent = orderedBlocks.length > 0 || plannerAssignableTasks.length > 0;
   const activeDraggedTask = useMemo(
-    () => unplannedTasks.find((task) => task.id === draggedTaskId) ?? null,
-    [draggedTaskId, unplannedTasks],
+    () => plannerAssignableTasks.find((task) => task.id === draggedTaskId) ?? null,
+    [draggedTaskId, plannerAssignableTasks],
   );
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
@@ -164,21 +174,45 @@ export function DayPlanner({
   }, [date]);
 
   useEffect(() => {
-    if (draggedTaskId && !unplannedTasks.some((task) => task.id === draggedTaskId)) {
+    if (draggedTaskId && !plannerAssignableTasks.some((task) => task.id === draggedTaskId)) {
       setDraggedTaskId(null);
     }
-  }, [draggedTaskId, unplannedTasks]);
+  }, [draggedTaskId, plannerAssignableTasks]);
 
   useEffect(() => {
     if (!suppressedTaskId) {
       return;
     }
 
-    const isStillUnplanned = unplannedTasks.some((task) => task.id === suppressedTaskId);
-    if (!isStillUnplanned || !actions.isPending) {
+    const isStillUnplanned = plannerAssignableTasks.some((task) => task.id === suppressedTaskId);
+    if (!isStillUnplanned || (!actions.isPending && !taskActions.isPending)) {
       setSuppressedTaskId(null);
     }
-  }, [actions.isPending, suppressedTaskId, unplannedTasks]);
+  }, [actions.isPending, taskActions.isPending, suppressedTaskId, plannerAssignableTasks]);
+
+  async function recoverTaskIdIfNeeded(taskId: string) {
+    if (!recoveryTaskIds.has(taskId)) {
+      return taskId;
+    }
+
+    const recoveredTask = await taskActions.moveToTodayAndReturn(taskId);
+    return recoveredTask.id;
+  }
+
+  async function assignPlannerTaskToBlock(block: DayPlannerBlockItem, taskId: string) {
+    const assignableTaskId = await recoverTaskIdIfNeeded(taskId);
+    await actions.assignTaskToBlock(block, assignableTaskId);
+  }
+
+  async function assignPlannerTasksToBlock(block: DayPlannerBlockItem, taskIds: string[]) {
+    const assignableTaskIds: string[] = [];
+
+    for (const taskId of taskIds) {
+      assignableTaskIds.push(await recoverTaskIdIfNeeded(taskId));
+    }
+
+    await actions.assignTasksToBlock(block, assignableTaskIds);
+  }
 
   useEffect(() => {
     const className = "planner-dragging-cursor";
@@ -445,7 +479,7 @@ export function DayPlanner({
       if (targetBlock) {
         setDisableDropAnimation(true);
         setSuppressedTaskId(activeTaskId);
-        actions.assignTaskToBlock(targetBlock, activeTaskId);
+        void assignPlannerTaskToBlock(targetBlock, activeTaskId);
       }
     } else {
       setDisableDropAnimation(false);
@@ -697,7 +731,7 @@ export function DayPlanner({
                         key={segment.id}
                         block={segment.block!}
                         existingBlocks={orderedBlocks}
-                        availableTasks={unplannedTasks}
+                        availableTasks={plannerAssignableTasks}
                         availableBlocks={orderedBlocks}
                         canMoveUp={(blockIndexMap.get(segment.block!.id) ?? -1) > 0}
                         canMoveDown={(blockIndexMap.get(segment.block!.id) ?? -1) < orderedBlocks.length - 1}
@@ -707,7 +741,7 @@ export function DayPlanner({
                             direction,
                           )
                         }
-                        onAddTasks={(taskIds) => actions.assignTasksToBlock(segment.block!, taskIds)}
+                        onAddTasks={(taskIds) => assignPlannerTasksToBlock(segment.block!, taskIds)}
                         onMoveTaskToBlock={(taskId, targetBlock) =>
                           actions.moveTaskToBlock(targetBlock, taskId)
                         }
@@ -761,17 +795,37 @@ export function DayPlanner({
           </div>
 
           <div className="planner__sidebar-pane" style={sidebarStyle}>
-            <UnplannedTasks
-              tasks={unplannedTasks}
-              blocks={orderedBlocks}
-              readOnly={!isEditable}
-              isHistoryDate={isHistoryDate}
-              isPending={actions.isPending}
-              draggedTaskId={draggedTaskId}
-              suppressedTaskId={suppressedTaskId}
-              onQuickAssign={(taskId, block) => actions.assignTaskToBlock(block, taskId)}
-              onBulkAssign={(taskIds, block) => actions.assignTasksToBlock(block, taskIds)}
-            />
+            <div className="planner__sidebar-stack">
+              {recoveryTasks.length > 0 ? (
+                <UnplannedTasks
+                  title="Recover overdue"
+                  description="Drag one into a block to pull it into today and schedule it."
+                  emptyText="No overdue tasks to recover"
+                  tone="recovery"
+                  showRecoveryDetail
+                  tasks={recoveryTasks}
+                  blocks={orderedBlocks}
+                  readOnly={!isEditable}
+                  isHistoryDate={isHistoryDate}
+                  isPending={actions.isPending || taskActions.isPending}
+                  draggedTaskId={draggedTaskId}
+                  suppressedTaskId={suppressedTaskId}
+                  onQuickAssign={(taskId, block) => void assignPlannerTaskToBlock(block, taskId)}
+                  onBulkAssign={(taskIds, block) => assignPlannerTasksToBlock(block, taskIds)}
+                />
+              ) : null}
+              <UnplannedTasks
+                tasks={unplannedTasks}
+                blocks={orderedBlocks}
+                readOnly={!isEditable}
+                isHistoryDate={isHistoryDate}
+                isPending={actions.isPending}
+                draggedTaskId={draggedTaskId}
+                suppressedTaskId={suppressedTaskId}
+                onQuickAssign={(taskId, block) => void actions.assignTaskToBlock(block, taskId)}
+                onBulkAssign={(taskIds, block) => actions.assignTasksToBlock(block, taskIds)}
+              />
+            </div>
           </div>
         </div>
 

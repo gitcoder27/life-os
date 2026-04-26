@@ -14,6 +14,21 @@
   overscroll-behavior: contain;
 }
 
+.unplanned-lane--recovery {
+  border-color: rgba(221, 131, 122, 0.14);
+  background:
+    linear-gradient(180deg, rgba(221, 131, 122, 0.045), rgba(255,255,255,0.018));
+}
+
+.unplanned-lane--recovery .unplanned-lane__title {
+  color: rgba(239, 164, 154, 0.78);
+}
+
+.unplanned-lane--recovery .unplanned-lane__count {
+  background: rgba(221, 131, 122, 0.11);
+  color: #e59a91;
+}
+
 .unplanned-lane::-webkit-scrollbar {
   width: 4px;
 }
@@ -59,6 +74,13 @@
   font-size: 0.58rem;
   font-weight: 800;
   font-variant-numeric: tabular-nums;
+}
+
+.unplanned-lane__description {
+  margin: -0.1rem 0 0.25rem;
+  color: var(--text-tertiary);
+  font-size: var(--fs-small);
+  line-height: 1.45;
 }
 
 .unplanned-lane__list {
@@ -247,6 +269,14 @@
   opacity: 0.7;
 }
 
+.unplanned-task__meta {
+  color: rgba(239, 164, 154, 0.72);
+  font-size: var(--fs-micro);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .unplanned-task__actions {
   flex-shrink: 0;
   opacity: 0;
@@ -338,4 +368,3 @@
 .unplanned-task__picker {
   border-color: rgba(217,153,58,0.35);
 }
-

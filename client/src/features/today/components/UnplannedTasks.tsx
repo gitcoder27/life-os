@@ -1,10 +1,16 @@
 import { useState, useEffect } from "react";
 import { useDraggable } from "@dnd-kit/core";
 import type { TaskItem, DayPlannerBlockItem } from "../../../shared/lib/api";
+import { getRecoveryTaskDetail } from "../helpers/date-helpers";
 import { UNPLANNED_TASK_DRAG_TYPE, getUnplannedTaskDragId } from "../helpers/planner-drag";
 import { BlockTargetPicker } from "./BlockTargetPicker";
 
 export function UnplannedTasks({
+  title = "Unplanned",
+  description,
+  emptyText,
+  tone = "default",
+  showRecoveryDetail = false,
   tasks,
   blocks,
   readOnly,
@@ -15,6 +21,11 @@ export function UnplannedTasks({
   onQuickAssign,
   onBulkAssign,
 }: {
+  title?: string;
+  description?: string;
+  emptyText?: string;
+  tone?: "default" | "recovery";
+  showRecoveryDetail?: boolean;
   tasks: TaskItem[];
   blocks: DayPlannerBlockItem[];
   readOnly: boolean;
@@ -44,7 +55,7 @@ export function UnplannedTasks({
 
   if (tasks.length === 0) {
     return (
-      <div className={`unplanned-lane${expanded ? " unplanned-lane--expanded" : ""}`}>
+      <div className={`unplanned-lane unplanned-lane--${tone}${expanded ? " unplanned-lane--expanded" : ""}`}>
         <div
           className="unplanned-lane__header"
           onClick={() => setExpanded((c) => !c)}
@@ -53,12 +64,12 @@ export function UnplannedTasks({
           onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") setExpanded((c) => !c); }}
         >
           <div className="unplanned-lane__header-main">
-            <h3 className="unplanned-lane__title">Unplanned</h3>
+            <h3 className="unplanned-lane__title">{title}</h3>
           </div>
         </div>
         <div className="unplanned-lane__empty">
           <span className="unplanned-lane__empty-icon">✓</span>
-          <p>{isHistoryDate ? "No unplanned tasks saved" : "All planned"}</p>
+          <p>{emptyText ?? (isHistoryDate ? "No unplanned tasks saved" : "All planned")}</p>
         </div>
       </div>
     );
@@ -90,7 +101,7 @@ export function UnplannedTasks({
   }
 
   return (
-    <div className={`unplanned-lane${expanded ? " unplanned-lane--expanded" : ""}`}>
+    <div className={`unplanned-lane unplanned-lane--${tone}${expanded ? " unplanned-lane--expanded" : ""}`}>
       <div
         className="unplanned-lane__header"
         onClick={() => setExpanded((c) => !c)}
@@ -99,7 +110,7 @@ export function UnplannedTasks({
         onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") setExpanded((c) => !c); }}
       >
         <div className="unplanned-lane__header-main">
-          <h3 className="unplanned-lane__title">Unplanned</h3>
+          <h3 className="unplanned-lane__title">{title}</h3>
           <span className="unplanned-lane__count">{tasks.length}</span>
         </div>
         {!readOnly && blocks.length > 0 ? (
@@ -117,6 +128,10 @@ export function UnplannedTasks({
           </button>
         ) : null}
       </div>
+
+      {description ? (
+        <p className="unplanned-lane__description">{description}</p>
+      ) : null}
 
       {!readOnly && blocks.length === 0 ? (
         <div className="unplanned-lane__helper">
@@ -215,6 +230,7 @@ export function UnplannedTasks({
             isActiveDrag={draggedTaskId === task.id}
             isSuppressed={suppressedTaskId === task.id}
             onQuickAssign={(block) => onQuickAssign(task.id, block)}
+            meta={showRecoveryDetail && task.scheduledForDate ? getRecoveryTaskDetail(task.scheduledForDate) : null}
           />
         ))}
       </div>
@@ -233,6 +249,7 @@ function UnplannedTaskRow({
   isActiveDrag,
   isSuppressed,
   onQuickAssign,
+  meta,
 }: {
   task: TaskItem;
   blocks: DayPlannerBlockItem[];
@@ -244,6 +261,7 @@ function UnplannedTaskRow({
   isActiveDrag: boolean;
   isSuppressed: boolean;
   onQuickAssign: (block: DayPlannerBlockItem) => void;
+  meta?: string | null;
 }) {
   const isDraggable = !readOnly && !batchMode && blocks.length > 0 && !isPending;
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
@@ -283,6 +301,9 @@ function UnplannedTaskRow({
 
       <div className="unplanned-task__info" title={task.title}>
         <span className="unplanned-task__title">{task.title}</span>
+        {meta ? (
+          <span className="unplanned-task__meta">{meta}</span>
+        ) : null}
         {task.goal ? (
           <span className={`unplanned-task__goal goal-chip__dot--${task.goal.domain}`}>
             {task.goal.title}
