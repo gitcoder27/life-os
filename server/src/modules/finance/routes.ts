@@ -2,37 +2,59 @@ import type { FastifyPluginAsync } from "fastify";
 import type {
   CompleteFinanceBillRequest,
   CompleteFinanceBillWithExpenseRequest,
+  CreateFinanceAccountRequest,
   CreateFinanceBillRequest,
+  CreateFinanceTransactionRequest,
   CreateExpenseCategoryRequest,
+  CreateRecurringIncomeRequest,
   DeleteExpenseResponse,
   ExpenseCategoryItem,
   ExpenseCategoryMutationResponse,
   ExpensesResponse,
+  FinanceAccountItem,
+  FinanceAccountMutationResponse,
+  FinanceAccountsResponse,
   FinanceBillItem as ContractFinanceBillItem,
   FinanceBillMutationResponse,
   FinanceBillsResponse,
   FinanceCategoriesResponse,
+  FinanceDashboardResponse,
   FinanceGoalMutationResponse,
   FinanceInsightsResponse,
   FinanceMonthPlanMutationResponse,
   FinanceMonthPlanResponse,
+  FinanceTransactionItem,
+  FinanceTransactionMutationResponse,
+  FinanceTransactionsResponse,
   IsoDateString,
   IsoMonthString,
   LinkFinanceBillExpenseRequest,
   RecurrenceInput,
+  RecurringIncomeItem,
+  RecurringIncomeMutationResponse,
+  RecurringIncomeResponse,
   RecurringExpenseMutationResponse,
   RescheduleFinanceBillRequest,
+  UpdateFinanceAccountRequest,
   UpdateFinanceGoalRequest,
   UpdateFinanceMonthPlanRequest,
+  UpdateFinanceTransactionRequest,
   UpdateExpenseCategoryRequest,
+  UpdateRecurringIncomeRequest,
   UpdateRecurringExpenseRequest,
 } from "@life-os/contracts";
 import type {
   ExpenseCategory,
   Expense,
+  FinanceAccount,
+  FinanceAccountType as PrismaFinanceAccountType,
   FinanceGoalType as PrismaFinanceGoalType,
+  FinanceTransaction,
+  FinanceTransactionType as PrismaFinanceTransactionType,
   ExpenseSource as PrismaExpenseSource,
   GoalStatus as PrismaGoalStatus,
+  RecurringIncomeStatus as PrismaRecurringIncomeStatus,
+  RecurringIncomeTemplate,
   RecurringExpenseStatus as PrismaRecurringExpenseStatus,
   RecurringExpenseTemplate,
 } from "@prisma/client";
@@ -56,6 +78,9 @@ import { getMonthlyReviewModel, getWeeklyReviewModel } from "../reviews/service.
 
 type ExpenseSource = "manual" | "quick_capture" | "template";
 type RecurringExpenseStatus = "active" | "paused" | "archived";
+type FinanceAccountType = "bank" | "cash" | "wallet" | "other";
+type FinanceTransactionType = "income" | "expense" | "transfer" | "adjustment";
+type RecurringIncomeStatus = "active" | "paused" | "archived";
 
 interface ExpenseItem {
   id: string;
@@ -148,6 +173,9 @@ const isoMonthSchema = z.string().regex(/^\d{4}-\d{2}$/) as unknown as z.ZodType
 
 const expenseSourceSchema = z.enum(["manual", "quick_capture", "template"]);
 const recurringExpenseStatusSchema = z.enum(["active", "paused", "archived"]);
+const financeAccountTypeSchema = z.enum(["bank", "cash", "wallet", "other"]);
+const financeTransactionTypeSchema = z.enum(["income", "expense", "transfer", "adjustment"]);
+const recurringIncomeStatusSchema = z.enum(["active", "paused", "archived"]);
 const recurrenceExceptionActionSchema = z.enum(["skip", "do_once", "reschedule"]);
 const recurrenceRuleSchema = z.object({
   frequency: z.enum(["daily", "weekly", "monthly_nth_weekday", "interval"]),
@@ -191,6 +219,64 @@ const createExpenseSchema = z.object({
   source: expenseSourceSchema.optional(),
   recurringExpenseTemplateId: z.string().uuid().nullable().optional(),
 });
+
+const createFinanceAccountSchema = z.object({
+  name: z.string().min(1).max(120),
+  accountType: financeAccountTypeSchema.optional(),
+  currencyCode: z.string().length(3).optional(),
+  openingBalanceMinor: z.number().int().optional(),
+});
+
+const updateFinanceAccountSchema = z.object({
+  name: z.string().min(1).max(120).optional(),
+  accountType: financeAccountTypeSchema.optional(),
+  openingBalanceMinor: z.number().int().optional(),
+  archived: z.boolean().optional(),
+}).refine((value) => Object.keys(value).length > 0, "At least one field must be updated");
+
+const createFinanceTransactionSchema = z.object({
+  accountId: z.string().uuid(),
+  transferAccountId: z.string().uuid().nullable().optional(),
+  transactionType: financeTransactionTypeSchema,
+  amountMinor: z.number().int(),
+  currencyCode: z.string().length(3).optional(),
+  occurredOn: isoDateSchema,
+  description: z.string().max(4000).nullable().optional(),
+  expenseCategoryId: z.string().uuid().nullable().optional(),
+  billId: z.string().uuid().nullable().optional(),
+});
+
+const updateFinanceTransactionSchema = z.object({
+  accountId: z.string().uuid().optional(),
+  transferAccountId: z.string().uuid().nullable().optional(),
+  transactionType: financeTransactionTypeSchema.optional(),
+  amountMinor: z.number().int().optional(),
+  currencyCode: z.string().length(3).optional(),
+  occurredOn: isoDateSchema.optional(),
+  description: z.string().max(4000).nullable().optional(),
+  expenseCategoryId: z.string().uuid().nullable().optional(),
+  billId: z.string().uuid().nullable().optional(),
+}).refine((value) => Object.keys(value).length > 0, "At least one field must be updated");
+
+const createRecurringIncomeSchema = z.object({
+  accountId: z.string().uuid(),
+  title: z.string().min(1).max(200),
+  amountMinor: z.number().int().positive(),
+  currencyCode: z.string().length(3).optional(),
+  recurrenceRule: z.string().min(1).max(100).optional(),
+  nextExpectedOn: isoDateSchema,
+  status: recurringIncomeStatusSchema.optional(),
+});
+
+const updateRecurringIncomeSchema = z.object({
+  accountId: z.string().uuid().optional(),
+  title: z.string().min(1).max(200).optional(),
+  amountMinor: z.number().int().positive().optional(),
+  currencyCode: z.string().length(3).optional(),
+  recurrenceRule: z.string().min(1).max(100).optional(),
+  nextExpectedOn: isoDateSchema.optional(),
+  status: recurringIncomeStatusSchema.optional(),
+}).refine((value) => Object.keys(value).length > 0, "At least one field must be updated");
 
 const createFinanceBillSchema = z.object({
   title: z.string().min(1).max(200),
@@ -395,6 +481,92 @@ function fromPrismaRecurringExpenseStatus(
   throw new Error(`Unsupported recurring expense status: ${status satisfies never}`);
 }
 
+function toPrismaFinanceAccountType(type: FinanceAccountType): PrismaFinanceAccountType {
+  switch (type) {
+    case "bank":
+      return "BANK";
+    case "cash":
+      return "CASH";
+    case "wallet":
+      return "WALLET";
+    case "other":
+      return "OTHER";
+  }
+
+  throw new Error(`Unsupported finance account type: ${type satisfies never}`);
+}
+
+function fromPrismaFinanceAccountType(type: PrismaFinanceAccountType): FinanceAccountType {
+  switch (type) {
+    case "BANK":
+      return "bank";
+    case "CASH":
+      return "cash";
+    case "WALLET":
+      return "wallet";
+    case "OTHER":
+      return "other";
+  }
+
+  throw new Error(`Unsupported finance account type: ${type satisfies never}`);
+}
+
+function toPrismaFinanceTransactionType(type: FinanceTransactionType): PrismaFinanceTransactionType {
+  switch (type) {
+    case "income":
+      return "INCOME";
+    case "expense":
+      return "EXPENSE";
+    case "transfer":
+      return "TRANSFER";
+    case "adjustment":
+      return "ADJUSTMENT";
+  }
+
+  throw new Error(`Unsupported finance transaction type: ${type satisfies never}`);
+}
+
+function fromPrismaFinanceTransactionType(type: PrismaFinanceTransactionType): FinanceTransactionType {
+  switch (type) {
+    case "INCOME":
+      return "income";
+    case "EXPENSE":
+      return "expense";
+    case "TRANSFER":
+      return "transfer";
+    case "ADJUSTMENT":
+      return "adjustment";
+  }
+
+  throw new Error(`Unsupported finance transaction type: ${type satisfies never}`);
+}
+
+function toPrismaRecurringIncomeStatus(status: RecurringIncomeStatus): PrismaRecurringIncomeStatus {
+  switch (status) {
+    case "active":
+      return "ACTIVE";
+    case "paused":
+      return "PAUSED";
+    case "archived":
+      return "ARCHIVED";
+  }
+
+  throw new Error(`Unsupported recurring income status: ${status satisfies never}`);
+}
+
+function fromPrismaRecurringIncomeStatus(status: PrismaRecurringIncomeStatus): RecurringIncomeStatus {
+  switch (status) {
+    case "ACTIVE":
+      return "active";
+    case "PAUSED":
+      return "paused";
+    case "ARCHIVED":
+      return "archived";
+  }
+
+  throw new Error(`Unsupported recurring income status: ${status satisfies never}`);
+}
+
 function toPrismaFinanceGoalType(
   goalType: NonNullable<UpdateFinanceGoalRequest["goalType"]>,
 ): PrismaFinanceGoalType {
@@ -474,6 +646,71 @@ function serializeExpenseCategory(category: ExpenseCategory): ExpenseCategoryIte
     sortOrder: category.sortOrder,
     createdAt: category.createdAt.toISOString(),
     archivedAt: category.archivedAt?.toISOString() ?? null,
+  };
+}
+
+function getFinanceTransactionBalanceDelta(transaction: Pick<FinanceTransaction, "transactionType" | "amountMinor">) {
+  switch (transaction.transactionType) {
+    case "INCOME":
+      return transaction.amountMinor;
+    case "EXPENSE":
+      return -transaction.amountMinor;
+    case "ADJUSTMENT":
+      return transaction.amountMinor;
+    case "TRANSFER":
+      return -transaction.amountMinor;
+  }
+}
+
+function serializeFinanceAccount(
+  account: FinanceAccount,
+  currentBalanceMinor: number,
+): FinanceAccountItem {
+  return {
+    id: account.id,
+    name: account.name,
+    accountType: fromPrismaFinanceAccountType(account.accountType),
+    currencyCode: account.currencyCode,
+    openingBalanceMinor: account.openingBalanceMinor,
+    currentBalanceMinor,
+    archivedAt: account.archivedAt?.toISOString() ?? null,
+    createdAt: account.createdAt.toISOString(),
+    updatedAt: account.updatedAt.toISOString(),
+  };
+}
+
+function serializeFinanceTransaction(
+  transaction: FinanceTransaction,
+): FinanceTransactionItem {
+  return {
+    id: transaction.id,
+    accountId: transaction.accountId,
+    transferAccountId: transaction.transferAccountId,
+    transactionType: fromPrismaFinanceTransactionType(transaction.transactionType),
+    amountMinor: transaction.amountMinor,
+    currencyCode: transaction.currencyCode,
+    occurredOn: toIsoDateString(transaction.occurredOn),
+    description: transaction.description,
+    expenseCategoryId: transaction.expenseCategoryId,
+    billId: transaction.billId,
+    source: "ledger",
+    createdAt: transaction.createdAt.toISOString(),
+    updatedAt: transaction.updatedAt.toISOString(),
+  };
+}
+
+function serializeRecurringIncome(income: RecurringIncomeTemplate): RecurringIncomeItem {
+  return {
+    id: income.id,
+    accountId: income.accountId,
+    title: income.title,
+    amountMinor: income.amountMinor,
+    currencyCode: income.currencyCode,
+    recurrenceRule: income.recurrenceRule,
+    nextExpectedOn: toIsoDateString(income.nextExpectedOn),
+    status: fromPrismaRecurringIncomeStatus(income.status),
+    createdAt: income.createdAt.toISOString(),
+    updatedAt: income.updatedAt.toISOString(),
   };
 }
 
@@ -560,6 +797,258 @@ async function getUserFinanceContext(
     currencyCode: preferences?.currencyCode ?? "USD",
     timezone: preferences?.timezone ?? "UTC",
     weekStartsOn: preferences?.weekStartsOn ?? 1,
+  };
+}
+
+async function buildFinanceAccountItems(
+  app: Parameters<FastifyPluginAsync>[0],
+  userId: string,
+) {
+  const [accounts, transactions] = await Promise.all([
+    app.prisma.financeAccount.findMany({
+      where: {
+        userId,
+      },
+      orderBy: [{ archivedAt: "asc" }, { createdAt: "asc" }],
+    }),
+    app.prisma.financeTransaction.findMany({
+      where: {
+        userId,
+      },
+      select: {
+        accountId: true,
+        transferAccountId: true,
+        transactionType: true,
+        amountMinor: true,
+      },
+    }),
+  ]);
+
+  const balanceMap = new Map(accounts.map((account) => [account.id, account.openingBalanceMinor]));
+
+  for (const transaction of transactions) {
+    balanceMap.set(
+      transaction.accountId,
+      (balanceMap.get(transaction.accountId) ?? 0) + getFinanceTransactionBalanceDelta(transaction),
+    );
+
+    if (transaction.transactionType === "TRANSFER" && transaction.transferAccountId) {
+      balanceMap.set(
+        transaction.transferAccountId,
+        (balanceMap.get(transaction.transferAccountId) ?? 0) + transaction.amountMinor,
+      );
+    }
+  }
+
+  return accounts.map((account) => serializeFinanceAccount(account, balanceMap.get(account.id) ?? account.openingBalanceMinor));
+}
+
+async function findOwnedFinanceAccount(
+  app: Parameters<FastifyPluginAsync>[0],
+  userId: string,
+  accountId: string,
+) {
+  const account = await app.prisma.financeAccount.findFirst({
+    where: {
+      id: accountId,
+      userId,
+    },
+  });
+
+  if (!account) {
+    throw new AppError({
+      statusCode: 404,
+      code: "NOT_FOUND",
+      message: "Finance account not found",
+    });
+  }
+
+  return account;
+}
+
+async function assertOwnedFinanceAccount(
+  app: Parameters<FastifyPluginAsync>[0],
+  userId: string,
+  accountId: string | null | undefined,
+) {
+  if (!accountId) {
+    return;
+  }
+
+  await findOwnedFinanceAccount(app, userId, accountId);
+}
+
+function validateFinanceTransactionPayload(
+  payload: Pick<CreateFinanceTransactionRequest, "transactionType" | "amountMinor" | "transferAccountId">,
+) {
+  if (payload.transactionType === "adjustment") {
+    if (payload.amountMinor === 0) {
+      throw new AppError({
+        statusCode: 400,
+        code: "BAD_REQUEST",
+        message: "Adjustment amount cannot be zero",
+      });
+    }
+    return;
+  }
+
+  if (payload.amountMinor <= 0) {
+    throw new AppError({
+      statusCode: 400,
+      code: "BAD_REQUEST",
+      message: "Amount must be greater than zero",
+    });
+  }
+
+  if (payload.transactionType === "transfer" && !payload.transferAccountId) {
+    throw new AppError({
+      statusCode: 400,
+      code: "BAD_REQUEST",
+      message: "Transfer account is required",
+    });
+  }
+}
+
+async function buildFinanceDashboard(
+  app: Parameters<FastifyPluginAsync>[0],
+  userId: string,
+  month: IsoMonthString,
+): Promise<Omit<FinanceDashboardResponse, "generatedAt">> {
+  const { monthStart, nextMonthStart } = getMonthBounds(month);
+  const currencyCode = await getUserCurrencyCode(app, userId);
+
+  const [accounts, transactions, monthPlan, recurringIncome, legacyExpenses, upcomingBills, overdueBills] = await Promise.all([
+    buildFinanceAccountItems(app, userId),
+    app.prisma.financeTransaction.findMany({
+      where: {
+        userId,
+        occurredOn: {
+          gte: monthStart,
+          lt: nextMonthStart,
+        },
+      },
+      orderBy: [{ occurredOn: "desc" }, { createdAt: "desc" }],
+      take: 30,
+    }),
+    app.prisma.financeMonthPlan.findUnique({
+      where: {
+        userId_monthStart: {
+          userId,
+          monthStart,
+        },
+      },
+    }),
+    app.prisma.recurringIncomeTemplate.findMany({
+      where: {
+        userId,
+        status: {
+          in: ["ACTIVE", "PAUSED"],
+        },
+      },
+      orderBy: [{ nextExpectedOn: "asc" }, { createdAt: "asc" }],
+    }),
+    app.prisma.expense.findMany({
+      where: {
+        userId,
+        spentOn: {
+          gte: monthStart,
+          lt: nextMonthStart,
+        },
+      },
+      orderBy: [{ spentOn: "desc" }, { createdAt: "desc" }],
+      take: 30,
+    }),
+    app.prisma.adminItem.findMany({
+      where: {
+        userId,
+        dueOn: {
+          gte: monthStart,
+          lt: nextMonthStart,
+        },
+        itemType: "BILL",
+        status: getOpenBillStatusFilter(),
+      },
+      include: {
+        linkedExpense: {
+          select: {
+            id: true,
+          },
+        },
+      },
+      orderBy: {
+        dueOn: "asc",
+      },
+      take: 10,
+    }),
+    app.prisma.adminItem.findMany({
+      where: {
+        userId,
+        dueOn: {
+          lt: monthStart,
+        },
+        itemType: "BILL",
+        status: getOpenBillStatusFilter(),
+      },
+      include: {
+        linkedExpense: {
+          select: {
+            id: true,
+          },
+        },
+      },
+      orderBy: {
+        dueOn: "asc",
+      },
+      take: 10,
+    }),
+  ]);
+
+  const incomeReceivedMinor = transactions
+    .filter((transaction) => transaction.transactionType === "INCOME")
+    .reduce((sum, transaction) => sum + transaction.amountMinor, 0);
+  const ledgerSpentMinor = transactions
+    .filter((transaction) => transaction.transactionType === "EXPENSE")
+    .reduce((sum, transaction) => sum + transaction.amountMinor, 0);
+  const legacySpentMinor = legacyExpenses.reduce((sum, expense) => sum + expense.amountMinor, 0);
+  const upcomingOpenBills = [...overdueBills, ...upcomingBills];
+  const upcomingDueMinor = upcomingOpenBills.reduce((sum, bill) => sum + (bill.amountMinor ?? 0), 0);
+  const cashAvailableMinor = accounts
+    .filter((account) => !account.archivedAt)
+    .reduce((sum, account) => sum + account.currentBalanceMinor, 0);
+  const totalSpentMinor = ledgerSpentMinor + legacySpentMinor;
+
+  return {
+    month,
+    currencyCode,
+    cashAvailableMinor,
+    incomeReceivedMinor,
+    plannedIncomeMinor: monthPlan?.plannedIncomeMinor ?? null,
+    totalSpentMinor,
+    upcomingDueMinor,
+    safeToSpendMinor: cashAvailableMinor - upcomingDueMinor,
+    accountCount: accounts.filter((account) => !account.archivedAt).length,
+    transactionCount: transactions.length + legacyExpenses.length,
+    upcomingBills: upcomingOpenBills.map(serializeFinanceBill),
+    accounts,
+    recentTransactions: [
+      ...transactions.map(serializeFinanceTransaction),
+      ...legacyExpenses.map((expense): FinanceTransactionItem => ({
+        id: `legacy-expense-${expense.id}`,
+        accountId: "",
+        transferAccountId: null,
+        transactionType: "expense",
+        amountMinor: expense.amountMinor,
+        currencyCode: expense.currencyCode,
+        occurredOn: toIsoDateString(expense.spentOn),
+        description: expense.description,
+        expenseCategoryId: expense.expenseCategoryId,
+        billId: expense.billId,
+        source: "legacy_expense",
+        createdAt: expense.createdAt.toISOString(),
+        updatedAt: expense.updatedAt.toISOString(),
+      })),
+    ].sort((left, right) => right.occurredOn.localeCompare(left.occurredOn) || right.createdAt.localeCompare(left.createdAt)).slice(0, 30),
+    recurringIncome: recurringIncome.map(serializeRecurringIncome),
   };
 }
 
@@ -1201,6 +1690,304 @@ async function buildFinanceInsights(
 }
 
 export const registerFinanceRoutes: FastifyPluginAsync = async (app) => {
+  app.get("/dashboard", async (request, reply) => {
+    const user = requireAuthenticatedUser(request);
+    const query = parseOrThrow(
+      z.object({
+        month: isoMonthSchema,
+      }),
+      request.query,
+    );
+
+    const response: FinanceDashboardResponse = withGeneratedAt(
+      await buildFinanceDashboard(app, user.id, query.month),
+    );
+
+    return reply.send(response);
+  });
+
+  app.get("/accounts", async (request, reply) => {
+    const user = requireAuthenticatedUser(request);
+    const response: FinanceAccountsResponse = withGeneratedAt({
+      accounts: await buildFinanceAccountItems(app, user.id),
+    });
+
+    return reply.send(response);
+  });
+
+  app.post("/accounts", async (request, reply) => {
+    const user = requireAuthenticatedUser(request);
+    const payload = parseOrThrow(createFinanceAccountSchema, request.body as CreateFinanceAccountRequest);
+    const currencyCode = payload.currencyCode ?? (await getUserCurrencyCode(app, user.id));
+
+    const account = await app.prisma.financeAccount.create({
+      data: {
+        userId: user.id,
+        name: payload.name.trim(),
+        accountType: toPrismaFinanceAccountType(payload.accountType ?? "bank"),
+        currencyCode,
+        openingBalanceMinor: payload.openingBalanceMinor ?? 0,
+      },
+    });
+
+    const response: FinanceAccountMutationResponse = withGeneratedAt({
+      account: serializeFinanceAccount(account, account.openingBalanceMinor),
+    });
+
+    return reply.status(201).send(response);
+  });
+
+  app.patch("/accounts/:accountId", async (request, reply) => {
+    const user = requireAuthenticatedUser(request);
+    const { accountId } = request.params as { accountId: string };
+    const payload = parseOrThrow(updateFinanceAccountSchema, request.body as UpdateFinanceAccountRequest);
+
+    await findOwnedFinanceAccount(app, user.id, accountId);
+
+    const account = await app.prisma.financeAccount.update({
+      where: {
+        id: accountId,
+      },
+      data: {
+        name: payload.name?.trim(),
+        accountType: payload.accountType ? toPrismaFinanceAccountType(payload.accountType) : undefined,
+        openingBalanceMinor: payload.openingBalanceMinor,
+        archivedAt:
+          payload.archived === undefined
+            ? undefined
+            : payload.archived
+              ? new Date()
+              : null,
+      },
+    });
+
+    const accounts = await buildFinanceAccountItems(app, user.id);
+    const response: FinanceAccountMutationResponse = withGeneratedAt({
+      account: accounts.find((item) => item.id === account.id) ?? serializeFinanceAccount(account, account.openingBalanceMinor),
+    });
+
+    return reply.send(response);
+  });
+
+  app.get("/transactions", async (request, reply) => {
+    const user = requireAuthenticatedUser(request);
+    const query = parseOrThrow(expenseRangeQuerySchema, request.query);
+    const fromDate = parseIsoDate(query.from);
+    const toDateExclusive = new Date(parseIsoDate(query.to).getTime() + 24 * 60 * 60 * 1000);
+    const transactions = await app.prisma.financeTransaction.findMany({
+      where: {
+        userId: user.id,
+        occurredOn: {
+          gte: fromDate,
+          lt: toDateExclusive,
+        },
+      },
+      orderBy: [{ occurredOn: "desc" }, { createdAt: "desc" }],
+    });
+
+    const response: FinanceTransactionsResponse = withGeneratedAt({
+      from: query.from,
+      to: query.to,
+      transactions: transactions.map(serializeFinanceTransaction),
+    });
+
+    return reply.send(response);
+  });
+
+  app.post("/transactions", async (request, reply) => {
+    const user = requireAuthenticatedUser(request);
+    const payload = parseOrThrow(createFinanceTransactionSchema, request.body as CreateFinanceTransactionRequest);
+
+    validateFinanceTransactionPayload(payload);
+    await Promise.all([
+      assertOwnedFinanceAccount(app, user.id, payload.accountId),
+      assertOwnedFinanceAccount(app, user.id, payload.transferAccountId),
+      assertOwnedExpenseCategory(app, user.id, payload.expenseCategoryId),
+      payload.billId ? findOwnedFinanceBill(app, user.id, payload.billId) : Promise.resolve(null),
+    ]);
+
+    if (payload.transferAccountId && payload.transferAccountId === payload.accountId) {
+      throw new AppError({
+        statusCode: 400,
+        code: "BAD_REQUEST",
+        message: "Transfer accounts must be different",
+      });
+    }
+
+    const transaction = await app.prisma.financeTransaction.create({
+      data: {
+        userId: user.id,
+        accountId: payload.accountId,
+        transferAccountId: payload.transactionType === "transfer" ? payload.transferAccountId ?? null : null,
+        transactionType: toPrismaFinanceTransactionType(payload.transactionType),
+        amountMinor: payload.amountMinor,
+        currencyCode: payload.currencyCode ?? (await getUserCurrencyCode(app, user.id)),
+        occurredOn: parseIsoDate(payload.occurredOn),
+        description: payload.description ?? null,
+        expenseCategoryId: payload.expenseCategoryId ?? null,
+        billId: payload.billId ?? null,
+      },
+    });
+
+    const response: FinanceTransactionMutationResponse = withGeneratedAt({
+      transaction: serializeFinanceTransaction(transaction),
+    });
+
+    return reply.status(201).send(response);
+  });
+
+  app.patch("/transactions/:transactionId", async (request, reply) => {
+    const user = requireAuthenticatedUser(request);
+    const { transactionId } = request.params as { transactionId: string };
+    const payload = parseOrThrow(updateFinanceTransactionSchema, request.body as UpdateFinanceTransactionRequest);
+    const existing = await app.prisma.financeTransaction.findFirst({
+      where: {
+        id: transactionId,
+        userId: user.id,
+      },
+    });
+
+    if (!existing) {
+      throw new AppError({
+        statusCode: 404,
+        code: "NOT_FOUND",
+        message: "Finance transaction not found",
+      });
+    }
+
+    const nextPayload = {
+      accountId: payload.accountId ?? existing.accountId,
+      transferAccountId: payload.transferAccountId === undefined ? existing.transferAccountId : payload.transferAccountId,
+      transactionType: payload.transactionType ?? fromPrismaFinanceTransactionType(existing.transactionType),
+      amountMinor: payload.amountMinor ?? existing.amountMinor,
+    };
+
+    validateFinanceTransactionPayload(nextPayload);
+    await Promise.all([
+      assertOwnedFinanceAccount(app, user.id, nextPayload.accountId),
+      assertOwnedFinanceAccount(app, user.id, nextPayload.transferAccountId),
+      assertOwnedExpenseCategory(app, user.id, payload.expenseCategoryId),
+      payload.billId ? findOwnedFinanceBill(app, user.id, payload.billId) : Promise.resolve(null),
+    ]);
+
+    if (nextPayload.transferAccountId && nextPayload.transferAccountId === nextPayload.accountId) {
+      throw new AppError({
+        statusCode: 400,
+        code: "BAD_REQUEST",
+        message: "Transfer accounts must be different",
+      });
+    }
+
+    const transaction = await app.prisma.financeTransaction.update({
+      where: {
+        id: existing.id,
+      },
+      data: {
+        accountId: payload.accountId,
+        transferAccountId: nextPayload.transactionType === "transfer" ? nextPayload.transferAccountId : null,
+        transactionType: payload.transactionType ? toPrismaFinanceTransactionType(payload.transactionType) : undefined,
+        amountMinor: payload.amountMinor,
+        currencyCode: payload.currencyCode,
+        occurredOn: payload.occurredOn ? parseIsoDate(payload.occurredOn) : undefined,
+        description: payload.description,
+        expenseCategoryId: payload.expenseCategoryId,
+        billId: payload.billId,
+      },
+    });
+
+    const response: FinanceTransactionMutationResponse = withGeneratedAt({
+      transaction: serializeFinanceTransaction(transaction),
+    });
+
+    return reply.send(response);
+  });
+
+  app.get("/recurring-income", async (request, reply) => {
+    const user = requireAuthenticatedUser(request);
+    const recurringIncome = await app.prisma.recurringIncomeTemplate.findMany({
+      where: {
+        userId: user.id,
+      },
+      orderBy: [{ status: "asc" }, { nextExpectedOn: "asc" }],
+    });
+
+    const response: RecurringIncomeResponse = withGeneratedAt({
+      recurringIncome: recurringIncome.map(serializeRecurringIncome),
+    });
+
+    return reply.send(response);
+  });
+
+  app.post("/recurring-income", async (request, reply) => {
+    const user = requireAuthenticatedUser(request);
+    const payload = parseOrThrow(createRecurringIncomeSchema, request.body as CreateRecurringIncomeRequest);
+
+    await assertOwnedFinanceAccount(app, user.id, payload.accountId);
+
+    const recurringIncome = await app.prisma.recurringIncomeTemplate.create({
+      data: {
+        userId: user.id,
+        accountId: payload.accountId,
+        title: payload.title.trim(),
+        amountMinor: payload.amountMinor,
+        currencyCode: payload.currencyCode ?? (await getUserCurrencyCode(app, user.id)),
+        recurrenceRule: payload.recurrenceRule ?? "monthly",
+        nextExpectedOn: parseIsoDate(payload.nextExpectedOn),
+        status: toPrismaRecurringIncomeStatus(payload.status ?? "active"),
+      },
+    });
+
+    const response: RecurringIncomeMutationResponse = withGeneratedAt({
+      recurringIncome: serializeRecurringIncome(recurringIncome),
+    });
+
+    return reply.status(201).send(response);
+  });
+
+  app.patch("/recurring-income/:recurringIncomeId", async (request, reply) => {
+    const user = requireAuthenticatedUser(request);
+    const { recurringIncomeId } = request.params as { recurringIncomeId: string };
+    const payload = parseOrThrow(updateRecurringIncomeSchema, request.body as UpdateRecurringIncomeRequest);
+
+    const existing = await app.prisma.recurringIncomeTemplate.findFirst({
+      where: {
+        id: recurringIncomeId,
+        userId: user.id,
+      },
+    });
+
+    if (!existing) {
+      throw new AppError({
+        statusCode: 404,
+        code: "NOT_FOUND",
+        message: "Recurring income not found",
+      });
+    }
+
+    await assertOwnedFinanceAccount(app, user.id, payload.accountId);
+
+    const recurringIncome = await app.prisma.recurringIncomeTemplate.update({
+      where: {
+        id: existing.id,
+      },
+      data: {
+        accountId: payload.accountId,
+        title: payload.title?.trim(),
+        amountMinor: payload.amountMinor,
+        currencyCode: payload.currencyCode,
+        recurrenceRule: payload.recurrenceRule,
+        nextExpectedOn: payload.nextExpectedOn ? parseIsoDate(payload.nextExpectedOn) : undefined,
+        status: payload.status ? toPrismaRecurringIncomeStatus(payload.status) : undefined,
+      },
+    });
+
+    const response: RecurringIncomeMutationResponse = withGeneratedAt({
+      recurringIncome: serializeRecurringIncome(recurringIncome),
+    });
+
+    return reply.send(response);
+  });
+
   app.get("/month-plan", async (request, reply) => {
     const user = requireAuthenticatedUser(request);
     const query = parseOrThrow(

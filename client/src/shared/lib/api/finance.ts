@@ -36,6 +36,10 @@ type FinanceSummaryResponse = {
   upcomingBills: FinanceBillItem[];
 };
 
+export type FinanceAccountType = "bank" | "cash" | "wallet" | "other";
+export type FinanceTransactionType = "income" | "expense" | "transfer" | "adjustment";
+export type RecurringIncomeStatus = "active" | "paused" | "archived";
+
 export type FinanceBillCompletionMode = "pay_and_log" | "mark_paid_only";
 export type FinanceBillReconciliationStatus =
   | "due"
@@ -64,6 +68,65 @@ export type FinanceBillsResponse = {
   generatedAt: string;
   month: string;
   bills: FinanceBillItem[];
+};
+
+export type FinanceAccountItem = {
+  id: string;
+  name: string;
+  accountType: FinanceAccountType;
+  currencyCode: string;
+  openingBalanceMinor: number;
+  currentBalanceMinor: number;
+  archivedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type FinanceTransactionItem = {
+  id: string;
+  accountId: string;
+  transferAccountId: string | null;
+  transactionType: FinanceTransactionType;
+  amountMinor: number;
+  currencyCode: string;
+  occurredOn: string;
+  description: string | null;
+  expenseCategoryId: string | null;
+  billId: string | null;
+  source: "ledger" | "legacy_expense";
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type RecurringIncomeItem = {
+  id: string;
+  accountId: string;
+  title: string;
+  amountMinor: number;
+  currencyCode: string;
+  recurrenceRule: string;
+  nextExpectedOn: string;
+  status: RecurringIncomeStatus;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type FinanceDashboardResponse = {
+  generatedAt: string;
+  month: string;
+  currencyCode: string;
+  cashAvailableMinor: number;
+  incomeReceivedMinor: number;
+  plannedIncomeMinor: number | null;
+  totalSpentMinor: number;
+  upcomingDueMinor: number;
+  safeToSpendMinor: number;
+  accountCount: number;
+  transactionCount: number;
+  upcomingBills: FinanceBillItem[];
+  accounts: FinanceAccountItem[];
+  recentTransactions: FinanceTransactionItem[];
+  recurringIncome: RecurringIncomeItem[];
 };
 
 export type FinancePaceStatus = "no_plan" | "on_pace" | "slightly_heavy" | "off_track";
@@ -249,6 +312,21 @@ type DeleteExpenseMutationResponse = {
   expenseId: string;
 };
 
+type FinanceAccountMutationResponse = {
+  generatedAt: string;
+  account: FinanceAccountItem;
+};
+
+type FinanceTransactionMutationResponse = {
+  generatedAt: string;
+  transaction: FinanceTransactionItem;
+};
+
+type RecurringIncomeMutationResponse = {
+  generatedAt: string;
+  recurringIncome: RecurringIncomeItem;
+};
+
 type CategoryMutationResponse = {
   generatedAt: string;
   category: FinanceCategoriesResponse["categories"][number];
@@ -295,6 +373,7 @@ const invalidateFinanceCollections = (queryClient: ReturnType<typeof useQueryCli
 
 type FinanceDataQueryOptions = {
   enabled?: boolean;
+  includeDashboard?: boolean;
   includeBills?: boolean;
   includeSummary?: boolean;
   includeExpenses?: boolean;
@@ -305,6 +384,7 @@ type FinanceDataQueryOptions = {
 };
 
 type FinanceDataQueryResult = {
+  dashboard: FinanceDashboardResponse | null;
   bills: FinanceBillsResponse | null;
   summary: FinanceSummaryResponse | null;
   expenses: ExpensesResponse | null;
@@ -319,6 +399,7 @@ type FinanceDataQueryResult = {
     categories: ReturnType<typeof toSectionError> | null;
     monthPlan: ReturnType<typeof toSectionError> | null;
     insights: ReturnType<typeof toSectionError> | null;
+    dashboard: ReturnType<typeof toSectionError> | null;
   };
 };
 
@@ -332,6 +413,7 @@ export const useFinanceDataQuery = (
   const month = normalizeFinanceMonthInput(monthOrDate);
   const monthStart = getMonthStartDate(`${month}-01`);
   const monthEnd = getMonthEndDate(`${month}-01`);
+  const includeDashboard = options.includeDashboard ?? true;
   const includeBills = options.includeBills ?? true;
   const includeSummary = options.includeSummary ?? true;
   const includeExpenses = options.includeExpenses ?? true;
@@ -347,6 +429,7 @@ export const useFinanceDataQuery = (
     includeCategories ? "categories" : "no-categories",
     includeMonthPlan ? "month-plan" : "no-month-plan",
     includeInsights ? "insights" : "no-insights",
+    includeDashboard ? "dashboard" : "no-dashboard",
   ].join(":");
 
   return useQuery<FinanceDataQueryResult>({
@@ -354,6 +437,7 @@ export const useFinanceDataQuery = (
     enabled: options.enabled,
     queryFn: async () => {
       const [
+        dashboardResult,
         billsResult,
         summaryResult,
         expensesResult,
@@ -363,6 +447,11 @@ export const useFinanceDataQuery = (
         insightsResult,
       ] =
         await Promise.allSettled([
+          includeDashboard
+            ? apiRequest<FinanceDashboardResponse>("/api/finance/dashboard", {
+              query: { month },
+            })
+            : Promise.resolve(null),
           includeBills
             ? apiRequest<FinanceBillsResponse>("/api/finance/bills", {
               query: { month },
@@ -397,6 +486,10 @@ export const useFinanceDataQuery = (
         ]);
 
       return {
+        dashboard:
+          includeDashboard && dashboardResult.status === "fulfilled"
+            ? dashboardResult.value
+            : null,
         bills:
           includeBills && billsResult.status === "fulfilled"
             ? billsResult.value
@@ -449,6 +542,10 @@ export const useFinanceDataQuery = (
           insights:
             includeInsights && insightsResult.status === "rejected"
               ? toSectionError(insightsResult.reason, "Goal and review insights could not load.")
+              : null,
+          dashboard:
+            includeDashboard && dashboardResult.status === "rejected"
+              ? toSectionError(dashboardResult.reason, "Finance dashboard could not load.")
               : null,
         },
       };
@@ -520,6 +617,106 @@ export const useDeleteExpenseMutation = (todayDate: string) => {
     meta: {
       successMessage: "Expense deleted.",
       errorMessage: "Expense deletion failed.",
+    },
+    onSuccess: () => invalidateCoreData(queryClient, todayDate),
+  });
+};
+
+export const useCreateFinanceAccountMutation = (todayDate: string) => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (payload: {
+      name: string;
+      accountType?: FinanceAccountType;
+      currencyCode?: string;
+      openingBalanceMinor?: number;
+    }) =>
+      apiRequest<FinanceAccountMutationResponse>("/api/finance/accounts", {
+        method: "POST",
+        body: payload,
+      }),
+    meta: {
+      successMessage: "Account added.",
+      errorMessage: "Account creation failed.",
+    },
+    onSuccess: () => invalidateCoreData(queryClient, todayDate),
+  });
+};
+
+export const useUpdateFinanceAccountMutation = (todayDate: string) => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      accountId,
+      ...payload
+    }: {
+      accountId: string;
+      name?: string;
+      accountType?: FinanceAccountType;
+      openingBalanceMinor?: number;
+      archived?: boolean;
+    }) =>
+      apiRequest<FinanceAccountMutationResponse>(`/api/finance/accounts/${accountId}`, {
+        method: "PATCH",
+        body: payload,
+      }),
+    meta: {
+      successMessage: "Account updated.",
+      errorMessage: "Account update failed.",
+    },
+    onSuccess: () => invalidateCoreData(queryClient, todayDate),
+  });
+};
+
+export const useCreateFinanceTransactionMutation = (todayDate: string) => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (payload: {
+      accountId: string;
+      transferAccountId?: string | null;
+      transactionType: FinanceTransactionType;
+      amountMinor: number;
+      currencyCode?: string;
+      occurredOn: string;
+      description?: string | null;
+      expenseCategoryId?: string | null;
+      billId?: string | null;
+    }) =>
+      apiRequest<FinanceTransactionMutationResponse>("/api/finance/transactions", {
+        method: "POST",
+        body: payload,
+      }),
+    meta: {
+      successMessage: "Transaction added.",
+      errorMessage: "Transaction failed.",
+    },
+    onSuccess: () => invalidateCoreData(queryClient, todayDate),
+  });
+};
+
+export const useCreateRecurringIncomeMutation = (todayDate: string) => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (payload: {
+      accountId: string;
+      title: string;
+      amountMinor: number;
+      currencyCode?: string;
+      recurrenceRule?: string;
+      nextExpectedOn: string;
+      status?: RecurringIncomeStatus;
+    }) =>
+      apiRequest<RecurringIncomeMutationResponse>("/api/finance/recurring-income", {
+        method: "POST",
+        body: payload,
+      }),
+    meta: {
+      successMessage: "Income plan added.",
+      errorMessage: "Income plan failed.",
     },
     onSuccess: () => invalidateCoreData(queryClient, todayDate),
   });

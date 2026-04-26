@@ -12,6 +12,449 @@
   animation: slideUp 0.4s var(--ease) both;
 }
 
+/* ══════════════════════════════════════════════════
+   Finance Cockpit
+   ══════════════════════════════════════════════════ */
+
+.fc {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  animation: slideUp 0.38s var(--ease) both;
+}
+
+.fc__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.fc__title-row,
+.fc__actions,
+.fc-row__actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.fc__title-row h1 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: clamp(1.35rem, 2vw, 1.9rem);
+  font-weight: 600;
+  letter-spacing: 0;
+}
+
+.fc__actions {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.fc-snapshot {
+  display: grid;
+  grid-template-columns: minmax(13rem, 1.4fr) repeat(4, minmax(8rem, 1fr));
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  background:
+    linear-gradient(90deg, rgba(217, 153, 58, 0.08), transparent 38%),
+    rgba(255, 255, 255, 0.015);
+}
+
+.fc-snapshot__primary,
+.fc-metric {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-height: 5.6rem;
+  padding: 0.95rem 1rem;
+  border-right: 1px solid var(--border);
+}
+
+.fc-snapshot__primary strong {
+  font-family: var(--font-display);
+  font-size: clamp(1.65rem, 3vw, 2.4rem);
+  font-weight: 650;
+  letter-spacing: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.fc-metric strong {
+  margin-top: 0.18rem;
+  font-size: 1.05rem;
+  font-weight: 650;
+  letter-spacing: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.fc-metric--safe strong {
+  color: var(--positive);
+}
+
+.fc-label,
+.fc-muted {
+  color: var(--text-tertiary);
+  font-size: var(--fs-micro);
+  font-weight: 650;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.fc__body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(22rem, 0.38fr);
+  gap: 1.3rem;
+  align-items: start;
+}
+
+.fc-workbench,
+.fc-rail,
+.fc-panel {
+  min-width: 0;
+}
+
+.fc-tabs {
+  display: flex;
+  align-items: center;
+  gap: 0.15rem;
+  width: fit-content;
+  padding: 0.15rem;
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  background: rgba(255, 255, 255, 0.018);
+}
+
+.fc-tab {
+  border: 0;
+  border-radius: var(--r-xs);
+  background: transparent;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  font-size: var(--fs-small);
+  font-weight: 650;
+  padding: 0.38rem 0.75rem;
+  transition: color var(--dur) var(--ease), background var(--dur) var(--ease), transform var(--dur) var(--ease);
+}
+
+.fc-tab:hover {
+  color: var(--text-secondary);
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.fc-tab:active {
+  transform: translateY(1px);
+}
+
+.fc-tab--active {
+  color: var(--text);
+  background: rgba(217, 153, 58, 0.14);
+  box-shadow: inset 0 0 0 1px rgba(217, 153, 58, 0.24);
+}
+
+.fc-workbench {
+  display: flex;
+  flex-direction: column;
+  gap: 0.8rem;
+}
+
+.fc-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.fc-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding-top: 0.3rem;
+}
+
+.fc-section-head h2 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 1rem;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+
+.fc-setup-strip {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.4rem;
+}
+
+.fc-setup-step {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  min-height: 2.6rem;
+  border: 1px solid var(--border);
+  border-radius: var(--r-xs);
+  background: rgba(255, 255, 255, 0.018);
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-weight: 650;
+  padding: 0 0.75rem;
+  transition: all var(--dur) var(--ease);
+}
+
+.fc-setup-step:hover {
+  border-color: var(--border-active);
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.fc-setup-step--done {
+  color: var(--positive);
+}
+
+.fc-list {
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid var(--border);
+}
+
+.fc-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  gap: 0.75rem;
+  align-items: center;
+  min-height: 3.4rem;
+  border-bottom: 1px solid var(--border);
+  padding: 0.55rem 0;
+}
+
+.fc-row__dot {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  background: var(--text-tertiary);
+}
+
+.fc-row__dot--income {
+  background: var(--positive);
+}
+
+.fc-row__dot--expense {
+  background: var(--negative);
+}
+
+.fc-row__dot--transfer {
+  background: var(--accent-bright);
+}
+
+.fc-row__dot--adjustment {
+  background: var(--text-secondary);
+}
+
+.fc-row__main {
+  display: flex;
+  flex-direction: column;
+  gap: 0.12rem;
+  min-width: 0;
+}
+
+.fc-row__main strong {
+  overflow: hidden;
+  color: var(--text);
+  font-size: var(--fs-small);
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fc-row__main span {
+  overflow: hidden;
+  color: var(--text-tertiary);
+  font-size: var(--fs-micro);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fc-row__amount {
+  color: var(--text);
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.fc-row__amount--positive {
+  color: var(--positive);
+}
+
+.fc-bill {
+  border-bottom: 1px solid var(--border);
+}
+
+.fc-bill .fc-row {
+  border-bottom: 0;
+}
+
+.fc-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  background: rgba(255, 255, 255, 0.018);
+  padding: 0.85rem;
+}
+
+.fc-editor--nested {
+  margin: 0 0 0.7rem 1.25rem;
+}
+
+.fc-form-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.6rem;
+}
+
+.fc-field--wide {
+  grid-column: span 2;
+}
+
+.fc-inline-action {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin: 0 0 0.7rem 1.25rem;
+}
+
+.fc-inline-action input {
+  max-width: 11rem;
+}
+
+.fc-account-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+  gap: 0.6rem;
+}
+
+.fc-account {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  border-top: 1px solid var(--border);
+  padding: 0.75rem 0;
+}
+
+.fc-account strong {
+  font-size: var(--fs-body);
+  font-weight: 650;
+}
+
+.fc-account span:last-child {
+  font-variant-numeric: tabular-nums;
+}
+
+.fc-account--archived {
+  opacity: 0.48;
+}
+
+.fc-rail {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.fc-debt-next {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  padding: 0.85rem 0;
+}
+
+.fc-debt-next div {
+  display: flex;
+  flex-direction: column;
+  gap: 0.18rem;
+}
+
+.fc-debt-next strong {
+  font-size: var(--fs-small);
+  font-weight: 650;
+}
+
+.fc-debt-next > span {
+  color: var(--text-tertiary);
+  font-size: var(--fs-micro);
+  font-weight: 650;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.setup-drawer--money {
+  max-width: 31rem;
+}
+
+@media (max-width: 1120px) {
+  .fc__body,
+  .finance__body {
+    grid-template-columns: 1fr;
+  }
+
+  .fc-snapshot {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .fc-snapshot__primary {
+    grid-column: span 2;
+  }
+}
+
+@media (max-width: 720px) {
+  .fc__header,
+  .fc__title-row,
+  .fc__actions,
+  .fc-section-head {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .fc__actions {
+    justify-content: stretch;
+  }
+
+  .fc__actions .button,
+  .fc-tabs {
+    width: 100%;
+  }
+
+  .fc-tabs {
+    overflow-x: auto;
+  }
+
+  .fc-snapshot {
+    grid-template-columns: 1fr;
+  }
+
+  .fc-snapshot__primary {
+    grid-column: span 1;
+  }
+
+  .fc-form-grid,
+  .fc-setup-strip {
+    grid-template-columns: 1fr;
+  }
+
+  .fc-field--wide {
+    grid-column: span 1;
+  }
+
+  .fc-row {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+  }
+
+  .fc-row__actions {
+    grid-column: 2 / -1;
+    flex-wrap: wrap;
+  }
+}
+
 .finance__header {
   display: flex;
   align-items: center;
@@ -93,6 +536,8 @@
 }
 
 .month-nav__label {
+  border: 0;
+  background: transparent;
   padding: 0.2rem 0.55rem;
   font-size: var(--fs-small);
   font-weight: 650;

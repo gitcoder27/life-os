@@ -1,46 +1,38 @@
-import {
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
-import { useLocation } from "react-router-dom";
+import { useMemo, useState, type Dispatch, type SetStateAction } from "react";
 
 import {
   daysUntil,
   formatDueLabel,
-  type FinanceBillItem,
   formatMinorCurrency,
   formatMonthLabel,
-  formatRelativeDate,
   formatShortDate,
   getMonthString,
   getTodayDate,
   parseAmountToMinor,
+  type FinanceBillItem,
+  type FinanceTransactionType,
   useCreateBillMutation,
   useCreateCategoryMutation,
   useCreateExpenseMutation,
+  useCreateFinanceAccountMutation,
+  useCreateFinanceTransactionMutation,
   useCreateRecurringExpenseMutation,
-  useDeleteExpenseMutation,
+  useCreateRecurringIncomeMutation,
   useDismissBillMutation,
   useFinanceDataQuery,
-  useLinkBillExpenseMutation,
   useMarkBillPaidMutation,
   usePayAndLogBillMutation,
   useRescheduleBillMutation,
   useUpdateCategoryMutation,
-  useUpdateExpenseMutation,
   useUpdateFinanceGoalMutation,
   useUpdateFinanceMonthPlanMutation,
   useUpdateRecurringExpenseMutation,
 } from "../../shared/lib/api";
 import {
-  formatLegacyFinanceRecurrenceRule,
-  type RecurrenceRuleInput,
   formatFullRecurrenceSummary,
+  formatLegacyFinanceRecurrenceRule,
   getDefaultRecurrenceRule,
   isRecurring,
-  parseLegacyFinanceRecurrenceRule,
 } from "../../shared/lib/recurrence";
 import {
   EmptyState,
@@ -48,29 +40,27 @@ import {
   PageErrorState,
   PageLoadingState,
 } from "../../shared/ui/PageState";
-import { RecurrenceEditor, buildRecurrenceInput } from "../../shared/ui/RecurrenceEditor";
-import { readHomeDestinationState } from "../../shared/lib/homeNavigation";
+import { buildRecurrenceInput } from "../../shared/ui/RecurrenceEditor";
 import { FinanceInsightsPanel } from "./FinanceInsightsPanel";
-import { readFinanceRouteRequest } from "./finance-navigation";
 import { FinancePlanPanel } from "./FinancePlanPanel";
 
-type CategoryForm = { name: string; color: string };
-type RecurringForm = {
-  title: string;
-  expenseCategoryId: string;
-  defaultAmount: string;
-  recurrenceRule: string;
-  recurrenceInput: RecurrenceRuleInput | null;
-  nextDueOn: string;
-  remindDaysBefore: string;
+type CockpitTab = "overview" | "transactions" | "bills" | "accounts";
+type SetupTab = "accounts" | "income" | "categories" | "recurring";
+
+type AccountForm = {
+  name: string;
+  accountType: "bank" | "cash" | "wallet" | "other";
+  openingBalance: string;
 };
 
-type ExpenseForm = {
+type TransactionForm = {
+  transactionType: FinanceTransactionType;
+  accountId: string;
+  transferAccountId: string;
   amount: string;
+  occurredOn: string;
   description: string;
-  categoryId: string;
-  spentOn: string;
-  recurringExpenseTemplateId: string;
+  expenseCategoryId: string;
 };
 
 type BillForm = {
@@ -78,7 +68,6 @@ type BillForm = {
   dueOn: string;
   amount: string;
   categoryId: string;
-  note: string;
 };
 
 type BillPaymentForm = {
@@ -88,37 +77,35 @@ type BillPaymentForm = {
   description: string;
 };
 
-type BillLinkForm = {
-  expenseId: string;
+type IncomeForm = {
+  title: string;
+  accountId: string;
+  amount: string;
+  nextExpectedOn: string;
 };
 
-type ActivityFilter = "all" | "uncategorized" | "recurring" | "today";
-type ManageFocus = "categories" | "recurring";
-type FeedTab = "bills" | "expenses";
+type CategoryForm = {
+  name: string;
+  color: string;
+};
 
-const emptyCategory: CategoryForm = { name: "", color: "" };
-const emptyRecurring: RecurringForm = {
-  title: "",
-  expenseCategoryId: "",
-  defaultAmount: "",
-  recurrenceRule: "monthly",
-  recurrenceInput: null,
-  nextDueOn: "",
-  remindDaysBefore: "3",
+type RecurringBillForm = {
+  title: string;
+  amount: string;
+  categoryId: string;
+  nextDueOn: string;
 };
-const emptyBill: BillForm = {
-  title: "",
-  dueOn: "",
-  amount: "",
-  categoryId: "",
-  note: "",
+
+const emptyAccountForm: AccountForm = {
+  name: "",
+  accountType: "bank",
+  openingBalance: "",
 };
-const emptyBillPayment = (today: string): BillPaymentForm => ({
-  paidOn: today,
-  amount: "",
-  categoryId: "",
-  description: "",
-});
+
+const emptyCategoryForm: CategoryForm = {
+  name: "",
+  color: "",
+};
 
 function navigateMonth(month: string, delta: number): string {
   const [y, m] = month.split("-").map(Number);
@@ -126,266 +113,143 @@ function navigateMonth(month: string, delta: number): string {
   return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
 }
 
+function getBillDueText(bill: FinanceBillItem) {
+  if (bill.status === "done") {
+    return bill.paidAt ? `Paid ${formatShortDate(bill.paidAt.slice(0, 10))}` : "Paid";
+  }
+
+  if (bill.status === "dropped") return "Dropped";
+  if (bill.status === "rescheduled") return `Moved to ${formatShortDate(bill.dueOn)}`;
+
+  const days = daysUntil(bill.dueOn);
+  if (days < 0) return `${Math.abs(days)}d overdue`;
+  if (days === 0) return "Due today";
+  if (days <= 7) return `Due in ${days}d`;
+  return `Due ${formatShortDate(bill.dueOn)}`;
+}
+
+function getBillStatusLabel(bill: FinanceBillItem) {
+  switch (bill.reconciliationStatus) {
+    case "paid_with_expense": return "Logged";
+    case "paid_without_expense": return "Needs expense";
+    case "rescheduled": return "Open";
+    case "dropped": return "Dropped";
+    default: return "Due";
+  }
+}
+
 export function FinancePage() {
-  const location = useLocation();
   const today = getTodayDate();
   const currentMonth = getMonthString(today);
   const [selectedMonth, setSelectedMonth] = useState(currentMonth);
-  const [highlightedBillId, setHighlightedBillId] = useState<string | null>(null);
-  const isCurrentMonth = selectedMonth === currentMonth;
+  const [tab, setTab] = useState<CockpitTab>("overview");
+  const [showSetup, setShowSetup] = useState(false);
+  const [setupTab, setSetupTab] = useState<SetupTab>("accounts");
+  const [showTransactionForm, setShowTransactionForm] = useState(false);
+  const [showBillForm, setShowBillForm] = useState(false);
+  const [showExpenseForm, setShowExpenseForm] = useState(false);
+  const [payingBillId, setPayingBillId] = useState<string | null>(null);
+  const [reschedulingBillId, setReschedulingBillId] = useState<string | null>(null);
+  const [rescheduleDate, setRescheduleDate] = useState("");
 
   const financeQuery = useFinanceDataQuery(selectedMonth);
+  const financeData = financeQuery.data;
+  const dashboard = financeData?.dashboard;
+  const summary = financeData?.summary;
+  const bills = financeData?.bills?.bills ?? [];
+  const categories = financeData?.categories?.categories ?? [];
+  const recurringExpenses = financeData?.recurringExpenses?.recurringExpenses ?? [];
+  const monthPlan = financeData?.monthPlan?.monthPlan ?? null;
+  const insights = financeData?.insights?.insights ?? null;
+  const currency = dashboard?.currencyCode ?? summary?.currencyCode ?? "USD";
+  const activeCategories = categories.filter((category) => !category.archivedAt);
+  const activeAccounts = dashboard?.accounts.filter((account) => !account.archivedAt) ?? [];
+
+  const createAccountMutation = useCreateFinanceAccountMutation(today);
+  const createTransactionMutation = useCreateFinanceTransactionMutation(today);
+  const createIncomeMutation = useCreateRecurringIncomeMutation(today);
   const createBillMutation = useCreateBillMutation(today);
   const createExpenseMutation = useCreateExpenseMutation(today);
-  const updateExpenseMutation = useUpdateExpenseMutation(today);
-  const deleteExpenseMutation = useDeleteExpenseMutation(today);
   const payAndLogBillMutation = usePayAndLogBillMutation(today);
-  const linkBillExpenseMutation = useLinkBillExpenseMutation(today);
   const markBillPaidMutation = useMarkBillPaidMutation(today);
   const rescheduleBillMutation = useRescheduleBillMutation(today);
   const dismissBillMutation = useDismissBillMutation(today);
-  const updateFinanceGoalMutation = useUpdateFinanceGoalMutation(selectedMonth);
-  const updateFinanceMonthPlanMutation = useUpdateFinanceMonthPlanMutation(selectedMonth);
   const createCategoryMutation = useCreateCategoryMutation();
   const updateCategoryMutation = useUpdateCategoryMutation();
   const createRecurringMutation = useCreateRecurringExpenseMutation();
   const updateRecurringMutation = useUpdateRecurringExpenseMutation();
+  const updateFinanceGoalMutation = useUpdateFinanceGoalMutation(selectedMonth);
+  const updateFinanceMonthPlanMutation = useUpdateFinanceMonthPlanMutation(selectedMonth);
 
-  // Bill form
-  const [showBillForm, setShowBillForm] = useState(false);
-  const [billForm, setBillForm] = useState<BillForm>({
-    ...emptyBill,
-    dueOn: today,
+  const [accountForm, setAccountForm] = useState<AccountForm>(emptyAccountForm);
+  const [transactionForm, setTransactionForm] = useState<TransactionForm>({
+    transactionType: "expense",
+    accountId: "",
+    transferAccountId: "",
+    amount: "",
+    occurredOn: today,
+    description: "",
+    expenseCategoryId: "",
   });
-
-  // Expense form
-  const [showExpenseForm, setShowExpenseForm] = useState(false);
-  const emptyExpense: ExpenseForm = {
+  const [billForm, setBillForm] = useState<BillForm>({
+    title: "",
+    dueOn: today,
+    amount: "",
+    categoryId: "",
+  });
+  const [expenseForm, setExpenseForm] = useState({
     amount: "",
     description: "",
     categoryId: "",
     spentOn: today,
-    recurringExpenseTemplateId: "",
-  };
-  const [expenseForm, setExpenseForm] = useState<ExpenseForm>(emptyExpense);
+  });
+  const [billPaymentForm, setBillPaymentForm] = useState<BillPaymentForm>({
+    paidOn: today,
+    amount: "",
+    categoryId: "",
+    description: "",
+  });
+  const [incomeForm, setIncomeForm] = useState<IncomeForm>({
+    title: "Salary",
+    accountId: "",
+    amount: "",
+    nextExpectedOn: today,
+  });
+  const [categoryForm, setCategoryForm] = useState<CategoryForm>(emptyCategoryForm);
+  const [recurringBillForm, setRecurringBillForm] = useState<RecurringBillForm>({
+    title: "",
+    amount: "",
+    categoryId: "",
+    nextDueOn: today,
+  });
 
-  // Expense editing
-  const [editingExpenseId, setEditingExpenseId] = useState<string | null>(null);
-  const [editExpenseForm, setEditExpenseForm] = useState<ExpenseForm>(emptyExpense);
-  const [deletingExpenseId, setDeletingExpenseId] = useState<string | null>(null);
-
-  // Activity filter
-  const [activityFilter, setActivityFilter] = useState<ActivityFilter>("all");
-
-  // Category management
-  const [showCatForm, setShowCatForm] = useState(false);
-  const [editingCatId, setEditingCatId] = useState<string | null>(null);
-  const [catForm, setCatForm] = useState<CategoryForm>(emptyCategory);
-
-  // Recurring management
-  const [showRecForm, setShowRecForm] = useState(false);
-  const [editingRecId, setEditingRecId] = useState<string | null>(null);
-  const [recForm, setRecForm] = useState<RecurringForm>(emptyRecurring);
-
-  // Setup drawer
-  const [showSetupDrawer, setShowSetupDrawer] = useState(false);
-  const [setupFocus, setSetupFocus] = useState<ManageFocus>("recurring");
-
-  // Feed tab
-  const [feedTab, setFeedTab] = useState<FeedTab>("bills");
-
-  // Reschedule state
-  const [reschedulingBillId, setReschedulingBillId] = useState<string | null>(null);
-  const [rescheduleDate, setRescheduleDate] = useState("");
-  const [payingBillId, setPayingBillId] = useState<string | null>(null);
-  const [billPaymentForm, setBillPaymentForm] = useState<BillPaymentForm>(emptyBillPayment(today));
-  const [linkingBillId, setLinkingBillId] = useState<string | null>(null);
-  const [billLinkForm, setBillLinkForm] = useState<BillLinkForm>({ expenseId: "" });
-  const handledRouteRef = useRef<string | null>(null);
-
-  const financeData = financeQuery.data;
-  const homeDestination = readHomeDestinationState(location.state);
-  const financeRouteRequest = useMemo(
-    () => readFinanceRouteRequest(location.search),
-    [location.search],
-  );
-  const bills = financeData?.bills?.bills ?? [];
-  const summary = financeData?.summary;
-  const expenses = financeData?.expenses?.expenses ?? [];
-  const recurringExpenses = financeData?.recurringExpenses?.recurringExpenses ?? [];
-  const categories = financeData?.categories?.categories ?? [];
-  const monthPlan = financeData?.monthPlan?.monthPlan ?? null;
-  const insights = financeData?.insights?.insights ?? null;
-  const activeCategories = categories.filter((c) => !c.archivedAt);
-  const activeRecurringExpenses = recurringExpenses.filter((item) => item.status !== "archived");
-  const categoryMap = new Map(categories.map((c) => [c.id, c]));
-  const currency = summary?.currencyCode ?? "USD";
-
-  // ── Derived data ──
-
-  // Bills: overdue, due today, due this week, upcoming
   const openBills = bills
-    .filter((item) => item.status === "pending" || item.status === "rescheduled")
+    .filter((bill) => bill.status === "pending" || bill.status === "rescheduled")
     .sort((a, b) => a.dueOn.localeCompare(b.dueOn));
-  const pendingBills = (summary?.upcomingBills ?? [])
-    .filter((item) => item.status === "pending" || item.status === "rescheduled")
-    .sort((a, b) => a.dueOn.localeCompare(b.dueOn));
+  const paidBills = bills.filter((bill) => bill.status === "done");
+  const dueNow = openBills.filter((bill) => daysUntil(bill.dueOn) <= 7);
+  const recentTransactions = dashboard?.recentTransactions ?? [];
 
-  const overdueBills = openBills.filter((b) => daysUntil(b.dueOn) < 0);
-  const todayBills = openBills.filter((b) => daysUntil(b.dueOn) === 0);
-  const dueBills = [...overdueBills, ...todayBills, ...openBills.filter((b) => { const d = daysUntil(b.dueOn); return d > 0 && d <= 7; })];
-  const completedBills = bills.filter((b) => b.status === "done");
-  const unreconciledBills = completedBills.filter((b) => b.reconciliationStatus === "paid_without_expense");
-  const workflowBills = [...openBills, ...completedBills];
+  const categoryMap = useMemo(
+    () => new Map(categories.map((category) => [category.id, category])),
+    [categories],
+  );
+  const accountMap = useMemo(
+    () => new Map((dashboard?.accounts ?? []).map((account) => [account.id, account])),
+    [dashboard?.accounts],
+  );
 
-  // Today's logged spending
-  const todayExpenses = expenses.filter((e) => e.spentOn === today);
-  const todaySpent = todayExpenses.reduce((sum, e) => sum + e.amountMinor, 0);
+  const setupSteps = [
+    { key: "account", label: "Account", done: activeAccounts.length > 0, action: () => openSetup("accounts") },
+    { key: "income", label: "Salary", done: (dashboard?.recurringIncome.length ?? 0) > 0 || (dashboard?.incomeReceivedMinor ?? 0) > 0, action: () => openSetup("income") },
+    { key: "dues", label: "Dues", done: recurringExpenses.some((item) => item.status === "active") || openBills.length > 0, action: () => openSetup("recurring") },
+  ];
 
-  // Uncategorized count
-  const uncategorizedCount = expenses.filter((e) => !e.expenseCategoryId).length;
-
-  // Month pace
-  const dayOfMonth = new Date(`${today}T12:00:00`).getDate();
-  const daysInMonth = new Date(Number(selectedMonth.split("-")[0]), Number(selectedMonth.split("-")[1]), 0).getDate();
-  const prevTotal = summary?.previousMonthTotalSpentMinor ?? 0;
-
-  // Expenses grouped by day (sorted newest first)
-  const sortedExpenses = useMemo(() => {
-    let filtered = [...expenses];
-    if (activityFilter === "uncategorized") {
-      filtered = filtered.filter((e) => !e.expenseCategoryId);
-    } else if (activityFilter === "recurring") {
-      filtered = filtered.filter((e) => e.recurringExpenseTemplateId);
-    } else if (activityFilter === "today") {
-      filtered = filtered.filter((e) => e.spentOn === today);
-    }
-    return filtered.sort((a, b) => b.spentOn.localeCompare(a.spentOn) || b.createdAt.localeCompare(a.createdAt));
-  }, [expenses, activityFilter, today]);
-
-  const expensesByDay = useMemo(() => {
-    const groups = new Map<string, typeof sortedExpenses>();
-    for (const exp of sortedExpenses) {
-      const day = exp.spentOn;
-      const existing = groups.get(day);
-      if (existing) {
-        existing.push(exp);
-      } else {
-        groups.set(day, [exp]);
-      }
-    }
-    return Array.from(groups.entries());
-  }, [sortedExpenses]);
-
-  useEffect(() => {
-    if (!financeRouteRequest.month || financeRouteRequest.month === selectedMonth) {
-      return;
-    }
-
-    setSelectedMonth(financeRouteRequest.month);
-  }, [financeRouteRequest.month, selectedMonth]);
-
-  useEffect(() => {
-    const routeKey = `${location.key}:${location.search}`;
-    const hasFinanceRouteTarget =
-      Boolean(financeRouteRequest.billId)
-      || financeRouteRequest.intent !== "view"
-      || Boolean(financeRouteRequest.section);
-
-    if (!hasFinanceRouteTarget || handledRouteRef.current === routeKey) {
-      return;
-    }
-
-    if (financeRouteRequest.month && financeRouteRequest.month !== selectedMonth) {
-      return;
-    }
-
-    const targetBill = financeRouteRequest.billId
-      ? workflowBills.find((bill) => bill.id === financeRouteRequest.billId)
-      : null;
-
-    if (financeRouteRequest.billId && !targetBill) {
-      return;
-    }
-
-    setHighlightedBillId(targetBill?.id ?? null);
-    setFeedTab("bills");
-
-    if (targetBill && financeRouteRequest.intent === "pay" && targetBill.status !== "done") {
-      openBillPayment(targetBill);
-    }
-
-    requestAnimationFrame(() => {
-      const targetId = targetBill
-        ? `finance-bill-${targetBill.id}`
-        : "finance-feed";
-
-      document.getElementById(targetId)?.scrollIntoView({
-        behavior: "smooth",
-        block: "start",
-      });
-    });
-
-    handledRouteRef.current = routeKey;
-  }, [
-    financeRouteRequest.billId,
-    financeRouteRequest.intent,
-    financeRouteRequest.month,
-    financeRouteRequest.section,
-    location.key,
-    location.search,
-    selectedMonth,
-    workflowBills,
-  ]);
-
-  useEffect(() => {
-    if (
-      financeRouteRequest.billId
-      || financeRouteRequest.month
-      || financeRouteRequest.intent !== "view"
-      || financeRouteRequest.section
-    ) {
-      return;
-    }
-
-    if (homeDestination?.kind !== "finance_bills") {
-      setHighlightedBillId(null);
-      return;
-    }
-
-    setSelectedMonth(currentMonth);
-    setHighlightedBillId(homeDestination.adminItemId ?? null);
-    setFeedTab("bills");
-
-    requestAnimationFrame(() => {
-      const targetId = homeDestination.adminItemId
-        ? `finance-bill-${homeDestination.adminItemId}`
-        : "finance-feed";
-
-      document.getElementById(targetId)?.scrollIntoView({
-        behavior: "smooth",
-        block: "start",
-      });
-    });
-  }, [currentMonth, financeRouteRequest, homeDestination, location.key]);
-
-  useEffect(() => {
-    const manageTarget = new URLSearchParams(location.search).get("manage");
-    if (manageTarget === "categories" || manageTarget === "recurring") {
-      openManagement(manageTarget);
-    }
-  }, [location.search]);
-
-  if (financeQuery.isLoading && !financeQuery.data) {
-    return (
-      <PageLoadingState
-        title="Loading finance"
-        description="Pulling together spend totals, recent expenses, and recurring bills."
-      />
-    );
+  if (financeQuery.isLoading && !financeData) {
+    return <PageLoadingState title="Loading finance" description="Preparing your money cockpit." />;
   }
 
-  if (financeQuery.isError || !financeQuery.data) {
+  if (financeQuery.isError || !financeData) {
     return (
       <PageErrorState
         title="Finance could not load"
@@ -395,157 +259,112 @@ export function FinancePage() {
     );
   }
 
-  // ── Handlers ──
+  function openSetup(nextTab: SetupTab) {
+    setSetupTab(nextTab);
+    setShowSetup(true);
+  }
 
-  function openCreateBill() {
-    setBillForm({
-      ...emptyBill,
-      dueOn: isCurrentMonth ? today : `${selectedMonth}-01`,
+  async function handleCreateAccount() {
+    if (!accountForm.name.trim()) return;
+
+    await createAccountMutation.mutateAsync({
+      name: accountForm.name.trim(),
+      accountType: accountForm.accountType,
+      currencyCode: currency,
+      openingBalanceMinor: parseAmountToMinor(accountForm.openingBalance) ?? 0,
     });
-    setShowBillForm(true);
-    setFeedTab("bills");
+    setAccountForm(emptyAccountForm);
+  }
+
+  async function handleCreateTransaction() {
+    const amountMinor = parseAmountToMinor(transactionForm.amount);
+    if (!amountMinor || !transactionForm.accountId) return;
+
+    await createTransactionMutation.mutateAsync({
+      accountId: transactionForm.accountId,
+      transferAccountId: transactionForm.transactionType === "transfer" ? transactionForm.transferAccountId : null,
+      transactionType: transactionForm.transactionType,
+      amountMinor,
+      currencyCode: currency,
+      occurredOn: transactionForm.occurredOn || today,
+      description: transactionForm.description || null,
+      expenseCategoryId: transactionForm.transactionType === "expense" ? transactionForm.expenseCategoryId || null : null,
+    });
+    setTransactionForm((form) => ({
+      ...form,
+      amount: "",
+      description: "",
+      expenseCategoryId: "",
+      transferAccountId: "",
+    }));
+    setShowTransactionForm(false);
+  }
+
+  async function handleCreateIncome() {
+    const amountMinor = parseAmountToMinor(incomeForm.amount);
+    if (!amountMinor || !incomeForm.accountId || !incomeForm.title.trim()) return;
+
+    await createIncomeMutation.mutateAsync({
+      accountId: incomeForm.accountId,
+      title: incomeForm.title.trim(),
+      amountMinor,
+      currencyCode: currency,
+      recurrenceRule: "monthly",
+      nextExpectedOn: incomeForm.nextExpectedOn || today,
+    });
+    setIncomeForm({ title: "Salary", accountId: incomeForm.accountId, amount: "", nextExpectedOn: today });
   }
 
   async function handleAddBill() {
     if (!billForm.title.trim() || !billForm.dueOn) return;
+
     await createBillMutation.mutateAsync({
       title: billForm.title.trim(),
       dueOn: billForm.dueOn,
       amountMinor: billForm.amount ? parseAmountToMinor(billForm.amount) : null,
       expenseCategoryId: billForm.categoryId || null,
-      note: billForm.note || null,
     });
-    setBillForm({
-      ...emptyBill,
-      dueOn: isCurrentMonth ? today : `${selectedMonth}-01`,
-    });
+    setBillForm({ title: "", dueOn: today, amount: "", categoryId: "" });
     setShowBillForm(false);
+    setTab("bills");
   }
 
-  async function handleAddExpense() {
+  async function handleAddLegacyExpense() {
     const amountMinor = parseAmountToMinor(expenseForm.amount);
     if (!amountMinor) return;
+
     await createExpenseMutation.mutateAsync({
       spentOn: expenseForm.spentOn || today,
       amountMinor,
       currencyCode: currency,
-      description: expenseForm.description || "Quick expense",
+      description: expenseForm.description || "Expense",
       expenseCategoryId: expenseForm.categoryId || null,
       source: "manual",
-      recurringExpenseTemplateId: expenseForm.recurringExpenseTemplateId || null,
     });
-    setExpenseForm(emptyExpense);
+    setExpenseForm({ amount: "", description: "", categoryId: "", spentOn: today });
     setShowExpenseForm(false);
   }
 
-  function openEditExpense(expense: typeof expenses[number]) {
-    setEditingExpenseId(expense.id);
-    setEditExpenseForm({
-      amount: String(expense.amountMinor / 100),
-      description: expense.description ?? "",
-      categoryId: expense.expenseCategoryId ?? "",
-      spentOn: expense.spentOn,
-      recurringExpenseTemplateId: expense.recurringExpenseTemplateId ?? "",
-    });
-    setDeletingExpenseId(null);
-  }
-
-  async function handleUpdateExpense(expenseId: string) {
-    const amountMinor = parseAmountToMinor(editExpenseForm.amount);
-    if (!amountMinor) return;
-    await updateExpenseMutation.mutateAsync({
-      expenseId,
-      amountMinor,
-      description: editExpenseForm.description || null,
-      expenseCategoryId: editExpenseForm.categoryId || null,
-      spentOn: editExpenseForm.spentOn,
-    });
-    setEditingExpenseId(null);
-  }
-
   function openBillPayment(bill: FinanceBillItem) {
-    const recurringTemplate = bill.recurringExpenseTemplateId
-      ? recurringExpenses.find((item) => item.id === bill.recurringExpenseTemplateId)
-      : null;
-
     setBillPaymentForm({
       paidOn: bill.paidAt?.slice(0, 10) ?? today,
-      amount: bill.amountMinor != null
-        ? String(bill.amountMinor / 100)
-        : recurringTemplate?.defaultAmountMinor
-          ? String(recurringTemplate.defaultAmountMinor / 100)
-          : "",
+      amount: bill.amountMinor != null ? String(bill.amountMinor / 100) : "",
       description: bill.title,
-      categoryId: bill.expenseCategoryId ?? recurringTemplate?.expenseCategoryId ?? "",
+      categoryId: bill.expenseCategoryId ?? "",
     });
     setPayingBillId(bill.id);
-    setReschedulingBillId(null);
-    setLinkingBillId(null);
-  }
-
-  function getUnlinkedExpenseCandidates(bill: FinanceBillItem) {
-    return [...expenses]
-      .filter((expense) => !expense.billId)
-      .sort((left, right) => {
-        const leftScore =
-          (left.amountMinor === bill.amountMinor ? 2 : 0)
-          + (left.spentOn === (bill.paidAt?.slice(0, 10) ?? bill.dueOn) ? 2 : 0)
-          + (left.expenseCategoryId === bill.expenseCategoryId ? 1 : 0);
-        const rightScore =
-          (right.amountMinor === bill.amountMinor ? 2 : 0)
-          + (right.spentOn === (bill.paidAt?.slice(0, 10) ?? bill.dueOn) ? 2 : 0)
-          + (right.expenseCategoryId === bill.expenseCategoryId ? 1 : 0);
-
-        if (leftScore !== rightScore) {
-          return rightScore - leftScore;
-        }
-
-        return right.spentOn.localeCompare(left.spentOn) || right.createdAt.localeCompare(left.createdAt);
-      });
-  }
-
-  function openLinkExpense(bill: FinanceBillItem) {
-    const candidates = getUnlinkedExpenseCandidates(bill);
-    setBillLinkForm({
-      expenseId: candidates[0]?.id ?? "",
-    });
-    setLinkingBillId(bill.id);
-    setPayingBillId(null);
-    setReschedulingBillId(null);
   }
 
   async function handlePayAndLogBill(bill: FinanceBillItem) {
-    const amountMinor = billPaymentForm.amount ? parseAmountToMinor(billPaymentForm.amount) : null;
     await payAndLogBillMutation.mutateAsync({
       billId: bill.id,
       paidOn: billPaymentForm.paidOn || today,
-      amountMinor,
+      amountMinor: billPaymentForm.amount ? parseAmountToMinor(billPaymentForm.amount) : null,
       description: billPaymentForm.description || bill.title,
       expenseCategoryId: billPaymentForm.categoryId || null,
       currencyCode: currency,
     });
     setPayingBillId(null);
-    setBillPaymentForm(emptyBillPayment(today));
-  }
-
-  async function handleMarkBillPaid(bill: FinanceBillItem) {
-    await markBillPaidMutation.mutateAsync({
-      billId: bill.id,
-      paidOn: today,
-    });
-  }
-
-  async function handleLinkExpense(bill: FinanceBillItem) {
-    if (!billLinkForm.expenseId) return;
-    await linkBillExpenseMutation.mutateAsync({
-      billId: bill.id,
-      expenseId: billLinkForm.expenseId,
-    });
-    setLinkingBillId(null);
-  }
-
-  async function handleBillDrop(bill: FinanceBillItem) {
-    await dismissBillMutation.mutateAsync(bill.id);
   }
 
   async function handleBillReschedule(billId: string) {
@@ -555,1071 +374,667 @@ export function FinancePage() {
     setRescheduleDate("");
   }
 
-  async function handleQuickRecategorize(expenseId: string, expenseCategoryId: string) {
-    await updateExpenseMutation.mutateAsync({
-      expenseId,
-      expenseCategoryId: expenseCategoryId || null,
+  async function handleCreateCategory() {
+    if (!categoryForm.name.trim()) return;
+
+    await createCategoryMutation.mutateAsync({
+      name: categoryForm.name.trim(),
+      color: categoryForm.color || null,
     });
+    setCategoryForm(emptyCategoryForm);
   }
 
-  function openManagement(focus: ManageFocus) {
-    setSetupFocus(focus);
-    setShowSetupDrawer(true);
-  }
+  async function handleCreateRecurringBill() {
+    const amountMinor = recurringBillForm.amount ? parseAmountToMinor(recurringBillForm.amount) : null;
+    if (!recurringBillForm.title.trim() || !recurringBillForm.nextDueOn) return;
 
-  // Category CRUD
-  function openCreateCategory() {
-    setEditingCatId(null);
-    setCatForm(emptyCategory);
-    setShowCatForm(true);
-  }
-
-  function openEditCategory(cat: typeof categories[number]) {
-    setEditingCatId(cat.id);
-    setCatForm({ name: cat.name, color: cat.color ?? "" });
-    setShowCatForm(true);
-  }
-
-  async function handleCategorySave() {
-    if (!catForm.name.trim()) return;
-    if (editingCatId) {
-      await updateCategoryMutation.mutateAsync({
-        categoryId: editingCatId,
-        name: catForm.name.trim(),
-        color: catForm.color || null,
-      });
-    } else {
-      await createCategoryMutation.mutateAsync({
-        name: catForm.name.trim(),
-        color: catForm.color || null,
-      });
-    }
-    setShowCatForm(false);
-    setEditingCatId(null);
-    setCatForm(emptyCategory);
-  }
-
-  async function handleCategoryArchive(catId: string, archived: boolean) {
-    await updateCategoryMutation.mutateAsync({ categoryId: catId, archived });
-  }
-
-  // Recurring CRUD
-  function openCreateRecurring() {
-    const defaultRule = getDefaultRecurrenceRule("finance", today);
-    setEditingRecId(null);
-    setRecForm({
-      ...emptyRecurring,
-      nextDueOn: today,
-      recurrenceInput: defaultRule,
-      recurrenceRule: formatLegacyFinanceRecurrenceRule(defaultRule),
+    const rule = getDefaultRecurrenceRule("finance", recurringBillForm.nextDueOn);
+    await createRecurringMutation.mutateAsync({
+      title: recurringBillForm.title.trim(),
+      expenseCategoryId: recurringBillForm.categoryId || undefined,
+      defaultAmountMinor: amountMinor,
+      currencyCode: currency,
+      recurrenceRule: formatLegacyFinanceRecurrenceRule(rule),
+      recurrence: buildRecurrenceInput(rule),
+      nextDueOn: recurringBillForm.nextDueOn,
+      remindDaysBefore: 3,
     });
-    setShowRecForm(true);
+    setRecurringBillForm({ title: "", amount: "", categoryId: "", nextDueOn: today });
   }
-
-  function openEditRecurring(item: typeof recurringExpenses[number]) {
-    const recurrenceInput = item.recurrence?.rule
-      ?? parseLegacyFinanceRecurrenceRule(item.recurrenceRule, item.nextDueOn)
-      ?? getDefaultRecurrenceRule("finance", item.nextDueOn);
-    const nextDueOn = recurrenceInput.startsOn;
-    setEditingRecId(item.id);
-    setRecForm({
-      title: item.title,
-      expenseCategoryId: item.expenseCategoryId ?? "",
-      defaultAmount: item.defaultAmountMinor ? String(item.defaultAmountMinor / 100) : "",
-      recurrenceRule: formatLegacyFinanceRecurrenceRule(recurrenceInput),
-      recurrenceInput,
-      nextDueOn,
-      remindDaysBefore: String(item.remindDaysBefore),
-    });
-    setShowRecForm(true);
-  }
-
-  async function handleRecurringSave() {
-    if (!recForm.title.trim() || !recForm.nextDueOn) return;
-    const amountMinor = recForm.defaultAmount ? parseAmountToMinor(recForm.defaultAmount) : null;
-    const recurrenceRuleInput = recForm.recurrenceInput
-      ?? parseLegacyFinanceRecurrenceRule(recForm.recurrenceRule, recForm.nextDueOn)
-      ?? getDefaultRecurrenceRule("finance", recForm.nextDueOn);
-    const recurrence = buildRecurrenceInput(recurrenceRuleInput);
-    const recurrenceRule = formatLegacyFinanceRecurrenceRule(recurrenceRuleInput);
-    if (editingRecId) {
-      await updateRecurringMutation.mutateAsync({
-        recurringExpenseId: editingRecId,
-        title: recForm.title.trim(),
-        expenseCategoryId: recForm.expenseCategoryId || null,
-        defaultAmountMinor: amountMinor,
-        recurrenceRule,
-        recurrence,
-        nextDueOn: recurrenceRuleInput.startsOn,
-        remindDaysBefore: Number(recForm.remindDaysBefore) || 3,
-      });
-    } else {
-      await createRecurringMutation.mutateAsync({
-        title: recForm.title.trim(),
-        expenseCategoryId: recForm.expenseCategoryId || undefined,
-        defaultAmountMinor: amountMinor,
-        recurrenceRule,
-        recurrence,
-        nextDueOn: recurrenceRuleInput.startsOn,
-        remindDaysBefore: Number(recForm.remindDaysBefore) || 3,
-      });
-    }
-    setShowRecForm(false);
-    setEditingRecId(null);
-    setRecForm(emptyRecurring);
-  }
-
-  async function handleRecurringStatusChange(id: string, status: "active" | "paused" | "archived") {
-    await updateRecurringMutation.mutateAsync({ recurringExpenseId: id, status });
-  }
-
-  function getBillRowClass(bill: FinanceBillItem) {
-    if (bill.status === "done") {
-      return bill.reconciliationStatus === "paid_with_expense"
-        ? "bill-row bill-row--settled"
-        : "bill-row bill-row--unreconciled";
-    }
-    const d = daysUntil(bill.dueOn);
-    if (d < 0) return "bill-row bill-row--overdue";
-    if (d === 0) return "bill-row bill-row--today";
-    return "bill-row";
-  }
-
-  function getBillDueText(bill: FinanceBillItem) {
-    if (bill.status === "done") {
-      return bill.paidAt
-        ? `Paid ${formatShortDate(bill.paidAt.slice(0, 10))}`
-        : "Paid";
-    }
-
-    if (bill.status === "dropped") {
-      return "Dismissed";
-    }
-
-    if (bill.status === "rescheduled") {
-      return `Rescheduled to ${formatShortDate(bill.dueOn)}`;
-    }
-
-    const d = daysUntil(bill.dueOn);
-    if (d < 0) return `Overdue by ${Math.abs(d)} day${Math.abs(d) === 1 ? "" : "s"}`;
-    if (d === 0) return "Due today";
-    return `Due ${formatShortDate(bill.dueOn)}`;
-  }
-
-  function getBillReconciliationLabel(bill: FinanceBillItem) {
-    switch (bill.reconciliationStatus) {
-      case "paid_with_expense":
-        return "Expense linked";
-      case "paid_without_expense":
-        return "Needs expense log";
-      case "rescheduled":
-        return "Open bill";
-      case "dropped":
-        return "Dismissed";
-      default:
-        return "Due";
-    }
-  }
-
-  async function handleMonthPlanSave(payload: Parameters<typeof updateFinanceMonthPlanMutation.mutateAsync>[0]) {
-    await updateFinanceMonthPlanMutation.mutateAsync(payload);
-  }
-
-  async function handleFinanceGoalSave(
-    goalId: string,
-    payload: Omit<Parameters<typeof updateFinanceGoalMutation.mutateAsync>[0], "goalId">,
-  ) {
-    await updateFinanceGoalMutation.mutateAsync({
-      goalId,
-      ...payload,
-    });
-  }
-
-  // ── Render ──
 
   return (
-    <div className="finance">
-      {/* ── Slim Header ── */}
-      <div className="finance__header">
-        <div className="finance__header-left">
-          <h1 className="finance__title">Finance</h1>
+    <div className="fc">
+      <header className="fc__header">
+        <div className="fc__title-row">
+          <h1>Finance</h1>
           <div className="month-nav">
-            <button
-              className="month-nav__btn"
-              type="button"
-              onClick={() => setSelectedMonth(navigateMonth(selectedMonth, -1))}
-              aria-label="Previous month"
-            >
-              ‹
-            </button>
-            <span
-              className="month-nav__label"
-              onClick={() => setSelectedMonth(currentMonth)}
-              title="Return to current month"
-            >
+            <button className="month-nav__btn" type="button" onClick={() => setSelectedMonth(navigateMonth(selectedMonth, -1))}>‹</button>
+            <button className="month-nav__label" type="button" onClick={() => setSelectedMonth(currentMonth)}>
               {formatMonthLabel(selectedMonth)}
-            </span>
+            </button>
             <button
               className="month-nav__btn"
               type="button"
-              onClick={() => setSelectedMonth(navigateMonth(selectedMonth, 1))}
               disabled={selectedMonth >= currentMonth}
-              aria-label="Next month"
+              onClick={() => setSelectedMonth(navigateMonth(selectedMonth, 1))}
             >
               ›
             </button>
           </div>
         </div>
-        <div className="finance__header-actions">
-          <button
-            className="button button--primary button--small"
-            type="button"
-            onClick={openCreateBill}
-          >
-            Add bill
-          </button>
-          <button
-            className="button button--ghost button--small"
-            type="button"
-            onClick={() => { setShowExpenseForm(true); setFeedTab("expenses"); }}
-          >
-            Log expense
-          </button>
-          <button
-            className="finance__setup-trigger"
-            type="button"
-            onClick={() => setShowSetupDrawer(true)}
-            aria-label="Finance setup"
-            title="Manage categories and recurring bills"
-          >
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M6.5 1.5h3l.4 1.8.6.3 1.7-.8 2.1 2.1-.8 1.7.3.6 1.8.4v3l-1.8.4-.3.6.8 1.7-2.1 2.1-1.7-.8-.6.3-.4 1.8h-3l-.4-1.8-.6-.3-1.7.8-2.1-2.1.8-1.7-.3-.6-1.8-.4v-3l1.8-.4.3-.6-.8-1.7 2.1-2.1 1.7.8.6-.3.4-1.8z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round"/><circle cx="8" cy="8" r="2" stroke="currentColor" strokeWidth="1.2"/></svg>
-          </button>
+        <div className="fc__actions">
+          <button className="button button--primary button--small" type="button" onClick={() => setShowTransactionForm(true)}>Add money entry</button>
+          <button className="button button--ghost button--small" type="button" onClick={() => setShowBillForm(true)}>Add bill</button>
+          <button className="button button--ghost button--small" type="button" onClick={() => openSetup("accounts")}>Setup</button>
         </div>
-      </div>
+      </header>
 
-      {/* ── Inline Metrics Strip ── */}
-      <div className="finance__metrics">
-        <span className="metric">
-          <span className={`metric__value${todaySpent > 0 ? " metric__value--positive" : ""}`}>
-            {todaySpent > 0 ? formatMinorCurrency(todaySpent, currency) : "Nothing yet"}
-          </span>
-          <span className="metric__label">today</span>
-        </span>
-        <span className="metric__divider" />
-        <span className="metric">
-          <span className={`metric__value${overdueBills.length > 0 ? " metric__value--negative" : ""}`}>
-            {overdueBills.length > 0
-              ? `${overdueBills.length} overdue`
-              : todayBills.length > 0
-                ? `${todayBills.length} today`
-                : dueBills.length > 0
-                  ? `${dueBills.length} this week`
-                  : "All clear"}
-          </span>
-          <span className="metric__label">bills</span>
-        </span>
-        <span className="metric__divider" />
-        <span className="metric">
-          <span className={`metric__value${monthPlan?.paceStatus === "off_track" ? " metric__value--negative" : monthPlan?.paceStatus === "on_pace" ? " metric__value--positive" : ""}`}>
-            {monthPlan?.paceStatus === "no_plan"
-              ? "Set a plan"
-              : monthPlan?.paceStatus === "on_pace"
-                ? "On pace"
-                : monthPlan?.paceStatus === "slightly_heavy"
-                  ? "Slightly heavy"
-                  : monthPlan?.paceStatus === "off_track"
-                    ? "Off track"
-                    : `Day ${dayOfMonth}/${daysInMonth}`}
-          </span>
-          <span className="metric__label">pace</span>
-        </span>
-        {uncategorizedCount > 0 && (
-          <>
-            <span className="metric__divider" />
-            <span className="metric">
-              <span className="metric__value metric__value--accent">{uncategorizedCount}</span>
-              <span className="metric__label">uncategorized</span>
-            </span>
-          </>
-        )}
-      </div>
+      {financeData.sectionErrors.dashboard ? (
+        <InlineErrorState message={financeData.sectionErrors.dashboard.message} onRetry={() => void financeQuery.refetch()} />
+      ) : null}
 
-      {/* ── Main Body: Feed + Rail ── */}
-      <div className="finance__body">
-        <div className="finance__main">
+      <section className="fc-snapshot" aria-label="Money snapshot">
+        <div className="fc-snapshot__primary">
+          <span className="fc-label">Cash available</span>
+          <strong>{formatMinorCurrency(dashboard?.cashAvailableMinor ?? 0, currency)}</strong>
+        </div>
+        <div className="fc-metric">
+          <span className="fc-label">Income</span>
+          <strong>{formatMinorCurrency(dashboard?.incomeReceivedMinor ?? 0, currency)}</strong>
+        </div>
+        <div className="fc-metric">
+          <span className="fc-label">Spent</span>
+          <strong>{formatMinorCurrency(dashboard?.totalSpentMinor ?? 0, currency)}</strong>
+        </div>
+        <div className="fc-metric">
+          <span className="fc-label">Due</span>
+          <strong>{formatMinorCurrency(dashboard?.upcomingDueMinor ?? 0, currency)}</strong>
+        </div>
+        <div className="fc-metric fc-metric--safe">
+          <span className="fc-label">Safe</span>
+          <strong>{formatMinorCurrency(dashboard?.safeToSpendMinor ?? 0, currency)}</strong>
+        </div>
+      </section>
 
-          {/* ── Unified Feed ── */}
-          <div className="finance__feed" id="finance-feed">
-            <div className="feed__toolbar">
-              <div className="feed__tabs">
-                <button
-                  className={`feed__tab${feedTab === "bills" ? " feed__tab--active" : ""}`}
-                  type="button"
-                  onClick={() => setFeedTab("bills")}
-                >
-                  Bills
-                  {dueBills.length > 0 && <span className="feed__tab-badge">{dueBills.length}</span>}
-                </button>
-                <button
-                  className={`feed__tab${feedTab === "expenses" ? " feed__tab--active" : ""}`}
-                  type="button"
-                  onClick={() => setFeedTab("expenses")}
-                >
-                  Expenses
-                </button>
+      <div className="fc__body">
+        <main className="fc-workbench">
+          <nav className="fc-tabs" aria-label="Finance sections">
+            {(["overview", "transactions", "bills", "accounts"] as const).map((item) => (
+              <button
+                key={item}
+                className={`fc-tab${tab === item ? " fc-tab--active" : ""}`}
+                type="button"
+                onClick={() => setTab(item)}
+              >
+                {item === "overview" ? "Overview" : item === "transactions" ? "Transactions" : item === "bills" ? "Bills" : "Accounts"}
+              </button>
+            ))}
+          </nav>
+
+          {showTransactionForm ? (
+            <section className="fc-editor">
+              <div className="fc-form-grid">
+                <label className="field">
+                  <span>Type</span>
+                  <select value={transactionForm.transactionType} onChange={(event) => setTransactionForm((form) => ({ ...form, transactionType: event.target.value as FinanceTransactionType }))}>
+                    <option value="income">Income</option>
+                    <option value="expense">Expense</option>
+                    <option value="transfer">Transfer</option>
+                    <option value="adjustment">Adjustment</option>
+                  </select>
+                </label>
+                <label className="field">
+                  <span>Account</span>
+                  <select value={transactionForm.accountId} onChange={(event) => setTransactionForm((form) => ({ ...form, accountId: event.target.value }))}>
+                    <option value="">Select</option>
+                    {activeAccounts.map((account) => <option key={account.id} value={account.id}>{account.name}</option>)}
+                  </select>
+                </label>
+                {transactionForm.transactionType === "transfer" ? (
+                  <label className="field">
+                    <span>To</span>
+                    <select value={transactionForm.transferAccountId} onChange={(event) => setTransactionForm((form) => ({ ...form, transferAccountId: event.target.value }))}>
+                      <option value="">Select</option>
+                      {activeAccounts.filter((account) => account.id !== transactionForm.accountId).map((account) => <option key={account.id} value={account.id}>{account.name}</option>)}
+                    </select>
+                  </label>
+                ) : null}
+                <label className="field">
+                  <span>Amount</span>
+                  <input type="text" inputMode="decimal" value={transactionForm.amount} onChange={(event) => setTransactionForm((form) => ({ ...form, amount: event.target.value }))} />
+                </label>
+                <label className="field">
+                  <span>Date</span>
+                  <input type="date" value={transactionForm.occurredOn} onChange={(event) => setTransactionForm((form) => ({ ...form, occurredOn: event.target.value }))} />
+                </label>
+                <label className="field">
+                  <span>Category</span>
+                  <select value={transactionForm.expenseCategoryId} onChange={(event) => setTransactionForm((form) => ({ ...form, expenseCategoryId: event.target.value }))} disabled={transactionForm.transactionType !== "expense"}>
+                    <option value="">None</option>
+                    {activeCategories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}
+                  </select>
+                </label>
+                <label className="field fc-field--wide">
+                  <span>Description</span>
+                  <input type="text" value={transactionForm.description} onChange={(event) => setTransactionForm((form) => ({ ...form, description: event.target.value }))} />
+                </label>
               </div>
-              {feedTab === "bills" && (
-                <div className="feed__summary">
-                  <span>{openBills.length} open</span>
-                  <span className="metric__divider" />
-                  <span>{completedBills.length} paid</span>
-                  {unreconciledBills.length > 0 && (
-                    <>
-                      <span className="metric__divider" />
-                      <span className="feed__summary--alert">{unreconciledBills.length} unreconciled</span>
-                    </>
-                  )}
-                </div>
-              )}
-              {feedTab === "expenses" && (
-                <div className="activity-feed__filters">
-                  {(["all", "today", "uncategorized", "recurring"] as const).map((f) => (
-                    <button
-                      key={f}
-                      className={`activity-feed__filter${activityFilter === f ? " activity-feed__filter--active" : ""}`}
-                      type="button"
-                      onClick={() => setActivityFilter(f)}
-                    >
-                      {f === "all" ? "All" : f === "today" ? "Today" : f === "uncategorized" ? "Uncategorized" : "Recurring"}
-                    </button>
+              <div className="button-row">
+                <button className="button button--primary button--small" type="button" disabled={createTransactionMutation.isPending} onClick={() => void handleCreateTransaction()}>
+                  {createTransactionMutation.isPending ? "Saving..." : "Save entry"}
+                </button>
+                <button className="button button--ghost button--small" type="button" onClick={() => setShowTransactionForm(false)}>Cancel</button>
+              </div>
+            </section>
+          ) : null}
+
+          {showBillForm ? (
+            <section className="fc-editor">
+              <div className="fc-form-grid">
+                <label className="field fc-field--wide">
+                  <span>Bill</span>
+                  <input type="text" value={billForm.title} onChange={(event) => setBillForm((form) => ({ ...form, title: event.target.value }))} />
+                </label>
+                <label className="field">
+                  <span>Due</span>
+                  <input type="date" value={billForm.dueOn} onChange={(event) => setBillForm((form) => ({ ...form, dueOn: event.target.value }))} />
+                </label>
+                <label className="field">
+                  <span>Amount</span>
+                  <input type="text" inputMode="decimal" value={billForm.amount} onChange={(event) => setBillForm((form) => ({ ...form, amount: event.target.value }))} />
+                </label>
+                <label className="field">
+                  <span>Category</span>
+                  <select value={billForm.categoryId} onChange={(event) => setBillForm((form) => ({ ...form, categoryId: event.target.value }))}>
+                    <option value="">None</option>
+                    {activeCategories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}
+                  </select>
+                </label>
+              </div>
+              <div className="button-row">
+                <button className="button button--primary button--small" type="button" disabled={createBillMutation.isPending} onClick={() => void handleAddBill()}>
+                  {createBillMutation.isPending ? "Saving..." : "Save bill"}
+                </button>
+                <button className="button button--ghost button--small" type="button" onClick={() => setShowBillForm(false)}>Cancel</button>
+              </div>
+            </section>
+          ) : null}
+
+          {tab === "overview" ? (
+            <section className="fc-panel">
+              <div className="fc-setup-strip">
+                {setupSteps.map((step) => (
+                  <button key={step.key} className={`fc-setup-step${step.done ? " fc-setup-step--done" : ""}`} type="button" onClick={step.action}>
+                    <span>{step.done ? "✓" : "○"}</span>
+                    {step.label}
+                  </button>
+                ))}
+              </div>
+
+              <div className="fc-section-head">
+                <h2>Upcoming</h2>
+                <button className="button button--ghost button--small" type="button" onClick={() => setTab("bills")}>Bills</button>
+              </div>
+              {dueNow.length > 0 ? (
+                <div className="fc-list">
+                  {dueNow.slice(0, 6).map((bill) => (
+                    <BillRow
+                      key={bill.id}
+                      bill={bill}
+                      currency={currency}
+                      payingBillId={payingBillId}
+                      reschedulingBillId={reschedulingBillId}
+                      rescheduleDate={rescheduleDate}
+                      setRescheduleDate={setRescheduleDate}
+                      onPay={openBillPayment}
+                      onMarkPaid={(item) => void markBillPaidMutation.mutateAsync({ billId: item.id, paidOn: today })}
+                      onDrop={(item) => void dismissBillMutation.mutateAsync(item.id)}
+                      onStartReschedule={(item) => {
+                        setReschedulingBillId(item.id);
+                        setRescheduleDate(item.dueOn);
+                      }}
+                      onReschedule={handleBillReschedule}
+                      onCancelReschedule={() => setReschedulingBillId(null)}
+                      paymentForm={billPaymentForm}
+                      setPaymentForm={setBillPaymentForm}
+                      categories={activeCategories}
+                      onPayAndLog={handlePayAndLogBill}
+                      isPaying={payAndLogBillMutation.isPending}
+                    />
                   ))}
                 </div>
+              ) : (
+                <EmptyState title="No dues soon" description="The next seven days are clear." />
               )}
-            </div>
 
-            {/* ── Bill Form (inline, when adding) ── */}
-            {showBillForm && feedTab === "bills" && (
-              <div className="inline-editor" style={{ animation: "slideUp 0.25s var(--ease) both" }}>
-                <div className="stack-form">
-                  <div style={{ display: "flex", gap: "0.5rem" }}>
-                    <label className="field" style={{ flex: 2 }}>
-                      <span>Bill title</span>
-                      <input
-                        type="text"
-                        value={billForm.title}
-                        autoFocus
-                        placeholder="Rent, internet, insurance..."
-                        onChange={(e) => setBillForm((form) => ({ ...form, title: e.target.value }))}
-                        onKeyDown={(e) => { if (e.key === "Enter") void handleAddBill(); if (e.key === "Escape") setShowBillForm(false); }}
-                      />
-                    </label>
-                    <label className="field" style={{ flex: 1 }}>
-                      <span>Due date</span>
-                      <input
-                        type="date"
-                        value={billForm.dueOn}
-                        onChange={(e) => setBillForm((form) => ({ ...form, dueOn: e.target.value }))}
-                      />
-                    </label>
-                  </div>
-                  <div style={{ display: "flex", gap: "0.5rem" }}>
-                    <label className="field" style={{ flex: 1 }}>
-                      <span>Expected amount</span>
-                      <input
-                        type="text"
-                        inputMode="decimal"
-                        value={billForm.amount}
-                        placeholder="0.00"
-                        onChange={(e) => setBillForm((form) => ({ ...form, amount: e.target.value }))}
-                      />
-                    </label>
-                    <label className="field" style={{ flex: 1 }}>
-                      <span>Category</span>
-                      <select
-                        value={billForm.categoryId}
-                        onChange={(e) => setBillForm((form) => ({ ...form, categoryId: e.target.value }))}
-                      >
-                        <option value="">Choose later</option>
-                        {activeCategories.map((c) => (
-                          <option key={c.id} value={c.id}>{c.name}</option>
-                        ))}
-                      </select>
-                    </label>
-                  </div>
-                  <label className="field">
-                    <span>Note</span>
-                    <input
-                      type="text"
-                      value={billForm.note}
-                      placeholder="Optional reminder or account detail"
-                      onChange={(e) => setBillForm((form) => ({ ...form, note: e.target.value }))}
-                    />
-                  </label>
-                  <div className="button-row button-row--tight">
-                    <button className="button button--primary button--small" type="button" disabled={createBillMutation.isPending} onClick={() => void handleAddBill()}>
-                      {createBillMutation.isPending ? "Saving..." : "Add bill"}
-                    </button>
-                    <button className="button button--ghost button--small" type="button" onClick={() => setShowBillForm(false)}>Cancel</button>
-                  </div>
+              <div className="fc-section-head">
+                <h2>Recent money</h2>
+                <button className="button button--ghost button--small" type="button" onClick={() => setTab("transactions")}>All</button>
+              </div>
+              <TransactionList
+                transactions={recentTransactions.slice(0, 8)}
+                currency={currency}
+                accountMap={accountMap}
+                categoryMap={categoryMap}
+              />
+            </section>
+          ) : null}
+
+          {tab === "transactions" ? (
+            <section className="fc-panel">
+              <div className="fc-section-head">
+                <h2>Transactions</h2>
+                <div className="button-row button-row--tight">
+                  <button className="button button--primary button--small" type="button" onClick={() => setShowTransactionForm(true)}>Add entry</button>
+                  <button className="button button--ghost button--small" type="button" onClick={() => setShowExpenseForm((value) => !value)}>Legacy expense</button>
                 </div>
               </div>
-            )}
-
-            {/* ── Expense Form (inline, when adding) ── */}
-            {showExpenseForm && feedTab === "expenses" && (
-              <div className="inline-editor" style={{ animation: "slideUp 0.25s var(--ease) both" }}>
-                <div className="stack-form">
-                  <div style={{ display: "flex", gap: "0.5rem" }}>
-                    <label className="field" style={{ flex: 1 }}>
+              {showExpenseForm ? (
+                <section className="fc-editor fc-editor--nested">
+                  <div className="fc-form-grid">
+                    <label className="field">
                       <span>Amount</span>
-                      <input
-                        type="text"
-                        inputMode="decimal"
-                        placeholder="0.00"
-                        value={expenseForm.amount}
-                        autoFocus
-                        onChange={(e) => setExpenseForm((f) => ({ ...f, amount: e.target.value }))}
-                        onKeyDown={(e) => { if (e.key === "Enter") void handleAddExpense(); if (e.key === "Escape") setShowExpenseForm(false); }}
-                      />
+                      <input type="text" inputMode="decimal" value={expenseForm.amount} onChange={(event) => setExpenseForm((form) => ({ ...form, amount: event.target.value }))} />
                     </label>
-                    <label className="field" style={{ flex: 1 }}>
+                    <label className="field">
                       <span>Date</span>
-                      <input
-                        type="date"
-                        value={expenseForm.spentOn}
-                        onChange={(e) => setExpenseForm((f) => ({ ...f, spentOn: e.target.value }))}
-                      />
+                      <input type="date" value={expenseForm.spentOn} onChange={(event) => setExpenseForm((form) => ({ ...form, spentOn: event.target.value }))} />
                     </label>
-                  </div>
-                  <div style={{ display: "flex", gap: "0.5rem" }}>
-                    <label className="field" style={{ flex: 2 }}>
-                      <span>Description</span>
-                      <input
-                        type="text"
-                        placeholder="What was it for?"
-                        value={expenseForm.description}
-                        onChange={(e) => setExpenseForm((f) => ({ ...f, description: e.target.value }))}
-                        onKeyDown={(e) => { if (e.key === "Enter") void handleAddExpense(); }}
-                      />
-                    </label>
-                    <label className="field" style={{ flex: 1 }}>
+                    <label className="field">
                       <span>Category</span>
-                      <select
-                        value={expenseForm.categoryId}
-                        onChange={(e) => setExpenseForm((f) => ({ ...f, categoryId: e.target.value }))}
-                      >
-                        <option value="">Uncategorized</option>
-                        {activeCategories.map((c) => (
-                          <option key={c.id} value={c.id}>{c.name}</option>
-                        ))}
+                      <select value={expenseForm.categoryId} onChange={(event) => setExpenseForm((form) => ({ ...form, categoryId: event.target.value }))}>
+                        <option value="">None</option>
+                        {activeCategories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}
                       </select>
                     </label>
+                    <label className="field fc-field--wide">
+                      <span>Description</span>
+                      <input type="text" value={expenseForm.description} onChange={(event) => setExpenseForm((form) => ({ ...form, description: event.target.value }))} />
+                    </label>
                   </div>
-                  <div className="button-row button-row--tight">
-                    <button className="button button--primary button--small" type="button" disabled={createExpenseMutation.isPending} onClick={() => void handleAddExpense()}>
-                      {createExpenseMutation.isPending ? "Saving..." : "Add expense"}
-                    </button>
-                    <button className="button button--ghost button--small" type="button" onClick={() => setShowExpenseForm(false)}>Cancel</button>
-                  </div>
-                </div>
+                  <button className="button button--primary button--small" type="button" disabled={createExpenseMutation.isPending} onClick={() => void handleAddLegacyExpense()}>Save expense</button>
+                </section>
+              ) : null}
+              <TransactionList transactions={recentTransactions} currency={currency} accountMap={accountMap} categoryMap={categoryMap} />
+            </section>
+          ) : null}
+
+          {tab === "bills" ? (
+            <section className="fc-panel">
+              <div className="fc-section-head">
+                <h2>Bills</h2>
+                <span className="fc-muted">{openBills.length} open · {paidBills.length} paid</span>
               </div>
-            )}
+              {bills.length > 0 ? (
+                <div className="fc-list">
+                  {[...openBills, ...paidBills].map((bill) => (
+                    <BillRow
+                      key={bill.id}
+                      bill={bill}
+                      currency={currency}
+                      payingBillId={payingBillId}
+                      reschedulingBillId={reschedulingBillId}
+                      rescheduleDate={rescheduleDate}
+                      setRescheduleDate={setRescheduleDate}
+                      onPay={openBillPayment}
+                      onMarkPaid={(item) => void markBillPaidMutation.mutateAsync({ billId: item.id, paidOn: today })}
+                      onDrop={(item) => void dismissBillMutation.mutateAsync(item.id)}
+                      onStartReschedule={(item) => {
+                        setReschedulingBillId(item.id);
+                        setRescheduleDate(item.dueOn);
+                      }}
+                      onReschedule={handleBillReschedule}
+                      onCancelReschedule={() => setReschedulingBillId(null)}
+                      paymentForm={billPaymentForm}
+                      setPaymentForm={setBillPaymentForm}
+                      categories={activeCategories}
+                      onPayAndLog={handlePayAndLogBill}
+                      isPaying={payAndLogBillMutation.isPending}
+                    />
+                  ))}
+                </div>
+              ) : (
+                <EmptyState title="No bills" description="Add a bill or recurring due from setup." actionLabel="Add bill" onAction={() => setShowBillForm(true)} />
+              )}
+            </section>
+          ) : null}
 
-            {/* ── Bills Tab Content ── */}
-            {feedTab === "bills" && (
-              <>
-                {financeQuery.data.sectionErrors.bills ? (
-                  <InlineErrorState
-                    message={financeQuery.data.sectionErrors.bills.message}
-                    onRetry={() => void financeQuery.refetch()}
-                  />
-                ) : workflowBills.length > 0 ? (
-                  <div className="feed__list">
-                    {workflowBills.map((bill) => (
-                      <div key={bill.id} id={`finance-bill-${bill.id}`}>
-                        <div
-                          className={getBillRowClass(bill)}
-                          style={highlightedBillId === bill.id
-                            ? {
-                                borderColor: "rgba(217, 153, 58, 0.4)",
-                                boxShadow: "0 0 0 1px rgba(217, 153, 58, 0.25)",
-                                background: "rgba(217, 153, 58, 0.06)",
-                              }
-                            : undefined}
-                        >
-                          <span className="bill-row__indicator" />
-                          <div className="bill-row__info">
-                            <span className="bill-row__title">{bill.title}</span>
-                            <span className="bill-row__due">{getBillDueText(bill)}</span>
-                          </div>
-                          <div className="bill-row__meta">
-                            <span className={`bill-status-pill bill-status-pill--${bill.reconciliationStatus}`}>
-                              {getBillReconciliationLabel(bill)}
-                            </span>
-                            {bill.completionMode === "mark_paid_only" ? (
-                              <span className="bill-status-pill">Secondary path</span>
-                            ) : null}
-                          </div>
-                          {bill.amountMinor != null ? (
-                            <span className="bill-row__amount">{formatMinorCurrency(bill.amountMinor, currency)}</span>
-                          ) : null}
-                          <div className="bill-row__actions">
-                            {(bill.status === "pending" || bill.status === "rescheduled") ? (
-                              <>
-                                <button
-                                  className="button button--primary button--small"
-                                  type="button"
-                                  disabled={payAndLogBillMutation.isPending}
-                                  onClick={() => openBillPayment(bill)}
-                                >
-                                  Pay and log
-                                </button>
-                                <button
-                                  className="button button--ghost button--small"
-                                  type="button"
-                                  disabled={markBillPaidMutation.isPending}
-                                  onClick={() => void handleMarkBillPaid(bill)}
-                                >
-                                  Mark paid only
-                                </button>
-                                {reschedulingBillId === bill.id ? (
-                                  <div className="reschedule-input">
-                                    <input
-                                      type="date"
-                                      value={rescheduleDate}
-                                      onChange={(e) => setRescheduleDate(e.target.value)}
-                                      autoFocus
-                                      style={{ fontSize: "var(--fs-micro)", padding: "0.2rem 0.4rem" }}
-                                      onKeyDown={(e) => { if (e.key === "Enter") void handleBillReschedule(bill.id); if (e.key === "Escape") setReschedulingBillId(null); }}
-                                    />
-                                    <button className="button button--ghost button--small" type="button" onClick={() => void handleBillReschedule(bill.id)}>Go</button>
-                                    <button className="button button--ghost button--small" type="button" onClick={() => setReschedulingBillId(null)}>x</button>
-                                  </div>
-                                ) : (
-                                  <button
-                                    className="button button--ghost button--small"
-                                    type="button"
-                                    onClick={() => { setReschedulingBillId(bill.id); setRescheduleDate(bill.dueOn); }}
-                                  >
-                                    Reschedule
-                                  </button>
-                                )}
-                                <button
-                                  className="button button--ghost button--small"
-                                  type="button"
-                                  onClick={() => void handleBillDrop(bill)}
-                                >
-                                  Drop
-                                </button>
-                              </>
-                            ) : null}
-                            {bill.status === "done" && bill.reconciliationStatus === "paid_without_expense" ? (
-                              <>
-                                <button
-                                  className="button button--primary button--small"
-                                  type="button"
-                                  disabled={payAndLogBillMutation.isPending}
-                                  onClick={() => openBillPayment(bill)}
-                                >
-                                  Log expense
-                                </button>
-                                <button
-                                  className="button button--ghost button--small"
-                                  type="button"
-                                  disabled={linkBillExpenseMutation.isPending}
-                                  onClick={() => openLinkExpense(bill)}
-                                >
-                                  Link existing
-                                </button>
-                              </>
-                            ) : null}
-                          </div>
-                        </div>
-                        {payingBillId === bill.id && (
-                          <div className="inline-editor" style={{ marginLeft: "1.5rem" }}>
-                            <div className="stack-form">
-                              <div style={{ display: "flex", gap: "0.5rem" }}>
-                                <label className="field" style={{ flex: 1 }}>
-                                  <span>Paid on</span>
-                                  <input
-                                    type="date"
-                                    value={billPaymentForm.paidOn}
-                                    onChange={(e) => setBillPaymentForm((form) => ({ ...form, paidOn: e.target.value }))}
-                                  />
-                                </label>
-                                <label className="field" style={{ flex: 1 }}>
-                                  <span>Amount</span>
-                                  <input
-                                    type="text"
-                                    inputMode="decimal"
-                                    value={billPaymentForm.amount}
-                                    placeholder={bill.amountMinor != null ? String(bill.amountMinor / 100) : "0.00"}
-                                    onChange={(e) => setBillPaymentForm((form) => ({ ...form, amount: e.target.value }))}
-                                  />
-                                </label>
-                              </div>
-                              <div style={{ display: "flex", gap: "0.5rem" }}>
-                                <label className="field" style={{ flex: 1 }}>
-                                  <span>Category</span>
-                                  <select
-                                    value={billPaymentForm.categoryId}
-                                    onChange={(e) => setBillPaymentForm((form) => ({ ...form, categoryId: e.target.value }))}
-                                  >
-                                    <option value="">Uncategorized</option>
-                                    {activeCategories.map((c) => (
-                                      <option key={c.id} value={c.id}>{c.name}</option>
-                                    ))}
-                                  </select>
-                                </label>
-                                <label className="field" style={{ flex: 2 }}>
-                                  <span>Description</span>
-                                  <input
-                                    type="text"
-                                    value={billPaymentForm.description}
-                                    onChange={(e) => setBillPaymentForm((form) => ({ ...form, description: e.target.value }))}
-                                  />
-                                </label>
-                              </div>
-                              <div className="button-row button-row--tight">
-                                <button className="button button--primary button--small" type="button" disabled={payAndLogBillMutation.isPending} onClick={() => void handlePayAndLogBill(bill)}>
-                                  {payAndLogBillMutation.isPending ? "Saving..." : "Pay and log expense"}
-                                </button>
-                                <button className="button button--ghost button--small" type="button" onClick={() => setPayingBillId(null)}>Cancel</button>
-                              </div>
-                            </div>
-                          </div>
-                        )}
-                        {linkingBillId === bill.id && (
-                          <div className="inline-editor" style={{ marginLeft: "1.5rem" }}>
-                            <div className="stack-form">
-                              <label className="field">
-                                <span>Link an existing expense</span>
-                                <select
-                                  value={billLinkForm.expenseId}
-                                  onChange={(e) => setBillLinkForm({ expenseId: e.target.value })}
-                                >
-                                  {getUnlinkedExpenseCandidates(bill).length === 0 ? (
-                                    <option value="">No unlinked expenses in this month</option>
-                                  ) : null}
-                                  {getUnlinkedExpenseCandidates(bill).map((expense) => (
-                                    <option key={expense.id} value={expense.id}>
-                                      {`${formatShortDate(expense.spentOn)} · ${formatMinorCurrency(expense.amountMinor, expense.currencyCode)} · ${expense.description ?? "Expense"}`}
-                                    </option>
-                                  ))}
-                                </select>
-                              </label>
-                              <div className="button-row button-row--tight">
-                                <button
-                                  className="button button--primary button--small"
-                                  type="button"
-                                  disabled={linkBillExpenseMutation.isPending || !billLinkForm.expenseId}
-                                  onClick={() => void handleLinkExpense(bill)}
-                                >
-                                  {linkBillExpenseMutation.isPending ? "Linking..." : "Link expense"}
-                                </button>
-                                <button className="button button--ghost button--small" type="button" onClick={() => setLinkingBillId(null)}>
-                                  Cancel
-                                </button>
-                              </div>
-                            </div>
-                          </div>
-                        )}
-                        {reschedulingBillId === bill.id && bill.status === "done" && (
-                          <div className="confirm-bar" style={{ marginLeft: "1.5rem" }}>
-                            <span className="confirm-bar__text">Move this bill to</span>
-                            <input type="date" value={rescheduleDate} onChange={(e) => setRescheduleDate(e.target.value)} />
-                            <button className="button button--ghost button--small" type="button" onClick={() => void handleBillReschedule(bill.id)}>Save</button>
-                            <button className="button button--ghost button--small" type="button" onClick={() => setReschedulingBillId(null)}>Cancel</button>
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <EmptyState
-                    title="No bills yet"
-                    description="Add a one-off bill or set up recurring bills so Finance can keep future obligations visible."
-                    actionLabel={activeRecurringExpenses.length === 0 ? "Add recurring bill" : "Add bill"}
-                    onAction={activeRecurringExpenses.length === 0 ? () => openManagement("recurring") : openCreateBill}
-                  />
-                )}
-              </>
-            )}
+          {tab === "accounts" ? (
+            <section className="fc-panel">
+              <div className="fc-section-head">
+                <h2>Accounts</h2>
+                <button className="button button--primary button--small" type="button" onClick={() => openSetup("accounts")}>Add account</button>
+              </div>
+              {dashboard?.accounts.length ? (
+                <div className="fc-account-grid">
+                  {dashboard.accounts.map((account) => (
+                    <div key={account.id} className={`fc-account${account.archivedAt ? " fc-account--archived" : ""}`}>
+                      <span className="fc-label">{account.accountType}</span>
+                      <strong>{account.name}</strong>
+                      <span>{formatMinorCurrency(account.currentBalanceMinor, account.currencyCode)}</span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <EmptyState title="No accounts" description="Add one account to start tracking cash." actionLabel="Add account" onAction={() => openSetup("accounts")} />
+              )}
+            </section>
+          ) : null}
+        </main>
 
-            {/* ── Expenses Tab Content ── */}
-            {feedTab === "expenses" && (
-              <>
-                {financeQuery.data.sectionErrors.expenses ? (
-                  <InlineErrorState
-                    message={financeQuery.data.sectionErrors.expenses.message}
-                    onRetry={() => void financeQuery.refetch()}
-                  />
-                ) : sortedExpenses.length > 0 ? (
-                  <div className="feed__list">
-                    {expensesByDay.map(([day, dayExpenses]) => (
-                      <div key={day} className="activity-feed__day-group">
-                        <div className="activity-feed__day-label">{formatRelativeDate(day)}</div>
-                        {dayExpenses.map((expense) => (
-                          <div key={expense.id}>
-                            <div className="activity-row">
-                              <span
-                                className="activity-row__category-dot"
-                                style={{
-                                  background: expense.expenseCategoryId
-                                    ? (categoryMap.get(expense.expenseCategoryId)?.color ?? "var(--text-tertiary)")
-                                    : "var(--text-tertiary)",
-                                }}
-                              />
-                              <div className="activity-row__info">
-                                <span className="activity-row__title">{expense.description ?? "Expense"}</span>
-                                <span className="activity-row__category">
-                                  {expense.expenseCategoryId
-                                    ? (categoryMap.get(expense.expenseCategoryId)?.name ?? "Unknown")
-                                    : "Uncategorized"}
-                                </span>
-                              </div>
-                              <span className="activity-row__amount">
-                                {formatMinorCurrency(expense.amountMinor, expense.currencyCode)}
-                              </span>
-                              <label className="activity-row__category-editor">
-                                <select
-                                  value={expense.expenseCategoryId ?? ""}
-                                  onChange={(e) => void handleQuickRecategorize(expense.id, e.target.value)}
-                                  aria-label={`Category for ${expense.description ?? "expense"}`}
-                                >
-                                  <option value="">Uncategorized</option>
-                                  {activeCategories.map((c) => (
-                                    <option key={c.id} value={c.id}>{c.name}</option>
-                                  ))}
-                                </select>
-                              </label>
-                              <div className="activity-row__actions">
-                                <button className="button button--ghost button--small" type="button" onClick={() => openEditExpense(expense)} aria-label="Edit">Edit</button>
-                                <button className="button button--ghost button--small" type="button" onClick={() => { setDeletingExpenseId(expense.id); setEditingExpenseId(null); }} aria-label="Delete">Del</button>
-                              </div>
-                            </div>
-
-                            {editingExpenseId === expense.id && (
-                              <div className="inline-editor" style={{ marginLeft: "1.5rem" }}>
-                                <div className="stack-form">
-                                  <div style={{ display: "flex", gap: "0.5rem" }}>
-                                    <label className="field" style={{ flex: 1 }}>
-                                      <span>Amount</span>
-                                      <input type="text" inputMode="decimal" value={editExpenseForm.amount} autoFocus onChange={(e) => setEditExpenseForm((f) => ({ ...f, amount: e.target.value }))} onKeyDown={(e) => { if (e.key === "Enter") void handleUpdateExpense(expense.id); if (e.key === "Escape") setEditingExpenseId(null); }} />
-                                    </label>
-                                    <label className="field" style={{ flex: 1 }}>
-                                      <span>Date</span>
-                                      <input type="date" value={editExpenseForm.spentOn} onChange={(e) => setEditExpenseForm((f) => ({ ...f, spentOn: e.target.value }))} />
-                                    </label>
-                                  </div>
-                                  <div style={{ display: "flex", gap: "0.5rem" }}>
-                                    <label className="field" style={{ flex: 2 }}>
-                                      <span>Description</span>
-                                      <input type="text" value={editExpenseForm.description} onChange={(e) => setEditExpenseForm((f) => ({ ...f, description: e.target.value }))} onKeyDown={(e) => { if (e.key === "Enter") void handleUpdateExpense(expense.id); }} />
-                                    </label>
-                                    <label className="field" style={{ flex: 1 }}>
-                                      <span>Category</span>
-                                      <select value={editExpenseForm.categoryId} onChange={(e) => setEditExpenseForm((f) => ({ ...f, categoryId: e.target.value }))}>
-                                        <option value="">Uncategorized</option>
-                                        {activeCategories.map((c) => (<option key={c.id} value={c.id}>{c.name}</option>))}
-                                      </select>
-                                    </label>
-                                  </div>
-                                  <div className="button-row button-row--tight">
-                                    <button className="button button--primary button--small" type="button" disabled={updateExpenseMutation.isPending} onClick={() => void handleUpdateExpense(expense.id)}>
-                                      {updateExpenseMutation.isPending ? "Saving..." : "Save"}
-                                    </button>
-                                    <button className="button button--ghost button--small" type="button" onClick={() => setEditingExpenseId(null)}>Cancel</button>
-                                  </div>
-                                </div>
-                              </div>
-                            )}
-
-                            {deletingExpenseId === expense.id && (
-                              <div className="confirm-bar" style={{ marginLeft: "1.5rem" }}>
-                                <span className="confirm-bar__text">Delete &ldquo;{expense.description ?? "expense"}&rdquo;?</span>
-                                <button className="button button--ghost button--small" type="button" disabled={deleteExpenseMutation.isPending} onClick={() => void deleteExpenseMutation.mutateAsync(expense.id).then(() => setDeletingExpenseId(null))}>
-                                  {deleteExpenseMutation.isPending ? "Deleting..." : "Confirm"}
-                                </button>
-                                <button className="button button--ghost button--small" type="button" onClick={() => setDeletingExpenseId(null)}>Cancel</button>
-                              </div>
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <EmptyState
-                    title="No expenses"
-                    description={activityFilter !== "all" ? "No expenses match this filter." : "Log your first expense to see activity here."}
-                  />
-                )}
-              </>
-            )}
-          </div>
-        </div>
-
-        {/* ── Side Rail ── */}
-        <div className="finance__rail">
+        <aside className="fc-rail">
           <FinancePlanPanel
             monthPlan={monthPlan}
-            monthTotalSpentMinor={summary?.totalSpentMinor ?? 0}
-            previousMonthTotalSpentMinor={prevTotal}
+            monthTotalSpentMinor={dashboard?.totalSpentMinor ?? summary?.totalSpentMinor ?? 0}
+            previousMonthTotalSpentMinor={summary?.previousMonthTotalSpentMinor ?? 0}
             currencyCode={currency}
             categories={activeCategories}
             categoryTotals={summary?.categoryTotals ?? []}
-            isCurrentMonth={isCurrentMonth}
-            errorMessage={financeQuery.data.sectionErrors.monthPlan?.message ?? null}
+            isCurrentMonth={selectedMonth === currentMonth}
+            errorMessage={financeData.sectionErrors.monthPlan?.message ?? null}
             isSaving={updateFinanceMonthPlanMutation.isPending}
             onRetry={() => void financeQuery.refetch()}
-            onSave={handleMonthPlanSave}
+            onSave={(payload) => updateFinanceMonthPlanMutation.mutateAsync(payload)}
           />
-
+          <section className="fc-debt-next">
+            <div>
+              <span className="fc-label">Next</span>
+              <strong>Cards and loans</strong>
+            </div>
+            <span>Planned</span>
+          </section>
           <FinanceInsightsPanel
             insights={insights}
             currencyCode={currency}
-            errorMessage={financeQuery.data.sectionErrors.insights?.message ?? null}
+            errorMessage={financeData.sectionErrors.insights?.message ?? null}
             savingGoalId={updateFinanceGoalMutation.isPending ? updateFinanceGoalMutation.variables?.goalId ?? null : null}
             onRetry={() => void financeQuery.refetch()}
-            onSaveGoal={handleFinanceGoalSave}
+            onSaveGoal={(goalId, payload) => updateFinanceGoalMutation.mutateAsync({ goalId, ...payload })}
           />
-        </div>
+        </aside>
       </div>
 
-      {/* ── Setup Drawer ── */}
-      {showSetupDrawer && (
-        <div className="setup-drawer__backdrop" onClick={() => setShowSetupDrawer(false)}>
-          <aside className="setup-drawer" onClick={(e) => e.stopPropagation()}>
+      {showSetup ? (
+        <div className="setup-drawer__backdrop" onClick={() => setShowSetup(false)}>
+          <aside className="setup-drawer setup-drawer--money" onClick={(event) => event.stopPropagation()}>
             <div className="setup-drawer__header">
-              <h2 className="setup-drawer__title">Finance setup</h2>
-              <button
-                className="button button--ghost button--small"
-                type="button"
-                onClick={() => setShowSetupDrawer(false)}
-              >
-                Close
-              </button>
+              <h2 className="setup-drawer__title">Money setup</h2>
+              <button className="button button--ghost button--small" type="button" onClick={() => setShowSetup(false)}>Close</button>
             </div>
-
-            <div className="setup-drawer__tabs" role="tablist">
-              <button
-                className={`feed__tab${setupFocus === "categories" ? " feed__tab--active" : ""}`}
-                type="button"
-                role="tab"
-                aria-selected={setupFocus === "categories"}
-                onClick={() => setSetupFocus("categories")}
-              >
-                Categories
-              </button>
-              <button
-                className={`feed__tab${setupFocus === "recurring" ? " feed__tab--active" : ""}`}
-                type="button"
-                role="tab"
-                aria-selected={setupFocus === "recurring"}
-                onClick={() => setSetupFocus("recurring")}
-              >
-                Recurring bills
-              </button>
+            <div className="setup-drawer__tabs">
+              {(["accounts", "income", "categories", "recurring"] as const).map((item) => (
+                <button key={item} className={`feed__tab${setupTab === item ? " feed__tab--active" : ""}`} type="button" onClick={() => setSetupTab(item)}>
+                  {item === "accounts" ? "Accounts" : item === "income" ? "Income" : item === "categories" ? "Categories" : "Bills"}
+                </button>
+              ))}
             </div>
-
             <div className="setup-drawer__content">
-              {setupFocus === "categories" && (
-                <div id="finance-manage-categories">
-                  {financeQuery.data.sectionErrors.categories ? (
-                    <InlineErrorState
-                      message={financeQuery.data.sectionErrors.categories.message}
-                      onRetry={() => void financeQuery.refetch()}
-                    />
-                  ) : showCatForm ? (
-                    <div className="stack-form">
-                      <label className="field">
-                        <span>Name</span>
-                        <input type="text" value={catForm.name} placeholder="Category name" onChange={(e) => setCatForm((p) => ({ ...p, name: e.target.value }))} />
-                      </label>
-                      <label className="field">
-                        <span>Color (optional hex)</span>
-                        <input type="text" value={catForm.color} placeholder="#d9993a" maxLength={7} onChange={(e) => setCatForm((p) => ({ ...p, color: e.target.value }))} />
-                      </label>
-                      <div className="button-row">
-                        <button className="button button--primary button--small" type="button" onClick={() => void handleCategorySave()} disabled={createCategoryMutation.isPending || updateCategoryMutation.isPending}>
-                          {editingCatId ? "Update" : "Create"}
-                        </button>
-                        <button className="button button--ghost button--small" type="button" onClick={() => { setShowCatForm(false); setEditingCatId(null); }}>Cancel</button>
-                      </div>
-                    </div>
-                  ) : (
-                    <>
-                      {activeCategories.length > 0 ? (
-                        <div className="setup-drawer__list">
-                          {activeCategories.map((cat) => (
-                            <div key={cat.id} className="setup-drawer__item">
-                              <div className="setup-drawer__item-info">
-                                {cat.color && (
-                                  <span className="activity-row__category-dot" style={{ background: cat.color }} />
-                                )}
-                                <span className="setup-drawer__item-name">{cat.name}</span>
-                                <span className="setup-drawer__item-meta">
-                                  {formatMinorCurrency(
-                                    summary?.categoryTotals.find((ct) => ct.expenseCategoryId === cat.id)?.totalAmountMinor ?? 0,
-                                    currency,
-                                  )}
-                                </span>
-                              </div>
-                              <div className="setup-drawer__item-actions">
-                                <button className="button button--ghost button--small" type="button" onClick={() => openEditCategory(cat)}>Edit</button>
-                                <button className="button button--ghost button--small" type="button" onClick={() => void handleCategoryArchive(cat.id, true)}>Archive</button>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      ) : (
-                        <EmptyState
-                          title="No categories yet"
-                          description="Create the first category so bills and expenses have a stable structure."
-                          actionLabel="Add category"
-                          onAction={openCreateCategory}
-                        />
-                      )}
-                      {activeCategories.length > 0 ? (
-                        <button className="button button--ghost button--small" type="button" onClick={openCreateCategory} style={{ marginTop: "0.6rem" }}>
-                          Add category
-                        </button>
-                      ) : null}
-                    </>
-                  )}
+              {setupTab === "accounts" ? (
+                <div className="stack-form">
+                  <label className="field">
+                    <span>Name</span>
+                    <input type="text" value={accountForm.name} onChange={(event) => setAccountForm((form) => ({ ...form, name: event.target.value }))} />
+                  </label>
+                  <label className="field">
+                    <span>Type</span>
+                    <select value={accountForm.accountType} onChange={(event) => setAccountForm((form) => ({ ...form, accountType: event.target.value as AccountForm["accountType"] }))}>
+                      <option value="bank">Bank</option>
+                      <option value="cash">Cash</option>
+                      <option value="wallet">Wallet</option>
+                      <option value="other">Other</option>
+                    </select>
+                  </label>
+                  <label className="field">
+                    <span>Opening balance</span>
+                    <input type="text" inputMode="decimal" value={accountForm.openingBalance} onChange={(event) => setAccountForm((form) => ({ ...form, openingBalance: event.target.value }))} />
+                  </label>
+                  <button className="button button--primary button--small" type="button" disabled={createAccountMutation.isPending} onClick={() => void handleCreateAccount()}>Add account</button>
                 </div>
-              )}
+              ) : null}
 
-              {setupFocus === "recurring" && (
-                <div id="finance-manage-recurring">
-                  {financeQuery.data.sectionErrors.recurringExpenses ? (
-                    <InlineErrorState
-                      message={financeQuery.data.sectionErrors.recurringExpenses.message}
-                      onRetry={() => void financeQuery.refetch()}
-                    />
-                  ) : showRecForm ? (
-                    <div className="stack-form">
-                      <label className="field">
-                        <span>Title</span>
-                        <input type="text" value={recForm.title} placeholder="e.g. Rent, Spotify" onChange={(e) => setRecForm((p) => ({ ...p, title: e.target.value }))} />
-                      </label>
-                      <label className="field">
-                        <span>Category</span>
-                        <select value={recForm.expenseCategoryId} onChange={(e) => setRecForm((p) => ({ ...p, expenseCategoryId: e.target.value }))}>
-                          <option value="">None</option>
-                          {activeCategories.map((c) => (
-                            <option key={c.id} value={c.id}>{c.name}</option>
-                          ))}
-                        </select>
-                      </label>
-                      <label className="field">
-                        <span>Default amount</span>
-                        <input type="text" value={recForm.defaultAmount} placeholder="0.00" onChange={(e) => setRecForm((p) => ({ ...p, defaultAmount: e.target.value }))} />
-                      </label>
-                      <div className="manage-form__section">
-                        <span className="manage-form__section-label">Recurrence</span>
-                        <RecurrenceEditor
-                          value={recForm.recurrenceInput}
-                          onChange={(rule) => setRecForm((p) => ({
-                            ...p,
-                            recurrenceInput: rule,
-                            recurrenceRule: formatLegacyFinanceRecurrenceRule(rule),
-                            nextDueOn: rule.startsOn,
-                          }))}
-                          context="finance"
-                          startsOn={recForm.nextDueOn || today}
-                        />
-                      </div>
-                      <label className="field">
-                        <span>Next due date</span>
-                        <input
-                          type="date"
-                          value={recForm.nextDueOn}
-                          onChange={(e) => setRecForm((p) => {
-                            const nextDueOn = e.target.value;
-                            const recurrenceInput = p.recurrenceInput
-                              ? { ...p.recurrenceInput, startsOn: nextDueOn }
-                              : nextDueOn
-                                ? getDefaultRecurrenceRule("finance", nextDueOn)
-                                : p.recurrenceInput;
-                            return {
-                              ...p,
-                              nextDueOn,
-                              recurrenceInput,
-                              recurrenceRule: recurrenceInput ? formatLegacyFinanceRecurrenceRule(recurrenceInput) : p.recurrenceRule,
-                            };
-                          })}
-                        />
-                      </label>
-                      <label className="field">
-                        <span>Remind days before</span>
-                        <input type="number" min={0} value={recForm.remindDaysBefore} onChange={(e) => setRecForm((p) => ({ ...p, remindDaysBefore: e.target.value }))} />
-                      </label>
-                      <div className="button-row">
-                        <button className="button button--primary button--small" type="button" onClick={() => void handleRecurringSave()} disabled={createRecurringMutation.isPending || updateRecurringMutation.isPending}>
-                          {editingRecId ? "Update" : "Create"}
-                        </button>
-                        <button className="button button--ghost button--small" type="button" onClick={() => { setShowRecForm(false); setEditingRecId(null); }}>Cancel</button>
-                      </div>
-                    </div>
-                  ) : (
-                    <>
-                      {activeRecurringExpenses.length > 0 ? (
-                        <div className="setup-drawer__list">
-                          {activeRecurringExpenses.map((item) => (
-                            <div key={item.id} className="setup-drawer__item">
-                              <div className="setup-drawer__item-info">
-                                <span className="setup-drawer__item-name">{item.title}</span>
-                                <span className="setup-drawer__item-meta">
-                                  {isRecurring(item.recurrence) ? (
-                                    <>{formatFullRecurrenceSummary(item.recurrence!.rule)} · </>
-                                  ) : null}
-                                  {formatDueLabel(item.nextDueOn)}
-                                  {" · "}
-                                  <span className={`tag ${item.status === "active" ? "tag--positive" : item.status === "paused" ? "tag--warning" : "tag--neutral"}`}>
-                                    {item.status}
-                                  </span>
-                                </span>
-                              </div>
-                              <div className="setup-drawer__item-actions">
-                                <span className="setup-drawer__item-amount">
-                                  {formatMinorCurrency(item.defaultAmountMinor, item.currencyCode)}
-                                </span>
-                                <button className="button button--ghost button--small" type="button" onClick={() => openEditRecurring(item)}>Edit</button>
-                                {item.status === "active" ? (
-                                  <button className="button button--ghost button--small" type="button" onClick={() => void handleRecurringStatusChange(item.id, "paused")}>Pause</button>
-                                ) : item.status === "paused" ? (
-                                  <button className="button button--ghost button--small" type="button" onClick={() => void handleRecurringStatusChange(item.id, "active")}>Resume</button>
-                                ) : null}
-                                {item.status !== "archived" && (
-                                  <button className="button button--ghost button--small" type="button" onClick={() => void handleRecurringStatusChange(item.id, "archived")}>Archive</button>
-                                )}
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      ) : (
-                        <EmptyState
-                          title="No recurring bills yet"
-                          description="Recurring bills power the daily bill lane. Add the first one so Finance can surface future due dates automatically."
-                          actionLabel="Add recurring bill"
-                          onAction={openCreateRecurring}
-                        />
-                      )}
-                      {activeRecurringExpenses.length > 0 ? (
-                        <button className="button button--ghost button--small" type="button" onClick={openCreateRecurring} style={{ marginTop: "0.5rem" }}>
-                          Add recurring bill
-                        </button>
-                      ) : null}
-                    </>
-                  )}
+              {setupTab === "income" ? (
+                <div className="stack-form">
+                  <label className="field">
+                    <span>Income</span>
+                    <input type="text" value={incomeForm.title} onChange={(event) => setIncomeForm((form) => ({ ...form, title: event.target.value }))} />
+                  </label>
+                  <label className="field">
+                    <span>Account</span>
+                    <select value={incomeForm.accountId} onChange={(event) => setIncomeForm((form) => ({ ...form, accountId: event.target.value }))}>
+                      <option value="">Select</option>
+                      {activeAccounts.map((account) => <option key={account.id} value={account.id}>{account.name}</option>)}
+                    </select>
+                  </label>
+                  <label className="field">
+                    <span>Amount</span>
+                    <input type="text" inputMode="decimal" value={incomeForm.amount} onChange={(event) => setIncomeForm((form) => ({ ...form, amount: event.target.value }))} />
+                  </label>
+                  <label className="field">
+                    <span>Next date</span>
+                    <input type="date" value={incomeForm.nextExpectedOn} onChange={(event) => setIncomeForm((form) => ({ ...form, nextExpectedOn: event.target.value }))} />
+                  </label>
+                  <button className="button button--primary button--small" type="button" disabled={createIncomeMutation.isPending} onClick={() => void handleCreateIncome()}>Add income</button>
                 </div>
-              )}
+              ) : null}
+
+              {setupTab === "categories" ? (
+                <div className="stack-form">
+                  <label className="field">
+                    <span>Name</span>
+                    <input type="text" value={categoryForm.name} onChange={(event) => setCategoryForm((form) => ({ ...form, name: event.target.value }))} />
+                  </label>
+                  <label className="field">
+                    <span>Color</span>
+                    <input type="text" value={categoryForm.color} onChange={(event) => setCategoryForm((form) => ({ ...form, color: event.target.value }))} />
+                  </label>
+                  <button className="button button--primary button--small" type="button" disabled={createCategoryMutation.isPending} onClick={() => void handleCreateCategory()}>Add category</button>
+                  <div className="setup-drawer__list">
+                    {activeCategories.map((category) => (
+                      <div key={category.id} className="setup-drawer__item">
+                        <span className="setup-drawer__item-name">{category.name}</span>
+                        <button className="button button--ghost button--small" type="button" onClick={() => void updateCategoryMutation.mutateAsync({ categoryId: category.id, archived: true })}>Archive</button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+
+              {setupTab === "recurring" ? (
+                <div className="stack-form">
+                  <label className="field">
+                    <span>Bill</span>
+                    <input type="text" value={recurringBillForm.title} onChange={(event) => setRecurringBillForm((form) => ({ ...form, title: event.target.value }))} />
+                  </label>
+                  <label className="field">
+                    <span>Amount</span>
+                    <input type="text" inputMode="decimal" value={recurringBillForm.amount} onChange={(event) => setRecurringBillForm((form) => ({ ...form, amount: event.target.value }))} />
+                  </label>
+                  <label className="field">
+                    <span>Category</span>
+                    <select value={recurringBillForm.categoryId} onChange={(event) => setRecurringBillForm((form) => ({ ...form, categoryId: event.target.value }))}>
+                      <option value="">None</option>
+                      {activeCategories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}
+                    </select>
+                  </label>
+                  <label className="field">
+                    <span>Next due</span>
+                    <input type="date" value={recurringBillForm.nextDueOn} onChange={(event) => setRecurringBillForm((form) => ({ ...form, nextDueOn: event.target.value }))} />
+                  </label>
+                  <button className="button button--primary button--small" type="button" disabled={createRecurringMutation.isPending} onClick={() => void handleCreateRecurringBill()}>Add recurring bill</button>
+                  <div className="setup-drawer__list">
+                    {recurringExpenses.filter((item) => item.status !== "archived").map((item) => (
+                      <div key={item.id} className="setup-drawer__item">
+                        <div className="setup-drawer__item-info">
+                          <span className="setup-drawer__item-name">{item.title}</span>
+                          <span className="setup-drawer__item-meta">
+                            {isRecurring(item.recurrence) ? `${formatFullRecurrenceSummary(item.recurrence!.rule)} · ` : ""}
+                            {formatDueLabel(item.nextDueOn)}
+                          </span>
+                        </div>
+                        <button className="button button--ghost button--small" type="button" onClick={() => void updateRecurringMutation.mutateAsync({ recurringExpenseId: item.id, status: item.status === "active" ? "paused" : "active" })}>
+                          {item.status === "active" ? "Pause" : "Resume"}
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
             </div>
           </aside>
         </div>
-      )}
+      ) : null}
+    </div>
+  );
+}
+
+function TransactionList({
+  transactions,
+  currency,
+  accountMap,
+  categoryMap,
+}: {
+  transactions: Array<{
+    id: string;
+    accountId: string;
+    transactionType: FinanceTransactionType;
+    amountMinor: number;
+    currencyCode: string;
+    occurredOn: string;
+    description: string | null;
+    expenseCategoryId: string | null;
+    source: "ledger" | "legacy_expense";
+  }>;
+  currency: string;
+  accountMap: Map<string, { name: string }>;
+  categoryMap: Map<string, { name: string }>;
+}) {
+  if (transactions.length === 0) {
+    return <EmptyState title="No money entries" description="Add income, expense, transfer, or adjustment." />;
+  }
+
+  return (
+    <div className="fc-list">
+      {transactions.map((transaction) => {
+        const isPositive = transaction.transactionType === "income" || (transaction.transactionType === "adjustment" && transaction.amountMinor > 0);
+        const category = transaction.expenseCategoryId ? categoryMap.get(transaction.expenseCategoryId)?.name : null;
+        const account = transaction.accountId ? accountMap.get(transaction.accountId)?.name : "Legacy";
+
+        return (
+          <div key={transaction.id} className="fc-row">
+            <div className={`fc-row__dot fc-row__dot--${transaction.transactionType}`} />
+            <div className="fc-row__main">
+              <strong>{transaction.description || (transaction.transactionType === "income" ? "Income" : transaction.transactionType === "expense" ? "Expense" : transaction.transactionType === "transfer" ? "Transfer" : "Adjustment")}</strong>
+              <span>{formatShortDate(transaction.occurredOn)} · {account}{category ? ` · ${category}` : ""}</span>
+            </div>
+            <span className={`fc-row__amount${isPositive ? " fc-row__amount--positive" : ""}`}>
+              {isPositive ? "+" : "-"}{formatMinorCurrency(Math.abs(transaction.amountMinor), transaction.currencyCode || currency)}
+            </span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function BillRow({
+  bill,
+  currency,
+  payingBillId,
+  reschedulingBillId,
+  rescheduleDate,
+  setRescheduleDate,
+  onPay,
+  onMarkPaid,
+  onDrop,
+  onStartReschedule,
+  onReschedule,
+  onCancelReschedule,
+  paymentForm,
+  setPaymentForm,
+  categories,
+  onPayAndLog,
+  isPaying,
+}: {
+  bill: FinanceBillItem;
+  currency: string;
+  payingBillId: string | null;
+  reschedulingBillId: string | null;
+  rescheduleDate: string;
+  setRescheduleDate: (value: string) => void;
+  onPay: (bill: FinanceBillItem) => void;
+  onMarkPaid: (bill: FinanceBillItem) => void;
+  onDrop: (bill: FinanceBillItem) => void;
+  onStartReschedule: (bill: FinanceBillItem) => void;
+  onReschedule: (billId: string) => Promise<void>;
+  onCancelReschedule: () => void;
+  paymentForm: BillPaymentForm;
+  setPaymentForm: Dispatch<SetStateAction<BillPaymentForm>>;
+  categories: Array<{ id: string; name: string }>;
+  onPayAndLog: (bill: FinanceBillItem) => Promise<void>;
+  isPaying: boolean;
+}) {
+  const isOpen = bill.status === "pending" || bill.status === "rescheduled";
+
+  return (
+    <div className="fc-bill">
+      <div className="fc-row">
+        <div className={`fc-row__dot${daysUntil(bill.dueOn) <= 0 && isOpen ? " fc-row__dot--expense" : ""}`} />
+        <div className="fc-row__main">
+          <strong>{bill.title}</strong>
+          <span>{getBillDueText(bill)} · {getBillStatusLabel(bill)}</span>
+        </div>
+        {bill.amountMinor != null ? <span className="fc-row__amount">{formatMinorCurrency(bill.amountMinor, currency)}</span> : null}
+        <div className="fc-row__actions">
+          {isOpen ? (
+            <>
+              <button className="button button--primary button--small" type="button" onClick={() => onPay(bill)}>Pay</button>
+              <button className="button button--ghost button--small" type="button" onClick={() => onMarkPaid(bill)}>Paid</button>
+              <button className="button button--ghost button--small" type="button" onClick={() => onStartReschedule(bill)}>Move</button>
+              <button className="button button--ghost button--small" type="button" onClick={() => onDrop(bill)}>Drop</button>
+            </>
+          ) : null}
+          {!isOpen && bill.reconciliationStatus === "paid_without_expense" ? (
+            <button className="button button--primary button--small" type="button" onClick={() => onPay(bill)}>Log expense</button>
+          ) : null}
+        </div>
+      </div>
+
+      {payingBillId === bill.id ? (
+        <div className="fc-editor fc-editor--nested">
+          <div className="fc-form-grid">
+            <label className="field">
+              <span>Paid on</span>
+              <input type="date" value={paymentForm.paidOn} onChange={(event) => setPaymentForm((form) => ({ ...form, paidOn: event.target.value }))} />
+            </label>
+            <label className="field">
+              <span>Amount</span>
+              <input type="text" inputMode="decimal" value={paymentForm.amount} onChange={(event) => setPaymentForm((form) => ({ ...form, amount: event.target.value }))} />
+            </label>
+            <label className="field">
+              <span>Category</span>
+              <select value={paymentForm.categoryId} onChange={(event) => setPaymentForm((form) => ({ ...form, categoryId: event.target.value }))}>
+                <option value="">None</option>
+                {categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}
+              </select>
+            </label>
+            <label className="field fc-field--wide">
+              <span>Description</span>
+              <input type="text" value={paymentForm.description} onChange={(event) => setPaymentForm((form) => ({ ...form, description: event.target.value }))} />
+            </label>
+          </div>
+          <button className="button button--primary button--small" type="button" disabled={isPaying} onClick={() => void onPayAndLog(bill)}>
+            {isPaying ? "Saving..." : "Pay and log"}
+          </button>
+        </div>
+      ) : null}
+
+      {reschedulingBillId === bill.id ? (
+        <div className="fc-inline-action">
+          <input type="date" value={rescheduleDate} onChange={(event) => setRescheduleDate(event.target.value)} />
+          <button className="button button--primary button--small" type="button" onClick={() => void onReschedule(bill.id)}>Save</button>
+          <button className="button button--ghost button--small" type="button" onClick={onCancelReschedule}>Cancel</button>
+        </div>
+      ) : null}
     </div>
   );
 }

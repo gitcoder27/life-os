@@ -15,6 +15,9 @@ export type FinancePaceStatus = "no_plan" | "on_pace" | "slightly_heavy" | "off_
 export type FinanceWatchStatus = "within_limit" | "near_limit" | "over_limit";
 export type FinanceGoalType = "emergency_fund" | "debt_payoff" | "travel" | "large_purchase" | "other";
 export type FinanceContributionFit = "on_track" | "tight" | "needs_plan";
+export type FinanceAccountType = "bank" | "cash" | "wallet" | "other";
+export type FinanceTransactionType = "income" | "expense" | "transfer" | "adjustment";
+export type RecurringIncomeStatus = "active" | "paused" | "archived";
 
 export interface ExpenseItem {
   id: EntityId;
@@ -61,6 +64,148 @@ export interface FinanceSummaryResponse extends ApiMeta {
   previousMonthTotalSpentMinor?: number;
   categoryTotals: FinanceCategoryTotal[];
   upcomingBills: FinanceBillItem[];
+}
+
+export interface FinanceAccountItem {
+  id: EntityId;
+  name: string;
+  accountType: FinanceAccountType;
+  currencyCode: string;
+  openingBalanceMinor: number;
+  currentBalanceMinor: number;
+  archivedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface FinanceTransactionItem {
+  id: EntityId;
+  accountId: EntityId;
+  transferAccountId: EntityId | null;
+  transactionType: FinanceTransactionType;
+  amountMinor: number;
+  currencyCode: string;
+  occurredOn: IsoDateString;
+  description: string | null;
+  expenseCategoryId: EntityId | null;
+  billId: EntityId | null;
+  source: "ledger" | "legacy_expense";
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface RecurringIncomeItem {
+  id: EntityId;
+  accountId: EntityId;
+  title: string;
+  amountMinor: number;
+  currencyCode: string;
+  recurrenceRule: string;
+  nextExpectedOn: IsoDateString;
+  status: RecurringIncomeStatus;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface FinanceDashboardResponse extends ApiMeta {
+  month: IsoMonthString;
+  currencyCode: string;
+  cashAvailableMinor: number;
+  incomeReceivedMinor: number;
+  plannedIncomeMinor: number | null;
+  totalSpentMinor: number;
+  upcomingDueMinor: number;
+  safeToSpendMinor: number;
+  accountCount: number;
+  transactionCount: number;
+  upcomingBills: FinanceBillItem[];
+  accounts: FinanceAccountItem[];
+  recentTransactions: FinanceTransactionItem[];
+  recurringIncome: RecurringIncomeItem[];
+}
+
+export interface CreateFinanceAccountRequest {
+  name: string;
+  accountType?: FinanceAccountType;
+  currencyCode?: string;
+  openingBalanceMinor?: number;
+}
+
+export interface UpdateFinanceAccountRequest {
+  name?: string;
+  accountType?: FinanceAccountType;
+  openingBalanceMinor?: number;
+  archived?: boolean;
+}
+
+export interface FinanceAccountsResponse extends ApiMeta {
+  accounts: FinanceAccountItem[];
+}
+
+export interface FinanceAccountMutationResponse extends ApiMeta {
+  account: FinanceAccountItem;
+}
+
+export interface CreateFinanceTransactionRequest {
+  accountId: EntityId;
+  transferAccountId?: EntityId | null;
+  transactionType: FinanceTransactionType;
+  amountMinor: number;
+  currencyCode?: string;
+  occurredOn: IsoDateString;
+  description?: string | null;
+  expenseCategoryId?: EntityId | null;
+  billId?: EntityId | null;
+}
+
+export interface UpdateFinanceTransactionRequest {
+  accountId?: EntityId;
+  transferAccountId?: EntityId | null;
+  transactionType?: FinanceTransactionType;
+  amountMinor?: number;
+  currencyCode?: string;
+  occurredOn?: IsoDateString;
+  description?: string | null;
+  expenseCategoryId?: EntityId | null;
+  billId?: EntityId | null;
+}
+
+export interface FinanceTransactionsResponse extends ApiMeta {
+  from: IsoDateString;
+  to: IsoDateString;
+  transactions: FinanceTransactionItem[];
+}
+
+export interface FinanceTransactionMutationResponse extends ApiMeta {
+  transaction: FinanceTransactionItem;
+}
+
+export interface CreateRecurringIncomeRequest {
+  accountId: EntityId;
+  title: string;
+  amountMinor: number;
+  currencyCode?: string;
+  recurrenceRule?: string;
+  nextExpectedOn: IsoDateString;
+  status?: RecurringIncomeStatus;
+}
+
+export interface UpdateRecurringIncomeRequest {
+  accountId?: EntityId;
+  title?: string;
+  amountMinor?: number;
+  currencyCode?: string;
+  recurrenceRule?: string;
+  nextExpectedOn?: IsoDateString;
+  status?: RecurringIncomeStatus;
+}
+
+export interface RecurringIncomeResponse extends ApiMeta {
+  recurringIncome: RecurringIncomeItem[];
+}
+
+export interface RecurringIncomeMutationResponse extends ApiMeta {
+  recurringIncome: RecurringIncomeItem;
 }
 
 export interface FinanceMonthPlanCategoryWatchItem {

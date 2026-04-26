@@ -245,6 +245,26 @@ enum RecurringExpenseStatus {
   ARCHIVED
 }
 
+enum FinanceAccountType {
+  BANK
+  CASH
+  WALLET
+  OTHER
+}
+
+enum FinanceTransactionType {
+  INCOME
+  EXPENSE
+  TRANSFER
+  ADJUSTMENT
+}
+
+enum RecurringIncomeStatus {
+  ACTIVE
+  PAUSED
+  ARCHIVED
+}
+
 enum AdminItemType {
   BILL
   ADMIN
@@ -343,6 +363,9 @@ model User {
   weightLogs            WeightLog[]
   expenseCategories     ExpenseCategory[]
   financeMonthPlans     FinanceMonthPlan[]
+  financeAccounts       FinanceAccount[]
+  financeTransactions   FinanceTransaction[]
+  recurringIncomeTemplates RecurringIncomeTemplate[]
   recurringExpenseTemplates RecurringExpenseTemplate[]
   expenses              Expense[]
   adminItems            AdminItem[]
@@ -938,9 +961,70 @@ model ExpenseCategory {
   adminItems AdminItem[]
   financeMonthPlanWatches FinanceMonthPlanCategoryWatch[]
   recurringExpenseTemplates RecurringExpenseTemplate[]
+  financeTransactions FinanceTransaction[]
   weeklyReviewSpendWatches WeeklyReview[] @relation("WeeklyReviewSpendCategory")
 
   @@unique([userId, name])
+}
+
+model FinanceAccount {
+  id                   String                @id @default(uuid())
+  userId               String
+  name                 String
+  accountType          FinanceAccountType    @default(BANK)
+  currencyCode         String
+  openingBalanceMinor  Int                   @default(0)
+  archivedAt           DateTime?
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
+  user                 User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  transactions         FinanceTransaction[]  @relation("FinanceTransactionAccount")
+  transferTransactions FinanceTransaction[]  @relation("FinanceTransactionTransferAccount")
+  recurringIncomeTemplates RecurringIncomeTemplate[]
+
+  @@index([userId, archivedAt])
+}
+
+model FinanceTransaction {
+  id                String                 @id @default(uuid())
+  userId            String
+  accountId         String
+  transactionType   FinanceTransactionType
+  amountMinor       Int
+  currencyCode      String
+  occurredOn        DateTime
+  description       String?
+  expenseCategoryId String?
+  billId            String?
+  transferAccountId String?
+  createdAt         DateTime               @default(now())
+  updatedAt         DateTime               @updatedAt
+  user              User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  account           FinanceAccount         @relation("FinanceTransactionAccount", fields: [accountId], references: [id], onDelete: Cascade)
+  transferAccount   FinanceAccount?        @relation("FinanceTransactionTransferAccount", fields: [transferAccountId], references: [id], onDelete: SetNull)
+  expenseCategory   ExpenseCategory?       @relation(fields: [expenseCategoryId], references: [id], onDelete: SetNull)
+  bill              AdminItem?             @relation("BillFinanceTransactions", fields: [billId], references: [id], onDelete: SetNull)
+
+  @@index([userId, occurredOn])
+  @@index([accountId, occurredOn])
+}
+
+model RecurringIncomeTemplate {
+  id             String                @id @default(uuid())
+  userId         String
+  accountId      String
+  title          String
+  amountMinor    Int
+  currencyCode   String
+  recurrenceRule String
+  nextExpectedOn DateTime
+  status         RecurringIncomeStatus @default(ACTIVE)
+  createdAt      DateTime              @default(now())
+  updatedAt      DateTime              @updatedAt
+  user           User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  account        FinanceAccount        @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@index([userId, status, nextExpectedOn])
 }
 
 model RecurringExpenseTemplate {
@@ -1065,6 +1149,7 @@ model AdminItem {
   relatedTask                Task?                     @relation("AdminItemTask", fields: [relatedTaskId], references: [id], onDelete: SetNull)
   expenseCategory            ExpenseCategory?          @relation(fields: [expenseCategoryId], references: [id], onDelete: SetNull)
   linkedExpense              Expense?                  @relation("BillLinkedExpense")
+  financeTransactions        FinanceTransaction[]      @relation("BillFinanceTransactions")
   recurringExpenseTemplate   RecurringExpenseTemplate? @relation(fields: [recurringExpenseTemplateId], references: [id], onDelete: SetNull)
 
   @@index([userId, dueOn, status])
