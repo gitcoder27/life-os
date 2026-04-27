@@ -84,6 +84,7 @@ import { serializeRecurrenceDefinition, upsertRecurrenceRuleRecord } from "../..
 import { getWeekStartIsoDate, parseIsoDate } from "../../lib/time/cycle.js";
 import { toIsoDateString } from "../../lib/time/date.js";
 import { getUserLocalDate } from "../../lib/time/user-time.js";
+import { createIsoDateRangeQuerySchema, isoDateStringSchema } from "../../lib/validation/date-range.js";
 import { parseOrThrow } from "../../lib/validation/parse.js";
 import {
   OPEN_BILL_STATUSES,
@@ -186,7 +187,7 @@ interface CreateRecurringExpenseRequest {
   status?: RecurringExpenseStatus;
 }
 
-const isoDateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/) as unknown as z.ZodType<IsoDateString>;
+const isoDateSchema = isoDateStringSchema;
 const isoMonthSchema = z.string().regex(/^\d{4}-\d{2}$/) as unknown as z.ZodType<IsoMonthString>;
 
 const expenseSourceSchema = z.enum(["manual", "quick_capture", "template"]);
@@ -441,10 +442,7 @@ const updateRecurringExpenseSchema = z
   })
   .refine((value) => Object.keys(value).length > 0, "At least one field must be updated");
 
-const expenseRangeQuerySchema = z.object({
-  from: isoDateSchema,
-  to: isoDateSchema,
-});
+const expenseRangeQuerySchema = createIsoDateRangeQuerySchema({ maxDays: 366 });
 
 const financeMonthPlanWatchSchema = z.object({
   expenseCategoryId: z.string().uuid(),
@@ -1204,7 +1202,15 @@ async function buildFinanceDashboard(
   const ledgerSpentMinor = transactions
     .filter((transaction) => transaction.transactionType === "EXPENSE")
     .reduce((sum, transaction) => sum + transaction.amountMinor, 0);
-  const legacySpentMinor = legacyExpenses.reduce((sum, expense) => sum + expense.amountMinor, 0);
+  const ledgerExpenseBillIds = new Set(
+    transactions
+      .filter((transaction) => transaction.transactionType === "EXPENSE" && transaction.billId)
+      .map((transaction) => transaction.billId),
+  );
+  const legacyOnlyExpenses = legacyExpenses.filter(
+    (expense) => !expense.billId || !ledgerExpenseBillIds.has(expense.billId),
+  );
+  const legacySpentMinor = legacyOnlyExpenses.reduce((sum, expense) => sum + expense.amountMinor, 0);
   const upcomingOpenBills = [...overdueBills, ...upcomingBills];
   const upcomingDueMinor = upcomingOpenBills.reduce((sum, bill) => sum + (bill.amountMinor ?? 0), 0);
   const cardDueMinor = creditCards.reduce((sum, card) => sum + (card.minimumDueMinor ?? 0), 0);
@@ -1230,12 +1236,12 @@ async function buildFinanceDashboard(
     debtOutstandingMinor,
     safeToSpendMinor: cashAvailableMinor - upcomingDueMinor - debtDueMinor,
     accountCount: accounts.filter((account) => !account.archivedAt).length,
-    transactionCount: transactions.length + legacyExpenses.length,
+    transactionCount: transactions.length + legacyOnlyExpenses.length,
     upcomingBills: upcomingOpenBills.map(serializeFinanceBill),
     accounts,
     recentTransactions: [
       ...transactions.map(serializeFinanceTransaction),
-      ...legacyExpenses.map((expense): FinanceTransactionItem => ({
+      ...legacyOnlyExpenses.map((expense): FinanceTransactionItem => ({
         id: `legacy-expense-${expense.id}`,
         accountId: "",
         transferAccountId: null,

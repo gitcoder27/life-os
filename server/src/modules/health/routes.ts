@@ -70,10 +70,11 @@ import {
   getUserLocalDate,
   getUserLocalHour,
 } from "../../lib/time/user-time.js";
+import { createIsoDateRangeQuerySchema, isoDateStringSchema } from "../../lib/validation/date-range.js";
 import { parseOrThrow } from "../../lib/validation/parse.js";
 import { buildHealthSummaryEnhancements } from "./summary-builder.js";
 
-const isoDateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/) as unknown as z.ZodType<IsoDateString>;
+const isoDateSchema = isoDateStringSchema;
 const isoDateTimeSchema = z.string().datetime({ offset: true });
 const waterLogSourceSchema = z.enum(["tap", "quick_capture", "manual"]);
 const mealSlotSchema = z.enum(["breakfast", "lunch", "dinner", "snack"]);
@@ -87,10 +88,7 @@ const workoutActualStatusSchema = z.enum([
   "none",
 ]);
 
-const healthSummaryQuerySchema = z.object({
-  from: isoDateSchema,
-  to: isoDateSchema,
-});
+const healthSummaryQuerySchema = createIsoDateRangeQuerySchema({ maxDays: 93 });
 
 const byDateQuerySchema = z.object({
   date: isoDateSchema,

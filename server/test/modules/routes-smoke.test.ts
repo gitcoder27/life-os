@@ -2289,6 +2289,20 @@ describe("module route smoke tests", () => {
     expect(recurringExpensePatch.statusCode).toBe(200);
   });
 
+  it("rejects inverted and overly broad finance date ranges", async () => {
+    const invertedRange = await app!.inject({
+      method: "GET",
+      url: "/api/finance/expenses?from=2026-03-31&to=2026-03-01",
+    });
+    const broadRange = await app!.inject({
+      method: "GET",
+      url: "/api/finance/transactions?from=2026-01-01&to=2027-12-31",
+    });
+
+    expect(invertedRange.statusCode).toBe(400);
+    expect(broadRange.statusCode).toBe(400);
+  });
+
   it("serves habit write paths", async () => {
     prisma.habit = {
       findMany: vi.fn().mockResolvedValue([]),
@@ -3040,6 +3054,26 @@ describe("module route smoke tests", () => {
     expect(prisma.mealTemplate.deleteMany).not.toHaveBeenCalled();
     expect(prisma.recurringExpenseTemplate.create).not.toHaveBeenCalled();
     expect(prisma.adminItem.create).not.toHaveBeenCalled();
+  });
+
+  it("rejects invalid onboarding timezone values", async () => {
+    const response = await app!.inject({
+      method: "POST",
+      url: "/api/onboarding/complete",
+      payload: {
+        displayName: "Owner",
+        timezone: "Mars/Phobos",
+        currencyCode: "USD",
+        weekStartsOn: 1,
+        dailyWaterTargetMl: 2500,
+        goals: [],
+        habits: [],
+        routines: [],
+        firstWeekStartDate: "2026-03-09",
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
   });
 
   it("covers planning read and mutation endpoints", async () => {
@@ -4164,9 +4198,11 @@ describe("module route smoke tests", () => {
       ]);
     const update = vi.fn().mockResolvedValue({});
     const count = vi.fn().mockResolvedValue(0);
+    const findFirst = vi.fn().mockResolvedValue(null);
 
     prisma.task = {
       findMany,
+      findFirst,
       count,
       update,
     } as any;
@@ -4249,9 +4285,11 @@ describe("module route smoke tests", () => {
         }),
       );
     const count = vi.fn().mockResolvedValue(0);
+    const findFirst = vi.fn().mockResolvedValue(null);
 
     prisma.task = {
       findMany,
+      findFirst,
       count,
       update,
       create,
@@ -4403,12 +4441,14 @@ describe("module route smoke tests", () => {
       .mockResolvedValueOnce(1)
       .mockResolvedValueOnce(0);
     const update = vi.fn().mockResolvedValue({});
+    const findFirst = vi.fn().mockResolvedValue(null);
     const notificationFindFirst = vi.fn().mockResolvedValue(null);
     const notificationCreate = vi.fn().mockResolvedValue({});
     const auditEventCreate = vi.fn().mockResolvedValue({});
 
     prisma.task = {
       findMany,
+      findFirst,
       count,
       update,
     } as any;

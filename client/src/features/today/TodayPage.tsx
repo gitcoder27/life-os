@@ -518,119 +518,119 @@ export function TodayPage({ routeMode }: { routeMode?: "execute" | "plan" }) {
       {mode === "execute" ? (
         <div className="today-execute-v2">
           <div className="today-main-v2">
-            {!launchCompleted ? (
-              <>
-                <PreLaunchModeNotice
-                  date={data.today}
-                  launch={data.launch}
-                  suggestion={data.rescueSuggestion}
-                />
-                <DailyLaunchCard
-                  date={data.today}
-                  tasks={data.executionTasks}
-                  launch={data.launch}
-                  mustWinTask={data.mustWinTask}
-                />
-              </>
-            ) : (
-              <section
-                className={`today-workbench${workbenchResizing ? " today-workbench--resizing" : ""}`}
-                aria-label="Today workbench"
-                ref={workbenchRef}
-              >
-                <div className="today-workbench__queue">
-                  <ExecutionStream
-                    date={data.today}
-                    executionTasks={data.executionTasks}
-                    overdueTasks={data.overdueTasks}
-                    execution={todayPlannerExecution}
-                    taskActions={taskActions}
-                    plannerBlocks={data.plannerBlocks}
-                    onSwitchToPlanner={() => navigateToMode("plan")}
-                    activeFocusSession={activeFocusSession}
-                    mustWinTaskId={data.mustWinTask?.id ?? null}
-                    selectedTaskId={selectedTaskId}
-                    onSelectTask={(task) => setSelectedTaskId(task.id)}
-                  />
-                </div>
-
-                <div
-                  className="today-workbench__resize"
-                  role="separator"
-                  tabIndex={0}
-                  aria-label="Resize today context column"
-                  aria-orientation="vertical"
-                  aria-valuemin={320}
-                  aria-valuemax={544}
-                  aria-valuenow={workbenchRailWidth}
-                  title="Drag to resize. Double-click to reset."
-                  onPointerDown={(event) => {
-                    event.preventDefault();
-                    event.currentTarget.setPointerCapture(event.pointerId);
-                    setWorkbenchResizing(true);
-                    resizeWorkbenchRailFromPointer(event.clientX);
-                  }}
-                  onPointerMove={(event) => {
-                    if (!workbenchResizing) {
-                      return;
-                    }
-                    resizeWorkbenchRailFromPointer(event.clientX);
-                  }}
-                  onPointerUp={(event) => {
-                    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-                      event.currentTarget.releasePointerCapture(event.pointerId);
-                    }
-                    setWorkbenchResizing(false);
-                  }}
-                  onDoubleClick={resetWorkbenchRailWidth}
-                  onKeyDown={(event) => {
-                    if (event.key === "ArrowLeft") {
-                      event.preventDefault();
-                      updateWorkbenchRailWidth(workbenchRailWidth + WORKBENCH_RAIL_WIDTH_STEP);
-                      return;
-                    }
-                    if (event.key === "ArrowRight") {
-                      event.preventDefault();
-                      updateWorkbenchRailWidth(workbenchRailWidth - WORKBENCH_RAIL_WIDTH_STEP);
-                      return;
-                    }
-                    if (event.key === "Home") {
-                      event.preventDefault();
-                      resetWorkbenchRailWidth();
-                    }
-                  }}
-                />
-
-                <aside className="today-workbench__side" aria-label="Today context">
-                  <TaskInspectorPanel
-                    date={data.today}
-                    task={selectedTask}
-                    taskActions={taskActions}
-                    activeFocusSession={activeFocusSession}
-                    onAddTask={() => setTodayTaskCaptureOpen(true)}
-                    onPlanDay={() => navigateToMode("plan")}
-                    onClarifyTask={(taskId) => setClarifyTaskId(taskId)}
-                  />
-
-                  <div className="today-workbench__support">
-                    <GoalNudges
+            <section
+              className={`today-workbench${workbenchResizing ? " today-workbench--resizing" : ""}`}
+              aria-label="Today workbench"
+              ref={workbenchRef}
+            >
+              <div className="today-workbench__queue">
+                {!launchCompleted ? (
+                  <div className="today-workbench__launch" aria-label="Daily setup">
+                    <PreLaunchModeNotice
                       date={data.today}
-                      nudges={data.goalNudges}
-                      onAdd={handleAddGoalNudge}
-                      isAdding={createGoalTaskMutation.isPending}
-                      compact
+                      launch={data.launch}
+                      suggestion={data.rescueSuggestion}
                     />
-
-                    <DailyEssentials
-                      currentDay={data.currentDay}
-                      phase={phase}
+                    <DailyLaunchCard
+                      date={data.today}
+                      tasks={selectableTasks}
+                      launch={data.launch}
+                      mustWinTask={data.mustWinTask}
                     />
-                    <WeekDeepWorkStrip weekPlan={data.weekPlan} />
-                    <DayNotes tasks={data.quickCaptureTasks} today={data.today} />
                   </div>
-                </aside>
-              </section>
-            )}
+                ) : null}
+
+                <ExecutionStream
+                  date={data.today}
+                  executionTasks={data.executionTasks}
+                  overdueTasks={data.overdueTasks}
+                  execution={todayPlannerExecution}
+                  taskActions={taskActions}
+                  plannerBlocks={data.plannerBlocks}
+                  onSwitchToPlanner={() => navigateToMode("plan")}
+                  activeFocusSession={activeFocusSession}
+                  mustWinTaskId={data.mustWinTask?.id ?? null}
+                  selectedTaskId={selectedTaskId}
+                  onSelectTask={(task) => setSelectedTaskId(task.id)}
+                />
+              </div>
+
+              <div
+                className="today-workbench__resize"
+                role="separator"
+                tabIndex={0}
+                aria-label="Resize today context column"
+                aria-orientation="vertical"
+                aria-valuemin={320}
+                aria-valuemax={544}
+                aria-valuenow={workbenchRailWidth}
+                title="Drag to resize. Double-click to reset."
+                onPointerDown={(event) => {
+                  event.preventDefault();
+                  event.currentTarget.setPointerCapture(event.pointerId);
+                  setWorkbenchResizing(true);
+                  resizeWorkbenchRailFromPointer(event.clientX);
+                }}
+                onPointerMove={(event) => {
+                  if (!workbenchResizing) {
+                    return;
+                  }
+                  resizeWorkbenchRailFromPointer(event.clientX);
+                }}
+                onPointerUp={(event) => {
+                  if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+                    event.currentTarget.releasePointerCapture(event.pointerId);
+                  }
+                  setWorkbenchResizing(false);
+                }}
+                onDoubleClick={resetWorkbenchRailWidth}
+                onKeyDown={(event) => {
+                  if (event.key === "ArrowLeft") {
+                    event.preventDefault();
+                    updateWorkbenchRailWidth(workbenchRailWidth + WORKBENCH_RAIL_WIDTH_STEP);
+                    return;
+                  }
+                  if (event.key === "ArrowRight") {
+                    event.preventDefault();
+                    updateWorkbenchRailWidth(workbenchRailWidth - WORKBENCH_RAIL_WIDTH_STEP);
+                    return;
+                  }
+                  if (event.key === "Home") {
+                    event.preventDefault();
+                    resetWorkbenchRailWidth();
+                  }
+                }}
+              />
+
+              <aside className="today-workbench__side" aria-label="Today context">
+                <TaskInspectorPanel
+                  date={data.today}
+                  task={selectedTask}
+                  taskActions={taskActions}
+                  activeFocusSession={activeFocusSession}
+                  onAddTask={() => setTodayTaskCaptureOpen(true)}
+                  onPlanDay={() => navigateToMode("plan")}
+                  onClarifyTask={(taskId) => setClarifyTaskId(taskId)}
+                />
+
+                <div className="today-workbench__support">
+                  <GoalNudges
+                    date={data.today}
+                    nudges={data.goalNudges}
+                    onAdd={handleAddGoalNudge}
+                    isAdding={createGoalTaskMutation.isPending}
+                    compact
+                  />
+
+                  <DailyEssentials
+                    currentDay={data.currentDay}
+                    phase={phase}
+                  />
+                  <WeekDeepWorkStrip weekPlan={data.weekPlan} />
+                  <DayNotes tasks={data.quickCaptureTasks} today={data.today} />
+                </div>
+              </aside>
+            </section>
           </div>
         </div>
       ) : (

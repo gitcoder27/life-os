@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useDraggable } from "@dnd-kit/core";
 import type { TaskItem, DayPlannerBlockItem } from "../../../shared/lib/api";
-import { getRecoveryTaskDetail } from "../helpers/date-helpers";
+import { getRecoveryTaskCompactMeta, getRecoveryTaskDetail } from "../helpers/date-helpers";
 import { UNPLANNED_TASK_DRAG_TYPE, getUnplannedTaskDragId } from "../helpers/planner-drag";
 import { BlockTargetPicker } from "./BlockTargetPicker";
 
@@ -36,10 +36,11 @@ export function UnplannedTasks({
   onQuickAssign: (taskId: string, block: DayPlannerBlockItem) => void;
   onBulkAssign: (taskIds: string[], block: DayPlannerBlockItem) => Promise<void> | void;
 }) {
+  const isCollapsible = tone === "recovery";
   const [batchMode, setBatchMode] = useState(false);
   const [selectedTaskIds, setSelectedTaskIds] = useState<string[]>([]);
   const [targetBlockId, setTargetBlockId] = useState(blocks[0]?.id ?? "");
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useState(true);
 
   useEffect(() => {
     setSelectedTaskIds((current) =>
@@ -58,19 +59,30 @@ export function UnplannedTasks({
       <div className={`unplanned-lane unplanned-lane--${tone}${expanded ? " unplanned-lane--expanded" : ""}`}>
         <div
           className="unplanned-lane__header"
-          onClick={() => setExpanded((c) => !c)}
-          role="button"
-          tabIndex={0}
-          onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") setExpanded((c) => !c); }}
+          onClick={isCollapsible ? () => setExpanded((c) => !c) : undefined}
+          role={isCollapsible ? "button" : undefined}
+          tabIndex={isCollapsible ? 0 : undefined}
+          onKeyDown={isCollapsible
+            ? (e) => {
+                if (e.key === "Enter" || e.key === " ") setExpanded((c) => !c);
+              }
+            : undefined}
         >
           <div className="unplanned-lane__header-main">
             <h3 className="unplanned-lane__title">{title}</h3>
           </div>
+          {isCollapsible ? (
+            <span className={`unplanned-lane__chevron${expanded ? " unplanned-lane__chevron--open" : ""}`} aria-hidden="true">
+              ▾
+            </span>
+          ) : null}
         </div>
-        <div className="unplanned-lane__empty">
-          <span className="unplanned-lane__empty-icon">✓</span>
-          <p>{emptyText ?? (isHistoryDate ? "No unplanned tasks saved" : "All planned")}</p>
-        </div>
+        {expanded ? (
+          <div className="unplanned-lane__empty">
+            <span className="unplanned-lane__empty-icon">✓</span>
+            <p>{emptyText ?? (isHistoryDate ? "No unplanned tasks saved" : "All planned")}</p>
+          </div>
+        ) : null}
       </div>
     );
   }
@@ -104,18 +116,25 @@ export function UnplannedTasks({
     <div className={`unplanned-lane unplanned-lane--${tone}${expanded ? " unplanned-lane--expanded" : ""}`}>
       <div
         className="unplanned-lane__header"
-        onClick={() => setExpanded((c) => !c)}
-        role="button"
-        tabIndex={0}
-        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") setExpanded((c) => !c); }}
+        onClick={isCollapsible ? () => setExpanded((c) => !c) : undefined}
+        role={isCollapsible ? "button" : undefined}
+        tabIndex={isCollapsible ? 0 : undefined}
+        onKeyDown={isCollapsible
+          ? (e) => {
+              if (e.key === "Enter" || e.key === " ") setExpanded((c) => !c);
+            }
+          : undefined}
       >
         <div className="unplanned-lane__header-main">
           <h3 className="unplanned-lane__title">{title}</h3>
           <span className="unplanned-lane__count">{tasks.length}</span>
         </div>
-        {!readOnly && blocks.length > 0 ? (
+        {tone === "recovery" ? (
+          <span className="unplanned-lane__hint">drag to plan</span>
+        ) : null}
+        {!readOnly && blocks.length > 0 && expanded ? (
           <button
-            className="button button--ghost button--small"
+            className="unplanned-lane__mode-btn"
             type="button"
             onClick={(e) => {
               e.stopPropagation();
@@ -124,116 +143,127 @@ export function UnplannedTasks({
             }}
             disabled={isPending}
           >
-            {batchMode ? "Done" : "Plan multiple"}
+            {batchMode ? "Done" : "Select"}
           </button>
+        ) : null}
+        {isCollapsible ? (
+          <span className={`unplanned-lane__chevron${expanded ? " unplanned-lane__chevron--open" : ""}`} aria-hidden="true">
+            ▾
+          </span>
         ) : null}
       </div>
 
-      {description ? (
-        <p className="unplanned-lane__description">{description}</p>
-      ) : null}
+      {expanded ? (
+        <>
+          {description ? (
+            <p className="unplanned-lane__description">{description}</p>
+          ) : null}
 
-      {!readOnly && blocks.length === 0 ? (
-        <div className="unplanned-lane__helper">
-          Create a block first, then assign tasks from here.
-        </div>
-      ) : null}
+          {!readOnly && blocks.length === 0 ? (
+            <div className="unplanned-lane__helper">
+              Create a block first, then assign tasks from here.
+            </div>
+          ) : null}
 
-      {!readOnly && draggedTaskId ? (
-        <div className="unplanned-lane__drag-hint">
-          Drop on a time block to assign this task.
-        </div>
-      ) : null}
+          {!readOnly && draggedTaskId ? (
+            <div className="unplanned-lane__drag-hint">
+              Drop on a time block to assign this task.
+            </div>
+          ) : null}
 
-      {!readOnly && batchMode && blocks.length > 0 ? (
-        <div
-          className="unplanned-lane__batch"
-          onKeyDown={(event) => {
-            if (event.key === "Escape") {
-              event.preventDefault();
-              setBatchMode(false);
-              setSelectedTaskIds([]);
-              return;
-            }
+          {!readOnly && batchMode && blocks.length > 0 ? (
+            <div
+              className="unplanned-lane__batch"
+              onKeyDown={(event) => {
+                if (event.key === "Escape") {
+                  event.preventDefault();
+                  setBatchMode(false);
+                  setSelectedTaskIds([]);
+                  return;
+                }
 
-            if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "a") {
-              event.preventDefault();
-              setSelectedTaskIds(tasks.map((task) => task.id));
-            }
-          }}
-        >
-          <div className="unplanned-lane__batch-summary">
-            <strong>{selectedCount}</strong>
-            <span>{selectedCount === 1 ? "task selected" : "tasks selected"}</span>
-          </div>
-          <div className="unplanned-lane__batch-actions">
-            <button
-              className="button button--ghost button--small"
-              type="button"
-              onClick={() => setSelectedTaskIds(allVisibleSelected ? [] : tasks.map((task) => task.id))}
-              disabled={isPending}
-            >
-              {allVisibleSelected ? "Clear visible" : "Select all visible"}
-            </button>
-            {selectedCount > 0 ? (
-              <button
-                className="button button--ghost button--small"
-                type="button"
-                onClick={() => setSelectedTaskIds([])}
-                disabled={isPending}
-              >
-                Clear selection
-              </button>
-            ) : null}
-          </div>
-          <div className="unplanned-lane__batch-controls">
-            <label className="unplanned-lane__batch-field">
-              <span>Assign to</span>
-              <select
-                className="unplanned-lane__batch-select"
-                value={targetBlockId}
-                onChange={(event) => setTargetBlockId(event.target.value)}
-                disabled={isPending}
-              >
-                {blocks.map((block) => (
-                  <option key={block.id} value={block.id}>
-                    {formatBlockTime(block)} · {block.title || "Untitled"}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <button
-              className="button button--primary button--small"
-              type="button"
-              onClick={() => {
-                void handleAssignSelected();
+                if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "a") {
+                  event.preventDefault();
+                  setSelectedTaskIds(tasks.map((task) => task.id));
+                }
               }}
-              disabled={isPending || selectedCount === 0 || !targetBlockId}
             >
-              Assign selected
-            </button>
-          </div>
-        </div>
-      ) : null}
+              <div className="unplanned-lane__batch-summary">
+                <strong>{selectedCount}</strong>
+                <span>{selectedCount === 1 ? "task selected" : "tasks selected"}</span>
+              </div>
+              <div className="unplanned-lane__batch-actions">
+                <button
+                  className="button button--ghost button--small"
+                  type="button"
+                  onClick={() => setSelectedTaskIds(allVisibleSelected ? [] : tasks.map((task) => task.id))}
+                  disabled={isPending}
+                >
+                  {allVisibleSelected ? "Clear visible" : "Select all visible"}
+                </button>
+                {selectedCount > 0 ? (
+                  <button
+                    className="button button--ghost button--small"
+                    type="button"
+                    onClick={() => setSelectedTaskIds([])}
+                    disabled={isPending}
+                  >
+                    Clear selection
+                  </button>
+                ) : null}
+              </div>
+              <div className="unplanned-lane__batch-controls">
+                <label className="unplanned-lane__batch-field">
+                  <span>Assign to</span>
+                  <select
+                    className="unplanned-lane__batch-select"
+                    value={targetBlockId}
+                    onChange={(event) => setTargetBlockId(event.target.value)}
+                    disabled={isPending}
+                  >
+                    {blocks.map((block) => (
+                      <option key={block.id} value={block.id}>
+                        {formatBlockTime(block)} · {block.title || "Untitled"}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <button
+                  className="button button--primary button--small"
+                  type="button"
+                  onClick={() => {
+                    void handleAssignSelected();
+                  }}
+                  disabled={isPending || selectedCount === 0 || !targetBlockId}
+                >
+                  Assign selected
+                </button>
+              </div>
+            </div>
+          ) : null}
 
-      <div className="unplanned-lane__list">
-        {tasks.map((task) => (
-          <UnplannedTaskRow
-            key={task.id}
-            task={task}
-            blocks={blocks}
-            readOnly={readOnly}
-            batchMode={batchMode}
-            checked={selectedTaskIds.includes(task.id)}
-            isPending={isPending}
-            onToggleSelection={() => toggleTaskSelection(task.id)}
-            isActiveDrag={draggedTaskId === task.id}
-            isSuppressed={suppressedTaskId === task.id}
-            onQuickAssign={(block) => onQuickAssign(task.id, block)}
-            meta={showRecoveryDetail && task.scheduledForDate ? getRecoveryTaskDetail(task.scheduledForDate) : null}
-          />
-        ))}
-      </div>
+          <div className="unplanned-lane__list">
+            {tasks.map((task) => (
+              <UnplannedTaskRow
+                key={task.id}
+                task={task}
+                blocks={blocks}
+                readOnly={readOnly}
+                batchMode={batchMode}
+                checked={selectedTaskIds.includes(task.id)}
+                isPending={isPending}
+                onToggleSelection={() => toggleTaskSelection(task.id)}
+                isActiveDrag={draggedTaskId === task.id}
+                isSuppressed={suppressedTaskId === task.id}
+                onQuickAssign={(block) => onQuickAssign(task.id, block)}
+                meta={showRecoveryDetail && task.scheduledForDate ? getRecoveryTaskDetail(task.scheduledForDate) : null}
+                compactMeta={showRecoveryDetail && task.scheduledForDate ? getRecoveryTaskCompactMeta(task.scheduledForDate) : null}
+                tone={tone}
+              />
+            ))}
+          </div>
+        </>
+      ) : null}
     </div>
   );
 }
@@ -250,6 +280,8 @@ function UnplannedTaskRow({
   isSuppressed,
   onQuickAssign,
   meta,
+  compactMeta,
+  tone,
 }: {
   task: TaskItem;
   blocks: DayPlannerBlockItem[];
@@ -262,6 +294,8 @@ function UnplannedTaskRow({
   isSuppressed: boolean;
   onQuickAssign: (block: DayPlannerBlockItem) => void;
   meta?: string | null;
+  compactMeta?: { scheduledLabel: string; overdueLabel: string } | null;
+  tone?: "default" | "recovery";
 }) {
   const isDraggable = !readOnly && !batchMode && blocks.length > 0 && !isPending;
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
@@ -278,6 +312,7 @@ function UnplannedTaskRow({
       ref={setNodeRef}
       className={[
         "unplanned-task",
+        tone === "recovery" ? " unplanned-task--recovery" : "",
         batchMode ? " unplanned-task--batch" : "",
         isDraggable ? " unplanned-task--draggable" : "",
         isDragging || isActiveDrag ? " unplanned-task--dragging" : "",
@@ -300,14 +335,25 @@ function UnplannedTaskRow({
       ) : null}
 
       <div className="unplanned-task__info" title={task.title}>
-        <span className="unplanned-task__title">{task.title}</span>
-        {meta ? (
+        <div className="unplanned-task__title-row">
+          <span className="unplanned-task__title">{task.title}</span>
+          {compactMeta ? (
+            <span className="unplanned-task__status">{compactMeta.overdueLabel}</span>
+          ) : null}
+        </div>
+        {compactMeta || task.goal ? (
+          <div className="unplanned-task__meta-row">
+            {compactMeta ? (
+              <span className="unplanned-task__meta-pill">{compactMeta.scheduledLabel}</span>
+            ) : null}
+            {task.goal ? (
+              <span className={`unplanned-task__goal goal-chip__dot--${task.goal.domain}`}>
+                {task.goal.title}
+              </span>
+            ) : null}
+          </div>
+        ) : meta ? (
           <span className="unplanned-task__meta">{meta}</span>
-        ) : null}
-        {task.goal ? (
-          <span className={`unplanned-task__goal goal-chip__dot--${task.goal.domain}`}>
-            {task.goal.title}
-          </span>
         ) : null}
       </div>
 
@@ -323,11 +369,11 @@ function UnplannedTaskRow({
                   title={`Assign to ${blocks[0].title || "block"}`}
                   disabled={isPending}
                 >
-                  → {formatBlockLabel(blocks[0])}
+                  Plan
                 </button>
               ) : (
                 <BlockTargetPicker
-                  label="+ Assign"
+                  label="Plan"
                   blocks={blocks}
                   disabled={isPending}
                   triggerClassName="unplanned-task__assign-btn"
@@ -341,11 +387,6 @@ function UnplannedTaskRow({
       ) : null}
     </div>
   );
-}
-
-function formatBlockLabel(block: DayPlannerBlockItem): string {
-  const title = block.title || "Untitled";
-  return title.length > 15 ? title.slice(0, 15) + "…" : title;
 }
 
 function formatBlockTime(block: DayPlannerBlockItem): string {

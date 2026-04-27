@@ -13,6 +13,7 @@ import {
   useSensors,
 } from "@dnd-kit/core";
 import type { DragEndEvent, DragStartEvent } from "@dnd-kit/core";
+import type { IsoDateString } from "@life-os/contracts";
 
 import {
   formatMealSlotLabel,
@@ -158,7 +159,7 @@ function buildMealPlanSavePayload({
     notes: notes || null,
     entries: entries.map((entry, index) => ({
       id: entry.id,
-      date: entry.date,
+      date: entry.date as IsoDateString,
       mealSlot: entry.mealSlot,
       mealTemplateId: entry.mealTemplateId,
       servings: entry.servings,
@@ -167,7 +168,7 @@ function buildMealPlanSavePayload({
     })),
     prepSessions: prepSessions.map((session, index) => ({
       id: session.id,
-      scheduledForDate: session.scheduledForDate,
+      scheduledForDate: session.scheduledForDate as IsoDateString,
       title: session.title,
       notes: session.notes,
       sortOrder: index,
@@ -1654,6 +1655,22 @@ export function MealPlannerPage() {
   const lastSavedPayloadRef = useRef<string | null>(null);
   const lastAttemptedPayloadRef = useRef<string | null>(null);
 
+  const savePayload = useMemo(
+    () =>
+      buildMealPlanSavePayload({
+        notes: weekNotes,
+        entries,
+        prepSessions,
+        manualGroceries,
+        groceryItems,
+      }),
+    [entries, groceryItems, manualGroceries, prepSessions, weekNotes]
+  );
+  const serializedSavePayload = useMemo(
+    () => JSON.stringify(savePayload),
+    [savePayload]
+  );
+
   /* ── Drag & drop ── */
   const [activeDragTemplate, setActiveDragTemplate] =
     useState<MealTemplateItem | null>(null);
@@ -1742,16 +1759,24 @@ export function MealPlannerPage() {
       manualGroceries: nextManualGroceries,
       groceryItems: nextGroceryItems,
     });
+    const hydratedSerializedPayload = JSON.stringify(hydratedPayload);
+    const hasUnsavedDraft =
+      hasHydratedWeekRef.current &&
+      serializedSavePayload !== lastSavedPayloadRef.current;
+
+    if (hasUnsavedDraft && hydratedSerializedPayload !== serializedSavePayload) {
+      return;
+    }
 
     setEntries(nextEntries);
     setPrepSessions(nextPrepSessions);
     setGroceryItems(nextGroceryItems);
     setManualGroceries(nextManualGroceries);
     setWeekNotes(nextWeekNotes);
-    lastSavedPayloadRef.current = JSON.stringify(hydratedPayload);
+    lastSavedPayloadRef.current = hydratedSerializedPayload;
     lastAttemptedPayloadRef.current = lastSavedPayloadRef.current;
     hasHydratedWeekRef.current = true;
-  }, [weekQuery.data]);
+  }, [serializedSavePayload, weekQuery.data]);
 
   /* ── Entry helpers ── */
 
@@ -1784,22 +1809,6 @@ export function MealPlannerPage() {
       ].filter((t, i, arr) => arr.findIndex((x) => x.id === t.id) === i),
     [weekQuery.data?.mealTemplates, templatesQuery.data?.mealTemplates]
   );
-  const savePayload = useMemo(
-    () =>
-      buildMealPlanSavePayload({
-        notes: weekNotes,
-        entries,
-        prepSessions,
-        manualGroceries,
-        groceryItems,
-      }),
-    [entries, groceryItems, manualGroceries, prepSessions, weekNotes]
-  );
-  const serializedSavePayload = useMemo(
-    () => JSON.stringify(savePayload),
-    [savePayload]
-  );
-
   /* ── Actions ── */
 
   function assignTemplateToSlot(
@@ -1934,14 +1943,45 @@ export function MealPlannerPage() {
 
   /* ── Week navigation ── */
 
+  function saveCurrentDraftBeforeNavigation(nextWeekStart: string) {
+    if (nextWeekStart === weekStart) {
+      return;
+    }
+
+    if (
+      !hasHydratedWeekRef.current ||
+      serializedSavePayload === lastSavedPayloadRef.current
+    ) {
+      setWeekStart(nextWeekStart);
+      return;
+    }
+
+    if (saveMutation.isPending) {
+      return;
+    }
+
+    const payloadSnapshot = serializedSavePayload;
+    lastAttemptedPayloadRef.current = payloadSnapshot;
+
+    void saveMutation
+      .mutateAsync(savePayload)
+      .then(() => {
+        lastSavedPayloadRef.current = payloadSnapshot;
+        setWeekStart(nextWeekStart);
+      })
+      .catch(() => {
+        lastAttemptedPayloadRef.current = lastSavedPayloadRef.current;
+      });
+  }
+
   function goToPreviousWeek() {
-    setWeekStart(shiftWeek(weekStart, -1));
+    saveCurrentDraftBeforeNavigation(shiftWeek(weekStart, -1));
   }
   function goToNextWeek() {
-    setWeekStart(shiftWeek(weekStart, 1));
+    saveCurrentDraftBeforeNavigation(shiftWeek(weekStart, 1));
   }
   function goToCurrentWeek() {
-    setWeekStart(getWeekStartDate(today));
+    saveCurrentDraftBeforeNavigation(getWeekStartDate(today));
   }
 
   const isCurrentWeek = weekStart === getWeekStartDate(today);
@@ -1993,7 +2033,9 @@ export function MealPlannerPage() {
         .then(() => {
           lastSavedPayloadRef.current = payloadSnapshot;
         })
-        .catch(() => {});
+        .catch(() => {
+          lastAttemptedPayloadRef.current = lastSavedPayloadRef.current;
+        });
     }, MEAL_PLAN_AUTOSAVE_DELAY_MS);
 
     return () => {
@@ -2189,7 +2231,6 @@ export function MealPlannerPage() {
             }
             onSaved={(template) => {
               void templatesQuery.refetch();
-              void weekQuery.refetch();
               if (
                 recipeComposerState.mode === "create" &&
                 recipeComposerState.target

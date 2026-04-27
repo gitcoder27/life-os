@@ -16,6 +16,7 @@ import { requireAuthenticatedUser } from "../../lib/auth/require-auth.js";
 import { withGeneratedAt, withWriteSuccess } from "../../lib/http/response.js";
 import { getMonthEndDate, getWeekEndDate, parseIsoDate } from "../../lib/time/cycle.js";
 import { parseOrThrow } from "../../lib/validation/parse.js";
+import { timezoneSchema } from "../../lib/validation/timezone.js";
 import { ensureGoalConfigSeeded } from "../planning/goal-config.js";
 import { toPrismaGoalDomainSystemKey } from "../planning/planning-mappers.js";
 
@@ -118,7 +119,7 @@ function normalizeClockTime(value: string | null | undefined) {
 
 const onboardingCompletionSchema = z.object({
   displayName: z.string().min(1),
-  timezone: z.string().min(1),
+  timezone: timezoneSchema,
   currencyCode: z.string().length(3),
   weekStartsOn: z.number().int().min(0).max(6),
   dailyWaterTargetMl: z.number().int().positive(),

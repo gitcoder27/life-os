@@ -22,10 +22,6 @@ function buildPrimaryMessage(input: {
   readiness: TaskCommitmentGuidance["readiness"];
   suggestedReasons: TaskCommitmentReason[];
 }) {
-  if (input.readiness === "needs_clarification") {
-    return "Add the first visible step before scheduling this task.";
-  }
-
   if (input.suggestedReasons.includes("missing_next_action")) {
     return "Ready to schedule. Adding a first visible step can make starting easier.";
   }
@@ -70,13 +66,11 @@ export function buildTaskCommitmentGuidance(task: CommitmentTaskLike): TaskCommi
     suggestedReasons.push("missing_focus_length");
   }
 
-  const readiness: TaskCommitmentGuidance["readiness"] = "ready";
-
   return {
-    readiness,
+    readiness: "ready",
     blockingReasons,
     suggestedReasons,
-    primaryMessage: buildPrimaryMessage({ readiness, suggestedReasons }),
+    primaryMessage: buildPrimaryMessage({ readiness: "ready", suggestedReasons }),
   };
 }
 
@@ -105,5 +99,6 @@ export function mergeTaskCommitmentRequest(
 export function buildTaskCommitmentFieldErrors(
   guidance: TaskCommitmentGuidance,
 ): ApiFieldError[] {
+  void guidance;
   return [];
 }

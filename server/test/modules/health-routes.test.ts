@@ -672,4 +672,18 @@ describe("health routes meal planning", () => {
       }),
     );
   });
+
+  it("rejects inverted and overly broad health summary ranges", async () => {
+    const invertedRange = await app!.inject({
+      method: "GET",
+      url: "/api/health/summary?from=2026-03-10&to=2026-03-09",
+    });
+    const broadRange = await app!.inject({
+      method: "GET",
+      url: "/api/health/summary?from=2026-01-01&to=2026-12-31",
+    });
+
+    expect(invertedRange.statusCode).toBe(400);
+    expect(broadRange.statusCode).toBe(400);
+  });
 });

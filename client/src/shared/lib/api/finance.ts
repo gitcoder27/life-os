@@ -5,9 +5,53 @@ import {
 } from "@tanstack/react-query";
 
 import type {
-  RecurrenceDefinition,
+  AdminItemMutationResponse,
+  AdminItemRecord,
+  AdminItemStatus,
+  CreditCardItem,
+  CreditCardMutationResponse,
+  CreditCardStatus,
+  DeleteExpenseResponse,
+  ExpenseCategoryMutationResponse,
+  ExpenseMutationResponse,
+  ExpensesResponse,
+  FinanceAccountItem,
+  FinanceAccountMutationResponse,
+  FinanceAccountType,
+  FinanceBillCompletionMode,
+  FinanceBillItem,
+  FinanceBillMutationResponse,
+  FinanceBillReconciliationStatus,
+  FinanceBillsResponse,
+  FinanceCategoriesResponse,
+  FinanceContributionFit,
+  FinanceDashboardResponse,
+  FinanceGoalInsightItem,
+  FinanceGoalMutationResponse,
+  FinanceGoalType,
+  FinanceInsightsItem,
+  FinanceInsightsResponse,
+  FinanceMonthPlanItem,
+  FinanceMonthPlanMutationResponse,
+  FinanceMonthPlanResponse,
+  FinancePaceStatus,
+  FinanceSummaryResponse,
+  FinanceTransactionItem,
+  FinanceTransactionMutationResponse,
+  FinanceTransactionType,
+  FinanceWatchStatus,
+  LoanItem,
+  LoanMutationResponse,
+  LoanStatus,
   RecurrenceInput,
-} from "../recurrence";
+  RecurringExpenseMutationResponse,
+  RecurringExpensesResponse,
+  RecurringIncomeItem,
+  RecurringIncomeMutationResponse,
+  RecurringIncomeStatus,
+  UpdateFinanceGoalRequest,
+  UpdateFinanceMonthPlanRequest,
+} from "@life-os/contracts";
 import {
   getMonthEndDate,
   getMonthStartDate,
@@ -21,401 +65,38 @@ import {
   unwrapRequiredResult,
 } from "./core";
 
-type FinanceSummaryResponse = {
-  generatedAt: string;
-  month: string;
-  currencyCode: string;
-  totalSpentMinor: number;
-  previousMonthTotalSpentMinor: number;
-  categoryTotals: Array<{
-    expenseCategoryId: string | null;
-    name: string;
-    color: string | null;
-    totalAmountMinor: number;
-  }>;
-  upcomingBills: FinanceBillItem[];
+export type {
+  AdminItemRecord,
+  AdminItemStatus,
+  CreditCardItem,
+  CreditCardStatus,
+  FinanceAccountItem,
+  FinanceAccountType,
+  FinanceBillCompletionMode,
+  FinanceBillItem,
+  FinanceBillReconciliationStatus,
+  FinanceContributionFit,
+  FinanceDashboardResponse,
+  FinanceGoalInsightItem,
+  FinanceGoalType,
+  FinanceInsightsItem,
+  FinanceInsightsResponse,
+  FinanceMonthPlanItem,
+  FinanceMonthPlanResponse,
+  FinancePaceStatus,
+  FinanceTransactionItem,
+  FinanceTransactionType,
+  FinanceWatchStatus,
+  LoanItem,
+  LoanStatus,
+  RecurringIncomeItem,
+  RecurringIncomeStatus,
+  UpdateFinanceGoalRequest,
+  UpdateFinanceMonthPlanRequest,
 };
 
-export type FinanceAccountType = "bank" | "cash" | "wallet" | "other";
-export type FinanceTransactionType = "income" | "expense" | "transfer" | "adjustment";
-export type RecurringIncomeStatus = "active" | "paused" | "archived";
-export type CreditCardStatus = "active" | "archived";
-export type LoanStatus = "active" | "paid_off" | "archived";
-
-export type FinanceBillCompletionMode = "pay_and_log" | "mark_paid_only";
-export type FinanceBillReconciliationStatus =
-  | "due"
-  | "paid_with_expense"
-  | "paid_without_expense"
-  | "rescheduled"
-  | "dropped";
-export type FinanceBillItem = {
-  id: string;
-  title: string;
-  dueOn: string;
-  amountMinor: number | null;
-  status: "pending" | "done" | "rescheduled" | "dropped";
-  expenseCategoryId: string | null;
-  note: string | null;
-  paidAt: string | null;
-  linkedExpenseId: string | null;
-  completionMode: FinanceBillCompletionMode | null;
-  reconciliationStatus: FinanceBillReconciliationStatus;
-  recurringExpenseTemplateId: string | null;
-  createdAt: string;
-  updatedAt: string;
-};
-
-export type FinanceBillsResponse = {
-  generatedAt: string;
-  month: string;
-  bills: FinanceBillItem[];
-};
-
-export type FinanceAccountItem = {
-  id: string;
-  name: string;
-  accountType: FinanceAccountType;
-  currencyCode: string;
-  openingBalanceMinor: number;
-  currentBalanceMinor: number;
-  archivedAt: string | null;
-  createdAt: string;
-  updatedAt: string;
-};
-
-export type FinanceTransactionItem = {
-  id: string;
-  accountId: string;
-  transferAccountId: string | null;
-  transactionType: FinanceTransactionType;
-  amountMinor: number;
-  currencyCode: string;
-  occurredOn: string;
-  description: string | null;
-  expenseCategoryId: string | null;
-  billId: string | null;
-  source: "ledger" | "legacy_expense";
-  createdAt: string;
-  updatedAt: string;
-};
-
-export type RecurringIncomeItem = {
-  id: string;
-  accountId: string;
-  title: string;
-  amountMinor: number;
-  currencyCode: string;
-  recurrenceRule: string;
-  nextExpectedOn: string;
-  status: RecurringIncomeStatus;
-  createdAt: string;
-  updatedAt: string;
-};
-
-export type CreditCardItem = {
-  id: string;
-  paymentAccountId: string | null;
-  name: string;
-  issuer: string | null;
-  currencyCode: string;
-  creditLimitMinor: number;
-  outstandingBalanceMinor: number;
-  statementDay: number | null;
-  paymentDueDay: number | null;
-  minimumDueMinor: number | null;
-  utilizationPercent: number;
-  status: CreditCardStatus;
-  createdAt: string;
-  updatedAt: string;
-};
-
-export type LoanItem = {
-  id: string;
-  paymentAccountId: string | null;
-  name: string;
-  lender: string | null;
-  currencyCode: string;
-  principalAmountMinor: number | null;
-  outstandingBalanceMinor: number;
-  emiAmountMinor: number;
-  interestRateBps: number | null;
-  dueDay: number | null;
-  startOn: string | null;
-  endOn: string | null;
-  progressPercent: number;
-  status: LoanStatus;
-  createdAt: string;
-  updatedAt: string;
-};
-
-export type FinanceDashboardResponse = {
-  generatedAt: string;
-  month: string;
-  currencyCode: string;
-  cashAvailableMinor: number;
-  incomeReceivedMinor: number;
-  plannedIncomeMinor: number | null;
-  totalSpentMinor: number;
-  upcomingDueMinor: number;
-  debtDueMinor: number;
-  debtOutstandingMinor: number;
-  safeToSpendMinor: number;
-  accountCount: number;
-  transactionCount: number;
-  upcomingBills: FinanceBillItem[];
-  accounts: FinanceAccountItem[];
-  recentTransactions: FinanceTransactionItem[];
-  recurringIncome: RecurringIncomeItem[];
-  creditCards: CreditCardItem[];
-  loans: LoanItem[];
-};
-
-export type FinancePaceStatus = "no_plan" | "on_pace" | "slightly_heavy" | "off_track";
-export type FinanceWatchStatus = "within_limit" | "near_limit" | "over_limit";
-export type FinanceGoalType = "emergency_fund" | "debt_payoff" | "travel" | "large_purchase" | "other";
-export type FinanceContributionFit = "on_track" | "tight" | "needs_plan";
-
-export type FinanceMonthPlanItem = {
-  id: string | null;
-  month: string;
-  plannedSpendMinor: number | null;
-  fixedObligationsMinor: number | null;
-  flexibleSpendTargetMinor: number | null;
-  plannedIncomeMinor: number | null;
-  expectedLargeExpensesMinor: number | null;
-  categoryWatches: Array<{
-    expenseCategoryId: string;
-    name: string;
-    color: string | null;
-    watchLimitMinor: number;
-    actualSpentMinor: number;
-    status: FinanceWatchStatus;
-  }>;
-  billTimeline: {
-    today: FinanceSummaryResponse["upcomingBills"];
-    thisWeek: FinanceSummaryResponse["upcomingBills"];
-    laterThisMonth: FinanceSummaryResponse["upcomingBills"];
-  };
-  paceStatus: FinancePaceStatus;
-  paceSummary: string;
-  expectedSpendToDateMinor: number | null;
-  remainingPlannedSpendMinor: number | null;
-  remainingFlexibleSpendMinor: number | null;
-};
-
-export type FinanceMonthPlanResponse = {
-  generatedAt: string;
-  monthPlan: FinanceMonthPlanItem;
-};
-
-export type FinanceGoalInsightItem = {
-  goalId: string;
-  title: string;
-  status: "active" | "paused" | "completed" | "archived";
-  route: string;
-  goalType: FinanceGoalType | null;
-  targetDate: string | null;
-  targetAmountMinor: number | null;
-  currentAmountMinor: number | null;
-  progressPercent: number;
-  remainingAmountMinor: number | null;
-  monthlyContributionTargetMinor: number | null;
-  contributionFit: FinanceContributionFit;
-  contributionSummary: string;
-  nextMilestoneTitle: string | null;
-  nextMilestoneDate: string | null;
-};
-
-export type FinanceInsightsItem = {
-  month: string;
-  moneyGoals: FinanceGoalInsightItem[];
-  currentFocus: {
-    expenseCategoryId: string;
-    name: string;
-    color: string | null;
-    monthSpentMinor: number;
-    guidance: string;
-    route: string;
-  } | null;
-  weeklyReview: {
-    route: string;
-    startDate: string;
-    endDate: string;
-    spendingTotalMinor: number;
-    topSpendCategory: string | null;
-    biggestWin: string | null;
-    keepText: string | null;
-    improveText: string | null;
-    spendWatchCategoryName: string | null;
-  } | null;
-  monthlyReview: {
-    route: string;
-    startDate: string;
-    endDate: string;
-    monthVerdict: string | null;
-    biggestWin: string | null;
-    biggestLeak: string | null;
-    nextMonthTheme: string | null;
-    topSpendingCategories: Array<{
-      category: string;
-      amountMinor: number;
-    }>;
-  } | null;
-};
-
-export type FinanceInsightsResponse = {
-  generatedAt: string;
-  insights: FinanceInsightsItem;
-};
-
-export type UpdateFinanceMonthPlanRequest = {
-  plannedSpendMinor?: number | null;
-  fixedObligationsMinor?: number | null;
-  flexibleSpendTargetMinor?: number | null;
-  plannedIncomeMinor?: number | null;
-  expectedLargeExpensesMinor?: number | null;
-  categoryWatches?: Array<{
-    expenseCategoryId: string;
-    watchLimitMinor: number;
-  }>;
-};
-
-type FinanceMonthPlanMutationResponse = FinanceMonthPlanResponse;
-type FinanceGoalMutationResponse = {
-  generatedAt: string;
-  goalId: string;
-};
-
-export type UpdateFinanceGoalRequest = {
-  goalType?: FinanceGoalType | null;
-  targetAmountMinor?: number | null;
-  currentAmountMinor?: number | null;
-  monthlyContributionTargetMinor?: number | null;
-};
-
-type ExpensesResponse = {
-  generatedAt: string;
-  from: string;
-  to: string;
-  expenses: Array<{
-    id: string;
-    expenseCategoryId: string | null;
-    amountMinor: number;
-    currencyCode: string;
-    spentOn: string;
-    description: string | null;
-    source: "manual" | "quick_capture" | "template";
-    billId: string | null;
-    recurringExpenseTemplateId: string | null;
-    createdAt: string;
-    updatedAt: string;
-  }>;
-};
-
-type RecurringExpensesResponse = {
-  generatedAt: string;
-  recurringExpenses: Array<{
-    id: string;
-    title: string;
-    expenseCategoryId: string | null;
-    defaultAmountMinor: number | null;
-    currencyCode: string;
-    recurrenceRule: string;
-    recurrence: RecurrenceDefinition | null;
-    nextDueOn: string;
-    remindDaysBefore: number;
-    status: "active" | "paused" | "archived";
-    createdAt: string;
-    updatedAt: string;
-  }>;
-};
-
-type FinanceCategoriesResponse = {
-  generatedAt: string;
-  categories: Array<{
-    id: string;
-    name: string;
-    color: string | null;
-    sortOrder: number;
-    createdAt: string;
-    archivedAt: string | null;
-  }>;
-};
-
-type ExpenseMutationResponse = {
-  generatedAt: string;
-  expense: ExpensesResponse["expenses"][number];
-};
-
-type DeleteExpenseMutationResponse = {
-  generatedAt: string;
-  deleted: true;
-  expenseId: string;
-};
-
-type FinanceAccountMutationResponse = {
-  generatedAt: string;
-  account: FinanceAccountItem;
-};
-
-type FinanceTransactionMutationResponse = {
-  generatedAt: string;
-  transaction: FinanceTransactionItem;
-};
-
-type RecurringIncomeMutationResponse = {
-  generatedAt: string;
-  recurringIncome: RecurringIncomeItem;
-};
-
-type CreditCardMutationResponse = {
-  generatedAt: string;
-  creditCard: CreditCardItem;
-};
-
-type LoanMutationResponse = {
-  generatedAt: string;
-  loan: LoanItem;
-};
-
-type CategoryMutationResponse = {
-  generatedAt: string;
-  category: FinanceCategoriesResponse["categories"][number];
-};
-
-type RecurringExpenseMutationResponse = {
-  generatedAt: string;
-  recurringExpense: RecurringExpensesResponse["recurringExpenses"][number];
-};
-
-type FinanceBillMutationResponse = {
-  generatedAt: string;
-  bill: FinanceBillItem;
-  expense?: ExpensesResponse["expenses"][number] | null;
-};
-
-export type AdminItemStatus = "pending" | "done" | "rescheduled" | "dropped";
-
-export type AdminItemRecord = {
-  id: string;
-  title: string;
-  itemType: "bill" | "admin";
-  dueOn: string;
-  status: AdminItemStatus;
-  relatedTaskId: string | null;
-  recurringExpenseTemplateId: string | null;
-  amountMinor: number | null;
-  note: string | null;
-  completedAt: string | null;
-  createdAt: string;
-  updatedAt: string;
-};
-
-type AdminItemMutationResponse = {
-  generatedAt: string;
-  adminItem: AdminItemRecord;
-};
+type DeleteExpenseMutationResponse = DeleteExpenseResponse;
+type CategoryMutationResponse = ExpenseCategoryMutationResponse;
 
 const invalidateFinanceCollections = (queryClient: ReturnType<typeof useQueryClient>) => {
   void queryClient.invalidateQueries({ queryKey: queryKeys.financeCategories });

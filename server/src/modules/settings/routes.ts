@@ -11,8 +11,9 @@ import { z } from "zod";
 
 import { requireAuthenticatedUser } from "../../lib/auth/require-auth.js";
 import { withGeneratedAt } from "../../lib/http/response.js";
-import { isValidTimezone, resolveDisplayTimezone } from "../../lib/time/user-time.js";
+import { resolveDisplayTimezone } from "../../lib/time/user-time.js";
 import { parseOrThrow } from "../../lib/validation/parse.js";
+import { parseTimezoneCandidate, timezoneSchema } from "../../lib/validation/timezone.js";
 import {
   mergeNotificationPreferences,
   normalizeNotificationPreferences,
@@ -65,23 +66,13 @@ function getRequestTimezone(request: { headers: Record<string, unknown> }) {
   const headerValue = request.headers[CLIENT_TIMEZONE_HEADER];
   const candidate = Array.isArray(headerValue) ? headerValue[0] : headerValue;
 
-  if (typeof candidate !== "string") {
-    return null;
-  }
-
-  const timezone = candidate.trim();
-  return isValidTimezone(timezone) ? timezone : null;
+  return parseTimezoneCandidate(candidate);
 }
 
 const updateSettingsProfileSchema = z
   .object({
     displayName: z.string().min(1).max(200).nullable().optional(),
-    timezone: z
-      .string()
-      .min(1)
-      .max(120)
-      .refine(isValidTimezone, "Invalid timezone")
-      .optional(),
+    timezone: timezoneSchema.optional(),
     currencyCode: z
       .string()
       .length(3)

@@ -251,19 +251,20 @@ describe("task commitment routes", () => {
       }>;
     }>(response.body);
     expect(payload.tasks[0]?.commitmentGuidance).toEqual({
-      readiness: "needs_clarification",
-      blockingReasons: ["missing_next_action"],
+      readiness: "ready",
+      blockingReasons: [],
       suggestedReasons: [
+        "missing_next_action",
         "missing_five_minute_version",
         "missing_estimate",
         "missing_obstacle",
         "missing_focus_length",
       ],
-      primaryMessage: "Add the first visible step before scheduling this task.",
+      primaryMessage: "Ready to schedule. Adding a first visible step can make starting easier.",
     });
   });
 
-  it("rejects commit when next action is still missing", async () => {
+  it("commits an inbox task even when next action is still missing", async () => {
     const response = await app!.inject({
       method: "POST",
       url: `/api/tasks/${TASK_ID}/commit`,
@@ -272,20 +273,33 @@ describe("task commitment routes", () => {
       },
     });
 
-    expect(response.statusCode).toBe(400);
+    expect(response.statusCode).toBe(200);
     const payload = parseBody<{
-      code: string;
-      message: string;
-      fieldErrors?: Array<{ field: string; message: string }>;
+      task: {
+        scheduledForDate: string | null;
+        nextAction: string | null;
+        commitmentGuidance: {
+          readiness: string;
+          blockingReasons: string[];
+          suggestedReasons: string[];
+          primaryMessage: string;
+        };
+      };
     }>(response.body);
-    expect(payload.code).toBe("VALIDATION_ERROR");
-    expect(payload.message).toBe("Add the first visible step before scheduling this task.");
-    expect(payload.fieldErrors).toEqual([
-      {
-        field: "nextAction",
-        message: "Add the first visible step before scheduling this task.",
-      },
-    ]);
+    expect(payload.task.scheduledForDate).toBe("2026-04-19");
+    expect(payload.task.nextAction).toBeNull();
+    expect(payload.task.commitmentGuidance).toEqual({
+      readiness: "ready",
+      blockingReasons: [],
+      suggestedReasons: [
+        "missing_next_action",
+        "missing_five_minute_version",
+        "missing_estimate",
+        "missing_obstacle",
+        "missing_focus_length",
+      ],
+      primaryMessage: "Ready to schedule. Adding a first visible step can make starting easier.",
+    });
   });
 
   it("commits and schedules a clarified inbox task", async () => {

@@ -103,57 +103,61 @@ export function DailyLaunchCard({
   const canSubmit = Boolean(selectedTaskId || newTaskTitle.trim());
 
   return (
-    <section className="daily-launch">
+    <section className="daily-launch" aria-labelledby="daily-launch-title">
       <div className="daily-launch__header">
-        <span className="daily-launch__eyebrow">Daily setup</span>
-        <h2 className="daily-launch__title">Pick one thing worth protecting.</h2>
+        <div className="daily-launch__heading">
+          <span className="daily-launch__eyebrow">Daily setup</span>
+          <h2 className="daily-launch__title" id="daily-launch-title">Choose today's anchor.</h2>
+        </div>
         <p className="daily-launch__intro">
-          Define the task, optionally name the first visible step, and note what is most likely to get in the way.
+          Keep the queue visible. Mark the one task that deserves protection, then continue working.
         </p>
       </div>
 
       <div className="daily-launch__fields">
-        {hasSelectableTasks ? (
-          <div className="daily-launch__field">
-            <label className="daily-launch__label" htmlFor="dl-must-win">Choose a task</label>
-            <select
-              id="dl-must-win"
-              className="daily-launch__select"
-              value={selectedTaskId}
-              onChange={(event) => setSelectedTaskId(event.target.value)}
-            >
-              <option value="">Create a new task below</option>
-              {selectableTasks.map((task) => (
-                <option key={task.id} value={task.id}>{task.title}</option>
-              ))}
-            </select>
-          </div>
-        ) : null}
+        <div className="daily-launch__primary-fields">
+          {hasSelectableTasks ? (
+            <div className="daily-launch__field">
+              <label className="daily-launch__label" htmlFor="dl-must-win">Anchor task</label>
+              <select
+                id="dl-must-win"
+                className="daily-launch__select"
+                value={selectedTaskId}
+                onChange={(event) => setSelectedTaskId(event.target.value)}
+              >
+                <option value="">Create a new task below</option>
+                {selectableTasks.map((task) => (
+                  <option key={task.id} value={task.id}>{task.title}</option>
+                ))}
+              </select>
+            </div>
+          ) : null}
 
-        {!selectedTaskId ? (
+          {!selectedTaskId ? (
+            <div className="daily-launch__field">
+              <label className="daily-launch__label" htmlFor="dl-new-task">
+                {hasSelectableTasks ? "New anchor" : "Anchor task"}
+              </label>
+              <input
+                id="dl-new-task"
+                className="daily-launch__input"
+                value={newTaskTitle}
+                onChange={(event) => setNewTaskTitle(event.target.value)}
+                placeholder="Finish the proposal intro"
+              />
+            </div>
+          ) : null}
+
           <div className="daily-launch__field">
-            <label className="daily-launch__label" htmlFor="dl-new-task">
-              {hasSelectableTasks ? "New task" : "Task"}
-            </label>
+            <label className="daily-launch__label" htmlFor="dl-next-action">First step</label>
             <input
-              id="dl-new-task"
+              id="dl-next-action"
               className="daily-launch__input"
-              value={newTaskTitle}
-              onChange={(event) => setNewTaskTitle(event.target.value)}
-              placeholder="Finish the proposal intro"
+              value={nextAction}
+              onChange={(event) => setNextAction(event.target.value)}
+              placeholder="Open the proposal and write the opening paragraph"
             />
           </div>
-        ) : null}
-
-        <div className="daily-launch__field">
-          <label className="daily-launch__label" htmlFor="dl-next-action">First step (optional)</label>
-          <input
-            id="dl-next-action"
-            className="daily-launch__input"
-            value={nextAction}
-            onChange={(event) => setNextAction(event.target.value)}
-            placeholder="Open the proposal and write the opening paragraph"
-          />
         </div>
 
         <div className="daily-launch__row">
@@ -208,13 +212,16 @@ export function DailyLaunchCard({
       </div>
 
       <div className="daily-launch__footer">
+        <p className="daily-launch__hint">
+          Optional, but useful when the day is noisy.
+        </p>
         <button
           className="button button--primary"
           type="button"
           disabled={isBusy || !canSubmit}
           onClick={() => void handleSave()}
         >
-          {isBusy ? "Saving..." : "Complete launch"}
+          {isBusy ? "Saving..." : "Set today's anchor"}
         </button>
       </div>
     </section>

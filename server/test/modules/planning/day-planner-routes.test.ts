@@ -62,6 +62,17 @@ type PlanningCycleRecord = {
   priorities: [];
 };
 
+type CyclePriorityRecord = {
+  id: string;
+  planningCycleId: string;
+  slot: 1 | 2 | 3;
+  title: string;
+  status: "PENDING";
+  goalId: string | null;
+  goal: null;
+  completedAt: Date | null;
+};
+
 const DAY_ISO = "2026-03-14";
 const DAY_START = new Date("2026-03-14T00:00:00.000Z");
 const NEXT_DAY_ISO = "2026-03-15";
@@ -100,9 +111,11 @@ describe("day planner planning routes", () => {
   let planningCyclesByDate: Map<string, PlanningCycleRecord>;
   let plannerBlocks: PlannerBlockRecord[];
   let plannerLinks: PlannerLinkRecord[];
+  let cyclePriorities: CyclePriorityRecord[];
   let blockCounter: number;
   let linkCounter: number;
   let cycleCounter: number;
+  let priorityCounter: number;
 
   const authenticatedUser = {
     id: "user-1",
@@ -188,9 +201,11 @@ describe("day planner planning routes", () => {
     planningCyclesByDate = new Map();
     plannerBlocks = [];
     plannerLinks = [];
+    cyclePriorities = [];
     blockCounter = 1;
     linkCounter = 1;
     cycleCounter = 1;
+    priorityCounter = 1;
     ensurePlanningCycleRecord(DAY_START);
 
     prisma.$transaction = vi.fn(async (callback: (tx: Record<string, unknown>) => Promise<unknown>) => {
@@ -249,7 +264,47 @@ describe("day planner planning routes", () => {
       findMany: vi.fn().mockResolvedValue([]),
     } as any;
     prisma.cyclePriority = {
-      findMany: vi.fn().mockResolvedValue([]),
+      findMany: vi.fn().mockImplementation(async ({ where }: any = {}) =>
+        cyclePriorities
+          .filter((priority) => where?.planningCycleId ? priority.planningCycleId === where.planningCycleId : true)
+          .sort((left, right) => left.slot - right.slot)
+          .map((priority) => ({ ...priority })),
+      ),
+      deleteMany: vi.fn().mockImplementation(async ({ where }: any) => {
+        const ids = new Set((where?.id?.in ?? []) as string[]);
+        const before = cyclePriorities.length;
+        cyclePriorities = cyclePriorities.filter((priority) => !ids.has(priority.id));
+        return { count: before - cyclePriorities.length };
+      }),
+      create: vi.fn().mockImplementation(async ({ data }: any) => {
+        const created: CyclePriorityRecord = {
+          id: `priority-${priorityCounter++}`,
+          planningCycleId: data.planningCycleId,
+          slot: data.slot,
+          title: data.title,
+          status: "PENDING",
+          goalId: data.goalId ?? null,
+          goal: null,
+          completedAt: null,
+        };
+        cyclePriorities.push(created);
+        return { ...created };
+      }),
+      update: vi.fn().mockImplementation(async ({ where, data }: any) => {
+        const priorityIndex = cyclePriorities.findIndex((priority) => priority.id === where.id);
+        if (priorityIndex === -1) {
+          throw new Error("Priority not found");
+        }
+
+        cyclePriorities[priorityIndex] = {
+          ...cyclePriorities[priorityIndex]!,
+          slot: data.slot ?? cyclePriorities[priorityIndex]!.slot,
+          title: data.title ?? cyclePriorities[priorityIndex]!.title,
+          goalId: data.goalId === undefined ? cyclePriorities[priorityIndex]!.goalId : data.goalId,
+        };
+
+        return { ...cyclePriorities[priorityIndex]! };
+      }),
     } as any;
     prisma.habit = {
       findMany: vi.fn().mockResolvedValue([]),
@@ -532,6 +587,45 @@ describe("day planner planning routes", () => {
     if (app) {
       await app.close();
     }
+  });
+
+  it("accepts three day priorities", async () => {
+    const response = await app!.inject({
+      method: "PUT",
+      url: `/api/planning/days/${DAY_ISO}/priorities`,
+      payload: {
+        priorities: [
+          { slot: 1, title: "Ship the review", goalId: null },
+          { slot: 2, title: "Exercise", goalId: null },
+          { slot: 3, title: "Plan dinner", goalId: null },
+        ],
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(JSON.parse(response.body).priorities).toEqual([
+      expect.objectContaining({ slot: 1, title: "Ship the review" }),
+      expect.objectContaining({ slot: 2, title: "Exercise" }),
+      expect.objectContaining({ slot: 3, title: "Plan dinner" }),
+    ]);
+  });
+
+  it("rejects more than three day priorities", async () => {
+    const response = await app!.inject({
+      method: "PUT",
+      url: `/api/planning/days/${DAY_ISO}/priorities`,
+      payload: {
+        priorities: [
+          { slot: 1, title: "One", goalId: null },
+          { slot: 2, title: "Two", goalId: null },
+          { slot: 3, title: "Three", goalId: null },
+          { slot: 3, title: "Four", goalId: null },
+        ],
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(JSON.parse(response.body).message).toBe("Request validation failed");
   });
 
   it("creates, updates, reorders, and clears day planner blocks while syncing task times", async () => {

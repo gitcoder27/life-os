@@ -113,7 +113,7 @@ export const priorityInputSchema = z.object({
 
 export const dayPriorityInputSchema = z.object({
   id: z.string().uuid().optional(),
-  slot: z.union([z.literal(1), z.literal(2)]),
+  slot: z.union([z.literal(1), z.literal(2), z.literal(3)]),
   title: z.string().trim().min(1).max(200),
   goalId: z.string().uuid().nullable().optional(),
 });
@@ -152,7 +152,7 @@ export const updateGoalSchema = z
   .refine((value) => Object.keys(value).length > 0, "At least one field must be updated");
 
 export const updateDayPrioritiesSchema = z.object({
-  priorities: z.array(dayPriorityInputSchema).max(2),
+  priorities: z.array(dayPriorityInputSchema).max(3),
 });
 
 export const updateWeekPrioritiesSchema = z.object({

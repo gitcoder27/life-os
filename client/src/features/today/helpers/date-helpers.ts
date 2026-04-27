@@ -25,6 +25,16 @@ export function getRecoveryTaskDetail(isoDate: string) {
   return `Scheduled ${formatRecoveryDate(isoDate)} · overdue by ${overdueDays} day${overdueDays === 1 ? "" : "s"}`;
 }
 
+export function getRecoveryTaskCompactMeta(isoDate: string) {
+  const difference = daysUntil(isoDate);
+  const overdueDays = Math.max(Math.abs(difference), 1);
+
+  return {
+    scheduledLabel: formatRecoveryDate(isoDate),
+    overdueLabel: overdueDays === 1 ? "1d overdue" : `${overdueDays}d overdue`,
+  };
+}
+
 let draftKeyCounter = 0;
 export function nextDraftKey() {
   return `draft-${++draftKeyCounter}`;

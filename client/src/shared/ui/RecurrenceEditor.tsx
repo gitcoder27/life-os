@@ -1,11 +1,11 @@
 import { useState } from "react";
+import type { IsoDateString, RecurrenceInput as ContractRecurrenceInput } from "@life-os/contracts";
 import { formatShortDate, getTodayDate } from "../lib/api";
 import {
   type RecurrenceContext,
   type RecurrenceEndCondition,
   type RecurrenceEndType,
   type RecurrenceFrequency,
-  type RecurrenceInput,
   type RecurrenceRuleInput,
   type MonthlyNthWeekdayRule,
   DAY_LABELS_SHORT,
@@ -317,6 +317,17 @@ export function RecurrenceToggle({
 
 // ── Helper to build RecurrenceInput from editor state ───
 
-export function buildRecurrenceInput(rule: RecurrenceRuleInput): RecurrenceInput {
-  return { rule };
+export function buildRecurrenceInput(rule: RecurrenceRuleInput): ContractRecurrenceInput {
+  return {
+    rule: {
+      ...rule,
+      startsOn: rule.startsOn as IsoDateString,
+      end: rule.end
+        ? {
+            ...rule.end,
+            until: rule.end.until == null ? rule.end.until : (rule.end.until as IsoDateString),
+          }
+        : rule.end,
+    },
+  };
 }

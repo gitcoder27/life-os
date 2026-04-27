@@ -963,6 +963,10 @@ export async function replaceGoalDomainConfigs(
   await app.prisma.$transaction(async (tx) => {
     let nextArchivedSortOrder = normalizedDomains.length + 1;
     const requestedIds = new Set(normalizedDomains.flatMap((domain) => (domain.id ? [domain.id] : [])));
+    const reorderSortOrderOffset = Math.max(
+      normalizedDomains.length,
+      ...existingDomains.map((domain) => domain.sortOrder),
+    ) + existingDomains.length + 1;
 
     for (const existingDomain of existingDomains) {
       if (requestedIds.has(existingDomain.id)) {
@@ -989,6 +993,19 @@ export async function replaceGoalDomainConfigs(
 
       await tx.goalDomainConfig.delete({
         where: { id: existingDomain.id },
+      });
+    }
+
+    for (const [index, domain] of normalizedDomains.entries()) {
+      if (!domain.id) {
+        continue;
+      }
+
+      await tx.goalDomainConfig.update({
+        where: { id: domain.id },
+        data: {
+          sortOrder: reorderSortOrderOffset + index,
+        },
       });
     }
 
@@ -1070,6 +1087,10 @@ export async function replaceGoalHorizonConfigs(
   await app.prisma.$transaction(async (tx) => {
     let nextArchivedSortOrder = normalizedHorizons.length + 1;
     const requestedIds = new Set(normalizedHorizons.flatMap((horizon) => (horizon.id ? [horizon.id] : [])));
+    const reorderSortOrderOffset = Math.max(
+      normalizedHorizons.length,
+      ...existingHorizons.map((horizon) => horizon.sortOrder),
+    ) + existingHorizons.length + 1;
 
     for (const existingHorizon of existingHorizons) {
       if (requestedIds.has(existingHorizon.id)) {
@@ -1096,6 +1117,19 @@ export async function replaceGoalHorizonConfigs(
 
       await tx.goalHorizonConfig.delete({
         where: { id: existingHorizon.id },
+      });
+    }
+
+    for (const [index, horizon] of normalizedHorizons.entries()) {
+      if (!horizon.id) {
+        continue;
+      }
+
+      await tx.goalHorizonConfig.update({
+        where: { id: horizon.id },
+        data: {
+          sortOrder: reorderSortOrderOffset + index,
+        },
       });
     }
 

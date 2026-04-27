@@ -5,284 +5,128 @@ import {
 } from "@tanstack/react-query";
 
 import type {
-  RecurrenceDefinition,
+  ApplyTaskTemplateResponse,
+  BulkTaskMutationResponse,
+  BulkUpdateTasksRequest,
+  CarryForwardTaskRequest,
+  CommitTaskRequest,
+  CreateTaskRequest,
+  DayLaunchMutationResponse,
+  DayPlanResponse,
+  DayPlannerBlockItem,
+  DayPlannerBlockMutationResponse,
+  DayPlannerBlocksMutationResponse,
+  DayPlannerBlockTaskItem,
+  DailyLaunchItem,
+  GoalNudgeItem,
+  IsoDateString,
+  LogTaskStuckRequest,
+  PlanningPriorityInput,
+  PlanningPriorityMutationResponse,
+  PlanningTaskItem,
+  PriorityMutationResponse,
   RecurrenceInput,
   RecurringTaskCarryPolicy,
-} from "../recurrence";
+  RescueSuggestion,
+  TaskCommitmentGuidance,
+  TaskCommitmentReadiness,
+  TaskCommitmentReason,
+  TaskListCounts,
+  TaskMutationResponse,
+  TaskTemplateItem,
+  TaskTemplateTask,
+  TaskTemplateMutationResponse,
+  TaskTemplatesResponse,
+  TaskStatus,
+  TasksQuery,
+  TasksResponse,
+  UpdateTaskRequest,
+} from "@life-os/contracts";
 import {
   apiRequest,
   invalidateCoreData,
   invalidateTaskTemplateData,
   queryKeys,
 } from "./core";
-import type {
-  GoalHealthState,
-  LinkedGoal,
-} from "./goals";
 
-export type TaskCommitmentReadiness = "ready" | "needs_clarification";
-
-export type TaskCommitmentReason =
-  | "missing_next_action"
-  | "missing_five_minute_version"
-  | "missing_estimate"
-  | "missing_obstacle"
-  | "missing_focus_length";
-
-export type TaskCommitmentGuidance = {
-  readiness: TaskCommitmentReadiness;
-  blockingReasons: TaskCommitmentReason[];
-  suggestedReasons: TaskCommitmentReason[];
-  primaryMessage: string;
+export type TaskItem = PlanningTaskItem;
+export type TaskTemplate = TaskTemplateItem;
+export type DayPriorityInput = PlanningPriorityInput;
+export type DayPrioritiesMutationResponse = PlanningPriorityMutationResponse;
+export type TasksQueryFilters = Omit<TasksQuery, "scheduledForDate" | "from" | "to"> & {
+  scheduledForDate?: string;
+  from?: string;
+  to?: string;
 };
-
-export type TaskItem = {
-  id: string;
-  title: string;
-  notes: string | null;
-  kind: "task" | "note" | "reminder";
-  reminderAt: string | null;
-  status: "pending" | "completed" | "dropped";
-  scheduledForDate: string | null;
-  dueAt: string | null;
-  goalId: string | null;
-  goal: LinkedGoal | null;
-  originType: "manual" | "quick_capture" | "carry_forward" | "review_seed" | "recurring" | "template";
-  carriedFromTaskId: string | null;
-  recurrence: RecurrenceDefinition | null;
-  nextAction: string | null;
-  fiveMinuteVersion: string | null;
-  estimatedDurationMinutes: number | null;
-  likelyObstacle: string | null;
-  focusLengthMinutes: number | null;
-  progressState: "not_started" | "started" | "advanced";
-  todaySortOrder: number;
-  startedAt: string | null;
-  lastStuckAt: string | null;
-  commitmentGuidance?: TaskCommitmentGuidance | null;
-  completedAt: string | null;
-  createdAt: string;
-  updatedAt: string;
+export type BulkUpdateTasksInput = {
+  taskIds: string[];
+  action:
+    | {
+        type: "schedule";
+        scheduledForDate: string;
+      }
+    | {
+        type: "carry_forward";
+        targetDate: string;
+      }
+    | {
+        type: "link_goal";
+        goalId: string | null;
+      }
+    | {
+        type: "status";
+        status: TaskStatus;
+      }
+    | {
+        type: "archive";
+      };
 };
-
-export type DailyLaunchItem = {
-  id: string;
-  planningCycleId: string;
-  mustWinTaskId: string | null;
-  dayMode: "normal" | "rescue" | "recovery";
-  rescueReason: "overload" | "low_energy" | "interruption" | "missed_day" | null;
-  energyRating: number | null;
-  likelyDerailmentReason:
-    | "unclear"
-    | "too_big"
-    | "avoidance"
-    | "low_energy"
-    | "interrupted"
-    | "overloaded"
-    | null;
-  likelyDerailmentNote: string | null;
-  rescueSuggestedAt: string | null;
-  rescueActivatedAt: string | null;
-  rescueExitedAt: string | null;
-  completedAt: string | null;
-  createdAt: string;
-  updatedAt: string;
-};
-
-export type RescueSuggestion = {
-  mode: "rescue" | "recovery";
-  reason: "overload" | "low_energy" | "interruption" | "missed_day";
-  title: string;
-  detail: string;
-  minimumViableAction: string | null;
-};
-
-export type TaskListCounts = {
-  all: number;
-  task: number;
-  note: number;
-  reminder: number;
-};
-
-export type TaskTemplateTask = {
-  title: string;
-};
-
-export type TaskTemplate = {
-  id: string;
-  name: string;
-  description: string | null;
-  tasks: TaskTemplateTask[];
-  lastAppliedAt: string | null;
-  archivedAt: string | null;
-  createdAt: string;
-  updatedAt: string;
-};
-
-export type GoalNudgeItem = {
-  goal: LinkedGoal;
-  health: GoalHealthState;
-  progressPercent: number;
-  nextBestAction: string;
-  suggestedPriorityTitle: string;
-};
-
-export type DayPlannerBlockTaskItem = {
-  taskId: string;
-  sortOrder: number;
-  task: TaskItem;
-};
-
-export type DayPlannerBlockItem = {
-  id: string;
-  title: string | null;
-  startsAt: string;
-  endsAt: string;
-  sortOrder: number;
-  tasks: DayPlannerBlockTaskItem[];
-  createdAt: string;
-  updatedAt: string;
-};
-
-type DayPlanResponse = {
-  generatedAt: string;
-  date: string;
-  launch: DailyLaunchItem | null;
-  mustWinTask: TaskItem | null;
-  rescueSuggestion: RescueSuggestion | null;
-  priorities: Array<{
-    id: string;
-    slot: 1 | 2 | 3;
-    title: string;
-    status: "pending" | "completed" | "dropped";
-    goalId: string | null;
-    goal: LinkedGoal | null;
-    completedAt: string | null;
-  }>;
-  tasks: TaskItem[];
-  goalNudges: GoalNudgeItem[];
-  plannerBlocks: DayPlannerBlockItem[];
-};
-
-type DayPlannerBlockMutationResponse = {
-  generatedAt: string;
-  plannerBlock: DayPlannerBlockItem;
-};
-
-type DayPlannerBlocksMutationResponse = {
-  generatedAt: string;
-  plannerBlocks: DayPlannerBlockItem[];
+export type {
+  DailyLaunchItem,
+  DayPlannerBlockItem,
+  DayPlannerBlockTaskItem,
+  GoalNudgeItem,
+  RescueSuggestion,
+  TaskCommitmentGuidance,
+  TaskCommitmentReadiness,
+  TaskCommitmentReason,
+  TaskListCounts,
+  TaskTemplateTask,
 };
 
 type ReplacePlannerBlockTasksMutationContext = {
   previousDayPlan?: DayPlanResponse;
 };
 
-export type DayPriorityInput = {
-  id?: string;
-  slot: 1 | 2 | 3;
-  title: string;
-  goalId?: string | null;
-};
+const toIsoDateString = (date: string): IsoDateString => date as IsoDateString;
 
-type DayPrioritiesMutationResponse = {
-  generatedAt: string;
-  priorities: DayPlanResponse["priorities"];
-};
-
-type PriorityMutationResponse = {
-  generatedAt: string;
-  priority: DayPlanResponse["priorities"][number];
-};
-
-type TaskMutationResponse = {
-  generatedAt: string;
-  task: TaskItem;
-};
-
-type DayLaunchMutationResponse = {
-  generatedAt: string;
-  launch: DailyLaunchItem;
-  mustWinTask: TaskItem | null;
-  rescueSuggestion: RescueSuggestion | null;
-};
-
-type BulkTaskMutationResponse = {
-  generatedAt: string;
-  tasks: TaskItem[];
-};
-
-type TasksResponse = {
-  generatedAt: string;
-  tasks: TaskItem[];
-  nextCursor: string | null;
-  counts?: TaskListCounts;
-};
-
-type TaskTemplatesResponse = {
-  generatedAt: string;
-  taskTemplates: TaskTemplate[];
-};
-
-type TaskTemplateMutationResponse = {
-  generatedAt: string;
-  taskTemplate: TaskTemplate;
-};
-
-type ApplyTaskTemplateResponse = {
-  generatedAt: string;
-  taskTemplate: TaskTemplate;
-  tasks: TaskItem[];
-};
-
-export type TasksQueryFilters = {
-  scheduledForDate?: string;
-  from?: string;
-  to?: string;
-  status?: "pending" | "completed" | "dropped";
-  kind?: TaskItem["kind"];
-  cursor?: string;
-  limit?: number;
-  includeSummary?: boolean;
-  originType?: TaskItem["originType"];
-  scheduledState?: "all" | "scheduled" | "unscheduled";
-};
-
-export type BulkUpdateTasksInput =
-  | {
-      taskIds: string[];
-      action: {
-        type: "schedule";
-        scheduledForDate: string;
+const toBulkUpdateTasksRequest = (payload: BulkUpdateTasksInput): BulkUpdateTasksRequest => {
+  switch (payload.action.type) {
+    case "schedule":
+      return {
+        taskIds: payload.taskIds,
+        action: {
+          type: "schedule",
+          scheduledForDate: toIsoDateString(payload.action.scheduledForDate),
+        },
       };
-    }
-  | {
-      taskIds: string[];
-      action: {
-        type: "carry_forward";
-        targetDate: string;
+    case "carry_forward":
+      return {
+        taskIds: payload.taskIds,
+        action: {
+          type: "carry_forward",
+          targetDate: toIsoDateString(payload.action.targetDate),
+        },
       };
-    }
-  | {
-      taskIds: string[];
-      action: {
-        type: "link_goal";
-        goalId: string | null;
+    case "link_goal":
+    case "status":
+    case "archive":
+      return {
+        taskIds: payload.taskIds,
+        action: payload.action,
       };
-    }
-  | {
-      taskIds: string[];
-      action: {
-        type: "status";
-        status: TaskItem["status"];
-      };
-    }
-  | {
-      taskIds: string[];
-      action: {
-        type: "archive";
-      };
-    };
+  }
+};
 
 export const useDayPlanQuery = (date: string) =>
   useQuery({
@@ -462,7 +306,9 @@ export const useCarryForwardTaskMutation = (date: string) => {
     mutationFn: ({ taskId, targetDate }: { taskId: string; targetDate: string }) =>
       apiRequest<TaskMutationResponse>(`/api/tasks/${taskId}/carry-forward`, {
         method: "POST",
-        body: { targetDate },
+        body: {
+          targetDate: toIsoDateString(targetDate),
+        } satisfies CarryForwardTaskRequest,
       }),
     meta: {
       successMessage: "Task rescheduled.",
@@ -786,7 +632,7 @@ export const useUpdateTaskMutation = (date: string) => {
           kind,
           reminderAt,
           status,
-          scheduledForDate,
+          scheduledForDate: scheduledForDate == null ? scheduledForDate : toIsoDateString(scheduledForDate),
           goalId,
           dueAt,
           recurrence,
@@ -798,7 +644,7 @@ export const useUpdateTaskMutation = (date: string) => {
           focusLengthMinutes,
           progressState,
           startedAt,
-        },
+        } satisfies UpdateTaskRequest,
       }),
     meta: {
       successMessage: "Task updated.",
@@ -822,10 +668,13 @@ export const useCommitTaskMutation = (date: string) => {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: ({ taskId, ...body }: CommitTaskInput) =>
+    mutationFn: ({ taskId, scheduledForDate, ...body }: CommitTaskInput) =>
       apiRequest<TaskMutationResponse>(`/api/tasks/${taskId}/commit`, {
         method: "POST",
-        body,
+        body: {
+          ...body,
+          scheduledForDate: toIsoDateString(scheduledForDate),
+        } satisfies CommitTaskRequest,
       }),
     meta: {
       successMessage: "Task scheduled.",
@@ -847,7 +696,7 @@ export const useBulkUpdateTasksMutation = (
     mutationFn: (payload: BulkUpdateTasksInput) =>
       apiRequest<BulkTaskMutationResponse>("/api/tasks/bulk", {
         method: "PATCH",
-        body: payload,
+        body: toBulkUpdateTasksRequest(payload),
       }),
     meta: {
       errorMessage: "Bulk inbox update failed.",
@@ -869,7 +718,10 @@ export const useCreateTaskMutation = (
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (payload: {
+    mutationFn: ({
+      scheduledForDate,
+      ...payload
+    }: {
       title: string;
       notes?: string | null;
       kind?: TaskItem["kind"];
@@ -890,7 +742,10 @@ export const useCreateTaskMutation = (
     }) =>
       apiRequest<TaskMutationResponse>("/api/tasks", {
         method: "POST",
-        body: payload,
+        body: {
+          ...payload,
+          scheduledForDate: scheduledForDate == null ? scheduledForDate : toIsoDateString(scheduledForDate),
+        } satisfies CreateTaskRequest,
       }),
     meta: {
       successMessage: options?.successMessage ?? "Captured to inbox.",
@@ -947,8 +802,8 @@ export const useLogTaskStuckMutation = (date: string) => {
           reason,
           actionTaken,
           note,
-          targetDate,
-        },
+          targetDate: targetDate == null ? targetDate : toIsoDateString(targetDate),
+        } satisfies LogTaskStuckRequest,
       }),
     meta: {
       successMessage: "Stuck step captured.",

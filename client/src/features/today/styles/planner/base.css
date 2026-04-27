@@ -344,10 +344,6 @@ body.planner-dragging-cursor * {
   display: flex;
   flex-direction: column;
   gap: 0.85rem;
-  max-height: calc(100vh - var(--today-sticky-offset) - 1.5rem);
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  padding-right: 0.15rem;
 }
 
 .planner__sidebar-stack > .unplanned-lane {

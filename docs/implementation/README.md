@@ -9,6 +9,7 @@ Current docs:
 - `Life-OS-CEO-Implementation-Brief.md`: executive summary of the behavioral operating system direction, with codebase-grounded implementation entry points for future agents and contributors
 - `Life-OS-Behavior-Change-Product-Strategy.md`: strategic product thesis for evolving Life OS from planning/tracking toward activation, continuity, recovery, and adaptation
 - `Life-OS-Implementation-Roadmap.md`: phased implementation roadmap for the behavioral operating system upgrade
+- `Life-OS-Codebase-Review-Refactoring-Plan-2026-04-27.md`: senior codebase review findings and agent-ready refactoring checklist focused on contracts, correctness, oversized files, tests, and maintainability
 - `Life-OS-Next-2-Milestones-Implementation-Plan.md`: implementation handoff for the next two high-leverage milestones after the recent execution, recovery, and onboarding upgrades
 - `Life-OS-Top-3-Next-Enhancements-2026-04-18.md`: strategic write-up of the next three highest-leverage product enhancements to consider, focused on problem framing and product value rather than implementation planning
 - `Life-OS-Clarification-Before-Commitment-Backend-Agent-2026-04-18.md`: backend-first implementation brief for adding commitment readiness and an inbox-specific commit flow for Clarification Before Commitment

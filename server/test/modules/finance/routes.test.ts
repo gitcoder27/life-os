@@ -190,4 +190,95 @@ describe("finance bill reconciliation routes", () => {
     expect(payload.bill.linkedExpenseId).toBe(EXPENSE_ID);
     expect(payload.bill.reconciliationStatus).toBe("paid_with_expense");
   });
+
+  it("does not double-count a bill expense that also has a ledger transaction", async () => {
+    const now = new Date("2026-04-09T00:00:00.000Z");
+    const account = {
+      id: "00000000-0000-4000-8000-000000000040",
+      userId: USER_ID,
+      name: "Checking",
+      accountType: "BANK",
+      currencyCode: "USD",
+      openingBalanceMinor: 100000,
+      archivedAt: null,
+      createdAt: now,
+      updatedAt: now,
+    };
+    const ledgerTransaction = {
+      id: "00000000-0000-4000-8000-000000000050",
+      userId: USER_ID,
+      accountId: account.id,
+      transactionType: "EXPENSE",
+      amountMinor: 6500,
+      currencyCode: "USD",
+      occurredOn: now,
+      description: "Internet",
+      expenseCategoryId: null,
+      billId: BILL_ID,
+      transferAccountId: null,
+      createdAt: now,
+      updatedAt: now,
+    };
+    const linkedExpense = {
+      id: EXPENSE_ID,
+      userId: USER_ID,
+      expenseCategoryId: null,
+      billId: BILL_ID,
+      amountMinor: 6500,
+      currencyCode: "USD",
+      spentOn: now,
+      description: "Internet",
+      source: "MANUAL",
+      recurringExpenseTemplateId: null,
+      createdAt: now,
+      updatedAt: now,
+    };
+    const standaloneExpense = {
+      ...linkedExpense,
+      id: "00000000-0000-4000-8000-000000000060",
+      billId: null,
+      amountMinor: 1200,
+      description: "Coffee",
+    };
+
+    prisma.financeAccount.findMany.mockResolvedValueOnce([account]);
+    prisma.financeTransaction.findMany
+      .mockResolvedValueOnce([
+        {
+          accountId: account.id,
+          transferAccountId: null,
+          transactionType: "EXPENSE",
+          amountMinor: 6500,
+        },
+      ])
+      .mockResolvedValueOnce([ledgerTransaction]);
+    prisma.financeMonthPlan.findUnique.mockResolvedValueOnce(null);
+    prisma.recurringIncomeTemplate.findMany.mockResolvedValueOnce([]);
+    prisma.creditCard.findMany.mockResolvedValueOnce([]);
+    prisma.loan.findMany.mockResolvedValueOnce([]);
+    prisma.expense.findMany.mockResolvedValueOnce([linkedExpense, standaloneExpense]);
+    prisma.adminItem.findMany.mockResolvedValueOnce([]).mockResolvedValueOnce([]);
+
+    const response = await app!.inject({
+      method: "GET",
+      url: "/api/finance/dashboard?month=2026-04",
+    });
+
+    expect(response.statusCode).toBe(200);
+    const payload = parseBody<{
+      totalSpentMinor: number;
+      transactionCount: number;
+      recentTransactions: Array<{ source: string; billId: string | null; amountMinor: number }>;
+    }>(response.body);
+
+    expect(payload.totalSpentMinor).toBe(7700);
+    expect(payload.transactionCount).toBe(2);
+    expect(payload.recentTransactions).toHaveLength(2);
+    expect(payload.recentTransactions).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ source: "ledger", billId: BILL_ID, amountMinor: 6500 }),
+        expect.objectContaining({ source: "legacy_expense", billId: null, amountMinor: 1200 }),
+      ]),
+    );
+  });
 });
