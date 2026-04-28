@@ -26,6 +26,7 @@ import {
   usePayAndLogBillMutation,
   usePayCreditCardMutation,
   usePayLoanMutation,
+  useReceiveRecurringIncomeMutation,
   useRescheduleBillMutation,
   useUpdateCategoryMutation,
   useUpdateCreditCardMutation,
@@ -33,6 +34,8 @@ import {
   useUpdateFinanceMonthPlanMutation,
   useUpdateLoanMutation,
   useUpdateRecurringExpenseMutation,
+  useUpdateRecurringIncomeMutation,
+  useUndoRecurringIncomeReceiptMutation,
 } from "../../shared/lib/api";
 import {
   formatFullRecurrenceSummary,
@@ -50,8 +53,22 @@ import { buildRecurrenceInput } from "../../shared/ui/RecurrenceEditor";
 import { FinanceInsightsPanel } from "./FinanceInsightsPanel";
 import { FinancePlanPanel } from "./FinancePlanPanel";
 
-type CockpitTab = "overview" | "transactions" | "bills" | "accounts" | "debt";
+type CockpitTab = "overview" | "timeline" | "transactions" | "bills" | "accounts" | "debt";
 type SetupTab = "accounts" | "income" | "cards" | "loans" | "categories" | "recurring";
+
+type MoneyEvent = {
+  id: string;
+  sortKey: string;
+  dateLabel: string;
+  type: "income" | "bill" | "card" | "loan";
+  title: string;
+  amountMinor: number;
+  accountName: string;
+  status: string;
+  actionLabel: string;
+  tone: "positive" | "warning" | "negative";
+  onAction?: () => void;
+};
 
 type AccountForm = {
   name: string;
@@ -165,6 +182,19 @@ function getBillStatusLabel(bill: FinanceBillItem) {
   }
 }
 
+function getMonthShort(month: string) {
+  const [year, monthNumber] = month.split("-").map(Number);
+  return new Date(Date.UTC(year, monthNumber - 1, 1)).toLocaleString("en", { month: "short", timeZone: "UTC" });
+}
+
+function getPlannedIncomeMinor(incomePlans: Array<{ amountMinor: number; status: string }>, fallback: number | null | undefined) {
+  const activePlanTotal = incomePlans
+    .filter((income) => income.status === "active")
+    .reduce((sum, income) => sum + income.amountMinor, 0);
+
+  return activePlanTotal > 0 ? activePlanTotal : fallback ?? 0;
+}
+
 export function FinancePage() {
   const today = getTodayDate();
   const currentMonth = getMonthString(today);
@@ -195,6 +225,9 @@ export function FinancePage() {
   const createAccountMutation = useCreateFinanceAccountMutation(today);
   const createTransactionMutation = useCreateFinanceTransactionMutation(today);
   const createIncomeMutation = useCreateRecurringIncomeMutation(today);
+  const receiveIncomeMutation = useReceiveRecurringIncomeMutation(today);
+  const updateIncomeMutation = useUpdateRecurringIncomeMutation(today);
+  const undoIncomeReceiptMutation = useUndoRecurringIncomeReceiptMutation(today);
   const createCreditCardMutation = useCreateCreditCardMutation(today);
   const updateCreditCardMutation = useUpdateCreditCardMutation(today);
   const payCreditCardMutation = usePayCreditCardMutation(today);
@@ -292,6 +325,68 @@ export function FinancePage() {
     () => new Map((dashboard?.accounts ?? []).map((account) => [account.id, account])),
     [dashboard?.accounts],
   );
+  const activeIncomePlans = dashboard?.recurringIncome.filter((income) => income.status === "active") ?? [];
+  const plannedIncomeMinor = getPlannedIncomeMinor(activeIncomePlans, dashboard?.plannedIncomeMinor);
+  const nextIncomePlan = activeIncomePlans[0] ?? null;
+  const nextBill = dueNow[0] ?? openBills[0] ?? null;
+  const nextCardDue = activeCreditCards.find((card) => (card.minimumDueMinor ?? 0) > 0) ?? activeCreditCards[0] ?? null;
+  const nextLoanDue = activeLoans[0] ?? null;
+  const moneyEvents: MoneyEvent[] = [
+    ...activeIncomePlans.map((income): MoneyEvent => ({
+      id: `income-${income.id}`,
+      sortKey: income.nextExpectedOn,
+      dateLabel: formatShortDate(income.nextExpectedOn),
+      type: "income",
+      title: income.title,
+      amountMinor: income.amountMinor,
+      accountName: accountMap.get(income.accountId)?.name ?? "Account",
+      status: daysUntil(income.nextExpectedOn) < 0 ? "Overdue" : daysUntil(income.nextExpectedOn) === 0 ? "Due today" : "Expected",
+      actionLabel: "Mark received",
+      tone: "positive",
+      onAction: () => void handleReceiveIncome(income),
+    })),
+    ...openBills.map((bill): MoneyEvent => ({
+      id: `bill-${bill.id}`,
+      sortKey: bill.dueOn,
+      dateLabel: formatShortDate(bill.dueOn),
+      type: "bill",
+      title: bill.title,
+      amountMinor: bill.amountMinor ?? 0,
+      accountName: activeAccounts[0]?.name ?? "Account",
+      status: daysUntil(bill.dueOn) < 0 ? "Overdue" : daysUntil(bill.dueOn) === 0 ? "Due today" : "Upcoming",
+      actionLabel: "Pay",
+      tone: daysUntil(bill.dueOn) < 0 ? "negative" : "warning",
+      onAction: () => openBillPayment(bill),
+    })),
+    ...activeCreditCards
+      .filter((card) => (card.minimumDueMinor ?? 0) > 0)
+      .map((card): MoneyEvent => ({
+        id: `card-${card.id}`,
+        sortKey: card.paymentDueDay ? `${selectedMonth}-${String(card.paymentDueDay).padStart(2, "0")}` : `${selectedMonth}-28`,
+        dateLabel: card.paymentDueDay ? `${getMonthShort(selectedMonth)} ${card.paymentDueDay}` : "This month",
+        type: "card",
+        title: `${card.name} due`,
+        amountMinor: card.minimumDueMinor ?? 0,
+        accountName: card.paymentAccountId ? accountMap.get(card.paymentAccountId)?.name ?? "Account" : "No account",
+        status: "Upcoming",
+        actionLabel: "Pay due",
+        tone: "warning",
+        onAction: () => void handlePayCreditCard(card),
+      })),
+    ...activeLoans.map((loan): MoneyEvent => ({
+      id: `loan-${loan.id}`,
+      sortKey: loan.dueDay ? `${selectedMonth}-${String(loan.dueDay).padStart(2, "0")}` : `${selectedMonth}-28`,
+      dateLabel: loan.dueDay ? `${getMonthShort(selectedMonth)} ${loan.dueDay}` : "This month",
+      type: "loan",
+      title: `${loan.name} EMI`,
+      amountMinor: loan.emiAmountMinor,
+      accountName: loan.paymentAccountId ? accountMap.get(loan.paymentAccountId)?.name ?? "Account" : "No account",
+      status: "Upcoming",
+      actionLabel: "Pay EMI",
+      tone: "warning",
+      onAction: () => void handlePayLoan(loan),
+    })),
+  ].sort((left, right) => left.sortKey.localeCompare(right.sortKey));
 
   const setupSteps = [
     { key: "account", label: "Account", done: activeAccounts.length > 0, action: () => openSetup("accounts") },
@@ -367,6 +462,23 @@ export function FinancePage() {
       nextExpectedOn: incomeForm.nextExpectedOn || today,
     });
     setIncomeForm({ title: "Salary", accountId: incomeForm.accountId, amount: "", nextExpectedOn: today });
+  }
+
+  async function handleReceiveIncome(income: {
+    id: string;
+    accountId: string;
+    amountMinor: number;
+    currencyCode?: string;
+    title: string;
+  }) {
+    await receiveIncomeMutation.mutateAsync({
+      recurringIncomeId: income.id,
+      accountId: income.accountId,
+      amountMinor: income.amountMinor,
+      currencyCode: income.currencyCode ?? currency,
+      receivedOn: today,
+      description: income.title,
+    });
   }
 
   async function handleAddBill() {
@@ -562,7 +674,7 @@ export function FinancePage() {
           </div>
         </div>
         <div className="fc__actions">
-          <button className="button button--primary button--small" type="button" onClick={() => setShowTransactionForm(true)}>Add money entry</button>
+          <button className="button button--primary button--small" type="button" onClick={() => setShowTransactionForm(true)}>Add entry</button>
           <button className="button button--ghost button--small" type="button" onClick={() => setShowBillForm(true)}>Add bill</button>
           <button className="button button--ghost button--small" type="button" onClick={() => openSetup("accounts")}>Setup</button>
         </div>
@@ -572,44 +684,38 @@ export function FinancePage() {
         <InlineErrorState message={financeData.sectionErrors.dashboard.message} onRetry={() => void financeQuery.refetch()} />
       ) : null}
 
-      <section className="fc-snapshot" aria-label="Money snapshot">
-        <div className="fc-snapshot__primary">
-          <span className="fc-label">Cash available</span>
-          <strong>{formatMinorCurrency(dashboard?.cashAvailableMinor ?? 0, currency)}</strong>
-        </div>
-        <div className="fc-metric">
-          <span className="fc-label">Income</span>
-          <strong>{formatMinorCurrency(dashboard?.incomeReceivedMinor ?? 0, currency)}</strong>
-        </div>
-        <div className="fc-metric">
-          <span className="fc-label">Spent</span>
-          <strong>{formatMinorCurrency(dashboard?.totalSpentMinor ?? 0, currency)}</strong>
-        </div>
-        <div className="fc-metric">
-          <span className="fc-label">Due</span>
-          <strong>{formatMinorCurrency(dashboard?.upcomingDueMinor ?? 0, currency)}</strong>
-        </div>
-        <div className="fc-metric">
-          <span className="fc-label">Debt due</span>
-          <strong>{formatMinorCurrency(dashboard?.debtDueMinor ?? 0, currency)}</strong>
-        </div>
-        <div className="fc-metric fc-metric--safe">
-          <span className="fc-label">Safe</span>
-          <strong>{formatMinorCurrency(dashboard?.safeToSpendMinor ?? 0, currency)}</strong>
-        </div>
-      </section>
-
       <div className="fc__body">
         <main className="fc-workbench">
+          <SafeThisMonthPanel
+            currency={currency}
+            safeToSpendMinor={dashboard?.safeToSpendMinor ?? 0}
+            cashAvailableMinor={dashboard?.cashAvailableMinor ?? 0}
+            plannedIncomeMinor={plannedIncomeMinor}
+            upcomingDueMinor={(dashboard?.upcomingDueMinor ?? 0) + (dashboard?.debtDueMinor ?? 0)}
+            totalSpentMinor={dashboard?.totalSpentMinor ?? 0}
+          />
+          <MonthJourney
+            month={selectedMonth}
+            currency={currency}
+            incomePlan={nextIncomePlan}
+            nextBill={nextBill}
+            nextCard={nextCardDue}
+            nextLoan={nextLoanDue}
+            goals={insights?.moneyGoals ?? []}
+            onMarkIncomeReceived={nextIncomePlan ? () => void handleReceiveIncome(nextIncomePlan) : () => openSetup("income")}
+            onOpenBills={() => setTab("bills")}
+            onOpenDebt={() => setTab("debt")}
+            onOpenGoals={() => setTab("overview")}
+          />
           <nav className="fc-tabs" aria-label="Finance sections">
-            {(["overview", "transactions", "bills", "accounts", "debt"] as const).map((item) => (
+            {(["overview", "timeline", "transactions", "accounts", "debt"] as const).map((item) => (
               <button
                 key={item}
                 className={`fc-tab${tab === item ? " fc-tab--active" : ""}`}
                 type="button"
                 onClick={() => setTab(item)}
               >
-                {item === "overview" ? "Overview" : item === "transactions" ? "Transactions" : item === "bills" ? "Bills" : item === "accounts" ? "Accounts" : "Debt"}
+                {item === "overview" ? "Overview" : item === "timeline" ? "Timeline" : item === "transactions" ? "Transactions" : item === "accounts" ? "Accounts" : "Debt"}
               </button>
             ))}
           </nav>
@@ -705,63 +811,22 @@ export function FinancePage() {
 
           {tab === "overview" ? (
             <section className="fc-panel">
-              <div className="fc-setup-strip">
-                {setupSteps.map((step) => (
-                  <button key={step.key} className={`fc-setup-step${step.done ? " fc-setup-step--done" : ""}`} type="button" onClick={step.action}>
-                    <span>{step.done ? "✓" : "○"}</span>
-                    {step.label}
-                  </button>
-                ))}
-              </div>
-
               <div className="fc-section-head">
-                <h2>Debt</h2>
-                <button className="button button--ghost button--small" type="button" onClick={() => setTab("debt")}>Open</button>
+                <h2>Upcoming events</h2>
+                <button className="button button--ghost button--small" type="button" onClick={() => setTab("timeline")}>Full timeline</button>
               </div>
-              <DebtSummary
-                creditCards={activeCreditCards}
-                loans={activeLoans}
-                currency={currency}
-                outstandingMinor={dashboard?.debtOutstandingMinor ?? 0}
-                dueMinor={dashboard?.debtDueMinor ?? 0}
-              />
+              <MoneyEventsTable events={moneyEvents.slice(0, 6)} currency={currency} />
 
-              <div className="fc-section-head">
-                <h2>Upcoming</h2>
-                <button className="button button--ghost button--small" type="button" onClick={() => setTab("bills")}>Bills</button>
-              </div>
-              {dueNow.length > 0 ? (
-                <div className="fc-list">
-                  {dueNow.slice(0, 6).map((bill) => (
-                    <BillRow
-                      key={bill.id}
-                      bill={bill}
-                      currency={currency}
-                      payingBillId={payingBillId}
-                      reschedulingBillId={reschedulingBillId}
-                      rescheduleDate={rescheduleDate}
-                      setRescheduleDate={setRescheduleDate}
-                      onPay={openBillPayment}
-                      onMarkPaid={(item) => void markBillPaidMutation.mutateAsync({ billId: item.id, paidOn: today })}
-                      onDrop={(item) => void dismissBillMutation.mutateAsync(item.id)}
-                      onStartReschedule={(item) => {
-                        setReschedulingBillId(item.id);
-                        setRescheduleDate(item.dueOn);
-                      }}
-                      onReschedule={handleBillReschedule}
-                      onCancelReschedule={() => setReschedulingBillId(null)}
-                      paymentForm={billPaymentForm}
-                      setPaymentForm={setBillPaymentForm}
-                      categories={activeCategories}
-                      accounts={activeAccounts}
-                      onPayAndLog={handlePayAndLogBill}
-                      isPaying={payAndLogBillMutation.isPending}
-                    />
+              {setupSteps.some((step) => !step.done) ? (
+                <div className="fc-setup-strip">
+                  {setupSteps.map((step) => (
+                    <button key={step.key} className={`fc-setup-step${step.done ? " fc-setup-step--done" : ""}`} type="button" onClick={step.action}>
+                      <span>{step.done ? "✓" : "○"}</span>
+                      {step.label}
+                    </button>
                   ))}
                 </div>
-              ) : (
-                <EmptyState title="No dues soon" description="The next seven days are clear." />
-              )}
+              ) : null}
 
               <div className="fc-section-head">
                 <h2>Recent money</h2>
@@ -773,6 +838,16 @@ export function FinancePage() {
                 accountMap={accountMap}
                 categoryMap={categoryMap}
               />
+            </section>
+          ) : null}
+
+          {tab === "timeline" ? (
+            <section className="fc-panel">
+              <div className="fc-section-head">
+                <h2>Timeline</h2>
+                <button className="button button--ghost button--small" type="button" onClick={() => setShowTransactionForm(true)}>Add entry</button>
+              </div>
+              <MoneyEventsTable events={moneyEvents} currency={currency} />
             </section>
           ) : null}
 
@@ -909,6 +984,31 @@ export function FinancePage() {
         </main>
 
         <aside className="fc-rail">
+          <TodayMoneyActions
+            incomePlan={nextIncomePlan}
+            nextBill={nextBill}
+            nextCard={nextCardDue}
+            nextLoan={nextLoanDue}
+            currency={currency}
+            onMarkIncomeReceived={nextIncomePlan ? () => void handleReceiveIncome(nextIncomePlan) : undefined}
+            onOpenBill={nextBill ? () => openBillPayment(nextBill) : undefined}
+            onOpenDebt={() => setTab("debt")}
+            onAddBill={() => setShowBillForm(true)}
+          />
+          <SafeSpendMath
+            currency={currency}
+            cashAvailableMinor={dashboard?.cashAvailableMinor ?? 0}
+            incomeReceivedMinor={dashboard?.incomeReceivedMinor ?? 0}
+            upcomingDueMinor={dashboard?.upcomingDueMinor ?? 0}
+            debtDueMinor={dashboard?.debtDueMinor ?? 0}
+            safeToSpendMinor={dashboard?.safeToSpendMinor ?? 0}
+          />
+          <QuickLinks
+            onTransactions={() => setTab("transactions")}
+            onAccounts={() => setTab("accounts")}
+            onBills={() => setTab("bills")}
+            onDebt={() => setTab("debt")}
+          />
           <FinancePlanPanel
             monthPlan={monthPlan}
             monthTotalSpentMinor={dashboard?.totalSpentMinor ?? summary?.totalSpentMinor ?? 0}
@@ -922,13 +1022,6 @@ export function FinancePage() {
             onRetry={() => void financeQuery.refetch()}
             onSave={(payload) => updateFinanceMonthPlanMutation.mutateAsync(payload)}
           />
-          <section className="fc-debt-next">
-            <div>
-              <span className="fc-label">Debt due</span>
-              <strong>{formatMinorCurrency(dashboard?.debtDueMinor ?? 0, currency)}</strong>
-            </div>
-            <button className="button button--ghost button--small" type="button" onClick={() => setTab("debt")}>Debt</button>
-          </section>
           <FinanceInsightsPanel
             insights={insights}
             currencyCode={currency}
@@ -1000,6 +1093,18 @@ export function FinancePage() {
                     <input type="date" value={incomeForm.nextExpectedOn} onChange={(event) => setIncomeForm((form) => ({ ...form, nextExpectedOn: event.target.value }))} />
                   </label>
                   <button className="button button--primary button--small" type="button" disabled={createIncomeMutation.isPending} onClick={() => void handleCreateIncome()}>Add income</button>
+                  <IncomePlanList
+                    incomePlans={dashboard?.recurringIncome ?? []}
+                    currency={currency}
+                    accountMap={accountMap}
+                    onMarkReceived={(income) => void handleReceiveIncome(income)}
+                    onUndoReceipt={(incomeId) => void undoIncomeReceiptMutation.mutateAsync({ recurringIncomeId: incomeId })}
+                    onPause={(incomeId) => void updateIncomeMutation.mutateAsync({ recurringIncomeId: incomeId, status: "paused" })}
+                    onArchive={(incomeId) => void updateIncomeMutation.mutateAsync({ recurringIncomeId: incomeId, status: "archived" })}
+                    isUpdating={updateIncomeMutation.isPending}
+                    isReceiving={receiveIncomeMutation.isPending}
+                    isUndoing={undoIncomeReceiptMutation.isPending}
+                  />
                 </div>
               ) : null}
 
@@ -1143,6 +1248,374 @@ export function FinancePage() {
           </aside>
         </div>
       ) : null}
+    </div>
+  );
+}
+
+function SafeThisMonthPanel({
+  currency,
+  safeToSpendMinor,
+  cashAvailableMinor,
+  plannedIncomeMinor,
+  upcomingDueMinor,
+  totalSpentMinor,
+}: {
+  currency: string;
+  safeToSpendMinor: number;
+  cashAvailableMinor: number;
+  plannedIncomeMinor: number;
+  upcomingDueMinor: number;
+  totalSpentMinor: number;
+}) {
+  return (
+    <section className="fc-hero" aria-label="Safe this month">
+      <div className="fc-hero__safe">
+        <span className="fc-label">Safe this month</span>
+        <strong>{formatMinorCurrency(safeToSpendMinor, currency)}</strong>
+        <span className="fc-hero__caption">Safe to spend</span>
+        <span className="fc-status-dot">On track</span>
+      </div>
+      <div className="fc-hero__metric">
+        <span className="fc-icon-box">¤</span>
+        <span className="fc-label">Cash</span>
+        <strong>{formatMinorCurrency(cashAvailableMinor, currency)}</strong>
+        <small>Available now</small>
+      </div>
+      <div className="fc-hero__metric">
+        <span className="fc-icon-box">↗</span>
+        <span className="fc-label">Expected income</span>
+        <strong>{formatMinorCurrency(plannedIncomeMinor, currency)}</strong>
+        <small>This month</small>
+      </div>
+      <div className="fc-hero__metric">
+        <span className="fc-icon-box">▣</span>
+        <span className="fc-label">Obligations</span>
+        <strong>{formatMinorCurrency(upcomingDueMinor, currency)}</strong>
+        <small>Upcoming</small>
+      </div>
+      <div className="fc-hero__metric">
+        <span className="fc-icon-box">≡</span>
+        <span className="fc-label">Spent</span>
+        <strong>{formatMinorCurrency(totalSpentMinor, currency)}</strong>
+        <small>This month</small>
+      </div>
+    </section>
+  );
+}
+
+function MonthJourney({
+  month,
+  currency,
+  incomePlan,
+  nextBill,
+  nextCard,
+  nextLoan,
+  goals,
+  onMarkIncomeReceived,
+  onOpenBills,
+  onOpenDebt,
+  onOpenGoals,
+}: {
+  month: string;
+  currency: string;
+  incomePlan: {
+    title: string;
+    amountMinor: number;
+    nextExpectedOn: string;
+  } | null;
+  nextBill: FinanceBillItem | null;
+  nextCard: {
+    name: string;
+    minimumDueMinor: number | null;
+    paymentDueDay: number | null;
+  } | null;
+  nextLoan: {
+    name: string;
+    emiAmountMinor: number;
+    dueDay: number | null;
+  } | null;
+  goals: Array<{
+    goalId: string;
+    title: string;
+    progressPercent: number;
+  }>;
+  onMarkIncomeReceived?: () => void;
+  onOpenBills: () => void;
+  onOpenDebt: () => void;
+  onOpenGoals: () => void;
+}) {
+  const monthName = getMonthShort(month);
+
+  return (
+    <section className="fc-journey" aria-label="Month journey">
+      <div className="fc-journey__head">
+        <span className="fc-label">Month journey</span>
+        <div className="fc-dayline" aria-hidden="true">
+          {[25, 26, 27, 28, 29, 30].map((day) => <span key={day} className={day === 29 ? "is-today" : ""}>{day}</span>)}
+          <i />
+          <span>{monthName === "Dec" ? "Jan" : "May"}</span>
+          {[1, 2, 3, 4, 5, 6].map((day) => <span key={`next-${day}`}>{day}</span>)}
+        </div>
+      </div>
+      <div className="fc-lanes">
+        <div className="fc-lane">
+          <span className="fc-lane__name">Income</span>
+          {incomePlan ? (
+            <div className="fc-lane-pill fc-lane-pill--income">
+              <strong>{incomePlan.title}</strong>
+              <span>{formatShortDate(incomePlan.nextExpectedOn)}</span>
+              <span>{formatMinorCurrency(incomePlan.amountMinor, currency)}</span>
+              <button type="button" onClick={onMarkIncomeReceived}>Mark received</button>
+            </div>
+          ) : (
+            <button className="fc-lane-clear" type="button" onClick={onMarkIncomeReceived}>Add salary</button>
+          )}
+        </div>
+        <div className="fc-lane">
+          <span className="fc-lane__name">Bills</span>
+          {nextBill ? (
+            <button className="fc-lane-pill" type="button" onClick={onOpenBills}>
+              <strong>{nextBill.title}</strong>
+              <span>{formatShortDate(nextBill.dueOn)}</span>
+              <span>{nextBill.amountMinor != null ? formatMinorCurrency(nextBill.amountMinor, currency) : "Amount open"}</span>
+            </button>
+          ) : (
+            <button className="fc-lane-clear" type="button" onClick={onOpenBills}>Clear</button>
+          )}
+        </div>
+        <div className="fc-lane">
+          <span className="fc-lane__name">Debt</span>
+          {nextCard || nextLoan ? (
+            <button className="fc-lane-pill" type="button" onClick={onOpenDebt}>
+              <strong>{nextCard?.name ?? nextLoan?.name}</strong>
+              <span>{nextCard?.paymentDueDay ?? nextLoan?.dueDay ? `${monthName} ${nextCard?.paymentDueDay ?? nextLoan?.dueDay}` : "This month"}</span>
+              <span>{formatMinorCurrency(nextCard?.minimumDueMinor ?? nextLoan?.emiAmountMinor ?? 0, currency)}</span>
+            </button>
+          ) : (
+            <button className="fc-lane-clear" type="button" onClick={onOpenDebt}>No EMI / card due</button>
+          )}
+        </div>
+        <div className="fc-lane">
+          <span className="fc-lane__name">Goals</span>
+          <div className="fc-goal-chips">
+            {goals.slice(0, 3).map((goal) => (
+              <button key={goal.goalId} className="fc-goal-chip" type="button" onClick={onOpenGoals}>
+                <span>{goal.title}</span>
+                <strong>{goal.progressPercent}%</strong>
+              </button>
+            ))}
+            {goals.length === 0 ? <button className="fc-lane-clear" type="button" onClick={onOpenGoals}>Open goals</button> : null}
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function TodayMoneyActions({
+  incomePlan,
+  nextBill,
+  nextCard,
+  nextLoan,
+  currency,
+  onMarkIncomeReceived,
+  onOpenBill,
+  onOpenDebt,
+  onAddBill,
+}: {
+  incomePlan: {
+    title: string;
+    amountMinor: number;
+    nextExpectedOn: string;
+  } | null;
+  nextBill: FinanceBillItem | null;
+  nextCard: { name: string; minimumDueMinor: number | null } | null;
+  nextLoan: { name: string; emiAmountMinor: number } | null;
+  currency: string;
+  onMarkIncomeReceived?: () => void;
+  onOpenBill?: () => void;
+  onOpenDebt: () => void;
+  onAddBill: () => void;
+}) {
+  return (
+    <section className="fc-rail-card">
+      <span className="fc-label">Today's money actions</span>
+      <div className="fc-action-list">
+        {incomePlan ? (
+          <button className="fc-action" type="button" onClick={onMarkIncomeReceived}>
+            <span className="fc-action__icon fc-action__icon--income">↥</span>
+            <span><strong>Mark {incomePlan.title.toLowerCase()} received</strong><small>Expected {formatMinorCurrency(incomePlan.amountMinor, currency)} on {formatShortDate(incomePlan.nextExpectedOn)}</small></span>
+            <i>›</i>
+          </button>
+        ) : null}
+        {nextBill ? (
+          <button className="fc-action" type="button" onClick={onOpenBill}>
+            <span className="fc-action__icon">▣</span>
+            <span><strong>Pay {nextBill.title}</strong><small>{nextBill.amountMinor != null ? formatMinorCurrency(nextBill.amountMinor, currency) : "Amount open"} due {formatShortDate(nextBill.dueOn)}</small></span>
+            <i>›</i>
+          </button>
+        ) : (
+          <button className="fc-action" type="button" onClick={onAddBill}>
+            <span className="fc-action__icon">＋</span>
+            <span><strong>Add first bill</strong><small>Rent, utilities, subscriptions</small></span>
+            <i>›</i>
+          </button>
+        )}
+        {nextCard || nextLoan ? (
+          <button className="fc-action" type="button" onClick={onOpenDebt}>
+            <span className="fc-action__icon fc-action__icon--debt">▤</span>
+            <span><strong>{nextCard ? "Review card due" : "Review EMI"}</strong><small>{formatMinorCurrency(nextCard?.minimumDueMinor ?? nextLoan?.emiAmountMinor ?? 0, currency)} upcoming</small></span>
+            <i>›</i>
+          </button>
+        ) : null}
+      </div>
+    </section>
+  );
+}
+
+function SafeSpendMath({
+  currency,
+  cashAvailableMinor,
+  incomeReceivedMinor,
+  upcomingDueMinor,
+  debtDueMinor,
+  safeToSpendMinor,
+}: {
+  currency: string;
+  cashAvailableMinor: number;
+  incomeReceivedMinor: number;
+  upcomingDueMinor: number;
+  debtDueMinor: number;
+  safeToSpendMinor: number;
+}) {
+  return (
+    <section className="fc-rail-card">
+      <span className="fc-label">Safe-to-spend math</span>
+      <div className="fc-math">
+        <span>Cash available<strong>{formatMinorCurrency(cashAvailableMinor, currency)}</strong></span>
+        <span>Income received<strong>{formatMinorCurrency(incomeReceivedMinor, currency)}</strong></span>
+        <span>Upcoming obligations<strong>- {formatMinorCurrency(upcomingDueMinor, currency)}</strong></span>
+        <span>Debt due<strong>- {formatMinorCurrency(debtDueMinor, currency)}</strong></span>
+        <span>Planned goals<strong>{formatMinorCurrency(0, currency)}</strong></span>
+        <span className="fc-math__total">Safe to spend<strong>{formatMinorCurrency(safeToSpendMinor, currency)}</strong></span>
+      </div>
+    </section>
+  );
+}
+
+function QuickLinks({
+  onTransactions,
+  onAccounts,
+  onBills,
+  onDebt,
+}: {
+  onTransactions: () => void;
+  onAccounts: () => void;
+  onBills: () => void;
+  onDebt: () => void;
+}) {
+  return (
+    <section className="fc-rail-card">
+      <span className="fc-label">Quick links</span>
+      <div className="fc-links">
+        <button type="button" onClick={onTransactions}>Transactions <span>›</span></button>
+        <button type="button" onClick={onAccounts}>Accounts <span>›</span></button>
+        <button type="button" onClick={onBills}>Bills <span>›</span></button>
+        <button type="button" onClick={onDebt}>Debt <span>›</span></button>
+      </div>
+    </section>
+  );
+}
+
+function MoneyEventsTable({
+  events,
+  currency,
+}: {
+  events: MoneyEvent[];
+  currency: string;
+}) {
+  if (events.length === 0) {
+    return <EmptyState title="No upcoming events" description="Add income, bills, cards, or loans from setup." />;
+  }
+
+  return (
+    <div className="fc-event-table">
+      <div className="fc-event-table__head">
+        <span>Date</span>
+        <span>Type</span>
+        <span>Title</span>
+        <span>Amount</span>
+        <span>Account</span>
+        <span>Status</span>
+        <span>Action</span>
+      </div>
+      {events.map((event) => (
+        <div key={event.id} className="fc-event-row">
+          <span>{event.dateLabel}</span>
+          <span className={`fc-event-type fc-event-type--${event.type}`}>{event.type}</span>
+          <strong>{event.title}</strong>
+          <span className={event.tone === "positive" ? "fc-money-positive" : event.tone === "negative" ? "fc-money-negative" : ""}>
+            {formatMinorCurrency(event.amountMinor, currency)}
+          </span>
+          <span>{event.accountName}</span>
+          <span className={`fc-status fc-status--${event.tone}`}>{event.status}</span>
+          <button className="button button--ghost button--small" type="button" onClick={event.onAction}>{event.actionLabel}</button>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function IncomePlanList({
+  incomePlans,
+  currency,
+  accountMap,
+  onMarkReceived,
+  onUndoReceipt,
+  onPause,
+  onArchive,
+  isUpdating,
+  isReceiving,
+  isUndoing,
+}: {
+  incomePlans: Array<{
+    id: string;
+    accountId: string;
+    title: string;
+    amountMinor: number;
+    currencyCode: string;
+    nextExpectedOn: string;
+    status: "active" | "paused" | "archived";
+  }>;
+  currency: string;
+  accountMap: Map<string, { name: string }>;
+  onMarkReceived: (income: { id: string; accountId: string; amountMinor: number; currencyCode?: string; title: string }) => void;
+  onUndoReceipt: (incomeId: string) => void;
+  onPause: (incomeId: string) => void;
+  onArchive: (incomeId: string) => void;
+  isUpdating: boolean;
+  isReceiving: boolean;
+  isUndoing: boolean;
+}) {
+  if (incomePlans.length === 0) {
+    return <EmptyState title="No income plans" description="Add salary or other expected income." />;
+  }
+
+  return (
+    <div className="fc-income-list">
+      {incomePlans.map((income) => (
+        <div key={income.id} className={`fc-income-row${income.status !== "active" ? " fc-income-row--muted" : ""}`}>
+          <div>
+            <strong>{income.title}</strong>
+            <span>{accountMap.get(income.accountId)?.name ?? "Account"} · {formatShortDate(income.nextExpectedOn)} · {income.status}</span>
+          </div>
+          <span>{formatMinorCurrency(income.amountMinor, currency)}</span>
+          <button className="button button--primary button--small" type="button" disabled={isReceiving || income.status !== "active"} onClick={() => onMarkReceived(income)}>Mark received</button>
+          <button className="button button--ghost button--small" type="button" disabled={isUndoing} onClick={() => onUndoReceipt(income.id)}>Undo last</button>
+          <button className="button button--ghost button--small" type="button" disabled={isUpdating || income.status !== "active"} onClick={() => onPause(income.id)}>Pause</button>
+          <button className="button button--ghost button--small" type="button" disabled={isUpdating || income.status === "archived"} onClick={() => onArchive(income.id)}>Archive</button>
+        </div>
+      ))}
     </div>
   );
 }

@@ -11,6 +11,8 @@ function parseBody<T>(body: string) {
 const USER_ID = "00000000-0000-4000-8000-000000000001";
 const BILL_ID = "00000000-0000-4000-8000-000000000010";
 const EXPENSE_ID = "00000000-0000-4000-8000-000000000020";
+const ACCOUNT_ID = "00000000-0000-4000-8000-000000000040";
+const RECURRING_INCOME_ID = "00000000-0000-4000-8000-000000000070";
 
 describe("finance bill reconciliation routes", () => {
   let app: ReturnType<typeof Fastify> | undefined;
@@ -280,5 +282,171 @@ describe("finance bill reconciliation routes", () => {
         expect.objectContaining({ source: "legacy_expense", billId: null, amountMinor: 1200 }),
       ]),
     );
+  });
+
+  it("marks recurring income received and advances the next expected date", async () => {
+    const now = new Date("2026-04-28T00:00:00.000Z");
+    const existingIncome = {
+      id: RECURRING_INCOME_ID,
+      userId: USER_ID,
+      accountId: ACCOUNT_ID,
+      title: "Salary",
+      amountMinor: 8000000,
+      currencyCode: "INR",
+      recurrenceRule: "monthly",
+      nextExpectedOn: now,
+      status: "ACTIVE",
+      createdAt: now,
+      updatedAt: now,
+    };
+    const updatedIncome = {
+      ...existingIncome,
+      nextExpectedOn: new Date("2026-05-28T00:00:00.000Z"),
+      updatedAt: new Date("2026-04-28T01:00:00.000Z"),
+    };
+    const transaction = {
+      id: "00000000-0000-4000-8000-000000000080",
+      userId: USER_ID,
+      accountId: ACCOUNT_ID,
+      transferAccountId: null,
+      transactionType: "INCOME",
+      amountMinor: 8000000,
+      currencyCode: "INR",
+      occurredOn: now,
+      description: "Salary",
+      expenseCategoryId: null,
+      billId: null,
+      recurringIncomeTemplateId: RECURRING_INCOME_ID,
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    prisma.recurringIncomeTemplate.findFirst.mockResolvedValueOnce(existingIncome);
+    prisma.financeAccount.findFirst.mockResolvedValueOnce({
+      id: ACCOUNT_ID,
+      userId: USER_ID,
+      name: "Kotak",
+      accountType: "BANK",
+      currencyCode: "INR",
+      openingBalanceMinor: 0,
+      archivedAt: null,
+      createdAt: now,
+      updatedAt: now,
+    });
+    prisma.financeTransaction.create.mockResolvedValueOnce(transaction);
+    prisma.recurringIncomeTemplate.update.mockResolvedValueOnce(updatedIncome);
+
+    const response = await app!.inject({
+      method: "POST",
+      url: `/api/finance/recurring-income/${RECURRING_INCOME_ID}/receive`,
+      payload: {
+        receivedOn: "2026-04-28",
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(prisma.financeTransaction.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        accountId: ACCOUNT_ID,
+        transactionType: "INCOME",
+        amountMinor: 8000000,
+        currencyCode: "INR",
+        occurredOn: now,
+        description: "Salary",
+        recurringIncomeTemplateId: RECURRING_INCOME_ID,
+      }),
+    });
+    expect(prisma.recurringIncomeTemplate.update).toHaveBeenCalledWith({
+      where: {
+        id: RECURRING_INCOME_ID,
+      },
+      data: expect.objectContaining({
+        nextExpectedOn: new Date("2026-05-28T00:00:00.000Z"),
+      }),
+    });
+
+    const payload = parseBody<{
+      recurringIncome: { nextExpectedOn: string };
+      transaction: { transactionType: string; amountMinor: number };
+    }>(response.body);
+    expect(payload.recurringIncome.nextExpectedOn).toBe("2026-05-28");
+    expect(payload.transaction.transactionType).toBe("income");
+    expect(payload.transaction.amountMinor).toBe(8000000);
+  });
+
+  it("undoes the latest recurring income receipt", async () => {
+    const receiptDate = new Date("2026-05-28T00:00:00.000Z");
+    const existingIncome = {
+      id: RECURRING_INCOME_ID,
+      userId: USER_ID,
+      accountId: ACCOUNT_ID,
+      title: "Salary",
+      amountMinor: 8000000,
+      currencyCode: "INR",
+      recurrenceRule: "monthly",
+      nextExpectedOn: new Date("2026-06-28T00:00:00.000Z"),
+      status: "ACTIVE",
+      createdAt: new Date("2026-04-28T00:00:00.000Z"),
+      updatedAt: receiptDate,
+    };
+    const transaction = {
+      id: "00000000-0000-4000-8000-000000000080",
+      userId: USER_ID,
+      accountId: ACCOUNT_ID,
+      transferAccountId: null,
+      transactionType: "INCOME",
+      amountMinor: 8000000,
+      currencyCode: "INR",
+      occurredOn: receiptDate,
+      description: "Salary",
+      expenseCategoryId: null,
+      billId: null,
+      recurringIncomeTemplateId: RECURRING_INCOME_ID,
+      createdAt: receiptDate,
+      updatedAt: receiptDate,
+    };
+    const updatedIncome = {
+      ...existingIncome,
+      nextExpectedOn: receiptDate,
+      updatedAt: new Date("2026-05-28T01:00:00.000Z"),
+    };
+
+    prisma.recurringIncomeTemplate.findFirst.mockResolvedValueOnce(existingIncome);
+    prisma.financeTransaction.findFirst.mockResolvedValueOnce(transaction);
+    prisma.financeTransaction.delete.mockResolvedValueOnce(transaction);
+    prisma.recurringIncomeTemplate.update.mockResolvedValueOnce(updatedIncome);
+
+    const response = await app!.inject({
+      method: "POST",
+      url: `/api/finance/recurring-income/${RECURRING_INCOME_ID}/undo-latest-receive`,
+      payload: {},
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(prisma.financeTransaction.delete).toHaveBeenCalledWith({
+      where: {
+        id: transaction.id,
+      },
+    });
+    expect(prisma.recurringIncomeTemplate.update).toHaveBeenCalledWith({
+      where: {
+        id: RECURRING_INCOME_ID,
+      },
+      data: expect.objectContaining({
+        nextExpectedOn: receiptDate,
+        accountId: ACCOUNT_ID,
+        amountMinor: 8000000,
+        currencyCode: "INR",
+      }),
+    });
+
+    const payload = parseBody<{
+      recurringIncome: { nextExpectedOn: string };
+      transactionId: string;
+      undone: boolean;
+    }>(response.body);
+    expect(payload.recurringIncome.nextExpectedOn).toBe("2026-05-28");
+    expect(payload.transactionId).toBe(transaction.id);
+    expect(payload.undone).toBe(true);
   });
 });

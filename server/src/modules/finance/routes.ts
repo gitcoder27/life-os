@@ -40,11 +40,15 @@ import type {
   PayCreditCardRequest,
   PayLoanRequest,
   RecurrenceInput,
+  ReceiveRecurringIncomeRequest,
+  ReceiveRecurringIncomeResponse,
   RecurringIncomeItem,
   RecurringIncomeMutationResponse,
   RecurringIncomeResponse,
   RecurringExpenseMutationResponse,
   RescheduleFinanceBillRequest,
+  UndoRecurringIncomeReceiptRequest,
+  UndoRecurringIncomeReceiptResponse,
   UpdateFinanceAccountRequest,
   UpdateCreditCardRequest,
   UpdateFinanceGoalRequest,
@@ -299,6 +303,18 @@ const updateRecurringIncomeSchema = z.object({
   status: recurringIncomeStatusSchema.optional(),
 }).refine((value) => Object.keys(value).length > 0, "At least one field must be updated");
 
+const receiveRecurringIncomeSchema = z.object({
+  accountId: z.string().uuid().optional(),
+  amountMinor: z.number().int().positive().optional(),
+  currencyCode: z.string().length(3).optional(),
+  receivedOn: isoDateSchema,
+  description: z.string().max(240).nullable().optional(),
+});
+
+const undoRecurringIncomeReceiptSchema = z.object({
+  transactionId: z.string().uuid().optional(),
+}).optional();
+
 const createCreditCardSchema = z.object({
   name: z.string().min(1).max(120),
   issuer: z.string().max(120).nullable().optional(),
@@ -486,6 +502,42 @@ function getMonthBounds(month: IsoMonthString) {
 
 function getIsoMonthString(date: Date): IsoMonthString {
   return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}` as IsoMonthString;
+}
+
+function addMonthsClamped(date: Date, months: number) {
+  const next = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + months, 1));
+  const lastDay = new Date(Date.UTC(next.getUTCFullYear(), next.getUTCMonth() + 1, 0)).getUTCDate();
+  next.setUTCDate(Math.min(date.getUTCDate(), lastDay));
+  return next;
+}
+
+function addRecurringIncomePeriod(date: Date, recurrenceRule: string) {
+  const normalizedRule = recurrenceRule.trim().toLowerCase();
+  const next = new Date(date);
+
+  if (normalizedRule.includes("week")) {
+    next.setUTCDate(next.getUTCDate() + 7);
+    return next;
+  }
+
+  if (normalizedRule.includes("year")) {
+    return addMonthsClamped(date, 12);
+  }
+
+  return addMonthsClamped(date, 1);
+}
+
+function getNextRecurringIncomeDate(
+  income: Pick<RecurringIncomeTemplate, "nextExpectedOn" | "recurrenceRule">,
+  receivedOn: Date,
+) {
+  let nextExpectedOn = addRecurringIncomePeriod(income.nextExpectedOn, income.recurrenceRule);
+
+  while (nextExpectedOn <= receivedOn) {
+    nextExpectedOn = addRecurringIncomePeriod(nextExpectedOn, income.recurrenceRule);
+  }
+
+  return nextExpectedOn;
 }
 
 function diffInDays(from: Date, to: Date) {
@@ -822,6 +874,7 @@ function serializeFinanceTransaction(
     description: transaction.description,
     expenseCategoryId: transaction.expenseCategoryId,
     billId: transaction.billId,
+    recurringIncomeId: transaction.recurringIncomeTemplateId,
     source: "ledger",
     createdAt: transaction.createdAt.toISOString(),
     updatedAt: transaction.updatedAt.toISOString(),
@@ -1252,6 +1305,7 @@ async function buildFinanceDashboard(
         description: expense.description,
         expenseCategoryId: expense.expenseCategoryId,
         billId: expense.billId,
+        recurringIncomeId: null,
         source: "legacy_expense",
         createdAt: expense.createdAt.toISOString(),
         updatedAt: expense.updatedAt.toISOString(),
@@ -2194,6 +2248,164 @@ export const registerFinanceRoutes: FastifyPluginAsync = async (app) => {
 
     const response: RecurringIncomeMutationResponse = withGeneratedAt({
       recurringIncome: serializeRecurringIncome(recurringIncome),
+    });
+
+    return reply.send(response);
+  });
+
+  app.post("/recurring-income/:recurringIncomeId/receive", async (request, reply) => {
+    const user = requireAuthenticatedUser(request);
+    const { recurringIncomeId } = request.params as { recurringIncomeId: string };
+    const payload = parseOrThrow(receiveRecurringIncomeSchema, request.body as ReceiveRecurringIncomeRequest);
+
+    const existing = await app.prisma.recurringIncomeTemplate.findFirst({
+      where: {
+        id: recurringIncomeId,
+        userId: user.id,
+      },
+    });
+
+    if (!existing) {
+      throw new AppError({
+        statusCode: 404,
+        code: "NOT_FOUND",
+        message: "Recurring income not found",
+      });
+    }
+
+    if (existing.status !== "ACTIVE") {
+      throw new AppError({
+        statusCode: 400,
+        code: "BAD_REQUEST",
+        message: "Income plan must be active to receive",
+      });
+    }
+
+    const accountId = payload.accountId ?? existing.accountId;
+    await assertOwnedFinanceAccount(app, user.id, accountId);
+
+    const receivedOn = parseIsoDate(payload.receivedOn);
+    const amountMinor = payload.amountMinor ?? existing.amountMinor;
+    const currencyCode = payload.currencyCode ?? existing.currencyCode;
+    const description = payload.description ?? existing.title;
+
+    const result = await app.prisma.$transaction(async (tx) => {
+      const transaction = await tx.financeTransaction.create({
+        data: {
+          userId: user.id,
+          accountId,
+          transactionType: "INCOME",
+          amountMinor,
+          currencyCode,
+          occurredOn: receivedOn,
+          description,
+          recurringIncomeTemplateId: existing.id,
+        },
+      });
+      const recurringIncome = await tx.recurringIncomeTemplate.update({
+        where: {
+          id: existing.id,
+        },
+        data: {
+          accountId,
+          amountMinor,
+          currencyCode,
+          nextExpectedOn: getNextRecurringIncomeDate(existing, receivedOn),
+        },
+      });
+
+      return { recurringIncome, transaction };
+    });
+
+    const response: ReceiveRecurringIncomeResponse = withGeneratedAt({
+      recurringIncome: serializeRecurringIncome(result.recurringIncome),
+      transaction: serializeFinanceTransaction(result.transaction),
+    });
+
+    return reply.send(response);
+  });
+
+  app.post("/recurring-income/:recurringIncomeId/undo-latest-receive", async (request, reply) => {
+    const user = requireAuthenticatedUser(request);
+    const { recurringIncomeId } = request.params as { recurringIncomeId: string };
+    const payload =
+      parseOrThrow(undoRecurringIncomeReceiptSchema, request.body as UndoRecurringIncomeReceiptRequest | undefined) ?? {};
+
+    const existing = await app.prisma.recurringIncomeTemplate.findFirst({
+      where: {
+        id: recurringIncomeId,
+        userId: user.id,
+      },
+    });
+
+    if (!existing) {
+      throw new AppError({
+        statusCode: 404,
+        code: "NOT_FOUND",
+        message: "Recurring income not found",
+      });
+    }
+
+    const transaction = payload.transactionId
+      ? await app.prisma.financeTransaction.findFirst({
+        where: {
+          id: payload.transactionId,
+          userId: user.id,
+          transactionType: "INCOME",
+        },
+      })
+      : await app.prisma.financeTransaction.findFirst({
+        where: {
+          userId: user.id,
+          transactionType: "INCOME",
+          OR: [
+            {
+              recurringIncomeTemplateId: existing.id,
+            },
+            {
+              recurringIncomeTemplateId: null,
+              accountId: existing.accountId,
+              amountMinor: existing.amountMinor,
+              currencyCode: existing.currencyCode,
+              description: existing.title,
+            },
+          ],
+        },
+        orderBy: [{ occurredOn: "desc" }, { createdAt: "desc" }],
+      });
+
+    if (!transaction) {
+      throw new AppError({
+        statusCode: 404,
+        code: "NOT_FOUND",
+        message: "No received income transaction found",
+      });
+    }
+
+    const recurringIncome = await app.prisma.$transaction(async (tx) => {
+      await tx.financeTransaction.delete({
+        where: {
+          id: transaction.id,
+        },
+      });
+
+      return tx.recurringIncomeTemplate.update({
+        where: {
+          id: existing.id,
+        },
+        data: {
+          nextExpectedOn: transaction.occurredOn,
+          accountId: transaction.accountId,
+          amountMinor: transaction.amountMinor,
+          currencyCode: transaction.currencyCode,
+        },
+      });
+    });
+
+    const response: UndoRecurringIncomeReceiptResponse = withGeneratedAt({
+      recurringIncome: serializeRecurringIncome(recurringIncome),
+      transactionId: transaction.id,
+      undone: true,
     });
 
     return reply.send(response);

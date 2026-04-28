@@ -44,11 +44,13 @@ import type {
   LoanMutationResponse,
   LoanStatus,
   RecurrenceInput,
+  ReceiveRecurringIncomeResponse,
   RecurringExpenseMutationResponse,
   RecurringExpensesResponse,
   RecurringIncomeItem,
   RecurringIncomeMutationResponse,
   RecurringIncomeStatus,
+  UndoRecurringIncomeReceiptResponse,
   UpdateFinanceGoalRequest,
   UpdateFinanceMonthPlanRequest,
 } from "@life-os/contracts";
@@ -450,6 +452,88 @@ export const useCreateRecurringIncomeMutation = (todayDate: string) => {
     meta: {
       successMessage: "Income plan added.",
       errorMessage: "Income plan failed.",
+    },
+    onSuccess: () => invalidateCoreData(queryClient, todayDate),
+  });
+};
+
+export const useUpdateRecurringIncomeMutation = (todayDate: string) => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      recurringIncomeId,
+      ...payload
+    }: {
+      recurringIncomeId: string;
+      accountId?: string;
+      title?: string;
+      amountMinor?: number;
+      currencyCode?: string;
+      recurrenceRule?: string;
+      nextExpectedOn?: string;
+      status?: RecurringIncomeStatus;
+    }) =>
+      apiRequest<RecurringIncomeMutationResponse>(`/api/finance/recurring-income/${recurringIncomeId}`, {
+        method: "PATCH",
+        body: payload,
+      }),
+    meta: {
+      successMessage: "Income plan updated.",
+      errorMessage: "Income plan update failed.",
+    },
+    onSuccess: () => invalidateCoreData(queryClient, todayDate),
+  });
+};
+
+export const useReceiveRecurringIncomeMutation = (todayDate: string) => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      recurringIncomeId,
+      ...payload
+    }: {
+      recurringIncomeId: string;
+      accountId?: string;
+      amountMinor?: number;
+      currencyCode?: string;
+      receivedOn: string;
+      description?: string | null;
+    }) =>
+      apiRequest<ReceiveRecurringIncomeResponse>(`/api/finance/recurring-income/${recurringIncomeId}/receive`, {
+        method: "POST",
+        body: payload,
+      }),
+    meta: {
+      successMessage: "Income received.",
+      errorMessage: "Income receive failed.",
+    },
+    onSuccess: () => invalidateCoreData(queryClient, todayDate),
+  });
+};
+
+export const useUndoRecurringIncomeReceiptMutation = (todayDate: string) => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      recurringIncomeId,
+      transactionId,
+    }: {
+      recurringIncomeId: string;
+      transactionId?: string;
+    }) =>
+      apiRequest<UndoRecurringIncomeReceiptResponse>(
+        `/api/finance/recurring-income/${recurringIncomeId}/undo-latest-receive`,
+        {
+          method: "POST",
+          body: transactionId ? { transactionId } : {},
+        },
+      ),
+    meta: {
+      successMessage: "Income receipt undone.",
+      errorMessage: "Income undo failed.",
     },
     onSuccess: () => invalidateCoreData(queryClient, todayDate),
   });

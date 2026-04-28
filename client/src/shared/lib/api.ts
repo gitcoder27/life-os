@@ -170,6 +170,7 @@ export {
   usePayAndLogBillMutation,
   usePayCreditCardMutation,
   usePayLoanMutation,
+  useReceiveRecurringIncomeMutation,
   useRescheduleBillMutation,
   useUpdateCategoryMutation,
   useUpdateCreditCardMutation,
@@ -179,6 +180,8 @@ export {
   useUpdateFinanceMonthPlanMutation,
   useUpdateLoanMutation,
   useUpdateRecurringExpenseMutation,
+  useUpdateRecurringIncomeMutation,
+  useUndoRecurringIncomeReceiptMutation,
 } from "./api/finance";
 export type {
   CreditCardItem,

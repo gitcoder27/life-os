@@ -91,6 +91,7 @@ export interface FinanceTransactionItem {
   description: string | null;
   expenseCategoryId: EntityId | null;
   billId: EntityId | null;
+  recurringIncomeId: EntityId | null;
   source: "ledger" | "legacy_expense";
   createdAt: string;
   updatedAt: string;
@@ -248,6 +249,29 @@ export interface RecurringIncomeResponse extends ApiMeta {
 
 export interface RecurringIncomeMutationResponse extends ApiMeta {
   recurringIncome: RecurringIncomeItem;
+}
+
+export interface ReceiveRecurringIncomeRequest {
+  accountId?: EntityId;
+  amountMinor?: number;
+  currencyCode?: string;
+  receivedOn: IsoDateString;
+  description?: string | null;
+}
+
+export interface ReceiveRecurringIncomeResponse extends ApiMeta {
+  recurringIncome: RecurringIncomeItem;
+  transaction: FinanceTransactionItem;
+}
+
+export interface UndoRecurringIncomeReceiptRequest {
+  transactionId?: EntityId;
+}
+
+export interface UndoRecurringIncomeReceiptResponse extends ApiMeta {
+  recurringIncome: RecurringIncomeItem;
+  transactionId: EntityId;
+  undone: true;
 }
 
 export interface CreateCreditCardRequest {
