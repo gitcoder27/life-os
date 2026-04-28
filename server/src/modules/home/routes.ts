@@ -9,6 +9,7 @@ import type {
   HomeOverviewResponse,
   HomeQuoteResponse,
   IsoDateString,
+  IsoMonthString,
   TaskKind,
   RoutineSummary,
   TaskOriginType,
@@ -55,6 +56,7 @@ import {
   resolveDisplayTimezone,
 } from "../../lib/time/user-time.js";
 import { parseOrThrow } from "../../lib/validation/parse.js";
+import { buildFinanceAttentionItems } from "./finance-attention.js";
 import { buildHomeGuidance } from "./guidance.js";
 import { createHomeQuoteService } from "./quote-service.js";
 import {
@@ -67,6 +69,7 @@ import { goalSummaryInclude, planningTaskInclude } from "../planning/planning-re
 import { buildRescueSuggestion } from "../planning/day-mode.js";
 import { detectMissedDayPattern } from "../planning/day-mode.js";
 import { buildFinanceRoute } from "../finance/finance-navigation.js";
+import { buildFinanceTimeline } from "../finance/finance-timeline-service.js";
 import { getOpenDailyReviewRoute } from "../reviews/submission-window.js";
 import { calculateDailyScore, ensureCycle, getWeeklyMomentum } from "../scoring/service.js";
 
@@ -571,6 +574,11 @@ async function buildHomeOverview(
   };
 
   const attentionItems: AttentionItem[] = [];
+  const financeTimeline = await buildFinanceTimeline(
+    app,
+    userId,
+    targetIsoDate.slice(0, 7) as IsoMonthString,
+  );
   const focusFinanceBill =
     todayAdminItems[0]
     ?? monthlyPendingAdminItems[0]
@@ -642,6 +650,7 @@ async function buildHomeOverview(
       },
     });
   }
+  attentionItems.push(...buildFinanceAttentionItems(financeTimeline.items, financeTimeline.currencyCode));
 
   const homeNotifications: HomeNotificationItem[] = notifications.map((notification) => ({
     id: notification.id,

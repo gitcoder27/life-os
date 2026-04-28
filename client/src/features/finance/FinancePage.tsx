@@ -1,4 +1,4 @@
-import { useMemo, useState, type Dispatch, type SetStateAction } from "react";
+import { useMemo, useState, type Dispatch, type ReactNode, type SetStateAction } from "react";
 
 import {
   daysUntil,
@@ -32,6 +32,7 @@ import {
   useRescheduleBillMutation,
   useUpdateCategoryMutation,
   useUpdateCreditCardMutation,
+  useUpdateFinanceAccountMutation,
   useUpdateFinanceGoalMutation,
   useUpdateFinanceMonthPlanMutation,
   useUpdateLoanMutation,
@@ -44,6 +45,7 @@ import {
   formatLegacyFinanceRecurrenceRule,
   getDefaultRecurrenceRule,
   isRecurring,
+  type RecurrenceDefinition,
 } from "../../shared/lib/recurrence";
 import {
   EmptyState,
@@ -271,6 +273,7 @@ export function FinancePage() {
   const activeAccounts = dashboard?.accounts.filter((account) => !account.archivedAt) ?? [];
 
   const createAccountMutation = useCreateFinanceAccountMutation(today);
+  const updateAccountMutation = useUpdateFinanceAccountMutation(today);
   const createTransactionMutation = useCreateFinanceTransactionMutation(today);
   const createIncomeMutation = useCreateRecurringIncomeMutation(today);
   const receiveIncomeMutation = useReceiveRecurringIncomeMutation(today);
@@ -364,6 +367,7 @@ export function FinancePage() {
   const recentTransactions = dashboard?.recentTransactions ?? [];
   const activeCreditCards = dashboard?.creditCards.filter((card) => card.status === "active") ?? [];
   const activeLoans = dashboard?.loans.filter((loan) => loan.status === "active") ?? [];
+  const visibleRecurringBills = recurringExpenses.filter((item) => item.status !== "archived");
 
   const categoryMap = useMemo(
     () => new Map(categories.map((category) => [category.id, category])),
@@ -391,7 +395,7 @@ export function FinancePage() {
       item.primaryAction?.type === "mark_income_received" && income
         ? () => void handleReceiveIncome(income, item.date)
         : item.primaryAction?.type === "pay_bill" && bill
-          ? () => openBillPayment(bill)
+          ? () => openBillPaymentFromAnySurface(bill)
           : item.primaryAction?.type === "pay_card_due" && card
             ? () => void handlePayCreditCard(card, item.date)
             : item.primaryAction?.type === "pay_emi" && loan
@@ -418,6 +422,14 @@ export function FinancePage() {
     { key: "account", label: "Account", done: activeAccounts.length > 0, action: () => openSetup("accounts") },
     { key: "income", label: "Salary", done: (dashboard?.recurringIncome.length ?? 0) > 0 || (dashboard?.incomeReceivedMinor ?? 0) > 0, action: () => openSetup("income") },
     { key: "dues", label: "Dues", done: recurringExpenses.some((item) => item.status === "active") || openBills.length > 0, action: () => openSetup("recurring") },
+  ];
+  const setupNavItems: Array<{ key: SetupTab; label: string; count: number }> = [
+    { key: "accounts", label: "Accounts", count: activeAccounts.length },
+    { key: "income", label: "Income", count: dashboard?.recurringIncome.filter((item) => item.status !== "archived").length ?? 0 },
+    { key: "cards", label: "Cards", count: activeCreditCards.length },
+    { key: "loans", label: "Loans", count: activeLoans.length },
+    { key: "categories", label: "Categories", count: activeCategories.length },
+    { key: "recurring", label: "Bills", count: visibleRecurringBills.length },
   ];
 
   if (financeQuery.isLoading && !financeData) {
@@ -546,6 +558,11 @@ export function FinancePage() {
       accountId: activeAccounts[0]?.id ?? "",
     });
     setPayingBillId(bill.id);
+  }
+
+  function openBillPaymentFromAnySurface(bill: FinanceBillItem) {
+    setTab("bills");
+    openBillPayment(bill);
   }
 
   async function handlePayAndLogBill(bill: FinanceBillItem) {
@@ -819,7 +836,10 @@ export function FinancePage() {
                   <input type="text" inputMode="decimal" value={billForm.amount} onChange={(event) => setBillForm((form) => ({ ...form, amount: event.target.value }))} />
                 </label>
                 <label className="field">
-                  <span>Category</span>
+                  <span className="field__split-label">
+                    Category
+                    <button type="button" onClick={() => openSetup("categories")}>Manage</button>
+                  </span>
                   <select value={billForm.categoryId} onChange={(event) => setBillForm((form) => ({ ...form, categoryId: event.target.value }))}>
                     <option value="">None</option>
                     {activeCategories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}
@@ -1025,7 +1045,7 @@ export function FinancePage() {
             nextLoan={nextLoanDue}
             currency={currency}
             onMarkIncomeReceived={nextIncomePlan ? () => void handleReceiveIncome(nextIncomePlan) : undefined}
-            onOpenBill={nextBill ? () => openBillPayment(nextBill) : undefined}
+            onOpenBill={nextBill ? () => openBillPaymentFromAnySurface(nextBill) : undefined}
             onOpenDebt={() => setTab("debt")}
             onAddBill={() => setShowBillForm(true)}
           />
@@ -1071,207 +1091,257 @@ export function FinancePage() {
               <button className="button button--ghost button--small" type="button" onClick={() => setShowSetup(false)}>Close</button>
             </div>
             <div className="setup-drawer__tabs">
-              {(["accounts", "income", "cards", "loans", "categories", "recurring"] as const).map((item) => (
-                <button key={item} className={`feed__tab${setupTab === item ? " feed__tab--active" : ""}`} type="button" onClick={() => setSetupTab(item)}>
-                  {item === "accounts" ? "Accounts" : item === "income" ? "Income" : item === "cards" ? "Cards" : item === "loans" ? "Loans" : item === "categories" ? "Categories" : "Bills"}
+              {setupNavItems.map((item) => (
+                <button key={item.key} className={`feed__tab${setupTab === item.key ? " feed__tab--active" : ""}`} type="button" onClick={() => setSetupTab(item.key)}>
+                  {item.label}
+                  <span>{item.count}</span>
                 </button>
               ))}
             </div>
             <div className="setup-drawer__content">
               {setupTab === "accounts" ? (
                 <div className="stack-form">
-                  <label className="field">
-                    <span>Name</span>
-                    <input type="text" value={accountForm.name} onChange={(event) => setAccountForm((form) => ({ ...form, name: event.target.value }))} />
-                  </label>
-                  <label className="field">
-                    <span>Type</span>
-                    <select value={accountForm.accountType} onChange={(event) => setAccountForm((form) => ({ ...form, accountType: event.target.value as AccountForm["accountType"] }))}>
-                      <option value="bank">Bank</option>
-                      <option value="cash">Cash</option>
-                      <option value="wallet">Wallet</option>
-                      <option value="other">Other</option>
-                    </select>
-                  </label>
-                  <label className="field">
-                    <span>Opening balance</span>
-                    <input type="text" inputMode="decimal" value={accountForm.openingBalance} onChange={(event) => setAccountForm((form) => ({ ...form, openingBalance: event.target.value }))} />
-                  </label>
-                  <button className="button button--primary button--small" type="button" disabled={createAccountMutation.isPending} onClick={() => void handleCreateAccount()}>Add account</button>
+                  <SetupBlock title="Add account" meta={`${activeAccounts.length} active`}>
+                    <div className="setup-drawer__form-grid">
+                      <label className="field">
+                        <span>Name</span>
+                        <input type="text" value={accountForm.name} onChange={(event) => setAccountForm((form) => ({ ...form, name: event.target.value }))} />
+                      </label>
+                      <label className="field">
+                        <span>Type</span>
+                        <select value={accountForm.accountType} onChange={(event) => setAccountForm((form) => ({ ...form, accountType: event.target.value as AccountForm["accountType"] }))}>
+                          <option value="bank">Bank</option>
+                          <option value="cash">Cash</option>
+                          <option value="wallet">Wallet</option>
+                          <option value="other">Other</option>
+                        </select>
+                      </label>
+                      <label className="field">
+                        <span>Opening balance</span>
+                        <input type="text" inputMode="decimal" value={accountForm.openingBalance} onChange={(event) => setAccountForm((form) => ({ ...form, openingBalance: event.target.value }))} />
+                      </label>
+                    </div>
+                    <button className="button button--primary button--small" type="button" disabled={createAccountMutation.isPending} onClick={() => void handleCreateAccount()}>Add account</button>
+                  </SetupBlock>
+                  <SetupBlock title="Accounts" meta={formatMinorCurrency(dashboard?.cashAvailableMinor ?? 0, currency)}>
+                    <SetupAccountList
+                      accounts={dashboard?.accounts ?? []}
+                      currency={currency}
+                      isUpdating={updateAccountMutation.isPending}
+                      onArchive={(accountId) => void updateAccountMutation.mutateAsync({ accountId, archived: true })}
+                      onRestore={(accountId) => void updateAccountMutation.mutateAsync({ accountId, archived: false })}
+                    />
+                  </SetupBlock>
                 </div>
               ) : null}
 
               {setupTab === "income" ? (
                 <div className="stack-form">
-                  <label className="field">
-                    <span>Income</span>
-                    <input type="text" value={incomeForm.title} onChange={(event) => setIncomeForm((form) => ({ ...form, title: event.target.value }))} />
-                  </label>
-                  <label className="field">
-                    <span>Account</span>
-                    <select value={incomeForm.accountId} onChange={(event) => setIncomeForm((form) => ({ ...form, accountId: event.target.value }))}>
-                      <option value="">Select</option>
-                      {activeAccounts.map((account) => <option key={account.id} value={account.id}>{account.name}</option>)}
-                    </select>
-                  </label>
-                  <label className="field">
-                    <span>Amount</span>
-                    <input type="text" inputMode="decimal" value={incomeForm.amount} onChange={(event) => setIncomeForm((form) => ({ ...form, amount: event.target.value }))} />
-                  </label>
-                  <label className="field">
-                    <span>Next date</span>
-                    <input type="date" value={incomeForm.nextExpectedOn} onChange={(event) => setIncomeForm((form) => ({ ...form, nextExpectedOn: event.target.value }))} />
-                  </label>
-                  <button className="button button--primary button--small" type="button" disabled={createIncomeMutation.isPending} onClick={() => void handleCreateIncome()}>Add income</button>
-                  <IncomePlanList
-                    incomePlans={dashboard?.recurringIncome ?? []}
-                    currency={currency}
-                    accountMap={accountMap}
-                    onMarkReceived={(income) => void handleReceiveIncome(income)}
-                    onUndoReceipt={(incomeId) => void undoIncomeReceiptMutation.mutateAsync({ recurringIncomeId: incomeId })}
-                    onPause={(incomeId) => void updateIncomeMutation.mutateAsync({ recurringIncomeId: incomeId, status: "paused" })}
-                    onArchive={(incomeId) => void updateIncomeMutation.mutateAsync({ recurringIncomeId: incomeId, status: "archived" })}
-                    isUpdating={updateIncomeMutation.isPending}
-                    isReceiving={receiveIncomeMutation.isPending}
-                    isUndoing={undoIncomeReceiptMutation.isPending}
-                  />
+                  <SetupBlock title="Add income" meta={formatMinorCurrency(plannedIncomeMinor, currency)}>
+                    <div className="setup-drawer__form-grid">
+                      <label className="field">
+                        <span>Income</span>
+                        <input type="text" value={incomeForm.title} onChange={(event) => setIncomeForm((form) => ({ ...form, title: event.target.value }))} />
+                      </label>
+                      <label className="field">
+                        <span>Account</span>
+                        <select value={incomeForm.accountId} onChange={(event) => setIncomeForm((form) => ({ ...form, accountId: event.target.value }))}>
+                          <option value="">Select</option>
+                          {activeAccounts.map((account) => <option key={account.id} value={account.id}>{account.name}</option>)}
+                        </select>
+                      </label>
+                      <label className="field">
+                        <span>Amount</span>
+                        <input type="text" inputMode="decimal" value={incomeForm.amount} onChange={(event) => setIncomeForm((form) => ({ ...form, amount: event.target.value }))} />
+                      </label>
+                      <label className="field">
+                        <span>Next date</span>
+                        <input type="date" value={incomeForm.nextExpectedOn} onChange={(event) => setIncomeForm((form) => ({ ...form, nextExpectedOn: event.target.value }))} />
+                      </label>
+                    </div>
+                    <button className="button button--primary button--small" type="button" disabled={createIncomeMutation.isPending} onClick={() => void handleCreateIncome()}>Add income</button>
+                  </SetupBlock>
+                  <SetupBlock title="Income plans" meta={`${dashboard?.recurringIncome.filter((income) => income.status !== "archived").length ?? 0} saved`}>
+                    <IncomePlanList
+                      incomePlans={dashboard?.recurringIncome ?? []}
+                      currency={currency}
+                      accountMap={accountMap}
+                      onMarkReceived={(income) => void handleReceiveIncome(income)}
+                      onUndoReceipt={(incomeId) => void undoIncomeReceiptMutation.mutateAsync({ recurringIncomeId: incomeId })}
+                      onPause={(incomeId) => void updateIncomeMutation.mutateAsync({ recurringIncomeId: incomeId, status: "paused" })}
+                      onArchive={(incomeId) => void updateIncomeMutation.mutateAsync({ recurringIncomeId: incomeId, status: "archived" })}
+                      isUpdating={updateIncomeMutation.isPending}
+                      isReceiving={receiveIncomeMutation.isPending}
+                      isUndoing={undoIncomeReceiptMutation.isPending}
+                    />
+                  </SetupBlock>
                 </div>
               ) : null}
 
               {setupTab === "cards" ? (
                 <div className="stack-form">
-                  <label className="field">
-                    <span>Card</span>
-                    <input type="text" value={creditCardForm.name} onChange={(event) => setCreditCardForm((form) => ({ ...form, name: event.target.value }))} />
-                  </label>
-                  <label className="field">
-                    <span>Issuer</span>
-                    <input type="text" value={creditCardForm.issuer} onChange={(event) => setCreditCardForm((form) => ({ ...form, issuer: event.target.value }))} />
-                  </label>
-                  <label className="field">
-                    <span>Pay from</span>
-                    <select value={creditCardForm.paymentAccountId} onChange={(event) => setCreditCardForm((form) => ({ ...form, paymentAccountId: event.target.value }))}>
-                      <option value="">None</option>
-                      {activeAccounts.map((account) => <option key={account.id} value={account.id}>{account.name}</option>)}
-                    </select>
-                  </label>
-                  <label className="field">
-                    <span>Limit</span>
-                    <input type="text" inputMode="decimal" value={creditCardForm.creditLimit} onChange={(event) => setCreditCardForm((form) => ({ ...form, creditLimit: event.target.value }))} />
-                  </label>
-                  <label className="field">
-                    <span>Outstanding</span>
-                    <input type="text" inputMode="decimal" value={creditCardForm.outstandingBalance} onChange={(event) => setCreditCardForm((form) => ({ ...form, outstandingBalance: event.target.value }))} />
-                  </label>
-                  <label className="field">
-                    <span>Minimum due</span>
-                    <input type="text" inputMode="decimal" value={creditCardForm.minimumDue} onChange={(event) => setCreditCardForm((form) => ({ ...form, minimumDue: event.target.value }))} />
-                  </label>
-                  <label className="field">
-                    <span>Due day</span>
-                    <input type="number" min={1} max={31} value={creditCardForm.paymentDueDay} onChange={(event) => setCreditCardForm((form) => ({ ...form, paymentDueDay: event.target.value }))} />
-                  </label>
-                  <button className="button button--primary button--small" type="button" disabled={createCreditCardMutation.isPending} onClick={() => void handleCreateCreditCard()}>Add card</button>
+                  <SetupBlock title="Add card" meta={`${activeCreditCards.length} active`}>
+                    <div className="setup-drawer__form-grid">
+                      <label className="field">
+                        <span>Card</span>
+                        <input type="text" value={creditCardForm.name} onChange={(event) => setCreditCardForm((form) => ({ ...form, name: event.target.value }))} />
+                      </label>
+                      <label className="field">
+                        <span>Issuer</span>
+                        <input type="text" value={creditCardForm.issuer} onChange={(event) => setCreditCardForm((form) => ({ ...form, issuer: event.target.value }))} />
+                      </label>
+                      <label className="field">
+                        <span>Pay from</span>
+                        <select value={creditCardForm.paymentAccountId} onChange={(event) => setCreditCardForm((form) => ({ ...form, paymentAccountId: event.target.value }))}>
+                          <option value="">None</option>
+                          {activeAccounts.map((account) => <option key={account.id} value={account.id}>{account.name}</option>)}
+                        </select>
+                      </label>
+                      <label className="field">
+                        <span>Limit</span>
+                        <input type="text" inputMode="decimal" value={creditCardForm.creditLimit} onChange={(event) => setCreditCardForm((form) => ({ ...form, creditLimit: event.target.value }))} />
+                      </label>
+                      <label className="field">
+                        <span>Outstanding</span>
+                        <input type="text" inputMode="decimal" value={creditCardForm.outstandingBalance} onChange={(event) => setCreditCardForm((form) => ({ ...form, outstandingBalance: event.target.value }))} />
+                      </label>
+                      <label className="field">
+                        <span>Minimum due</span>
+                        <input type="text" inputMode="decimal" value={creditCardForm.minimumDue} onChange={(event) => setCreditCardForm((form) => ({ ...form, minimumDue: event.target.value }))} />
+                      </label>
+                      <label className="field">
+                        <span>Due day</span>
+                        <input type="number" min={1} max={31} value={creditCardForm.paymentDueDay} onChange={(event) => setCreditCardForm((form) => ({ ...form, paymentDueDay: event.target.value }))} />
+                      </label>
+                    </div>
+                    <button className="button button--primary button--small" type="button" disabled={createCreditCardMutation.isPending} onClick={() => void handleCreateCreditCard()}>Add card</button>
+                  </SetupBlock>
+                  <SetupBlock title="Cards" meta={formatMinorCurrency(activeCreditCards.reduce((sum, card) => sum + card.outstandingBalanceMinor, 0), currency)}>
+                    <SetupCardList
+                      cards={activeCreditCards}
+                      currency={currency}
+                      accountMap={accountMap}
+                      isUpdating={updateCreditCardMutation.isPending}
+                      onArchive={(cardId) => void updateCreditCardMutation.mutateAsync({ creditCardId: cardId, status: "archived" })}
+                    />
+                  </SetupBlock>
                 </div>
               ) : null}
 
               {setupTab === "loans" ? (
                 <div className="stack-form">
-                  <label className="field">
-                    <span>Loan</span>
-                    <input type="text" value={loanForm.name} onChange={(event) => setLoanForm((form) => ({ ...form, name: event.target.value }))} />
-                  </label>
-                  <label className="field">
-                    <span>Lender</span>
-                    <input type="text" value={loanForm.lender} onChange={(event) => setLoanForm((form) => ({ ...form, lender: event.target.value }))} />
-                  </label>
-                  <label className="field">
-                    <span>Pay from</span>
-                    <select value={loanForm.paymentAccountId} onChange={(event) => setLoanForm((form) => ({ ...form, paymentAccountId: event.target.value }))}>
-                      <option value="">None</option>
-                      {activeAccounts.map((account) => <option key={account.id} value={account.id}>{account.name}</option>)}
-                    </select>
-                  </label>
-                  <label className="field">
-                    <span>Principal</span>
-                    <input type="text" inputMode="decimal" value={loanForm.principalAmount} onChange={(event) => setLoanForm((form) => ({ ...form, principalAmount: event.target.value }))} />
-                  </label>
-                  <label className="field">
-                    <span>Outstanding</span>
-                    <input type="text" inputMode="decimal" value={loanForm.outstandingBalance} onChange={(event) => setLoanForm((form) => ({ ...form, outstandingBalance: event.target.value }))} />
-                  </label>
-                  <label className="field">
-                    <span>EMI</span>
-                    <input type="text" inputMode="decimal" value={loanForm.emiAmount} onChange={(event) => setLoanForm((form) => ({ ...form, emiAmount: event.target.value }))} />
-                  </label>
-                  <label className="field">
-                    <span>Due day</span>
-                    <input type="number" min={1} max={31} value={loanForm.dueDay} onChange={(event) => setLoanForm((form) => ({ ...form, dueDay: event.target.value }))} />
-                  </label>
-                  <button className="button button--primary button--small" type="button" disabled={createLoanMutation.isPending} onClick={() => void handleCreateLoan()}>Add loan</button>
+                  <SetupBlock title="Add loan" meta={`${activeLoans.length} active`}>
+                    <div className="setup-drawer__form-grid">
+                      <label className="field">
+                        <span>Loan</span>
+                        <input type="text" value={loanForm.name} onChange={(event) => setLoanForm((form) => ({ ...form, name: event.target.value }))} />
+                      </label>
+                      <label className="field">
+                        <span>Lender</span>
+                        <input type="text" value={loanForm.lender} onChange={(event) => setLoanForm((form) => ({ ...form, lender: event.target.value }))} />
+                      </label>
+                      <label className="field">
+                        <span>Pay from</span>
+                        <select value={loanForm.paymentAccountId} onChange={(event) => setLoanForm((form) => ({ ...form, paymentAccountId: event.target.value }))}>
+                          <option value="">None</option>
+                          {activeAccounts.map((account) => <option key={account.id} value={account.id}>{account.name}</option>)}
+                        </select>
+                      </label>
+                      <label className="field">
+                        <span>Principal</span>
+                        <input type="text" inputMode="decimal" value={loanForm.principalAmount} onChange={(event) => setLoanForm((form) => ({ ...form, principalAmount: event.target.value }))} />
+                      </label>
+                      <label className="field">
+                        <span>Outstanding</span>
+                        <input type="text" inputMode="decimal" value={loanForm.outstandingBalance} onChange={(event) => setLoanForm((form) => ({ ...form, outstandingBalance: event.target.value }))} />
+                      </label>
+                      <label className="field">
+                        <span>EMI</span>
+                        <input type="text" inputMode="decimal" value={loanForm.emiAmount} onChange={(event) => setLoanForm((form) => ({ ...form, emiAmount: event.target.value }))} />
+                      </label>
+                      <label className="field">
+                        <span>Due day</span>
+                        <input type="number" min={1} max={31} value={loanForm.dueDay} onChange={(event) => setLoanForm((form) => ({ ...form, dueDay: event.target.value }))} />
+                      </label>
+                    </div>
+                    <button className="button button--primary button--small" type="button" disabled={createLoanMutation.isPending} onClick={() => void handleCreateLoan()}>Add loan</button>
+                  </SetupBlock>
+                  <SetupBlock title="Loans" meta={formatMinorCurrency(activeLoans.reduce((sum, loan) => sum + loan.outstandingBalanceMinor, 0), currency)}>
+                    <SetupLoanList
+                      loans={activeLoans}
+                      currency={currency}
+                      accountMap={accountMap}
+                      isUpdating={updateLoanMutation.isPending}
+                      onArchive={(loanId) => void updateLoanMutation.mutateAsync({ loanId, status: "archived" })}
+                    />
+                  </SetupBlock>
                 </div>
               ) : null}
 
               {setupTab === "categories" ? (
                 <div className="stack-form">
-                  <label className="field">
-                    <span>Name</span>
-                    <input type="text" value={categoryForm.name} onChange={(event) => setCategoryForm((form) => ({ ...form, name: event.target.value }))} />
-                  </label>
-                  <label className="field">
-                    <span>Color</span>
-                    <input type="text" value={categoryForm.color} onChange={(event) => setCategoryForm((form) => ({ ...form, color: event.target.value }))} />
-                  </label>
-                  <button className="button button--primary button--small" type="button" disabled={createCategoryMutation.isPending} onClick={() => void handleCreateCategory()}>Add category</button>
-                  <div className="setup-drawer__list">
-                    {activeCategories.map((category) => (
-                      <div key={category.id} className="setup-drawer__item">
-                        <span className="setup-drawer__item-name">{category.name}</span>
-                        <button className="button button--ghost button--small" type="button" onClick={() => void updateCategoryMutation.mutateAsync({ categoryId: category.id, archived: true })}>Archive</button>
-                      </div>
-                    ))}
-                  </div>
+                  <SetupBlock title="Add category" meta={`${activeCategories.length} active`}>
+                    <div className="setup-drawer__form-grid setup-drawer__form-grid--compact">
+                      <label className="field">
+                        <span>Name</span>
+                        <input type="text" value={categoryForm.name} onChange={(event) => setCategoryForm((form) => ({ ...form, name: event.target.value }))} />
+                      </label>
+                      <label className="field">
+                        <span>Color</span>
+                        <input type="text" value={categoryForm.color} onChange={(event) => setCategoryForm((form) => ({ ...form, color: event.target.value }))} />
+                      </label>
+                    </div>
+                    <button className="button button--primary button--small" type="button" disabled={createCategoryMutation.isPending} onClick={() => void handleCreateCategory()}>Add category</button>
+                  </SetupBlock>
+                  <SetupBlock title="Categories" meta="For bills and expenses">
+                    <SetupCategoryList
+                      categories={activeCategories}
+                      isUpdating={updateCategoryMutation.isPending}
+                      onArchive={(categoryId) => void updateCategoryMutation.mutateAsync({ categoryId, archived: true })}
+                    />
+                  </SetupBlock>
                 </div>
               ) : null}
 
               {setupTab === "recurring" ? (
                 <div className="stack-form">
-                  <label className="field">
-                    <span>Bill</span>
-                    <input type="text" value={recurringBillForm.title} onChange={(event) => setRecurringBillForm((form) => ({ ...form, title: event.target.value }))} />
-                  </label>
-                  <label className="field">
-                    <span>Amount</span>
-                    <input type="text" inputMode="decimal" value={recurringBillForm.amount} onChange={(event) => setRecurringBillForm((form) => ({ ...form, amount: event.target.value }))} />
-                  </label>
-                  <label className="field">
-                    <span>Category</span>
-                    <select value={recurringBillForm.categoryId} onChange={(event) => setRecurringBillForm((form) => ({ ...form, categoryId: event.target.value }))}>
-                      <option value="">None</option>
-                      {activeCategories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}
-                    </select>
-                  </label>
-                  <label className="field">
-                    <span>Next due</span>
-                    <input type="date" value={recurringBillForm.nextDueOn} onChange={(event) => setRecurringBillForm((form) => ({ ...form, nextDueOn: event.target.value }))} />
-                  </label>
-                  <button className="button button--primary button--small" type="button" disabled={createRecurringMutation.isPending} onClick={() => void handleCreateRecurringBill()}>Add recurring bill</button>
-                  <div className="setup-drawer__list">
-                    {recurringExpenses.filter((item) => item.status !== "archived").map((item) => (
-                      <div key={item.id} className="setup-drawer__item">
-                        <div className="setup-drawer__item-info">
-                          <span className="setup-drawer__item-name">{item.title}</span>
-                          <span className="setup-drawer__item-meta">
-                            {isRecurring(item.recurrence) ? `${formatFullRecurrenceSummary(item.recurrence!.rule)} · ` : ""}
-                            {formatDueLabel(item.nextDueOn)}
-                          </span>
-                        </div>
-                        <button className="button button--ghost button--small" type="button" onClick={() => void updateRecurringMutation.mutateAsync({ recurringExpenseId: item.id, status: item.status === "active" ? "paused" : "active" })}>
-                          {item.status === "active" ? "Pause" : "Resume"}
-                        </button>
-                      </div>
-                    ))}
-                  </div>
+                  <SetupBlock title="Add recurring bill" meta={`${visibleRecurringBills.length} saved`}>
+                    <div className="setup-drawer__form-grid">
+                      <label className="field">
+                        <span>Bill</span>
+                        <input type="text" value={recurringBillForm.title} onChange={(event) => setRecurringBillForm((form) => ({ ...form, title: event.target.value }))} />
+                      </label>
+                      <label className="field">
+                        <span>Amount</span>
+                        <input type="text" inputMode="decimal" value={recurringBillForm.amount} onChange={(event) => setRecurringBillForm((form) => ({ ...form, amount: event.target.value }))} />
+                      </label>
+                      <label className="field">
+                        <span className="field__split-label">
+                          Category
+                          <button type="button" onClick={() => setSetupTab("categories")}>Manage</button>
+                        </span>
+                        <select value={recurringBillForm.categoryId} onChange={(event) => setRecurringBillForm((form) => ({ ...form, categoryId: event.target.value }))}>
+                          <option value="">None</option>
+                          {activeCategories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}
+                        </select>
+                      </label>
+                      <label className="field">
+                        <span>Next due</span>
+                        <input type="date" value={recurringBillForm.nextDueOn} onChange={(event) => setRecurringBillForm((form) => ({ ...form, nextDueOn: event.target.value }))} />
+                      </label>
+                    </div>
+                    <button className="button button--primary button--small" type="button" disabled={createRecurringMutation.isPending} onClick={() => void handleCreateRecurringBill()}>Add recurring bill</button>
+                  </SetupBlock>
+                  <SetupBlock title="Recurring bills" meta={formatMinorCurrency(visibleRecurringBills.reduce((sum, item) => sum + (item.defaultAmountMinor ?? 0), 0), currency)}>
+                    <SetupRecurringBillList
+                      recurringBills={visibleRecurringBills}
+                      currency={currency}
+                      categoryMap={categoryMap}
+                      isUpdating={updateRecurringMutation.isPending}
+                      onToggle={(item) => void updateRecurringMutation.mutateAsync({ recurringExpenseId: item.id, status: item.status === "active" ? "paused" : "active" })}
+                      onArchive={(recurringExpenseId) => void updateRecurringMutation.mutateAsync({ recurringExpenseId, status: "archived" })}
+                    />
+                  </SetupBlock>
                 </div>
               ) : null}
             </div>
@@ -1622,6 +1692,255 @@ function MoneyEventsTable({
   );
 }
 
+function SetupBlock({
+  title,
+  meta,
+  children,
+}: {
+  title: string;
+  meta?: string;
+  children: ReactNode;
+}) {
+  return (
+    <section className="setup-block">
+      <div className="setup-block__head">
+        <h3>{title}</h3>
+        {meta ? <span>{meta}</span> : null}
+      </div>
+      {children}
+    </section>
+  );
+}
+
+function SetupEmpty({ title }: { title: string }) {
+  return <div className="setup-empty">{title}</div>;
+}
+
+function formatAccountType(accountType: string) {
+  switch (accountType) {
+    case "bank": return "Bank";
+    case "cash": return "Cash";
+    case "wallet": return "Wallet";
+    default: return "Other";
+  }
+}
+
+function SetupAccountList({
+  accounts,
+  currency,
+  isUpdating,
+  onArchive,
+  onRestore,
+}: {
+  accounts: Array<{
+    id: string;
+    name: string;
+    accountType: string;
+    currentBalanceMinor: number;
+    archivedAt: string | null;
+  }>;
+  currency: string;
+  isUpdating: boolean;
+  onArchive: (accountId: string) => void;
+  onRestore: (accountId: string) => void;
+}) {
+  if (accounts.length === 0) {
+    return <SetupEmpty title="No accounts yet" />;
+  }
+
+  return (
+    <div className="setup-manage-list">
+      {accounts.map((account) => (
+        <div key={account.id} className={`setup-manage-row${account.archivedAt ? " setup-manage-row--muted" : ""}`}>
+          <div>
+            <strong>{account.name}</strong>
+            <span>{formatAccountType(account.accountType)} · {account.archivedAt ? "Archived" : "Active"}</span>
+          </div>
+          <span className="setup-manage-row__amount">{formatMinorCurrency(account.currentBalanceMinor, currency)}</span>
+          <button className="button button--ghost button--small" type="button" disabled={isUpdating} onClick={() => account.archivedAt ? onRestore(account.id) : onArchive(account.id)}>
+            {account.archivedAt ? "Restore" : "Archive"}
+          </button>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function SetupCardList({
+  cards,
+  currency,
+  accountMap,
+  isUpdating,
+  onArchive,
+}: {
+  cards: Array<{
+    id: string;
+    name: string;
+    issuer: string | null;
+    paymentAccountId: string | null;
+    outstandingBalanceMinor: number;
+    creditLimitMinor: number;
+    minimumDueMinor: number | null;
+    paymentDueDay: number | null;
+    utilizationPercent: number;
+  }>;
+  currency: string;
+  accountMap: Map<string, { name: string }>;
+  isUpdating: boolean;
+  onArchive: (cardId: string) => void;
+}) {
+  if (cards.length === 0) {
+    return <SetupEmpty title="No cards tracked" />;
+  }
+
+  return (
+    <div className="setup-manage-list">
+      {cards.map((card) => (
+        <div key={card.id} className="setup-manage-row">
+          <div>
+            <strong>{card.name}</strong>
+            <span>
+              {card.issuer ?? "Credit card"} · {card.utilizationPercent}% used
+              {card.paymentDueDay ? ` · due ${card.paymentDueDay}` : ""}
+              {card.paymentAccountId ? ` · ${accountMap.get(card.paymentAccountId)?.name ?? "Account"}` : ""}
+            </span>
+          </div>
+          <span className="setup-manage-row__amount">{formatMinorCurrency(card.minimumDueMinor ?? card.outstandingBalanceMinor, currency)}</span>
+          <button className="button button--ghost button--small" type="button" disabled={isUpdating} onClick={() => onArchive(card.id)}>Archive</button>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function SetupLoanList({
+  loans,
+  currency,
+  accountMap,
+  isUpdating,
+  onArchive,
+}: {
+  loans: Array<{
+    id: string;
+    name: string;
+    lender: string | null;
+    paymentAccountId: string | null;
+    outstandingBalanceMinor: number;
+    emiAmountMinor: number;
+    dueDay: number | null;
+    progressPercent: number;
+  }>;
+  currency: string;
+  accountMap: Map<string, { name: string }>;
+  isUpdating: boolean;
+  onArchive: (loanId: string) => void;
+}) {
+  if (loans.length === 0) {
+    return <SetupEmpty title="No loans tracked" />;
+  }
+
+  return (
+    <div className="setup-manage-list">
+      {loans.map((loan) => (
+        <div key={loan.id} className="setup-manage-row">
+          <div>
+            <strong>{loan.name}</strong>
+            <span>
+              {loan.lender ?? "Loan"} · {loan.progressPercent}% paid
+              {loan.dueDay ? ` · due ${loan.dueDay}` : ""}
+              {loan.paymentAccountId ? ` · ${accountMap.get(loan.paymentAccountId)?.name ?? "Account"}` : ""}
+            </span>
+          </div>
+          <span className="setup-manage-row__amount">{formatMinorCurrency(loan.emiAmountMinor, currency)}</span>
+          <button className="button button--ghost button--small" type="button" disabled={isUpdating} onClick={() => onArchive(loan.id)}>Archive</button>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function SetupCategoryList({
+  categories,
+  isUpdating,
+  onArchive,
+}: {
+  categories: Array<{ id: string; name: string; color: string | null }>;
+  isUpdating: boolean;
+  onArchive: (categoryId: string) => void;
+}) {
+  if (categories.length === 0) {
+    return <SetupEmpty title="No categories yet" />;
+  }
+
+  return (
+    <div className="setup-manage-list setup-manage-list--chips">
+      {categories.map((category) => (
+        <div key={category.id} className="setup-category-chip">
+          <span style={{ background: category.color ?? "rgba(226, 184, 95, 0.7)" }} />
+          <strong>{category.name}</strong>
+          <button className="button button--ghost button--small" type="button" disabled={isUpdating} onClick={() => onArchive(category.id)}>Archive</button>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function SetupRecurringBillList({
+  recurringBills,
+  currency,
+  categoryMap,
+  isUpdating,
+  onToggle,
+  onArchive,
+}: {
+  recurringBills: Array<{
+    id: string;
+    title: string;
+    expenseCategoryId: string | null;
+    defaultAmountMinor: number | null;
+    recurrence: RecurrenceDefinition | null;
+    nextDueOn: string;
+    status: "active" | "paused" | "archived";
+  }>;
+  currency: string;
+  categoryMap: Map<string, { name: string }>;
+  isUpdating: boolean;
+  onToggle: (item: { id: string; status: "active" | "paused" | "archived" }) => void;
+  onArchive: (recurringExpenseId: string) => void;
+}) {
+  if (recurringBills.length === 0) {
+    return <SetupEmpty title="No recurring bills" />;
+  }
+
+  return (
+    <div className="setup-manage-list">
+      {recurringBills.map((item) => {
+        const category = item.expenseCategoryId ? categoryMap.get(item.expenseCategoryId)?.name : null;
+        return (
+          <div key={item.id} className={`setup-manage-row${item.status !== "active" ? " setup-manage-row--muted" : ""}`}>
+            <div>
+              <strong>{item.title}</strong>
+              <span>
+                {isRecurring(item.recurrence) ? `${formatFullRecurrenceSummary(item.recurrence!.rule)} · ` : ""}
+                {formatDueLabel(item.nextDueOn)}
+                {category ? ` · ${category}` : ""}
+                {item.status !== "active" ? ` · ${item.status}` : ""}
+              </span>
+            </div>
+            <span className="setup-manage-row__amount">{formatMinorCurrency(item.defaultAmountMinor ?? 0, currency)}</span>
+            <div className="setup-manage-row__actions">
+              <button className="button button--ghost button--small" type="button" disabled={isUpdating} onClick={() => onToggle(item)}>
+                {item.status === "active" ? "Pause" : "Resume"}
+              </button>
+              <button className="button button--ghost button--small" type="button" disabled={isUpdating} onClick={() => onArchive(item.id)}>Archive</button>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function IncomePlanList({
   incomePlans,
   currency,
@@ -1658,18 +1977,20 @@ function IncomePlanList({
   }
 
   return (
-    <div className="fc-income-list">
+    <div className="setup-manage-list">
       {incomePlans.map((income) => (
-        <div key={income.id} className={`fc-income-row${income.status !== "active" ? " fc-income-row--muted" : ""}`}>
+        <div key={income.id} className={`setup-income-row${income.status !== "active" ? " setup-income-row--muted" : ""}`}>
           <div>
             <strong>{income.title}</strong>
-            <span>{accountMap.get(income.accountId)?.name ?? "Account"} · {formatShortDate(income.nextExpectedOn)} · {income.status}</span>
+            <span>{accountMap.get(income.accountId)?.name ?? "Account"} · Next {formatShortDate(income.nextExpectedOn)} · {income.status}</span>
           </div>
-          <span>{formatMinorCurrency(income.amountMinor, currency)}</span>
-          <button className="button button--primary button--small" type="button" disabled={isReceiving || income.status !== "active"} onClick={() => onMarkReceived(income)}>Mark received</button>
-          <button className="button button--ghost button--small" type="button" disabled={isUndoing} onClick={() => onUndoReceipt(income.id)}>Undo last</button>
-          <button className="button button--ghost button--small" type="button" disabled={isUpdating || income.status !== "active"} onClick={() => onPause(income.id)}>Pause</button>
-          <button className="button button--ghost button--small" type="button" disabled={isUpdating || income.status === "archived"} onClick={() => onArchive(income.id)}>Archive</button>
+          <span className="setup-income-row__amount">{formatMinorCurrency(income.amountMinor, currency)}</span>
+          <div className="setup-income-row__actions">
+            <button className="button button--primary button--small" type="button" disabled={isReceiving || income.status !== "active"} onClick={() => onMarkReceived(income)}>Mark received</button>
+            <button className="button button--ghost button--small" type="button" disabled={isUndoing} onClick={() => onUndoReceipt(income.id)}>Undo</button>
+            <button className="button button--ghost button--small" type="button" disabled={isUpdating || income.status !== "active"} onClick={() => onPause(income.id)}>Pause</button>
+            <button className="button button--ghost button--small" type="button" disabled={isUpdating || income.status === "archived"} onClick={() => onArchive(income.id)}>Archive</button>
+          </div>
         </div>
       ))}
     </div>

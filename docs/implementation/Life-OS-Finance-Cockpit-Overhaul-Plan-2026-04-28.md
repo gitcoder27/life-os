@@ -1040,25 +1040,25 @@ These may matter later, but the immediate product risk is workflow coherence, no
 
 ### Phase 4: Setup Management
 
-- [ ] Split setup drawer into smaller components.
-- [ ] Add account management rows.
-- [ ] Add income plan management rows.
-- [ ] Add recurring bill management rows.
-- [ ] Add credit card management rows.
-- [ ] Add loan management rows.
-- [ ] Add category management rows.
+- [x] Split setup drawer into smaller components.
+- [x] Add account management rows.
+- [x] Add income plan management rows.
+- [x] Add recurring bill management rows.
+- [x] Add credit card management rows.
+- [x] Add loan management rows.
+- [x] Add category management rows.
 - [ ] Add edit flows where needed.
-- [ ] Add archive/pause flows where needed.
-- [ ] Ensure newly created items appear immediately.
+- [x] Add archive/pause flows where needed.
+- [x] Ensure newly created items appear immediately.
 
 ### Phase 5: Reviews and Cross-App Integration
 
-- [ ] Add Finance due items to Today when actionable.
+- [x] Add Finance due items to Today when actionable.
 - [ ] Add Capture to finance conversion for bills/expenses.
 - [ ] Add goal contribution commitments to Finance.
-- [ ] Add weekly finance review summary.
-- [ ] Add monthly finance review summary.
-- [ ] Add missed salary/bill/debt alerts.
+- [x] Add weekly finance review summary.
+- [x] Add monthly finance review summary.
+- [x] Add missed salary/bill/debt alerts.
 - [ ] Add review-driven next month adjustments.
 
 ### Technical Quality

@@ -1,4 +1,9 @@
-import { useFinanceDataQuery, getTodayDate } from "../../../shared/lib/api";
+import {
+  useFinanceDataQuery,
+  getTodayDate,
+  useReceiveRecurringIncomeMutation,
+  type FinanceTimelineItem,
+} from "../../../shared/lib/api";
 import { Link } from "react-router-dom";
 import { buildFinanceBillRoute, buildFinanceRoute } from "../../finance/finance-navigation";
 import { useQuickMarkBillPaid } from "../../finance/useQuickMarkBillPaid";
@@ -13,6 +18,7 @@ export function FinanceAdmin() {
     includeInsights: false,
   });
   const { isPending, markPaid, pendingBillId } = useQuickMarkBillPaid(today);
+  const receiveIncomeMutation = useReceiveRecurringIncomeMutation(today);
 
   if (financeQuery.isLoading && !financeQuery.data) {
     return (
@@ -34,8 +40,26 @@ export function FinanceAdmin() {
   const pendingBills = summary?.upcomingBills?.filter((b) => b.status === "pending" || b.status === "rescheduled") ?? [];
   const overdueBills = pendingBills.filter((b) => b.dueOn <= today);
   const upcomingBills = pendingBills.filter((b) => b.dueOn > today).slice(0, 3);
+  const actionableTimelineItems = (data.timeline?.items ?? [])
+    .filter(isActionableTodayFinanceItem)
+    .slice(0, 4);
+  const incomePlans = data.dashboard?.recurringIncome ?? [];
 
   const currencyCode = summary?.currencyCode ?? "USD";
+  const handleReceiveIncome = async (item: FinanceTimelineItem) => {
+    const income = incomePlans.find((plan) => plan.id === item.sourceId);
+    const accountId = income?.accountId ?? item.accountId;
+    if (!accountId) return;
+
+    await receiveIncomeMutation.mutateAsync({
+      recurringIncomeId: item.sourceId,
+      accountId,
+      amountMinor: item.amountMinor,
+      currencyCode: item.currencyCode,
+      receivedOn: item.date,
+      description: item.title,
+    });
+  };
 
   return (
     <div className="today-finance-admin">
@@ -58,6 +82,50 @@ export function FinanceAdmin() {
             </Link>
           </div>
         </div>
+
+        {actionableTimelineItems.map((item) => {
+          const isIncome = item.sourceType === "income_plan";
+          const isOverdue = item.status === "overdue";
+
+          return (
+            <div
+              key={item.id}
+              className={`today-fa__row today-fa__row--finance${isOverdue ? " today-fa__row--alert" : ""}`}
+            >
+              <span
+                className={`today-fa__indicator${
+                  isOverdue ? " today-fa__indicator--alert" : " today-fa__indicator--done"
+                }`}
+              >
+                {getFinanceEventMarker(item)}
+              </span>
+              <span className="today-fa__label">
+                {getFinanceEventTitle(item)}
+                {` · ${formatMinor(item.amountMinor, item.currencyCode)}`}
+              </span>
+              <span className="today-fa__due">{isOverdue ? "Overdue" : "Today"}</span>
+              <div className="today-fa__actions">
+                {isIncome ? (
+                  <button
+                    className="today-fa__chip-button today-fa__chip--primary"
+                    type="button"
+                    disabled={receiveIncomeMutation.isPending}
+                    onClick={() => void handleReceiveIncome(item)}
+                  >
+                    {receiveIncomeMutation.isPending ? "Saving..." : "Mark"}
+                  </button>
+                ) : (
+                  <Link
+                    to={buildFinanceRoute({ month: item.date.slice(0, 7) })}
+                    className="today-fa__chip today-fa__chip--primary"
+                  >
+                    Open
+                  </Link>
+                )}
+              </div>
+            </div>
+          );
+        })}
 
         {/* Overdue bills */}
         {overdueBills.map((bill) => (
@@ -125,6 +193,36 @@ export function FinanceAdmin() {
       </div>
     </div>
   );
+}
+
+function isActionableTodayFinanceItem(item: FinanceTimelineItem): boolean {
+  if (item.status !== "overdue" && item.status !== "due_today") {
+    return false;
+  }
+
+  if (!item.primaryAction) {
+    return false;
+  }
+
+  return (
+    item.sourceType === "income_plan"
+    || item.sourceType === "credit_card_due"
+    || item.sourceType === "loan_emi"
+  );
+}
+
+function getFinanceEventMarker(item: FinanceTimelineItem): string {
+  if (item.sourceType === "income_plan") return "I";
+  if (item.sourceType === "credit_card_due") return "C";
+  return "L";
+}
+
+function getFinanceEventTitle(item: FinanceTimelineItem): string {
+  if (item.sourceType === "income_plan") {
+    return item.status === "overdue" ? `${item.title} missed` : item.title;
+  }
+
+  return item.title;
 }
 
 function formatMinor(amountMinor: number, currencyCode: string): string {

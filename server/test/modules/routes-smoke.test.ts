@@ -180,6 +180,26 @@ describe("module route smoke tests", () => {
       deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
       createMany: vi.fn().mockResolvedValue({ count: 0 }),
     } as any;
+    prisma.financeAccount = {
+      findMany: vi.fn().mockResolvedValue([]),
+      deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
+    } as any;
+    prisma.recurringIncomeTemplate = {
+      findMany: vi.fn().mockResolvedValue([]),
+      deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
+    } as any;
+    prisma.financeTransaction = {
+      findMany: vi.fn().mockResolvedValue([]),
+      deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
+    } as any;
+    prisma.creditCard = {
+      findMany: vi.fn().mockResolvedValue([]),
+      deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
+    } as any;
+    prisma.loan = {
+      findMany: vi.fn().mockResolvedValue([]),
+      deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
+    } as any;
 
     scoringMock.ensureCycle.mockResolvedValue({
       id: "cycle-id",
@@ -1721,6 +1741,40 @@ describe("module route smoke tests", () => {
         },
       ]),
     } as any;
+    prisma.financeAccount = {
+      findMany: vi.fn().mockResolvedValue([
+        {
+          id: "finance-account-1",
+          userId: "user-1",
+          name: "Kotak",
+          accountType: "BANK",
+          currencyCode: "INR",
+          openingBalanceMinor: 0,
+          archivedAt: null,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      ]),
+      deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
+    } as any;
+    prisma.recurringIncomeTemplate = {
+      findMany: vi.fn().mockResolvedValue([
+        {
+          id: "income-1",
+          userId: "user-1",
+          accountId: "finance-account-1",
+          title: "Salary",
+          amountMinor: 8000000,
+          currencyCode: "INR",
+          recurrenceRule: "monthly",
+          nextExpectedOn: new Date("2026-03-14T00:00:00.000Z"),
+          status: "ACTIVE",
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      ]),
+      deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
+    } as any;
     prisma.notification = { findMany: vi.fn().mockResolvedValue([]) } as any;
     prisma.userPreference = {
       findUnique: vi.fn().mockResolvedValue({
@@ -1790,6 +1844,20 @@ describe("module route smoke tests", () => {
           route: "/finance?month=2026-03&bill=admin-1&intent=pay&section=due_now",
         },
       }),
+    );
+    expect(payload.attentionItems).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "finance:income_plan:income-1",
+          kind: "finance",
+          title: "Mark Salary received",
+          detail: "₹80,000 due today",
+          action: {
+            type: "open_route",
+            route: "/finance?month=2026-03",
+          },
+        }),
+      ]),
     );
     expect(payload.guidance.weeklyChallenge).toEqual(
       expect.objectContaining({
