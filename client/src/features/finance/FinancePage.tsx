@@ -1,4 +1,4 @@
-import { useMemo, useState, type Dispatch, type ReactNode, type SetStateAction } from "react";
+import { useMemo, useState, type CSSProperties, type Dispatch, type ReactNode, type SetStateAction } from "react";
 
 import {
   daysUntil,
@@ -1367,37 +1367,65 @@ function SafeThisMonthPanel({
   reservedMinor: number;
   totalSpentMinor: number;
 }) {
+  const allocationTotalMinor = Math.max(
+    Math.abs(safeToSpendMinor) + Math.max(reservedMinor, 0) + Math.max(totalSpentMinor, 0),
+    1,
+  );
+  const reservedShare = Math.min((Math.max(reservedMinor, 0) / allocationTotalMinor) * 100, 100);
+  const spentShare = Math.min((Math.max(totalSpentMinor, 0) / allocationTotalMinor) * 100, 100);
+  const metricItems = [
+    {
+      icon: "¤",
+      label: "Cash",
+      value: cashAvailableMinor,
+      meta: "Available now",
+    },
+    {
+      icon: "↗",
+      label: "Expected",
+      value: plannedIncomeMinor,
+      meta: "This month",
+    },
+    {
+      icon: "▣",
+      label: "Reserved",
+      value: reservedMinor,
+      meta: "Bills, debt, plans",
+    },
+    {
+      icon: "≡",
+      label: "Spent",
+      value: totalSpentMinor,
+      meta: "This month",
+    },
+  ];
+
   return (
     <section className="fc-hero" aria-label="Safe this month">
       <div className="fc-hero__safe">
-        <span className="fc-label">Safe this month</span>
+        <span className="fc-label">Safe to spend</span>
         <strong>{formatMinorCurrency(safeToSpendMinor, currency)}</strong>
-        <span className="fc-hero__caption">Safe to spend</span>
+        <div className="fc-hero__track" aria-hidden="true">
+          <span
+            className="fc-hero__track-fill fc-hero__track-fill--reserved"
+            style={{ inlineSize: `${reservedShare}%` } as CSSProperties}
+          />
+          <span
+            className="fc-hero__track-fill fc-hero__track-fill--spent"
+            style={{ inlineSize: `${spentShare}%` } as CSSProperties}
+          />
+        </div>
         <span className="fc-status-dot">On track</span>
       </div>
-      <div className="fc-hero__metric">
-        <span className="fc-icon-box">¤</span>
-        <span className="fc-label">Cash</span>
-        <strong>{formatMinorCurrency(cashAvailableMinor, currency)}</strong>
-        <small>Available now</small>
-      </div>
-      <div className="fc-hero__metric">
-        <span className="fc-icon-box">↗</span>
-        <span className="fc-label">Expected income</span>
-        <strong>{formatMinorCurrency(plannedIncomeMinor, currency)}</strong>
-        <small>This month</small>
-      </div>
-      <div className="fc-hero__metric">
-        <span className="fc-icon-box">▣</span>
-        <span className="fc-label">Reserved</span>
-        <strong>{formatMinorCurrency(reservedMinor, currency)}</strong>
-        <small>Bills, debt, plans</small>
-      </div>
-      <div className="fc-hero__metric">
-        <span className="fc-icon-box">≡</span>
-        <span className="fc-label">Spent</span>
-        <strong>{formatMinorCurrency(totalSpentMinor, currency)}</strong>
-        <small>This month</small>
+      <div className="fc-hero__metrics">
+        {metricItems.map((metric) => (
+          <div className="fc-hero__metric" key={metric.label}>
+            <span className="fc-icon-box">{metric.icon}</span>
+            <span className="fc-label">{metric.label}</span>
+            <strong>{formatMinorCurrency(metric.value, currency)}</strong>
+            <small>{metric.meta}</small>
+          </div>
+        ))}
       </div>
     </section>
   );
