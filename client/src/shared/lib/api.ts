@@ -199,6 +199,8 @@ export type {
   FinanceMonthPlanItem,
   FinanceMonthPlanResponse,
   FinancePaceStatus,
+  FinanceTimelineItem,
+  FinanceTimelineResponse,
   FinanceTransactionItem,
   FinanceTransactionType,
   FinanceWatchStatus,

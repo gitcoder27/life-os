@@ -1009,20 +1009,20 @@ These may matter later, but the immediate product risk is workflow coherence, no
 
 ### Phase 2: Monthly Timeline
 
-- [ ] Define `FinanceTimelineItem` contract.
-- [ ] Add finance timeline service.
-- [ ] Add timeline endpoint.
-- [ ] Include expected income plans.
-- [ ] Include received income transactions.
-- [ ] Include open bills.
-- [ ] Include paid bills.
-- [ ] Include credit card dues.
-- [ ] Include loan EMIs.
-- [ ] Add Timeline tab.
-- [ ] Add grouped timeline UI.
-- [ ] Add row-level actions from timeline.
-- [ ] Add empty timeline state.
-- [ ] Add server tests for timeline ordering and statuses.
+- [x] Define `FinanceTimelineItem` contract.
+- [x] Add finance timeline service.
+- [x] Add timeline endpoint.
+- [x] Include expected income plans.
+- [x] Include received income transactions.
+- [x] Include open bills.
+- [x] Include paid bills.
+- [x] Include credit card dues.
+- [x] Include loan EMIs.
+- [x] Add Timeline tab.
+- [x] Add grouped timeline UI.
+- [x] Add row-level actions from timeline.
+- [x] Add empty timeline state.
+- [x] Add server tests for timeline ordering and statuses.
 - [ ] Manually verify timeline on desktop and mobile.
 
 ### Phase 3: Safe-to-Spend
@@ -1064,13 +1064,13 @@ These may matter later, but the immediate product risk is workflow coherence, no
 ### Technical Quality
 
 - [ ] Split large Finance page into workflow components.
-- [ ] Split finance route logic into services.
-- [ ] Keep contracts as the source of shared types.
-- [ ] Add route tests for every new endpoint.
+- [x] Split finance route logic into services.
+- [x] Keep contracts as the source of shared types.
+- [x] Add route tests for every new endpoint.
 - [ ] Add service tests for calculations.
-- [ ] Run `npm run typecheck`.
-- [ ] Run `npm run build`.
-- [ ] Run focused server finance tests.
+- [x] Run `npm run typecheck`.
+- [x] Run `npm run build`.
+- [x] Run focused server finance tests.
 - [ ] Verify mobile layout manually.
 - [ ] Verify no dashboard double counting.
 

@@ -6,6 +6,7 @@ import {
   formatMinorCurrency,
   formatMonthLabel,
   formatShortDate,
+  type FinanceTimelineItem,
   getMonthString,
   getTodayDate,
   parseAmountToMinor,
@@ -67,6 +68,7 @@ type MoneyEvent = {
   status: string;
   actionLabel: string;
   tone: "positive" | "warning" | "negative";
+  groupTitle?: string;
   onAction?: () => void;
 };
 
@@ -193,6 +195,38 @@ function getPlannedIncomeMinor(incomePlans: Array<{ amountMinor: number; status:
     .reduce((sum, income) => sum + income.amountMinor, 0);
 
   return activePlanTotal > 0 ? activePlanTotal : fallback ?? 0;
+}
+
+function getTimelineType(item: FinanceTimelineItem): MoneyEvent["type"] {
+  switch (item.sourceType) {
+    case "income_plan":
+    case "income_transaction":
+      return "income";
+    case "credit_card_due":
+      return "card";
+    case "loan_emi":
+      return "loan";
+    default:
+      return "bill";
+  }
+}
+
+function getTimelineTone(item: FinanceTimelineItem): MoneyEvent["tone"] {
+  if (item.status === "overdue") return "negative";
+  if (item.direction === "in") return "positive";
+  return "warning";
+}
+
+function getTimelineStatusLabel(status: FinanceTimelineItem["status"]) {
+  switch (status) {
+    case "due_today": return "Due today";
+    case "due_soon": return "Due soon";
+    case "completed": return "Done";
+    case "skipped": return "Skipped";
+    case "paused": return "Paused";
+    case "overdue": return "Overdue";
+    default: return "Expected";
+  }
 }
 
 export function FinancePage() {
@@ -331,62 +365,40 @@ export function FinancePage() {
   const nextBill = dueNow[0] ?? openBills[0] ?? null;
   const nextCardDue = activeCreditCards.find((card) => (card.minimumDueMinor ?? 0) > 0) ?? activeCreditCards[0] ?? null;
   const nextLoanDue = activeLoans[0] ?? null;
-  const moneyEvents: MoneyEvent[] = [
-    ...activeIncomePlans.map((income): MoneyEvent => ({
-      id: `income-${income.id}`,
-      sortKey: income.nextExpectedOn,
-      dateLabel: formatShortDate(income.nextExpectedOn),
-      type: "income",
-      title: income.title,
-      amountMinor: income.amountMinor,
-      accountName: accountMap.get(income.accountId)?.name ?? "Account",
-      status: daysUntil(income.nextExpectedOn) < 0 ? "Overdue" : daysUntil(income.nextExpectedOn) === 0 ? "Due today" : "Expected",
-      actionLabel: "Mark received",
-      tone: "positive",
-      onAction: () => void handleReceiveIncome(income),
-    })),
-    ...openBills.map((bill): MoneyEvent => ({
-      id: `bill-${bill.id}`,
-      sortKey: bill.dueOn,
-      dateLabel: formatShortDate(bill.dueOn),
-      type: "bill",
-      title: bill.title,
-      amountMinor: bill.amountMinor ?? 0,
-      accountName: activeAccounts[0]?.name ?? "Account",
-      status: daysUntil(bill.dueOn) < 0 ? "Overdue" : daysUntil(bill.dueOn) === 0 ? "Due today" : "Upcoming",
-      actionLabel: "Pay",
-      tone: daysUntil(bill.dueOn) < 0 ? "negative" : "warning",
-      onAction: () => openBillPayment(bill),
-    })),
-    ...activeCreditCards
-      .filter((card) => (card.minimumDueMinor ?? 0) > 0)
-      .map((card): MoneyEvent => ({
-        id: `card-${card.id}`,
-        sortKey: card.paymentDueDay ? `${selectedMonth}-${String(card.paymentDueDay).padStart(2, "0")}` : `${selectedMonth}-28`,
-        dateLabel: card.paymentDueDay ? `${getMonthShort(selectedMonth)} ${card.paymentDueDay}` : "This month",
-        type: "card",
-        title: `${card.name} due`,
-        amountMinor: card.minimumDueMinor ?? 0,
-        accountName: card.paymentAccountId ? accountMap.get(card.paymentAccountId)?.name ?? "Account" : "No account",
-        status: "Upcoming",
-        actionLabel: "Pay due",
-        tone: "warning",
-        onAction: () => void handlePayCreditCard(card),
-      })),
-    ...activeLoans.map((loan): MoneyEvent => ({
-      id: `loan-${loan.id}`,
-      sortKey: loan.dueDay ? `${selectedMonth}-${String(loan.dueDay).padStart(2, "0")}` : `${selectedMonth}-28`,
-      dateLabel: loan.dueDay ? `${getMonthShort(selectedMonth)} ${loan.dueDay}` : "This month",
-      type: "loan",
-      title: `${loan.name} EMI`,
-      amountMinor: loan.emiAmountMinor,
-      accountName: loan.paymentAccountId ? accountMap.get(loan.paymentAccountId)?.name ?? "Account" : "No account",
-      status: "Upcoming",
-      actionLabel: "Pay EMI",
-      tone: "warning",
-      onAction: () => void handlePayLoan(loan),
-    })),
-  ].sort((left, right) => left.sortKey.localeCompare(right.sortKey));
+  const timelineGroupTitles = new Map((financeData?.timeline?.groups ?? []).flatMap((group) => group.items.map((item) => [item.id, group.title])));
+  const moneyEvents: MoneyEvent[] = (financeData?.timeline?.items ?? []).map((item): MoneyEvent => {
+    const accountName = typeof item.metadata.accountName === "string" ? item.metadata.accountName : null;
+    const income = activeIncomePlans.find((plan) => plan.id === item.sourceId);
+    const bill = bills.find((candidate) => candidate.id === item.sourceId);
+    const card = activeCreditCards.find((candidate) => candidate.id === item.sourceId);
+    const loan = activeLoans.find((candidate) => candidate.id === item.sourceId);
+
+    const onAction =
+      item.primaryAction?.type === "mark_income_received" && income
+        ? () => void handleReceiveIncome(income, item.date)
+        : item.primaryAction?.type === "pay_bill" && bill
+          ? () => openBillPayment(bill)
+          : item.primaryAction?.type === "pay_card_due" && card
+            ? () => void handlePayCreditCard(card, item.date)
+            : item.primaryAction?.type === "pay_emi" && loan
+              ? () => void handlePayLoan(loan, item.date)
+              : undefined;
+
+    return {
+      id: item.id,
+      sortKey: item.date,
+      dateLabel: formatShortDate(item.date),
+      type: getTimelineType(item),
+      title: item.title,
+      amountMinor: item.amountMinor,
+      accountName: accountName ?? (item.accountId ? accountMap.get(item.accountId)?.name ?? "Account" : "-"),
+      status: getTimelineStatusLabel(item.status),
+      actionLabel: item.primaryAction?.label ?? "Done",
+      tone: getTimelineTone(item),
+      groupTitle: timelineGroupTitles.get(item.id),
+      onAction,
+    };
+  });
 
   const setupSteps = [
     { key: "account", label: "Account", done: activeAccounts.length > 0, action: () => openSetup("accounts") },
@@ -470,13 +482,13 @@ export function FinancePage() {
     amountMinor: number;
     currencyCode?: string;
     title: string;
-  }) {
+  }, receivedOn = today) {
     await receiveIncomeMutation.mutateAsync({
       recurringIncomeId: income.id,
       accountId: income.accountId,
       amountMinor: income.amountMinor,
       currencyCode: income.currencyCode ?? currency,
-      receivedOn: today,
+      receivedOn,
       description: income.title,
     });
   }
@@ -626,7 +638,7 @@ export function FinancePage() {
     paymentAccountId: string | null;
     outstandingBalanceMinor: number;
     minimumDueMinor: number | null;
-  }) {
+  }, paidOn = today) {
     const amountMinor = card.minimumDueMinor ?? card.outstandingBalanceMinor;
     if (!card.paymentAccountId || amountMinor <= 0) return;
 
@@ -634,7 +646,7 @@ export function FinancePage() {
       creditCardId: card.id,
       accountId: card.paymentAccountId,
       amountMinor,
-      paidOn: today,
+      paidOn,
     });
   }
 
@@ -642,14 +654,14 @@ export function FinancePage() {
     id: string;
     paymentAccountId: string | null;
     emiAmountMinor: number;
-  }) {
+  }, paidOn = today) {
     if (!loan.paymentAccountId || loan.emiAmountMinor <= 0) return;
 
     await payLoanMutation.mutateAsync({
       loanId: loan.id,
       accountId: loan.paymentAccountId,
       amountMinor: loan.emiAmountMinor,
-      paidOn: today,
+      paidOn,
     });
   }
 
@@ -815,7 +827,11 @@ export function FinancePage() {
                 <h2>Upcoming events</h2>
                 <button className="button button--ghost button--small" type="button" onClick={() => setTab("timeline")}>Full timeline</button>
               </div>
-              <MoneyEventsTable events={moneyEvents.slice(0, 6)} currency={currency} />
+              {financeData.sectionErrors.timeline ? (
+                <InlineErrorState message={financeData.sectionErrors.timeline.message} onRetry={() => void financeQuery.refetch()} />
+              ) : (
+                <MoneyEventsTable events={moneyEvents.slice(0, 6)} currency={currency} />
+              )}
 
               {setupSteps.some((step) => !step.done) ? (
                 <div className="fc-setup-strip">
@@ -847,7 +863,11 @@ export function FinancePage() {
                 <h2>Timeline</h2>
                 <button className="button button--ghost button--small" type="button" onClick={() => setShowTransactionForm(true)}>Add entry</button>
               </div>
-              <MoneyEventsTable events={moneyEvents} currency={currency} />
+              {financeData.sectionErrors.timeline ? (
+                <InlineErrorState message={financeData.sectionErrors.timeline.message} onRetry={() => void financeQuery.refetch()} />
+              ) : (
+                <MoneyEventsTable events={moneyEvents} currency={currency} showGroups />
+              )}
             </section>
           ) : null}
 
@@ -1530,13 +1550,25 @@ function QuickLinks({
 function MoneyEventsTable({
   events,
   currency,
+  showGroups = false,
 }: {
   events: MoneyEvent[];
   currency: string;
+  showGroups?: boolean;
 }) {
   if (events.length === 0) {
     return <EmptyState title="No upcoming events" description="Add income, bills, cards, or loans from setup." />;
   }
+
+  const rows = showGroups
+    ? events.flatMap((event, index) => {
+      const previous = events[index - 1];
+      const shouldShowGroup = event.groupTitle && previous?.groupTitle !== event.groupTitle;
+      return shouldShowGroup
+        ? [{ type: "group" as const, id: `group-${event.groupTitle}`, title: event.groupTitle }, { type: "event" as const, event }]
+        : [{ type: "event" as const, event }];
+    })
+    : events.map((event) => ({ type: "event" as const, event }));
 
   return (
     <div className="fc-event-table">
@@ -1549,19 +1581,30 @@ function MoneyEventsTable({
         <span>Status</span>
         <span>Action</span>
       </div>
-      {events.map((event) => (
-        <div key={event.id} className="fc-event-row">
-          <span>{event.dateLabel}</span>
-          <span className={`fc-event-type fc-event-type--${event.type}`}>{event.type}</span>
-          <strong>{event.title}</strong>
-          <span className={event.tone === "positive" ? "fc-money-positive" : event.tone === "negative" ? "fc-money-negative" : ""}>
-            {formatMinorCurrency(event.amountMinor, currency)}
-          </span>
-          <span>{event.accountName}</span>
-          <span className={`fc-status fc-status--${event.tone}`}>{event.status}</span>
-          <button className="button button--ghost button--small" type="button" onClick={event.onAction}>{event.actionLabel}</button>
-        </div>
-      ))}
+      {rows.map((row) => {
+        if (row.type === "group") {
+          return <div key={row.id} className="fc-event-group">{row.title}</div>;
+        }
+
+        const event = row.event;
+        return (
+          <div key={event.id} className="fc-event-row">
+            <span>{event.dateLabel}</span>
+            <span className={`fc-event-type fc-event-type--${event.type}`}>{event.type}</span>
+            <strong>{event.title}</strong>
+            <span className={event.tone === "positive" ? "fc-money-positive" : event.tone === "negative" ? "fc-money-negative" : ""}>
+              {formatMinorCurrency(event.amountMinor, currency)}
+            </span>
+            <span>{event.accountName}</span>
+            <span className={`fc-status fc-status--${event.tone}`}>{event.status}</span>
+            {event.onAction ? (
+              <button className="button button--ghost button--small" type="button" onClick={event.onAction}>{event.actionLabel}</button>
+            ) : (
+              <span className="fc-event-action-muted">{event.actionLabel}</span>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }

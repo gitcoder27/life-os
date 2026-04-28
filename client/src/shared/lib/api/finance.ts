@@ -36,6 +36,8 @@ import type {
   FinanceMonthPlanResponse,
   FinancePaceStatus,
   FinanceSummaryResponse,
+  FinanceTimelineItem,
+  FinanceTimelineResponse,
   FinanceTransactionItem,
   FinanceTransactionMutationResponse,
   FinanceTransactionType,
@@ -86,6 +88,8 @@ export type {
   FinanceMonthPlanItem,
   FinanceMonthPlanResponse,
   FinancePaceStatus,
+  FinanceTimelineItem,
+  FinanceTimelineResponse,
   FinanceTransactionItem,
   FinanceTransactionType,
   FinanceWatchStatus,
@@ -116,6 +120,7 @@ type FinanceDataQueryOptions = {
   includeCategories?: boolean;
   includeMonthPlan?: boolean;
   includeInsights?: boolean;
+  includeTimeline?: boolean;
 };
 
 type FinanceDataQueryResult = {
@@ -127,6 +132,7 @@ type FinanceDataQueryResult = {
   categories: FinanceCategoriesResponse | null;
   monthPlan: FinanceMonthPlanResponse | null;
   insights: FinanceInsightsResponse | null;
+  timeline: FinanceTimelineResponse | null;
   sectionErrors: {
     bills: ReturnType<typeof toSectionError> | null;
     expenses: ReturnType<typeof toSectionError> | null;
@@ -135,6 +141,7 @@ type FinanceDataQueryResult = {
     monthPlan: ReturnType<typeof toSectionError> | null;
     insights: ReturnType<typeof toSectionError> | null;
     dashboard: ReturnType<typeof toSectionError> | null;
+    timeline: ReturnType<typeof toSectionError> | null;
   };
 };
 
@@ -156,6 +163,7 @@ export const useFinanceDataQuery = (
   const includeCategories = options.includeCategories ?? true;
   const includeMonthPlan = options.includeMonthPlan ?? true;
   const includeInsights = options.includeInsights ?? true;
+  const includeTimeline = options.includeTimeline ?? true;
   const sectionKey = [
     includeBills ? "bills" : "no-bills",
     includeSummary ? "summary" : "no-summary",
@@ -165,6 +173,7 @@ export const useFinanceDataQuery = (
     includeMonthPlan ? "month-plan" : "no-month-plan",
     includeInsights ? "insights" : "no-insights",
     includeDashboard ? "dashboard" : "no-dashboard",
+    includeTimeline ? "timeline" : "no-timeline",
   ].join(":");
 
   return useQuery<FinanceDataQueryResult>({
@@ -180,6 +189,7 @@ export const useFinanceDataQuery = (
         categoriesResult,
         monthPlanResult,
         insightsResult,
+        timelineResult,
       ] =
         await Promise.allSettled([
           includeDashboard
@@ -218,6 +228,11 @@ export const useFinanceDataQuery = (
               query: { month },
             })
             : Promise.resolve(null),
+          includeTimeline
+            ? apiRequest<FinanceTimelineResponse>("/api/finance/timeline", {
+              query: { month },
+            })
+            : Promise.resolve(null),
         ]);
 
       return {
@@ -253,6 +268,10 @@ export const useFinanceDataQuery = (
           includeInsights && insightsResult.status === "fulfilled"
             ? insightsResult.value
             : null,
+        timeline:
+          includeTimeline && timelineResult.status === "fulfilled"
+            ? timelineResult.value
+            : null,
         sectionErrors: {
           bills:
             includeBills && billsResult.status === "rejected"
@@ -281,6 +300,10 @@ export const useFinanceDataQuery = (
           dashboard:
             includeDashboard && dashboardResult.status === "rejected"
               ? toSectionError(dashboardResult.reason, "Finance dashboard could not load.")
+              : null,
+          timeline:
+            includeTimeline && timelineResult.status === "rejected"
+              ? toSectionError(timelineResult.reason, "Timeline could not load.")
               : null,
         },
       };

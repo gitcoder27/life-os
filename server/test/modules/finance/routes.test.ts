@@ -449,4 +449,165 @@ describe("finance bill reconciliation routes", () => {
     expect(payload.transactionId).toBe(transaction.id);
     expect(payload.undone).toBe(true);
   });
+
+  it("builds a monthly timeline with income, bills, cards, and loans grouped by status", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-04-28T12:00:00.000Z"));
+
+    const createdAt = new Date("2026-04-01T00:00:00.000Z");
+    const account = {
+      id: ACCOUNT_ID,
+      userId: USER_ID,
+      name: "Kotak",
+      accountType: "BANK",
+      currencyCode: "INR",
+      openingBalanceMinor: 11050000,
+      archivedAt: null,
+      createdAt,
+      updatedAt: createdAt,
+    };
+
+    prisma.financeAccount.findMany.mockResolvedValueOnce([account]);
+    prisma.recurringIncomeTemplate.findMany.mockResolvedValueOnce([
+      {
+        id: RECURRING_INCOME_ID,
+        userId: USER_ID,
+        accountId: ACCOUNT_ID,
+        title: "Salary",
+        amountMinor: 8000000,
+        currencyCode: "INR",
+        recurrenceRule: "monthly",
+        nextExpectedOn: new Date("2026-04-30T00:00:00.000Z"),
+        status: "ACTIVE",
+        createdAt,
+        updatedAt: createdAt,
+      },
+    ]);
+    prisma.financeTransaction.findMany.mockResolvedValueOnce([
+      {
+        id: "00000000-0000-4000-8000-000000000081",
+        userId: USER_ID,
+        accountId: ACCOUNT_ID,
+        transferAccountId: null,
+        transactionType: "INCOME",
+        amountMinor: 1000000,
+        currencyCode: "INR",
+        occurredOn: new Date("2026-04-05T00:00:00.000Z"),
+        description: "Freelance",
+        expenseCategoryId: null,
+        billId: null,
+        recurringIncomeTemplateId: null,
+        createdAt,
+        updatedAt: createdAt,
+      },
+    ]);
+    prisma.adminItem.findMany.mockResolvedValueOnce([
+      {
+        id: "00000000-0000-4000-8000-000000000090",
+        userId: USER_ID,
+        title: "Rent",
+        itemType: "BILL",
+        dueOn: new Date("2026-04-20T00:00:00.000Z"),
+        status: "PENDING",
+        relatedTaskId: null,
+        recurringExpenseTemplateId: null,
+        expenseCategoryId: null,
+        amountMinor: 2500000,
+        note: null,
+        completedAt: null,
+        completionMode: null,
+        createdAt,
+        updatedAt: createdAt,
+        linkedExpense: null,
+      },
+      {
+        id: "00000000-0000-4000-8000-000000000091",
+        userId: USER_ID,
+        title: "Internet",
+        itemType: "BILL",
+        dueOn: new Date("2026-04-10T00:00:00.000Z"),
+        status: "DONE",
+        relatedTaskId: null,
+        recurringExpenseTemplateId: null,
+        expenseCategoryId: null,
+        amountMinor: 150000,
+        note: null,
+        completedAt: new Date("2026-04-10T00:00:00.000Z"),
+        completionMode: "PAY_AND_LOG",
+        createdAt,
+        updatedAt: createdAt,
+        linkedExpense: { id: EXPENSE_ID },
+      },
+    ]);
+    prisma.creditCard.findMany.mockResolvedValueOnce([
+      {
+        id: "00000000-0000-4000-8000-0000000000a0",
+        userId: USER_ID,
+        paymentAccountId: ACCOUNT_ID,
+        name: "Axis Ace",
+        issuer: "Axis",
+        currencyCode: "INR",
+        creditLimitMinor: 30000000,
+        outstandingBalanceMinor: 900000,
+        statementDay: null,
+        paymentDueDay: 29,
+        minimumDueMinor: 900000,
+        status: "ACTIVE",
+        createdAt,
+        updatedAt: createdAt,
+      },
+    ]);
+    prisma.loan.findMany.mockResolvedValueOnce([
+      {
+        id: "00000000-0000-4000-8000-0000000000b0",
+        userId: USER_ID,
+        paymentAccountId: ACCOUNT_ID,
+        name: "Car loan",
+        lender: "HDFC",
+        currencyCode: "INR",
+        principalAmountMinor: 60000000,
+        outstandingBalanceMinor: 42000000,
+        emiAmountMinor: 1200000,
+        interestRateBps: null,
+        dueDay: 30,
+        startOn: null,
+        endOn: null,
+        status: "ACTIVE",
+        createdAt,
+        updatedAt: createdAt,
+      },
+    ]);
+
+    const response = await app!.inject({
+      method: "GET",
+      url: "/api/finance/timeline?month=2026-04",
+    });
+
+    vi.useRealTimers();
+
+    expect(response.statusCode).toBe(200);
+    const payload = parseBody<{
+      items: Array<{ sourceType: string; title: string; status: string; primaryAction: { type: string } | null }>;
+      groups: Array<{ key: string; items: Array<{ title: string }> }>;
+    }>(response.body);
+
+    expect(payload.items.map((item) => item.sourceType)).toEqual([
+      "bill",
+      "credit_card_due",
+      "income_plan",
+      "loan_emi",
+      "income_transaction",
+      "bill",
+    ]);
+    expect(payload.items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ title: "Rent", status: "overdue", primaryAction: expect.objectContaining({ type: "pay_bill" }) }),
+        expect.objectContaining({ title: "Salary", status: "due_soon", primaryAction: expect.objectContaining({ type: "mark_income_received" }) }),
+        expect.objectContaining({ title: "Freelance", status: "completed", primaryAction: null }),
+        expect.objectContaining({ title: "Axis Ace due", status: "due_soon", primaryAction: expect.objectContaining({ type: "pay_card_due" }) }),
+        expect.objectContaining({ title: "Car loan EMI", status: "due_soon", primaryAction: expect.objectContaining({ type: "pay_emi" }) }),
+      ]),
+    );
+    expect(payload.groups.map((group) => group.key)).toEqual(["overdue", "next_7_days", "completed"]);
+  });
 });

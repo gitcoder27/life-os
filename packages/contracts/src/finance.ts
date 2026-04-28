@@ -20,6 +20,36 @@ export type FinanceTransactionType = "income" | "expense" | "transfer" | "adjust
 export type RecurringIncomeStatus = "active" | "paused" | "archived";
 export type CreditCardStatus = "active" | "archived";
 export type LoanStatus = "active" | "paid_off" | "archived";
+export type FinanceTimelineSourceType =
+  | "income_plan"
+  | "income_transaction"
+  | "bill"
+  | "credit_card_due"
+  | "loan_emi"
+  | "planned_expense"
+  | "goal_contribution";
+export type FinanceTimelineDirection = "in" | "out" | "neutral";
+export type FinanceTimelineStatus =
+  | "expected"
+  | "due_soon"
+  | "due_today"
+  | "overdue"
+  | "completed"
+  | "skipped"
+  | "paused";
+export type FinanceTimelineActionType =
+  | "mark_income_received"
+  | "pay_bill"
+  | "pay_card_due"
+  | "pay_emi"
+  | "open"
+  | "none";
+export type FinanceTimelineGroupKey =
+  | "overdue"
+  | "today"
+  | "next_7_days"
+  | "later_this_month"
+  | "completed";
 
 export interface ExpenseItem {
   id: EntityId;
@@ -165,6 +195,39 @@ export interface FinanceDashboardResponse extends ApiMeta {
   recurringIncome: RecurringIncomeItem[];
   creditCards: CreditCardItem[];
   loans: LoanItem[];
+}
+
+export interface FinanceTimelineAction {
+  type: FinanceTimelineActionType;
+  label: string;
+}
+
+export interface FinanceTimelineItem {
+  id: EntityId | string;
+  sourceType: FinanceTimelineSourceType;
+  sourceId: EntityId;
+  date: IsoDateString;
+  title: string;
+  amountMinor: number;
+  currencyCode: string;
+  direction: FinanceTimelineDirection;
+  status: FinanceTimelineStatus;
+  primaryAction: FinanceTimelineAction | null;
+  accountId: EntityId | null;
+  metadata: Record<string, string | number | boolean | null>;
+}
+
+export interface FinanceTimelineGroup {
+  key: FinanceTimelineGroupKey;
+  title: string;
+  items: FinanceTimelineItem[];
+}
+
+export interface FinanceTimelineResponse extends ApiMeta {
+  month: IsoMonthString;
+  currencyCode: string;
+  items: FinanceTimelineItem[];
+  groups: FinanceTimelineGroup[];
 }
 
 export interface CreateFinanceAccountRequest {

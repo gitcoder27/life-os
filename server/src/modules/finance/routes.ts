@@ -28,6 +28,7 @@ import type {
   FinanceInsightsResponse,
   FinanceMonthPlanMutationResponse,
   FinanceMonthPlanResponse,
+  FinanceTimelineResponse,
   FinanceTransactionItem,
   FinanceTransactionMutationResponse,
   FinanceTransactionsResponse,
@@ -95,6 +96,7 @@ import {
   serializeFinanceBill,
   toPrismaBillCompletionMode,
 } from "./service.js";
+import { buildFinanceTimeline } from "./finance-timeline-service.js";
 import { getMonthlyReviewModel, getWeeklyReviewModel } from "../reviews/service.js";
 
 type ExpenseSource = "manual" | "quick_capture" | "template";
@@ -1966,6 +1968,22 @@ export const registerFinanceRoutes: FastifyPluginAsync = async (app) => {
 
     const response: FinanceDashboardResponse = withGeneratedAt(
       await buildFinanceDashboard(app, user.id, query.month),
+    );
+
+    return reply.send(response);
+  });
+
+  app.get("/timeline", async (request, reply) => {
+    const user = requireAuthenticatedUser(request);
+    const query = parseOrThrow(
+      z.object({
+        month: isoMonthSchema,
+      }),
+      request.query,
+    );
+
+    const response: FinanceTimelineResponse = withGeneratedAt(
+      await buildFinanceTimeline(app, user.id, query.month),
     );
 
     return reply.send(response);

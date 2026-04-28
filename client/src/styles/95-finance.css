@@ -825,6 +825,16 @@ button.fc-lane-clear:active {
   border-bottom: 0;
 }
 
+.fc-event-group {
+  padding: 0.6rem 0.8rem 0.35rem;
+  border-bottom: 1px solid rgba(226, 184, 95, 0.08);
+  color: var(--text-tertiary);
+  font-size: var(--fs-micro);
+  font-weight: 780;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+}
+
 .fc-event-row strong,
 .fc-event-row span:nth-child(4) {
   color: var(--text);
@@ -865,6 +875,11 @@ button.fc-lane-clear:active {
 .fc-status--negative,
 .fc-money-negative {
   color: var(--negative) !important;
+}
+
+.fc-event-action-muted {
+  color: var(--text-tertiary);
+  font-size: var(--fs-small);
 }
 
 .fc-income-list {
