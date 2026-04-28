@@ -421,6 +421,26 @@
   gap: 0.3rem;
 }
 
+.ap-goal-card__milestone--empty {
+  gap: 0.12rem;
+  padding: 0.55rem 0.65rem;
+  border: 1px dashed rgba(255, 255, 255, 0.08);
+  border-radius: var(--r-xs);
+  background: rgba(255, 255, 255, 0.018);
+}
+
+.ap-goal-card__milestone-empty-title {
+  color: var(--text-secondary);
+  font-size: var(--fs-micro);
+  font-weight: 700;
+}
+
+.ap-goal-card__milestone-empty-copy {
+  color: var(--text-tertiary);
+  font-size: var(--fs-micro);
+  line-height: 1.45;
+}
+
 .ap-goal-card__milestone-header {
   display: flex;
   justify-content: space-between;

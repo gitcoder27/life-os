@@ -1,12 +1,5 @@
 import type { GoalOverviewItem } from "../../shared/lib/api";
 
-const healthLabels: Record<string, string> = {
-  on_track: "On Track",
-  drifting: "Drifting",
-  stalled: "Stalled",
-  achieved: "Achieved",
-};
-
 const statusDisplayLabels: Record<string, string> = {
   on_track: "IN PROGRESS",
   drifting: "NEEDS ATTENTION",
@@ -33,8 +26,8 @@ function getNextMilestoneName(goal: GoalOverviewItem): string | null {
     if (goal.nextBestAction.startsWith(prefix)) {
       return goal.nextBestAction.slice(prefix.length);
     }
-    return goal.nextBestAction;
   }
+
   return null;
 }
 
@@ -52,6 +45,7 @@ export function GoalCard({
   onOpenInPlan?: () => void;
 }) {
   const milestoneName = getNextMilestoneName(goal);
+  const hasMilestones = goal.milestoneCounts.total > 0;
   const healthState = goal.health ?? "on_track";
   const statusLabel = statusDisplayLabels[healthState] ?? "ACTIVE";
   const habitCount = goal.linkedSummary.activeHabits;
@@ -114,11 +108,11 @@ export function GoalCard({
       </div>
 
       {/* Milestone progress */}
-      {milestoneName && (
+      {hasMilestones ? (
         <div className="ap-goal-card__milestone">
           <div className="ap-goal-card__milestone-header">
             <span className="ap-goal-card__milestone-label">
-              Milestone: {milestoneName}
+              {milestoneName ? `Next: ${milestoneName}` : `${goal.milestoneCounts.completed}/${goal.milestoneCounts.total} milestones`}
             </span>
             <span className="ap-goal-card__milestone-pct">
               {goal.progressPercent}%
@@ -131,25 +125,10 @@ export function GoalCard({
             />
           </div>
         </div>
-      )}
-
-      {/* Fallback: show progress bar even without milestone name */}
-      {!milestoneName && goal.progressPercent > 0 && (
-        <div className="ap-goal-card__milestone">
-          <div className="ap-goal-card__milestone-header">
-            <span className="ap-goal-card__milestone-label">
-              {goal.milestoneCounts.completed}/{goal.milestoneCounts.total} milestones
-            </span>
-            <span className="ap-goal-card__milestone-pct">
-              {goal.progressPercent}%
-            </span>
-          </div>
-          <div className="ap-goal-card__progress-track">
-            <div
-              className={`ap-goal-card__progress-fill ap-goal-card__progress-fill--${healthState}`}
-              style={{ width: `${Math.min(goal.progressPercent, 100)}%` }}
-            />
-          </div>
+      ) : (
+        <div className="ap-goal-card__milestone ap-goal-card__milestone--empty">
+          <span className="ap-goal-card__milestone-empty-title">No milestones yet</span>
+          <span className="ap-goal-card__milestone-empty-copy">Open details to define the first milestone.</span>
         </div>
       )}
 
