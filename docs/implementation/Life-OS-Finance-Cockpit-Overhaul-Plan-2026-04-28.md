@@ -1027,16 +1027,16 @@ These may matter later, but the immediate product risk is workflow coherence, no
 
 ### Phase 3: Safe-to-Spend
 
-- [ ] Define safe-to-spend breakdown contract.
-- [ ] Include unpaid bills in breakdown.
-- [ ] Include card dues in breakdown.
-- [ ] Include loan EMIs in breakdown.
-- [ ] Include planned expenses in breakdown.
-- [ ] Include goal commitments in breakdown.
-- [ ] Exclude expected income from cash until received.
-- [ ] Add inspector breakdown UI.
-- [ ] Add explanation-free but traceable rows.
-- [ ] Add safe-to-spend tests for empty and populated states.
+- [x] Define safe-to-spend breakdown contract.
+- [x] Include unpaid bills in breakdown.
+- [x] Include card dues in breakdown.
+- [x] Include loan EMIs in breakdown.
+- [x] Include planned expenses in breakdown.
+- [x] Include goal commitments in breakdown.
+- [x] Exclude expected income from cash until received.
+- [x] Add inspector breakdown UI.
+- [x] Add explanation-free but traceable rows.
+- [x] Add safe-to-spend tests for empty and populated states.
 
 ### Phase 4: Setup Management
 
@@ -1067,12 +1067,12 @@ These may matter later, but the immediate product risk is workflow coherence, no
 - [x] Split finance route logic into services.
 - [x] Keep contracts as the source of shared types.
 - [x] Add route tests for every new endpoint.
-- [ ] Add service tests for calculations.
+- [x] Add service tests for calculations.
 - [x] Run `npm run typecheck`.
 - [x] Run `npm run build`.
 - [x] Run focused server finance tests.
 - [ ] Verify mobile layout manually.
-- [ ] Verify no dashboard double counting.
+- [x] Verify no dashboard double counting.
 
 ## 12. Success Criteria
 

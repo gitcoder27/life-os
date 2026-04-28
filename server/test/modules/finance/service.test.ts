@@ -1,6 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 
 import {
+  buildFinanceSafeToSpendBreakdown,
+} from "../../../src/modules/finance/finance-safe-spend-service.js";
+import {
   getBillReconciliationStatus,
   materializeRecurringExpenseItems,
   serializeFinanceBill,
@@ -98,5 +101,31 @@ describe("finance service", () => {
     } as any);
 
     expect(status).toBe("paid_without_expense");
+  });
+
+  it("calculates safe-to-spend without adding received income twice", () => {
+    const breakdown = buildFinanceSafeToSpendBreakdown({
+      currencyCode: "USD",
+      cashAvailableMinor: 250000,
+      incomeReceivedMinor: 50000,
+      unpaidBillsMinor: 40000,
+      cardDuesMinor: 9000,
+      loanEmisMinor: 12000,
+      plannedExpensesMinor: 15000,
+      goalCommitmentsMinor: 20000,
+      billCount: 1,
+      cardCount: 1,
+      loanCount: 1,
+      goalCount: 1,
+    });
+
+    expect(breakdown.totalDeductionsMinor).toBe(96000);
+    expect(breakdown.safeToSpendMinor).toBe(154000);
+    expect(breakdown.lines).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ key: "income_received", role: "context", amountMinor: 50000 }),
+        expect.objectContaining({ key: "safe_to_spend", role: "result", amountMinor: 154000 }),
+      ]),
+    );
   });
 });

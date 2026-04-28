@@ -6,6 +6,7 @@ import {
   formatMinorCurrency,
   formatMonthLabel,
   formatShortDate,
+  type FinanceDashboardResponse,
   type FinanceTimelineItem,
   getMonthString,
   getTodayDate,
@@ -227,6 +228,19 @@ function getTimelineStatusLabel(status: FinanceTimelineItem["status"]) {
     case "overdue": return "Overdue";
     default: return "Expected";
   }
+}
+
+function formatSafeSpendLineAmount(
+  line: FinanceDashboardResponse["safeToSpendBreakdown"]["lines"][number],
+  currency: string,
+) {
+  const amount = formatMinorCurrency(line.amountMinor, currency);
+
+  if (line.role === "deduction" && line.amountMinor > 0) {
+    return `- ${amount}`;
+  }
+
+  return amount;
 }
 
 export function FinancePage() {
@@ -703,7 +717,7 @@ export function FinancePage() {
             safeToSpendMinor={dashboard?.safeToSpendMinor ?? 0}
             cashAvailableMinor={dashboard?.cashAvailableMinor ?? 0}
             plannedIncomeMinor={plannedIncomeMinor}
-            upcomingDueMinor={(dashboard?.upcomingDueMinor ?? 0) + (dashboard?.debtDueMinor ?? 0)}
+            reservedMinor={dashboard?.safeToSpendBreakdown.totalDeductionsMinor ?? ((dashboard?.upcomingDueMinor ?? 0) + (dashboard?.debtDueMinor ?? 0))}
             totalSpentMinor={dashboard?.totalSpentMinor ?? 0}
           />
           <MonthJourney
@@ -1017,11 +1031,7 @@ export function FinancePage() {
           />
           <SafeSpendMath
             currency={currency}
-            cashAvailableMinor={dashboard?.cashAvailableMinor ?? 0}
-            incomeReceivedMinor={dashboard?.incomeReceivedMinor ?? 0}
-            upcomingDueMinor={dashboard?.upcomingDueMinor ?? 0}
-            debtDueMinor={dashboard?.debtDueMinor ?? 0}
-            safeToSpendMinor={dashboard?.safeToSpendMinor ?? 0}
+            breakdown={dashboard?.safeToSpendBreakdown ?? null}
           />
           <QuickLinks
             onTransactions={() => setTab("transactions")}
@@ -1277,14 +1287,14 @@ function SafeThisMonthPanel({
   safeToSpendMinor,
   cashAvailableMinor,
   plannedIncomeMinor,
-  upcomingDueMinor,
+  reservedMinor,
   totalSpentMinor,
 }: {
   currency: string;
   safeToSpendMinor: number;
   cashAvailableMinor: number;
   plannedIncomeMinor: number;
-  upcomingDueMinor: number;
+  reservedMinor: number;
   totalSpentMinor: number;
 }) {
   return (
@@ -1309,9 +1319,9 @@ function SafeThisMonthPanel({
       </div>
       <div className="fc-hero__metric">
         <span className="fc-icon-box">▣</span>
-        <span className="fc-label">Obligations</span>
-        <strong>{formatMinorCurrency(upcomingDueMinor, currency)}</strong>
-        <small>Upcoming</small>
+        <span className="fc-label">Reserved</span>
+        <strong>{formatMinorCurrency(reservedMinor, currency)}</strong>
+        <small>Bills, debt, plans</small>
       </div>
       <div className="fc-hero__metric">
         <span className="fc-icon-box">≡</span>
@@ -1495,29 +1505,32 @@ function TodayMoneyActions({
 
 function SafeSpendMath({
   currency,
-  cashAvailableMinor,
-  incomeReceivedMinor,
-  upcomingDueMinor,
-  debtDueMinor,
-  safeToSpendMinor,
+  breakdown,
 }: {
   currency: string;
-  cashAvailableMinor: number;
-  incomeReceivedMinor: number;
-  upcomingDueMinor: number;
-  debtDueMinor: number;
-  safeToSpendMinor: number;
+  breakdown: FinanceDashboardResponse["safeToSpendBreakdown"] | null;
 }) {
+  const lines = breakdown?.lines ?? [];
+  const detailLines = lines.filter((line) => line.role !== "result");
+  const resultLine = lines.find((line) => line.role === "result");
+
   return (
     <section className="fc-rail-card">
       <span className="fc-label">Safe-to-spend math</span>
       <div className="fc-math">
-        <span>Cash available<strong>{formatMinorCurrency(cashAvailableMinor, currency)}</strong></span>
-        <span>Income received<strong>{formatMinorCurrency(incomeReceivedMinor, currency)}</strong></span>
-        <span>Upcoming obligations<strong>- {formatMinorCurrency(upcomingDueMinor, currency)}</strong></span>
-        <span>Debt due<strong>- {formatMinorCurrency(debtDueMinor, currency)}</strong></span>
-        <span>Planned goals<strong>{formatMinorCurrency(0, currency)}</strong></span>
-        <span className="fc-math__total">Safe to spend<strong>{formatMinorCurrency(safeToSpendMinor, currency)}</strong></span>
+        {detailLines.map((line) => (
+          <span key={line.key} className={`fc-math__line fc-math__line--${line.role}`}>
+            <span>
+              {line.label}
+              {line.sourceCount != null && line.sourceCount > 0 ? <em>{line.sourceCount}</em> : null}
+            </span>
+            <strong>{formatSafeSpendLineAmount(line, currency)}</strong>
+          </span>
+        ))}
+        <span className="fc-math__total">
+          {resultLine?.label ?? "Safe to spend"}
+          <strong>{formatMinorCurrency(resultLine?.amountMinor ?? 0, currency)}</strong>
+        </span>
       </div>
     </section>
   );

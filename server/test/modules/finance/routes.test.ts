@@ -260,6 +260,7 @@ describe("finance bill reconciliation routes", () => {
     prisma.loan.findMany.mockResolvedValueOnce([]);
     prisma.expense.findMany.mockResolvedValueOnce([linkedExpense, standaloneExpense]);
     prisma.adminItem.findMany.mockResolvedValueOnce([]).mockResolvedValueOnce([]);
+    prisma.goal.findMany.mockResolvedValueOnce([]);
 
     const response = await app!.inject({
       method: "GET",
@@ -280,6 +281,193 @@ describe("finance bill reconciliation routes", () => {
       expect.arrayContaining([
         expect.objectContaining({ source: "ledger", billId: BILL_ID, amountMinor: 6500 }),
         expect.objectContaining({ source: "legacy_expense", billId: null, amountMinor: 1200 }),
+      ]),
+    );
+  });
+
+  it("subtracts planned expenses and goal commitments from safe-to-spend", async () => {
+    const now = new Date("2026-04-09T00:00:00.000Z");
+    const account = {
+      id: ACCOUNT_ID,
+      userId: USER_ID,
+      name: "Checking",
+      accountType: "BANK",
+      currencyCode: "USD",
+      openingBalanceMinor: 200000,
+      archivedAt: null,
+      createdAt: now,
+      updatedAt: now,
+    };
+    const incomeTransaction = {
+      id: "00000000-0000-4000-8000-000000000050",
+      userId: USER_ID,
+      accountId: account.id,
+      transferAccountId: null,
+      transactionType: "INCOME",
+      amountMinor: 50000,
+      currencyCode: "USD",
+      occurredOn: now,
+      description: "Salary",
+      expenseCategoryId: null,
+      billId: null,
+      recurringIncomeTemplateId: null,
+      createdAt: now,
+      updatedAt: now,
+    };
+    const bill = {
+      id: BILL_ID,
+      userId: USER_ID,
+      title: "Rent",
+      itemType: "BILL",
+      dueOn: new Date("2026-04-20T00:00:00.000Z"),
+      status: "PENDING",
+      relatedTaskId: null,
+      recurringExpenseTemplateId: null,
+      expenseCategoryId: null,
+      amountMinor: 40000,
+      note: null,
+      completedAt: null,
+      completionMode: null,
+      createdAt: now,
+      updatedAt: now,
+      linkedExpense: null,
+    };
+
+    prisma.financeAccount.findMany.mockResolvedValueOnce([account]);
+    prisma.financeTransaction.findMany
+      .mockResolvedValueOnce([
+        {
+          accountId: account.id,
+          transferAccountId: null,
+          transactionType: "INCOME",
+          amountMinor: 50000,
+        },
+      ])
+      .mockResolvedValueOnce([incomeTransaction]);
+    prisma.financeMonthPlan.findUnique.mockResolvedValueOnce({
+      id: "00000000-0000-4000-8000-0000000000c0",
+      userId: USER_ID,
+      monthStart: new Date("2026-04-01T00:00:00.000Z"),
+      plannedSpendMinor: null,
+      fixedObligationsMinor: null,
+      flexibleSpendTargetMinor: null,
+      plannedIncomeMinor: null,
+      expectedLargeExpensesMinor: 15000,
+      createdAt: now,
+      updatedAt: now,
+    });
+    prisma.recurringIncomeTemplate.findMany.mockResolvedValueOnce([]);
+    prisma.creditCard.findMany.mockResolvedValueOnce([
+      {
+        id: "00000000-0000-4000-8000-0000000000a0",
+        userId: USER_ID,
+        paymentAccountId: ACCOUNT_ID,
+        name: "Axis Ace",
+        issuer: "Axis",
+        currencyCode: "USD",
+        creditLimitMinor: 300000,
+        outstandingBalanceMinor: 90000,
+        statementDay: null,
+        paymentDueDay: 29,
+        minimumDueMinor: 9000,
+        status: "ACTIVE",
+        createdAt: now,
+        updatedAt: now,
+      },
+    ]);
+    prisma.loan.findMany.mockResolvedValueOnce([
+      {
+        id: "00000000-0000-4000-8000-0000000000b0",
+        userId: USER_ID,
+        paymentAccountId: ACCOUNT_ID,
+        name: "Car loan",
+        lender: "HDFC",
+        currencyCode: "USD",
+        principalAmountMinor: 600000,
+        outstandingBalanceMinor: 420000,
+        emiAmountMinor: 12000,
+        interestRateBps: null,
+        dueDay: 30,
+        startOn: null,
+        endOn: null,
+        status: "ACTIVE",
+        createdAt: now,
+        updatedAt: now,
+      },
+    ]);
+    prisma.expense.findMany.mockResolvedValueOnce([]);
+    prisma.adminItem.findMany.mockResolvedValueOnce([bill]).mockResolvedValueOnce([]);
+    prisma.goal.findMany.mockResolvedValueOnce([
+      {
+        id: "00000000-0000-4000-8000-0000000000d0",
+        financeGoal: {
+          monthlyContributionTargetMinor: 20000,
+        },
+      },
+    ]);
+
+    const response = await app!.inject({
+      method: "GET",
+      url: "/api/finance/dashboard?month=2026-04",
+    });
+
+    expect(response.statusCode).toBe(200);
+    const payload = parseBody<{
+      safeToSpendMinor: number;
+      safeToSpendBreakdown: {
+        totalDeductionsMinor: number;
+        plannedExpensesMinor: number;
+        goalCommitmentsMinor: number;
+        lines: Array<{ key: string; amountMinor: number; role: string; sourceCount: number | null }>;
+      };
+    }>(response.body);
+
+    expect(payload.safeToSpendMinor).toBe(154000);
+    expect(payload.safeToSpendBreakdown.totalDeductionsMinor).toBe(96000);
+    expect(payload.safeToSpendBreakdown.plannedExpensesMinor).toBe(15000);
+    expect(payload.safeToSpendBreakdown.goalCommitmentsMinor).toBe(20000);
+    expect(payload.safeToSpendBreakdown.lines).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ key: "income_received", amountMinor: 50000, role: "context" }),
+        expect.objectContaining({ key: "upcoming_bills", amountMinor: 40000, role: "deduction", sourceCount: 1 }),
+        expect.objectContaining({ key: "card_dues", amountMinor: 9000, role: "deduction", sourceCount: 1 }),
+        expect.objectContaining({ key: "loan_emis", amountMinor: 12000, role: "deduction", sourceCount: 1 }),
+        expect.objectContaining({ key: "safe_to_spend", amountMinor: 154000, role: "result" }),
+      ]),
+    );
+  });
+
+  it("returns an empty safe-to-spend breakdown when finance is not set up", async () => {
+    prisma.financeAccount.findMany.mockResolvedValueOnce([]);
+    prisma.financeTransaction.findMany.mockResolvedValueOnce([]).mockResolvedValueOnce([]);
+    prisma.financeMonthPlan.findUnique.mockResolvedValueOnce(null);
+    prisma.recurringIncomeTemplate.findMany.mockResolvedValueOnce([]);
+    prisma.creditCard.findMany.mockResolvedValueOnce([]);
+    prisma.loan.findMany.mockResolvedValueOnce([]);
+    prisma.expense.findMany.mockResolvedValueOnce([]);
+    prisma.adminItem.findMany.mockResolvedValueOnce([]).mockResolvedValueOnce([]);
+    prisma.goal.findMany.mockResolvedValueOnce([]);
+
+    const response = await app!.inject({
+      method: "GET",
+      url: "/api/finance/dashboard?month=2026-04",
+    });
+
+    expect(response.statusCode).toBe(200);
+    const payload = parseBody<{
+      safeToSpendMinor: number;
+      safeToSpendBreakdown: {
+        totalDeductionsMinor: number;
+        lines: Array<{ key: string; amountMinor: number }>;
+      };
+    }>(response.body);
+
+    expect(payload.safeToSpendMinor).toBe(0);
+    expect(payload.safeToSpendBreakdown.totalDeductionsMinor).toBe(0);
+    expect(payload.safeToSpendBreakdown.lines).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ key: "cash_available", amountMinor: 0 }),
+        expect.objectContaining({ key: "safe_to_spend", amountMinor: 0 }),
       ]),
     );
   });

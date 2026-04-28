@@ -731,13 +731,31 @@ button.fc-lane-clear:active {
   gap: 0.3rem;
 }
 
-.fc-math span {
+.fc-math__line,
+.fc-math__total {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 0.75rem;
   color: var(--text-secondary);
   font-size: var(--fs-small);
+}
+
+.fc-math__line span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.fc-math__line em {
+  color: var(--text-tertiary);
+  font-size: var(--fs-micro);
+  font-style: normal;
+  font-weight: 750;
+}
+
+.fc-math__line--context {
+  color: var(--text-tertiary);
 }
 
 .fc-math strong {

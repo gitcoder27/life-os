@@ -50,6 +50,16 @@ export type FinanceTimelineGroupKey =
   | "next_7_days"
   | "later_this_month"
   | "completed";
+export type FinanceSafeToSpendLineKey =
+  | "cash_available"
+  | "income_received"
+  | "upcoming_bills"
+  | "card_dues"
+  | "loan_emis"
+  | "planned_expenses"
+  | "goal_commitments"
+  | "safe_to_spend";
+export type FinanceSafeToSpendLineRole = "starting_balance" | "context" | "deduction" | "result";
 
 export interface ExpenseItem {
   id: EntityId;
@@ -187,6 +197,7 @@ export interface FinanceDashboardResponse extends ApiMeta {
   debtDueMinor: number;
   debtOutstandingMinor: number;
   safeToSpendMinor: number;
+  safeToSpendBreakdown: FinanceSafeToSpendBreakdown;
   accountCount: number;
   transactionCount: number;
   upcomingBills: FinanceBillItem[];
@@ -195,6 +206,28 @@ export interface FinanceDashboardResponse extends ApiMeta {
   recurringIncome: RecurringIncomeItem[];
   creditCards: CreditCardItem[];
   loans: LoanItem[];
+}
+
+export interface FinanceSafeToSpendBreakdownLine {
+  key: FinanceSafeToSpendLineKey;
+  label: string;
+  amountMinor: number;
+  role: FinanceSafeToSpendLineRole;
+  sourceCount: number | null;
+}
+
+export interface FinanceSafeToSpendBreakdown {
+  currencyCode: string;
+  cashAvailableMinor: number;
+  incomeReceivedMinor: number;
+  unpaidBillsMinor: number;
+  cardDuesMinor: number;
+  loanEmisMinor: number;
+  plannedExpensesMinor: number;
+  goalCommitmentsMinor: number;
+  totalDeductionsMinor: number;
+  safeToSpendMinor: number;
+  lines: FinanceSafeToSpendBreakdownLine[];
 }
 
 export interface FinanceTimelineAction {

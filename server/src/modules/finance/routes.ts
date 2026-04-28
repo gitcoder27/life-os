@@ -97,6 +97,7 @@ import {
   toPrismaBillCompletionMode,
 } from "./service.js";
 import { buildFinanceTimeline } from "./finance-timeline-service.js";
+import { buildFinanceSafeToSpendBreakdown } from "./finance-safe-spend-service.js";
 import { getMonthlyReviewModel, getWeeklyReviewModel } from "../reviews/service.js";
 
 type ExpenseSource = "manual" | "quick_capture" | "template";
@@ -1151,7 +1152,7 @@ async function buildFinanceDashboard(
   const { monthStart, nextMonthStart } = getMonthBounds(month);
   const currencyCode = await getUserCurrencyCode(app, userId);
 
-  const [accounts, transactions, monthPlan, recurringIncome, creditCards, loans, legacyExpenses, upcomingBills, overdueBills] = await Promise.all([
+  const [accounts, transactions, monthPlan, recurringIncome, creditCards, loans, legacyExpenses, upcomingBills, overdueBills, moneyGoals] = await Promise.all([
     buildFinanceAccountItems(app, userId),
     app.prisma.financeTransaction.findMany({
       where: {
@@ -1249,6 +1250,25 @@ async function buildFinanceDashboard(
       },
       take: 10,
     }),
+    app.prisma.goal.findMany({
+      where: {
+        userId,
+        status: "ACTIVE",
+        domain: {
+          systemKey: "MONEY",
+        },
+        financeGoal: {
+          is: {
+            monthlyContributionTargetMinor: {
+              gt: 0,
+            },
+          },
+        },
+      },
+      include: {
+        financeGoal: true,
+      },
+    }),
   ]);
 
   const incomeReceivedMinor = transactions
@@ -1271,6 +1291,11 @@ async function buildFinanceDashboard(
   const cardDueMinor = creditCards.reduce((sum, card) => sum + (card.minimumDueMinor ?? 0), 0);
   const loanDueMinor = loans.reduce((sum, loan) => sum + loan.emiAmountMinor, 0);
   const debtDueMinor = cardDueMinor + loanDueMinor;
+  const plannedExpensesMinor = monthPlan?.expectedLargeExpensesMinor ?? 0;
+  const goalCommitmentsMinor = moneyGoals.reduce(
+    (sum, goal) => sum + (goal.financeGoal?.monthlyContributionTargetMinor ?? 0),
+    0,
+  );
   const debtOutstandingMinor =
     creditCards.reduce((sum, card) => sum + card.outstandingBalanceMinor, 0)
     + loans.reduce((sum, loan) => sum + loan.outstandingBalanceMinor, 0);
@@ -1278,6 +1303,20 @@ async function buildFinanceDashboard(
     .filter((account) => !account.archivedAt)
     .reduce((sum, account) => sum + account.currentBalanceMinor, 0);
   const totalSpentMinor = ledgerSpentMinor + legacySpentMinor;
+  const safeToSpendBreakdown = buildFinanceSafeToSpendBreakdown({
+    currencyCode,
+    cashAvailableMinor,
+    incomeReceivedMinor,
+    unpaidBillsMinor: upcomingDueMinor,
+    cardDuesMinor: cardDueMinor,
+    loanEmisMinor: loanDueMinor,
+    plannedExpensesMinor,
+    goalCommitmentsMinor,
+    billCount: upcomingOpenBills.length,
+    cardCount: creditCards.filter((card) => (card.minimumDueMinor ?? 0) > 0).length,
+    loanCount: loans.length,
+    goalCount: moneyGoals.length,
+  });
 
   return {
     month,
@@ -1289,7 +1328,8 @@ async function buildFinanceDashboard(
     upcomingDueMinor,
     debtDueMinor,
     debtOutstandingMinor,
-    safeToSpendMinor: cashAvailableMinor - upcomingDueMinor - debtDueMinor,
+    safeToSpendMinor: safeToSpendBreakdown.safeToSpendMinor,
+    safeToSpendBreakdown,
     accountCount: accounts.filter((account) => !account.archivedAt).length,
     transactionCount: transactions.length + legacyOnlyExpenses.length,
     upcomingBills: upcomingOpenBills.map(serializeFinanceBill),
