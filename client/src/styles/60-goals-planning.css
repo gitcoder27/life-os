@@ -1763,6 +1763,10 @@
   transition: stroke 200ms ease;
 }
 
+.ghq-graph .react-flow__edge {
+  animation: graphEdgeReveal 0.18s var(--ease) both;
+}
+
 .ghq-graph .react-flow__node:has(.graph-goal-node__menu) {
   z-index: 1000 !important;
 }
@@ -1967,6 +1971,8 @@
   gap: 0.3rem;
   position: relative;
   overflow: visible;
+  transform-origin: top center;
+  animation: graphGoalNodeReveal 0.2s var(--ease) both;
 }
 
 .graph-goal-node:hover:not(.graph-goal-node--dimmed) {
@@ -2030,25 +2036,68 @@
   color: var(--text);
 }
 
-.graph-goal-node__expand {
-  width: 1.4rem;
-  min-width: 1.4rem;
-  height: 1.4rem;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+.graph-goal-node__controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.28rem;
+  flex-shrink: 0;
+}
+
+.graph-goal-node__branch-toggle {
+  min-width: 2.35rem;
+  height: 1.45rem;
+  padding: 0 0.38rem 0 0.3rem;
+  border: 1px solid rgba(217, 153, 58, 0.18);
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.04);
-  color: var(--text-secondary);
+  background: rgba(217, 153, 58, 0.08);
+  color: var(--accent);
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  gap: 0.08rem;
   cursor: pointer;
+  transition:
+    background var(--dur-fast) var(--ease),
+    border-color var(--dur-fast) var(--ease),
+    color var(--dur-fast) var(--ease),
+    transform var(--dur-fast) var(--ease);
+}
+
+.graph-goal-node__branch-toggle:hover {
+  border-color: rgba(217, 153, 58, 0.38);
+  background: rgba(217, 153, 58, 0.14);
+  color: var(--accent-bright);
+  transform: translateY(-1px);
+}
+
+.graph-goal-node__branch-icon {
+  width: 0.76rem;
+  height: 0.76rem;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  transition: transform var(--dur-fast) var(--ease);
+}
+
+.graph-goal-node__branch-toggle--open .graph-goal-node__branch-icon {
+  transform: rotate(90deg);
+}
+
+.graph-goal-node__branch-count {
+  min-width: 0.7rem;
+  font-size: 0.68rem;
+  font-weight: 800;
+  line-height: 1;
+  text-align: center;
 }
 
 .graph-goal-node__quick-add,
 .graph-goal-node__menu-trigger {
-  width: 1.35rem;
-  min-width: 1.35rem;
-  height: 1.35rem;
+  width: 1.45rem;
+  min-width: 1.45rem;
+  height: 1.45rem;
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: var(--r-xs);
   background: rgba(255, 255, 255, 0.035);
@@ -2062,6 +2111,14 @@
     opacity var(--dur-fast) var(--ease),
     background var(--dur-fast) var(--ease),
     color var(--dur-fast) var(--ease);
+}
+
+.graph-goal-node__quick-add {
+  border-color: rgba(217, 153, 58, 0.16);
+  background: rgba(217, 153, 58, 0.07);
+  color: var(--accent);
+  font-size: 0.98rem;
+  font-weight: 700;
 }
 
 .graph-goal-node__quick-add:hover,
@@ -2184,6 +2241,29 @@
 
 .graph-goal-node__menu .graph-goal-node__menu-danger {
   color: #dba09a;
+}
+
+@keyframes graphGoalNodeReveal {
+  from {
+    opacity: 0;
+    transform: translateY(-7px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes graphEdgeReveal {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ghq-graph .react-flow__edge,
+  .graph-goal-node {
+    animation: none;
+  }
 }
 
 /* ── Graph: Inline Planner ── */

@@ -68,7 +68,9 @@ export function FocusSessionLauncher({
     }
   }, [insight, open, plannedMinutesAutoFilled]);
 
-  if (task.kind !== "task" || task.status !== "pending" || !task.nextAction?.trim()) {
+  const nextAction = task.nextAction?.trim() ?? "";
+
+  if (task.kind !== "task" || task.status !== "pending") {
     return null;
   }
 
@@ -125,10 +127,12 @@ export function FocusSessionLauncher({
                 </div>
 
                 <div className="stack-form">
-                  <div className="focus-session-sheet__summary">
-                    <span className="focus-session-sheet__label">Next action</span>
-                    <strong>{task.nextAction}</strong>
-                  </div>
+                  {nextAction ? (
+                    <div className="focus-session-sheet__summary">
+                      <span className="focus-session-sheet__label">Next action</span>
+                      <strong>{nextAction}</strong>
+                    </div>
+                  ) : null}
 
                   {insight ? (
                     <FocusSessionInsightCard

@@ -91,7 +91,6 @@ export function TaskInspectorPanel({
         <FocusSessionPanel
           date={date}
           session={activeFocusSession}
-          onClarifyTask={onClarifyTask}
         />
         <div className="task-inspector__empty">
           <span className="task-inspector__eyebrow">Today queue</span>
@@ -116,13 +115,14 @@ export function TaskInspectorPanel({
   const isCompleted = task.status === "completed";
   const isOverdue = Boolean(task.scheduledForDate && task.scheduledForDate < date && isPending);
   const canFocus = task.kind === "task" && isPending;
+  const nextAction = task.nextAction?.trim() ?? "";
+  const hasBriefMeta = Boolean(task.fiveMinuteVersion || task.estimatedDurationMinutes);
 
   return (
     <section className="task-inspector" aria-label="Task inspector">
       <FocusSessionPanel
         date={date}
         session={activeFocusSession}
-        onClarifyTask={onClarifyTask}
       />
 
       <section className="task-inspector__body">
@@ -144,20 +144,26 @@ export function TaskInspectorPanel({
           ) : null}
         </div>
 
-        <div className="task-inspector__brief">
-          <span>Next action</span>
-          <strong>{task.nextAction?.trim() || "Define the first visible step."}</strong>
-          {task.fiveMinuteVersion || task.estimatedDurationMinutes ? (
-            <p className="task-inspector__quiet-meta">
-              {task.fiveMinuteVersion ? (
-                <span>Small version: {task.fiveMinuteVersion}</span>
-              ) : null}
-              {task.estimatedDurationMinutes ? (
-                <span>{task.estimatedDurationMinutes} min</span>
-              ) : null}
-            </p>
-          ) : null}
-        </div>
+        {nextAction || hasBriefMeta ? (
+          <div className="task-inspector__brief">
+            {nextAction ? (
+              <>
+                <span>Next action</span>
+                <strong>{nextAction}</strong>
+              </>
+            ) : null}
+            {hasBriefMeta ? (
+              <p className="task-inspector__quiet-meta">
+                {task.fiveMinuteVersion ? (
+                  <span>Small version: {task.fiveMinuteVersion}</span>
+                ) : null}
+                {task.estimatedDurationMinutes ? (
+                  <span>{task.estimatedDurationMinutes} min</span>
+                ) : null}
+              </p>
+            ) : null}
+          </div>
+        ) : null}
 
         {canFocus ? (
           <div className="task-inspector__primary-action">

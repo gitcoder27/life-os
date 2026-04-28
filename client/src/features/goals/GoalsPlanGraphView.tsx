@@ -46,6 +46,7 @@ type GoalNodeData = {
   isSpotlightMatch: boolean;
   canExpand: boolean;
   isExpanded: boolean;
+  childCount: number;
   isInMonthFocus: boolean;
   isInWeekFocus: boolean;
   onSelect: (goalId: string) => void;
@@ -62,10 +63,9 @@ type GoalNodeData = {
 };
 
 type ChildDraftNodeData = {
-  title: string;
+  initialTitle: string;
   isPending: boolean;
-  onChange: (title: string) => void;
-  onSave: () => void;
+  onSave: (title: string) => void;
   onCancel: () => void;
 };
 
@@ -98,8 +98,7 @@ type LayoutProps = {
   onArchiveGoal: (goal: GoalOverviewItem) => void;
   onAddToLane: (lane: "month" | "week", goalId: string) => void;
   onDropGoalOnGoal: (targetGoalId: string, draggedGoalId: string) => void;
-  onChildDraftChange: (title: string) => void;
-  onSaveChildDraft: () => void;
+  onSaveChildDraft: (title: string) => void;
   onCancelChildDraft: () => void;
 };
 
@@ -189,42 +188,57 @@ const GoalGraphNode = memo(function GoalGraphNode({ data }: NodeProps) {
       <div className="graph-goal-node__row">
         <span className={`graph-goal-node__dot graph-goal-node__dot--${health}`} />
         <span className="graph-goal-node__title">{d.goal.title}</span>
-        {d.canExpand ? (
+        <div className="graph-goal-node__controls" aria-label="Goal actions">
+          {d.canExpand ? (
+            <button
+              className={[
+                "graph-goal-node__branch-toggle",
+                d.isExpanded ? "graph-goal-node__branch-toggle--open" : "",
+              ].filter(Boolean).join(" ")}
+              type="button"
+              onClick={(event) => {
+                event.stopPropagation();
+                d.onToggleExpanded(d.goal.id);
+              }}
+              aria-label={
+                d.isExpanded
+                  ? `Collapse ${d.childCount} sub-goals`
+                  : `Expand ${d.childCount} sub-goals`
+              }
+              title={d.isExpanded ? "Collapse sub-goals" : "Expand sub-goals"}
+            >
+              <svg className="graph-goal-node__branch-icon" viewBox="0 0 16 16" aria-hidden="true">
+                <path d="M5.5 3.5L10 8l-4.5 4.5" />
+              </svg>
+              <span className="graph-goal-node__branch-count">{d.childCount}</span>
+            </button>
+          ) : null}
           <button
-            className="graph-goal-node__expand"
+            className="graph-goal-node__quick-add"
             type="button"
             onClick={(event) => {
               event.stopPropagation();
-              d.onToggleExpanded(d.goal.id);
+              d.onOpenAddChild(d.goal.id);
             }}
-            aria-label={d.isExpanded ? "Collapse branch" : "Expand branch"}
+            aria-label={`Add sub-goal under ${d.goal.title}`}
+            title="Add sub-goal"
           >
-            {d.isExpanded ? "−" : "+"}
+            +
           </button>
-        ) : null}
-        <button
-          className="graph-goal-node__quick-add"
-          type="button"
-          onClick={(event) => {
-            event.stopPropagation();
-            d.onOpenAddChild(d.goal.id);
-          }}
-          aria-label={`Add sub-goal under ${d.goal.title}`}
-        >
-          +
-        </button>
-        <button
-          className="graph-goal-node__menu-trigger"
-          type="button"
-          onClick={(event) => {
-            event.stopPropagation();
-            setMenuOpen((current) => !current);
-          }}
-          aria-label={`Open actions for ${d.goal.title}`}
-          aria-expanded={menuOpen}
-        >
-          ⋯
-        </button>
+          <button
+            className="graph-goal-node__menu-trigger"
+            type="button"
+            onClick={(event) => {
+              event.stopPropagation();
+              setMenuOpen((current) => !current);
+            }}
+            aria-label={`Open actions for ${d.goal.title}`}
+            aria-expanded={menuOpen}
+            title="More actions"
+          >
+            ⋯
+          </button>
+        </div>
       </div>
       <div className="graph-goal-node__meta">
         <span className="graph-goal-node__domain">
@@ -371,50 +385,40 @@ const GoalGraphNode = memo(function GoalGraphNode({ data }: NodeProps) {
 
 const ChildDraftNode = memo(function ChildDraftNode({ data }: NodeProps) {
   const d = data as unknown as ChildDraftNodeData;
-  const focusTimeoutRef = useRef<number | null>(null);
-
-  const setInputRef = useCallback((node: HTMLInputElement | null) => {
-    if (!node) {
-      return;
-    }
-
-    if (focusTimeoutRef.current) {
-      window.clearTimeout(focusTimeoutRef.current);
-    }
-
-    focusTimeoutRef.current = window.setTimeout(() => {
-      node.focus();
-      node.select();
-    }, 0);
-  }, []);
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  const [title, setTitle] = useState(d.initialTitle);
 
   useEffect(() => {
-    return () => {
-      if (focusTimeoutRef.current) {
-        window.clearTimeout(focusTimeoutRef.current);
+    const frame = window.requestAnimationFrame(() => {
+      if (inputRef.current) {
+        inputRef.current.focus();
+        if (!inputRef.current.value) {
+          inputRef.current.select();
+        }
       }
-    };
+    });
+
+    return () => window.cancelAnimationFrame(frame);
   }, []);
 
   return (
     <div className="graph-child-draft nopan">
       <Handle type="target" position={Position.Top} className="graph-handle--hidden" />
       <input
-        ref={setInputRef}
-        autoFocus
+        ref={inputRef}
         className="graph-child-draft__input"
         type="text"
-        value={d.title}
+        value={title}
         placeholder="Supporting goal title"
-        onChange={(event) => d.onChange(event.target.value)}
+        onChange={(event) => setTitle(event.target.value)}
         onKeyDown={(event) => {
           if (event.key !== "Enter" || event.nativeEvent.isComposing) {
             return;
           }
 
           event.preventDefault();
-          if (!d.isPending && d.title.trim()) {
-            d.onSave();
+          if (!d.isPending && title.trim()) {
+            d.onSave(title);
           }
         }}
       />
@@ -422,8 +426,8 @@ const ChildDraftNode = memo(function ChildDraftNode({ data }: NodeProps) {
         <button
           className="button button--primary button--small"
           type="button"
-          onClick={d.onSave}
-          disabled={d.isPending || !d.title.trim()}
+          onClick={() => d.onSave(title)}
+          disabled={d.isPending || !title.trim()}
         >
           {d.isPending ? "Saving..." : "Save"}
         </button>
@@ -676,6 +680,7 @@ const buildLayout = (props: LayoutProps) => {
         isSpotlightMatch: props.spotlightExactGoalIds.has(goal.id),
         canExpand: (childrenByParent.get(goal.id)?.length ?? 0) > 0,
         isExpanded: props.expandedGoalIds.has(goal.id),
+        childCount: childrenByParent.get(goal.id)?.length ?? 0,
         isInMonthFocus: props.monthFocusGoalIds.has(goal.id),
         isInWeekFocus: props.weekFocusGoalIds.has(goal.id),
         onSelect: props.onSelectGoal,
@@ -730,9 +735,8 @@ const buildLayout = (props: LayoutProps) => {
           position: { x: itemNodeX, y: itemNodeY },
           zIndex: props.selectedGoalId === goal.id ? 70 : 5,
           data: {
-            title: props.childDraft?.title ?? "",
+            initialTitle: props.childDraft?.title ?? "",
             isPending: props.childDraftIsPending,
-            onChange: props.onChildDraftChange,
             onSave: props.onSaveChildDraft,
             onCancel: props.onCancelChildDraft,
           } satisfies ChildDraftNodeData,
@@ -772,6 +776,149 @@ const buildLayout = (props: LayoutProps) => {
   };
 };
 
+const easeOutCubic = (t: number) => 1 - Math.pow(1 - t, 3);
+
+const useAnimatedNodes = (nodes: Node[], disabled = false) => {
+  const [animatedNodes, setAnimatedNodes] = useState(nodes);
+  const displayedNodesRef = useRef(nodes);
+  const frameRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    displayedNodesRef.current = animatedNodes;
+  }, [animatedNodes]);
+
+  useEffect(() => {
+    if (disabled) {
+      if (frameRef.current !== null) {
+        window.cancelAnimationFrame(frameRef.current);
+        frameRef.current = null;
+      }
+
+      displayedNodesRef.current = nodes;
+      setAnimatedNodes(nodes);
+      return;
+    }
+
+    const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const sourceNodes = displayedNodesRef.current;
+    const sourceById = new Map(sourceNodes.map((node) => [node.id, node]));
+    const hasPositionChanges = nodes.some((node) => {
+      const source = sourceById.get(node.id);
+      return Boolean(
+        source
+        && (
+          source.position.x !== node.position.x
+          || source.position.y !== node.position.y
+        ),
+      );
+    });
+
+    if (frameRef.current !== null) {
+      window.cancelAnimationFrame(frameRef.current);
+      frameRef.current = null;
+    }
+
+    if (prefersReducedMotion || !hasPositionChanges) {
+      displayedNodesRef.current = nodes;
+      setAnimatedNodes(nodes);
+      return;
+    }
+
+    const start = window.performance.now();
+    const duration = 240;
+
+    const tick = (timestamp: number) => {
+      const progress = Math.min((timestamp - start) / duration, 1);
+      const eased = easeOutCubic(progress);
+      const nextNodes = nodes.map((node) => {
+        const source = sourceById.get(node.id);
+
+        if (!source) {
+          return node;
+        }
+
+        return {
+          ...node,
+          position: {
+            x: source.position.x + (node.position.x - source.position.x) * eased,
+            y: source.position.y + (node.position.y - source.position.y) * eased,
+          },
+        };
+      });
+
+      displayedNodesRef.current = nextNodes;
+      setAnimatedNodes(nextNodes);
+
+      if (progress < 1) {
+        frameRef.current = window.requestAnimationFrame(tick);
+        return;
+      }
+
+      frameRef.current = null;
+      displayedNodesRef.current = nodes;
+      setAnimatedNodes(nodes);
+    };
+
+    frameRef.current = window.requestAnimationFrame(tick);
+
+    return () => {
+      if (frameRef.current !== null) {
+        window.cancelAnimationFrame(frameRef.current);
+        frameRef.current = null;
+      }
+    };
+  }, [disabled, nodes]);
+
+  return disabled ? nodes : animatedNodes;
+};
+
+const edgeStyleMatches = (
+  left: Edge["style"],
+  right: Edge["style"],
+) => {
+  if (left === right) {
+    return true;
+  }
+
+  if (!left || !right) {
+    return false;
+  }
+
+  return (
+    left.stroke === right.stroke
+    && left.strokeWidth === right.strokeWidth
+    && left.opacity === right.opacity
+    && left.strokeDasharray === right.strokeDasharray
+  );
+};
+
+const edgeMatches = (left: Edge, right: Edge) => (
+  left.id === right.id
+  && left.source === right.source
+  && left.target === right.target
+  && left.type === right.type
+  && left.animated === right.animated
+  && edgeStyleMatches(left.style, right.style)
+);
+
+const useStableEdges = (edges: Edge[]) => {
+  const stableEdgesRef = useRef(edges);
+
+  return useMemo(() => {
+    const previousEdges = stableEdgesRef.current;
+    const canReusePrevious =
+      previousEdges.length === edges.length
+      && previousEdges.every((edge, index) => edgeMatches(edge, edges[index]));
+
+    if (canReusePrevious) {
+      return previousEdges;
+    }
+
+    stableEdgesRef.current = edges;
+    return edges;
+  }, [edges]);
+};
+
 type GraphInnerProps = LayoutProps & {
   isExpanded: boolean;
   onCanvasClear: () => void;
@@ -780,7 +927,7 @@ type GraphInnerProps = LayoutProps & {
 const GraphInner = (props: GraphInnerProps) => {
   const { fitView, getViewport, setViewport, zoomIn, zoomOut } = useReactFlow();
   const nodesInitialized = useNodesInitialized();
-  const lastInitialFitKeyRef = useRef<string | null>(null);
+  const initialFitDoneRef = useRef(false);
   const savedViewportRef = useRef<Viewport | null>(null);
   const previousFocusModeRef = useRef(false);
 
@@ -788,18 +935,19 @@ const GraphInner = (props: GraphInnerProps) => {
     () => buildLayout(props),
     [props],
   );
+  const animatedNodes = useAnimatedNodes(nodes, Boolean(props.childDraft));
+  const stableEdges = useStableEdges(edges);
 
   useEffect(() => {
     if (!nodesInitialized || visibleGoalIds.length === 0) {
       return;
     }
 
-    const fitKey = visibleGoalIds.join("|");
-    if (lastInitialFitKeyRef.current === fitKey) {
+    if (initialFitDoneRef.current) {
       return;
     }
 
-    lastInitialFitKeyRef.current = fitKey;
+    initialFitDoneRef.current = true;
     const targets = visibleGoalIds.map((id) => ({ id }));
     const firstFrame = window.requestAnimationFrame(() => {
       void fitView({
@@ -897,8 +1045,8 @@ const GraphInner = (props: GraphInnerProps) => {
 
   return (
     <ReactFlow
-      nodes={nodes}
-      edges={edges}
+      nodes={animatedNodes}
+      edges={stableEdges}
       nodeTypes={nodeTypes}
       onNodeClick={handleNodeClick}
       onPaneClick={props.onCanvasClear}
@@ -956,8 +1104,7 @@ export type GoalsPlanGraphViewProps = {
   onArchiveGoal: (goal: GoalOverviewItem) => void;
   onAddToLane: (lane: "month" | "week", goalId: string) => void;
   onDropGoalOnGoal: (targetGoalId: string, draggedGoalId: string) => void;
-  onChildDraftChange: (title: string) => void;
-  onSaveChildDraft: () => void;
+  onSaveChildDraft: (title: string) => void;
   onCancelChildDraft: () => void;
   onCanvasClear: () => void;
   onEnterFocusMode: () => void;
@@ -993,7 +1140,6 @@ export const GoalsPlanGraphView = ({
   onArchiveGoal,
   onAddToLane,
   onDropGoalOnGoal,
-  onChildDraftChange,
   onSaveChildDraft,
   onCancelChildDraft,
   onCanvasClear,
@@ -1210,18 +1356,17 @@ export const GoalsPlanGraphView = ({
           childDraftIsPending={childDraftIsPending}
           monthFocusGoalIds={monthFocusGoalIds}
           weekFocusGoalIds={weekFocusGoalIds}
-                  onSelectGoal={onSelectGoal}
-                  onToggleExpanded={onToggleExpanded}
-                  onOpenAddChild={onOpenAddChild}
-                  onOpenDetails={onOpenDetails}
-                  onOpenPlanning={onOpenPlanning}
+          onSelectGoal={onSelectGoal}
+          onToggleExpanded={onToggleExpanded}
+          onOpenAddChild={onOpenAddChild}
+          onOpenDetails={onOpenDetails}
+          onOpenPlanning={onOpenPlanning}
           onEditGoal={onEditGoal}
           onDetachGoal={onDetachGoal}
           onDuplicateGoal={onDuplicateGoal}
           onArchiveGoal={onArchiveGoal}
           onAddToLane={onAddToLane}
           onDropGoalOnGoal={onDropGoalOnGoal}
-          onChildDraftChange={onChildDraftChange}
           onSaveChildDraft={onSaveChildDraft}
           onCancelChildDraft={onCancelChildDraft}
           isExpanded={isExpanded}

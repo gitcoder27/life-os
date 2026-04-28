@@ -193,14 +193,6 @@ function ensureTaskCanStartFocus(task: FocusSessionRecord["task"] | null) {
     });
   }
 
-  if (!task.nextAction?.trim()) {
-    throw new AppError({
-      statusCode: 400,
-      code: "VALIDATION_ERROR",
-      message: "Add a next action before starting a focus session.",
-    });
-  }
-
   return task;
 }
 

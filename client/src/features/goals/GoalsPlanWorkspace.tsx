@@ -1188,23 +1188,20 @@ export function GoalsPlanWorkspace({
     [activeGoals, horizons, onSelectGoal, selectedGoalId],
   );
 
-  const handleGraphChildDraftChange = useCallback((title: string) => {
-    setGraphChildDraft((current) => (current ? { ...current, title } : current));
-  }, []);
-
   const handleGraphChildDraftCancel = useCallback(() => {
     setGraphChildDraft(null);
     setGraphStructureError(null);
   }, []);
 
-  const handleGraphChildDraftSave = useCallback(async () => {
-    if (!graphChildDraft || !graphChildDraft.title.trim()) {
+  const handleGraphChildDraftSave = useCallback(async (title: string) => {
+    const trimmedTitle = title.trim();
+    if (!graphChildDraft || !trimmedTitle) {
       return;
     }
 
     try {
       await createGoalMutation.mutateAsync({
-        title: graphChildDraft.title.trim(),
+        title: trimmedTitle,
         domainId: graphChildDraft.domainId,
         horizonId: graphChildDraft.horizonId || null,
         parentGoalId: graphChildDraft.parentGoalId,
@@ -1643,7 +1640,6 @@ export function GoalsPlanWorkspace({
                   onArchiveGoal={(goal) => void handleArchiveGoal(goal)}
                   onAddToLane={handleAddGoalIdToLane}
                   onDropGoalOnGoal={handleDropGoalOnGoal}
-                  onChildDraftChange={handleGraphChildDraftChange}
                   onSaveChildDraft={handleGraphChildDraftSave}
                   onCancelChildDraft={handleGraphChildDraftCancel}
                   onCanvasClear={handleGraphPaneClear}

@@ -333,6 +333,29 @@ describe("focus routes", () => {
     expect(tasksById.get(TASK_ID)?.progressState).toBe("STARTED");
   });
 
+  it("creates a focus session when the task title is enough", async () => {
+    tasksById.set(TASK_ID, {
+      ...buildTask(TASK_ID),
+      nextAction: null,
+    });
+
+    const response = await app!.inject({
+      method: "POST",
+      url: "/api/focus/sessions",
+      payload: {
+        taskId: TASK_ID,
+        depth: "shallow",
+        plannedMinutes: 20,
+      },
+    });
+
+    expect(response.statusCode).toBe(201);
+    const payload = parseBody<{ session: { taskId: string; task: { nextAction: string | null }; plannedMinutes: number } }>(response.body);
+    expect(payload.session.taskId).toBe(TASK_ID);
+    expect(payload.session.task.nextAction).toBeNull();
+    expect(payload.session.plannedMinutes).toBe(20);
+  });
+
   it("rejects starting a second active session", async () => {
     sessionsById.set(SESSION_ID, buildSession(SESSION_ID));
 
