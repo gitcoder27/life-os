@@ -2613,6 +2613,7 @@
   border-radius: 0.58rem;
   background: rgba(255, 255, 255, 0.02);
   color: var(--today-ink);
+  color-scheme: dark;
   font-size: 0.86rem;
   font-family: inherit;
   transition:
@@ -2645,6 +2646,20 @@
   background-repeat: no-repeat;
   background-position: right 1rem center;
   padding-right: 2.5rem;
+}
+
+.today-desk .daily-launch__select option {
+  background-color: #17140f;
+  color: var(--today-ink);
+}
+
+.today-desk .daily-launch__select option:checked {
+  background-color: #3f321f;
+  color: #fff7e8;
+}
+
+.today-desk .daily-launch__select option:disabled {
+  color: var(--today-ink-faint);
 }
 
 .today-desk .daily-launch__row {
