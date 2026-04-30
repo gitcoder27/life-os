@@ -2,7 +2,7 @@ import {
   useEffect,
   useState,
 } from "react";
-import { NavLink, useLocation } from "react-router-dom";
+import { useLocation } from "react-router-dom";
 
 import {
   formatMealSlotLabel,
@@ -36,6 +36,7 @@ import {
   PageLoadingState,
 } from "../../shared/ui/PageState";
 import { readHomeDestinationState } from "../../shared/lib/homeNavigation";
+import { HealthSubNav } from "./HealthSubNav";
 
 type MealSlot = "breakfast" | "lunch" | "dinner" | "snack";
 
@@ -498,31 +499,6 @@ function TimelineRow({
 /* ═══════════════════════════════════════════════
    Health Page — Main Component
    ═══════════════════════════════════════════════ */
-
-/* ── Health Sub-Navigation ── */
-function HealthSubNav() {
-  return (
-    <nav className="mp-subnav" aria-label="Health sections">
-      <NavLink
-        to="/health"
-        className={({ isActive }) =>
-          `mp-subnav__link${isActive ? " mp-subnav__link--active" : ""}`
-        }
-        end
-      >
-        Basics
-      </NavLink>
-      <NavLink
-        to="/meals"
-        className={({ isActive }) =>
-          `mp-subnav__link${isActive ? " mp-subnav__link--active" : ""}`
-        }
-      >
-        Meals
-      </NavLink>
-    </nav>
-  );
-}
 
 export function HealthPage() {
   const location = useLocation();
