@@ -1,9 +1,16 @@
+import { useState } from "react";
+import { useDraggable } from "@dnd-kit/core";
 import { formatTimeLabel } from "../../../shared/lib/api";
 import type {
   DailyRhythmItem,
   DailyRhythmPlan,
   DailyRhythmReservation,
 } from "../helpers/daily-rhythm";
+import {
+  DAILY_RHYTHM_DRAG_TYPE,
+  getDailyRhythmDragId,
+} from "../helpers/planner-drag";
+import { PlannerRailSection } from "./PlannerRailSection";
 
 export function DailyRhythmLane({
   plan,
@@ -20,7 +27,10 @@ export function DailyRhythmLane({
   onComplete: (item: DailyRhythmItem) => void;
   onSkip: (item: DailyRhythmItem) => void;
 }) {
-  const focusItems = plan.items.filter((item) => item.state !== "done" && item.state !== "skipped" && item.state !== "planned");
+  const [expanded, setExpanded] = useState(true);
+  const focusItems = plan.items.filter(
+    (item) => item.state !== "done" && item.state !== "skipped" && item.state !== "planned",
+  );
   const visibleItems = focusItems.length > 0
     ? focusItems
     : plan.items.filter((item) => item.state === "done" || item.state === "planned").slice(0, 3);
@@ -30,17 +40,20 @@ export function DailyRhythmLane({
   }
 
   return (
-    <section className="daily-rhythm" aria-label="Daily rhythm">
-      <div className="daily-rhythm__header">
-        <div className="daily-rhythm__title-wrap">
-          <h3 className="daily-rhythm__title">Daily rhythm</h3>
-          <span className="daily-rhythm__count">{focusItems.length}</span>
-        </div>
-        <span className="daily-rhythm__meter">
+    <PlannerRailSection
+      title="Rhythm"
+      count={focusItems.length}
+      tone="rhythm"
+      expanded={expanded}
+      className="daily-rhythm"
+      ariaLabel="Daily rhythm"
+      headerMeta={
+        <span className="planner-rail-section__meta">
           {plan.counts.reserved + plan.counts.planned}/{plan.counts.total}
         </span>
-      </div>
-
+      }
+      onToggle={() => setExpanded((current) => !current)}
+    >
       <div className="daily-rhythm__rail" aria-hidden="true">
         <span
           className="daily-rhythm__rail-fill"
@@ -63,7 +76,7 @@ export function DailyRhythmLane({
           />
         ))}
       </div>
-    </section>
+    </PlannerRailSection>
   );
 }
 
@@ -164,9 +177,29 @@ function DailyRhythmRow({
   const canReserve = !readOnly && item.state !== "done" && item.state !== "skipped" && item.state !== "planned";
   const canComplete = !readOnly && !item.completed && !item.skipped;
   const canSkip = !readOnly && item.kind === "habit" && !item.completed && !item.skipped;
+  const canDrag = canReserve && !isPending;
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
+    id: getDailyRhythmDragId(item.id),
+    data: {
+      type: DAILY_RHYTHM_DRAG_TYPE,
+      itemId: item.id,
+    },
+    disabled: !canDrag,
+  });
 
   return (
-    <div className={`daily-rhythm-item daily-rhythm-item--${item.state}`}>
+    <div
+      ref={setNodeRef}
+      className={[
+        "daily-rhythm-item",
+        ` daily-rhythm-item--${item.state}`,
+        canDrag ? " daily-rhythm-item--draggable" : "",
+        isDragging ? " daily-rhythm-item--dragging" : "",
+      ].join("")}
+      aria-grabbed={isDragging}
+      {...attributes}
+      {...listeners}
+    >
       <div className="daily-rhythm-item__mark" aria-hidden="true" />
       <div className="daily-rhythm-item__body">
         <div className="daily-rhythm-item__top">
@@ -174,13 +207,17 @@ function DailyRhythmRow({
           <span className="daily-rhythm-item__state">{getStateLabel(item)}</span>
         </div>
         <div className="daily-rhythm-item__meta">
-          <span>{item.detailLabel}</span>
-          {item.progressLabel ? <span>{item.progressLabel}</span> : null}
-          {item.conflictLabel ? <span>Conflict: {item.conflictLabel}</span> : null}
+          <span>{buildRhythmMeta(item)}</span>
+          {item.conflictLabel ? (
+            <span className="daily-rhythm-item__conflict">{item.conflictLabel}</span>
+          ) : null}
         </div>
       </div>
       {canReserve || canComplete || canSkip ? (
-        <div className="daily-rhythm-item__actions">
+        <div
+          className="daily-rhythm-item__actions"
+          onPointerDown={(event) => event.stopPropagation()}
+        >
           {canReserve ? (
             <button
               className="daily-rhythm__text-btn"
@@ -245,6 +282,14 @@ function getStateLabel(item: DailyRhythmItem) {
   }
 
   return "Anytime";
+}
+
+function buildRhythmMeta(item: DailyRhythmItem) {
+  if (item.progressLabel) {
+    return `${item.detailLabel} · ${item.progressLabel}`;
+  }
+
+  return item.detailLabel;
 }
 
 function SkipMiniIcon() {

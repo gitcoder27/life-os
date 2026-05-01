@@ -128,7 +128,7 @@ export const shellNavItems: readonly ShellNavItem[] = [
   { to: "/home", label: "Home", hint: "dashboard and direction", icon: HomeIcon },
   { to: "/inbox", label: "Inbox", hint: "capture triage", icon: InboxIcon },
   { to: "/today", label: "Today", hint: "daily execution workspace", icon: TodayIcon },
-  { to: "/planner", label: "Planner", hint: "timeline and day design", icon: PlannerIcon },
+  { to: "/planner", label: "Day Planner", hint: "timeline and day design", icon: PlannerIcon },
   { to: "/habits", label: "Habits", hint: "consistency system", icon: HabitsIcon },
   { to: "/health", label: "Health", hint: "body basics", icon: HealthIcon },
   { to: "/meals", label: "Meals", hint: "weekly meal planning", icon: MealsIcon },

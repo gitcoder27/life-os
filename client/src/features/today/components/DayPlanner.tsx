@@ -1,9 +1,10 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type WheelEvent } from "react";
 import {
   DndContext,
   DragOverlay,
   PointerSensor,
   pointerWithin,
+  useDroppable,
   useSensor,
   useSensors,
   type DragEndEvent,
@@ -42,6 +43,8 @@ import type {
 } from "../helpers/daily-rhythm";
 import type { PlannerExecutionModel } from "../helpers/planner-execution";
 import {
+  DAILY_RHYTHM_DRAG_TYPE,
+  DAILY_RHYTHM_TIMELINE_DROP_TYPE,
   PLANNER_BLOCK_DROP_TYPE,
   UNPLANNED_TASK_DRAG_TYPE,
 } from "../helpers/planner-drag";
@@ -129,6 +132,7 @@ export function DayPlanner({
   const [hoursDraft, setHoursDraft] = useState(visibleHours);
   const [now, setNow] = useState(() => new Date());
   const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null);
+  const [draggedRhythmItemId, setDraggedRhythmItemId] = useState<string | null>(null);
   const [suppressedTaskId, setSuppressedTaskId] = useState<string | null>(null);
   const [disableDropAnimation, setDisableDropAnimation] = useState(false);
   const [quickEditRequest, setQuickEditRequest] = useState<PlannerQuickEditRequest | null>(null);
@@ -169,6 +173,22 @@ export function DayPlanner({
     () => plannerAssignableTasks.find((task) => task.id === draggedTaskId) ?? null,
     [draggedTaskId, plannerAssignableTasks],
   );
+  const activeDraggedRhythmItem = useMemo(
+    () => dailyRhythmPlan?.items.find((item) => item.id === draggedRhythmItemId) ?? null,
+    [dailyRhythmPlan?.items, draggedRhythmItemId],
+  );
+  const { isOver: isRhythmTimelineOver, setNodeRef: setRhythmTimelineDropRef } = useDroppable({
+    id: "planner-daily-rhythm-timeline",
+    data: {
+      type: DAILY_RHYTHM_TIMELINE_DROP_TYPE,
+    },
+    disabled:
+      !isEditable ||
+      draggedRhythmItemId === null ||
+      Boolean(formDraft) ||
+      Boolean(isRhythmActionPending) ||
+      actions.isPending,
+  });
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
   );
@@ -197,6 +217,12 @@ export function DayPlanner({
       setDraggedTaskId(null);
     }
   }, [draggedTaskId, plannerAssignableTasks]);
+
+  useEffect(() => {
+    if (draggedRhythmItemId && !dailyRhythmPlan?.items.some((item) => item.id === draggedRhythmItemId)) {
+      setDraggedRhythmItemId(null);
+    }
+  }, [dailyRhythmPlan?.items, draggedRhythmItemId]);
 
   useEffect(() => {
     if (!suppressedTaskId) {
@@ -259,12 +285,12 @@ export function DayPlanner({
 
   useEffect(() => {
     const className = "planner-dragging-cursor";
-    document.body.classList.toggle(className, draggedTaskId !== null);
+    document.body.classList.toggle(className, draggedTaskId !== null || draggedRhythmItemId !== null);
 
     return () => {
       document.body.classList.remove(className);
     };
-  }, [draggedTaskId]);
+  }, [draggedRhythmItemId, draggedTaskId]);
 
   useLayoutEffect(() => {
     if (!isLiveDate || timeline.nowLinePx === null || hasAutoCenteredNowRef.current) {
@@ -488,22 +514,30 @@ export function DayPlanner({
 
     setDisableDropAnimation(false);
 
-    if (event.active.data.current?.type !== UNPLANNED_TASK_DRAG_TYPE) {
+    if (event.active.data.current?.type === UNPLANNED_TASK_DRAG_TYPE) {
+      const taskId = event.active.data.current?.taskId;
+      setDraggedTaskId(typeof taskId === "string" ? taskId : null);
+      setDraggedRhythmItemId(null);
       return;
     }
 
-    const taskId = event.active.data.current?.taskId;
-    setDraggedTaskId(typeof taskId === "string" ? taskId : null);
+    if (event.active.data.current?.type === DAILY_RHYTHM_DRAG_TYPE) {
+      const itemId = event.active.data.current?.itemId;
+      setDraggedRhythmItemId(typeof itemId === "string" ? itemId : null);
+      setDraggedTaskId(null);
+    }
   }
 
   function handleUnplannedTaskDragCancel() {
     setDraggedTaskId(null);
+    setDraggedRhythmItemId(null);
     setDisableDropAnimation(false);
   }
 
   function handleUnplannedTaskDragEnd(event: DragEndEvent) {
     if (!isEditable) {
       setDraggedTaskId(null);
+      setDraggedRhythmItemId(null);
       setDisableDropAnimation(false);
       return;
     }
@@ -524,11 +558,49 @@ export function DayPlanner({
         setSuppressedTaskId(activeTaskId);
         void assignPlannerTaskToBlock(targetBlock, activeTaskId);
       }
+    } else if (event.active.data.current?.type === DAILY_RHYTHM_DRAG_TYPE) {
+      const activeItemId = event.active.data.current?.itemId;
+      const isTimelineDrop = event.over?.data.current?.type === DAILY_RHYTHM_TIMELINE_DROP_TYPE;
+      const rhythmItem =
+        typeof activeItemId === "string"
+          ? dailyRhythmPlan?.items.find((item) => item.id === activeItemId) ?? null
+          : null;
+
+      if (rhythmItem && isTimelineDrop) {
+        setDisableDropAnimation(true);
+        void handleReserveRhythmItem(rhythmItem);
+      } else {
+        setDisableDropAnimation(false);
+      }
     } else {
       setDisableDropAnimation(false);
     }
 
     setDraggedTaskId(null);
+    setDraggedRhythmItemId(null);
+  }
+
+  function handleSidebarWheelCapture(event: WheelEvent<HTMLDivElement>) {
+    const sidebar = event.currentTarget;
+    const verticalDelta = event.deltaY;
+
+    if (Math.abs(verticalDelta) <= Math.abs(event.deltaX)) {
+      return;
+    }
+
+    const maxScrollTop = sidebar.scrollHeight - sidebar.clientHeight;
+    if (maxScrollTop <= 0) {
+      return;
+    }
+
+    const canScrollUp = verticalDelta < 0 && sidebar.scrollTop > 0;
+    const canScrollDown = verticalDelta > 0 && sidebar.scrollTop < maxScrollTop - 1;
+
+    if (canScrollUp || canScrollDown) {
+      event.preventDefault();
+      event.stopPropagation();
+      sidebar.scrollTop = Math.max(0, Math.min(maxScrollTop, sidebar.scrollTop + verticalDelta));
+    }
   }
 
   return (
@@ -680,7 +752,10 @@ export function DayPlanner({
         onDragEnd={handleUnplannedTaskDragEnd}
       >
         <div className="planner__body">
-          <div className="planner__timeline-pane">
+          <div
+            ref={setRhythmTimelineDropRef}
+            className={`planner__timeline-pane${draggedRhythmItemId ? " planner__timeline-pane--rhythm-drop-ready" : ""}${isRhythmTimelineOver ? " planner__timeline-pane--rhythm-drop-over" : ""}`}
+          >
             {orderedBlocks.length === 0 && !formDraft ? (
               <div className="planner__empty">
                 <div className="planner__empty-icon">✦</div>
@@ -859,7 +934,7 @@ export function DayPlanner({
           </div>
 
           <div className="planner__sidebar-pane" style={sidebarStyle}>
-            <div className="planner__sidebar-stack">
+            <div className="planner__sidebar-stack" onWheelCapture={handleSidebarWheelCapture}>
               {dailyRhythmPlan ? (
                 <DailyRhythmLane
                   plan={dailyRhythmPlan}
@@ -912,6 +987,7 @@ export function DayPlanner({
         {createPortal(
           <DragOverlay dropAnimation={disableDropAnimation ? null : undefined}>
             {activeDraggedTask ? <PlannerTaskDragPreview task={activeDraggedTask} /> : null}
+            {activeDraggedRhythmItem ? <PlannerRhythmDragPreview item={activeDraggedRhythmItem} /> : null}
           </DragOverlay>,
           document.body,
         )}
@@ -1026,6 +1102,18 @@ function PlannerTaskDragPreview({ task }: { task: TaskItem }) {
             {task.goal.title}
           </span>
         ) : null}
+      </div>
+    </div>
+  );
+}
+
+function PlannerRhythmDragPreview({ item }: { item: DailyRhythmItem }) {
+  return (
+    <div className={`daily-rhythm-item daily-rhythm-item--${item.state} daily-rhythm-item--dragging daily-rhythm-item--overlay`}>
+      <div className="daily-rhythm-item__mark" aria-hidden="true" />
+      <div className="daily-rhythm-item__body">
+        <span className="daily-rhythm-item__title">{item.title}</span>
+        <span className="daily-rhythm-item__meta">{item.detailLabel}</span>
       </div>
     </div>
   );
