@@ -178,6 +178,7 @@ export function ManageHabitsSection({
                     category: habit.category ?? "",
                     habitType: habit.habitType,
                     targetPerDay: String(habit.targetPerDay),
+                    durationMinutes: String(habit.durationMinutes),
                     recurrenceRule: habit.recurrence?.rule ?? null,
                     goalId: habit.goalId ?? "",
                     timingMode: habit.timingMode,
@@ -213,6 +214,7 @@ export function ManageHabitsSection({
                       <div className="manage-list__meta">
                         {habit.category || "Uncategorized"}
                         {habit.habitType ? ` · ${habit.habitType}` : ""}
+                        {` · ${habit.durationMinutes}m`}
                         {habit.streakCount > 0 ? ` · ${habit.streakCount} streak` : ""}
                         {habit.goal ? ` · ${habit.goal.title}` : ""}
                         {habit.recurrence && isRecurring(habit.recurrence) ? (

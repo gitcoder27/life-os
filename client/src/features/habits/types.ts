@@ -21,6 +21,7 @@ export type HabitFormValues = {
   category: string;
   habitType: "maintenance" | "growth" | "identity";
   targetPerDay: string;
+  durationMinutes: string;
   recurrenceRule: RecurrenceRuleInput | null;
   goalId: string;
   timingMode: "anytime" | "anchor" | "exact_time" | "time_window";

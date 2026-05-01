@@ -103,6 +103,15 @@
     position: static;
   }
 
+  .daily-rhythm {
+    border-radius: var(--r);
+  }
+
+  .daily-rhythm-block__copy {
+    grid-template-columns: 1fr;
+    gap: 0.16rem;
+  }
+
   /* Mobile: unplanned panel becomes fixed bottom bar */
   .unplanned-lane {
     position: fixed;
@@ -305,6 +314,20 @@
 
   .planner-block__task-picker {
     padding-left: 1rem;
+  }
+
+  .daily-rhythm-item {
+    grid-template-columns: 0.38rem minmax(0, 1fr);
+  }
+
+  .daily-rhythm-item__actions {
+    grid-column: 2;
+    justify-content: flex-start;
+  }
+
+  .daily-rhythm-block {
+    align-items: flex-start;
+    flex-direction: column;
   }
 
   .unplanned-task {

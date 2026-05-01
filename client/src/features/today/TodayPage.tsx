@@ -29,6 +29,10 @@ import {
   useActiveFocusSessionQuery,
   useCreateTaskMutation,
   useDayPlanQuery,
+  useHabitCheckinMutation,
+  useHabitsQuery,
+  useRoutineCheckinMutation,
+  useSkipHabitMutation,
   type GoalNudgeItem,
 } from "../../shared/lib/api";
 import { isQuickCaptureReferenceTask } from "../../shared/lib/quickCapture";
@@ -45,6 +49,11 @@ import {
   WORKBENCH_RAIL_WIDTH_STEP,
   writeStoredWorkbenchRailWidth,
 } from "./helpers/workbench-layout";
+import {
+  buildDailyRhythmPlan,
+  findDailyRhythmSlot,
+  type DailyRhythmItem,
+} from "./helpers/daily-rhythm";
 
 const ISO_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const isPlannerAssignableTask = (task: { kind: string }) => task.kind === "task";
@@ -86,7 +95,11 @@ export function TodayPage({ routeMode }: { routeMode?: "execute" | "plan" }) {
   const isLivePlannerDate = plannerDate === data.today;
   const isEditablePlannerDate = plannerDate >= data.today;
   const plannerDayPlanQuery = useDayPlanQuery(plannerDate);
+  const habitsQuery = useHabitsQuery();
   const activeFocusSessionQuery = useActiveFocusSessionQuery();
+  const plannerHabitCheckinMutation = useHabitCheckinMutation(data.today);
+  const plannerSkipHabitMutation = useSkipHabitMutation(data.today);
+  const plannerRoutineCheckinMutation = useRoutineCheckinMutation(data.today);
   const createGoalTaskMutation = useCreateTaskMutation(data.today, {
     successMessage: "Goal task added to Today.",
     errorMessage: "Goal task could not be added.",
@@ -156,6 +169,21 @@ export function TodayPage({ routeMode }: { routeMode?: "execute" | "plan" }) {
         isLiveDate: isLivePlannerDate,
       }),
     [isLivePlannerDate, plannerBlocks, plannerNow, plannerUnplannedTasks],
+  );
+  const dailyRhythmPlan = useMemo(
+    () => {
+      if (!isLivePlannerDate || !habitsQuery.data) {
+        return null;
+      }
+
+      return buildDailyRhythmPlan({
+        date: plannerDate,
+        blocks: plannerBlocks,
+        dueHabits: habitsQuery.data.dueHabits,
+        routines: habitsQuery.data.routines,
+      });
+    },
+    [habitsQuery.data, isLivePlannerDate, plannerBlocks, plannerDate],
   );
   const selectableTasks = useMemo(
     () => [...data.executionTasks, ...data.overdueTasks],
@@ -446,8 +474,20 @@ export function TodayPage({ routeMode }: { routeMode?: "execute" | "plan" }) {
     activeFocusSessionQuery.error instanceof Error
       ? activeFocusSessionQuery.error.message
       : null,
+    habitsQuery.error instanceof Error
+      ? habitsQuery.error.message
+      : null,
     createGoalTaskMutation.error instanceof Error
       ? createGoalTaskMutation.error.message
+      : null,
+    plannerHabitCheckinMutation.error instanceof Error
+      ? plannerHabitCheckinMutation.error.message
+      : null,
+    plannerSkipHabitMutation.error instanceof Error
+      ? plannerSkipHabitMutation.error.message
+      : null,
+    plannerRoutineCheckinMutation.error instanceof Error
+      ? plannerRoutineCheckinMutation.error.message
       : null,
     mode === "plan" ? plannerActions.mutationError : null,
   ]
@@ -456,6 +496,7 @@ export function TodayPage({ routeMode }: { routeMode?: "execute" | "plan" }) {
   const refetchEverything = () => {
     data.refetchAll();
     void activeFocusSessionQuery.refetch();
+    void habitsQuery.refetch();
   };
 
   async function handleAddGoalNudge(nudge: GoalNudgeItem) {
@@ -471,6 +512,59 @@ export function TodayPage({ routeMode }: { routeMode?: "execute" | "plan" }) {
       estimatedDurationMinutes: 25,
       focusLengthMinutes: 25,
     });
+  }
+
+  async function handleReserveRhythmItem(item: DailyRhythmItem) {
+    if (!isLivePlannerDate) {
+      return;
+    }
+
+    const exactSlot = item.state === "reserved" && item.startsAt && item.endsAt
+      ? { startsAt: item.startsAt, endsAt: item.endsAt }
+      : null;
+    const slot = exactSlot ?? findDailyRhythmSlot({
+      item,
+      blocks: plannerBlocks,
+      date: plannerDate,
+    });
+
+    if (!slot) {
+      return;
+    }
+
+    await plannerActions.addBlock({
+      title: item.title,
+      startsAt: slot.startsAt,
+      endsAt: slot.endsAt,
+    });
+  }
+
+  async function handleCompleteRhythmItem(item: DailyRhythmItem) {
+    if (item.completed) {
+      return;
+    }
+
+    if (item.kind === "habit") {
+      await plannerHabitCheckinMutation.mutateAsync({
+        habitId: item.sourceId,
+        level: "standard",
+      });
+      return;
+    }
+
+    await Promise.all(
+      item.incompleteRoutineItemIds.map((itemId) =>
+        plannerRoutineCheckinMutation.mutateAsync(itemId),
+      ),
+    );
+  }
+
+  async function handleSkipRhythmItem(item: DailyRhythmItem) {
+    if (item.kind !== "habit" || item.completed || item.skipped) {
+      return;
+    }
+
+    await plannerSkipHabitMutation.mutateAsync(item.sourceId);
   }
 
   const pendingPriorityCount = priorityDraft.draft.filter(
@@ -644,8 +738,17 @@ export function TodayPage({ routeMode }: { routeMode?: "execute" | "plan" }) {
           unplannedTasks={plannerUnplannedTasks}
           recoveryTasks={plannerRecoveryTasks}
           execution={plannerExecution}
+          dailyRhythmPlan={dailyRhythmPlan}
           actions={plannerActions}
           taskActions={plannerTaskActions}
+          isRhythmActionPending={
+            plannerHabitCheckinMutation.isPending ||
+            plannerSkipHabitMutation.isPending ||
+            plannerRoutineCheckinMutation.isPending
+          }
+          onReserveRhythmItem={handleReserveRhythmItem}
+          onCompleteRhythmItem={handleCompleteRhythmItem}
+          onSkipRhythmItem={handleSkipRhythmItem}
           onSelectDate={setPlannerDate}
           onStepDate={stepPlannerDate}
           sidebarStyle={plannerSidebarStyle}

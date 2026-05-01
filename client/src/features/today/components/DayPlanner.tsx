@@ -36,6 +36,10 @@ import {
   writeStoredPlannerVisibleHours,
   type PlannerTimelineSegment,
 } from "../helpers/planner-timeline";
+import type {
+  DailyRhythmItem,
+  DailyRhythmPlan,
+} from "../helpers/daily-rhythm";
 import type { PlannerExecutionModel } from "../helpers/planner-execution";
 import {
   PLANNER_BLOCK_DROP_TYPE,
@@ -46,6 +50,10 @@ import { PlannerBlockForm } from "./PlannerBlockForm";
 import { UnplannedTasks } from "./UnplannedTasks";
 import type { useTaskActions } from "../hooks/useTaskActions";
 import { PlannerDateNavigator } from "./PlannerDateNavigator";
+import {
+  DailyRhythmLane,
+  DailyRhythmTimelineBlock,
+} from "./DailyRhythmLane";
 
 type PlannerActions = ReturnType<typeof usePlannerActions>;
 type TaskActions = ReturnType<typeof useTaskActions>;
@@ -84,8 +92,13 @@ export function DayPlanner({
   unplannedTasks,
   recoveryTasks = [],
   execution,
+  dailyRhythmPlan,
   actions,
   taskActions,
+  isRhythmActionPending,
+  onReserveRhythmItem,
+  onCompleteRhythmItem,
+  onSkipRhythmItem,
   onSelectDate,
   onStepDate,
   sidebarStyle,
@@ -99,8 +112,13 @@ export function DayPlanner({
   unplannedTasks: TaskItem[];
   recoveryTasks?: TaskItem[];
   execution: PlannerExecutionModel;
+  dailyRhythmPlan?: DailyRhythmPlan | null;
   actions: PlannerActions;
   taskActions: TaskActions;
+  isRhythmActionPending?: boolean;
+  onReserveRhythmItem?: (item: DailyRhythmItem) => void | Promise<void>;
+  onCompleteRhythmItem?: (item: DailyRhythmItem) => void | Promise<void>;
+  onSkipRhythmItem?: (item: DailyRhythmItem) => void | Promise<void>;
   onSelectDate: (isoDate: string) => void;
   onStepDate: (direction: -1 | 1) => void;
   sidebarStyle?: CSSProperties;
@@ -129,11 +147,12 @@ export function DayPlanner({
     () =>
       buildPlannerTimelineModel({
         blocks: orderedBlocks,
+        reservations: dailyRhythmPlan?.reservations,
         now,
         preferredHours: visibleHours,
         isLiveDate,
       }),
-    [isLiveDate, orderedBlocks, now, visibleHours],
+    [dailyRhythmPlan?.reservations, isLiveDate, orderedBlocks, now, visibleHours],
   );
   const hoursValidation = validatePlannerVisibleHours(hoursDraft);
   const isCleanupPending = actions.isPending || taskActions.isPending;
@@ -212,6 +231,30 @@ export function DayPlanner({
     }
 
     await actions.assignTasksToBlock(block, assignableTaskIds);
+  }
+
+  async function handleReserveRhythmItem(item: DailyRhythmItem) {
+    if (!isEditable) {
+      return;
+    }
+
+    await Promise.resolve(onReserveRhythmItem?.(item));
+  }
+
+  async function handleCompleteRhythmItem(item: DailyRhythmItem) {
+    if (!isEditable) {
+      return;
+    }
+
+    await Promise.resolve(onCompleteRhythmItem?.(item));
+  }
+
+  async function handleSkipRhythmItem(item: DailyRhythmItem) {
+    if (!isEditable) {
+      return;
+    }
+
+    await Promise.resolve(onSkipRhythmItem?.(item));
   }
 
   useEffect(() => {
@@ -726,6 +769,27 @@ export function DayPlanner({
                         isPending={actions.isPending}
                         onQuickAddBlock={handleQuickAddBlock}
                       />
+                    ) : segment.kind === "reservation" && segment.reservation ? (
+                      <DailyRhythmTimelineBlock
+                        key={segment.id}
+                        reservation={segment.reservation}
+                        item={
+                          dailyRhythmPlan?.items.find((item) => item.id === segment.reservation?.itemId) ?? null
+                        }
+                        topPx={segment.topPx}
+                        heightPx={segment.heightPx}
+                        readOnly={!isEditable}
+                        isPending={Boolean(isRhythmActionPending) || actions.isPending}
+                        onReserve={(item) => {
+                          void handleReserveRhythmItem(item);
+                        }}
+                        onComplete={(item) => {
+                          void handleCompleteRhythmItem(item);
+                        }}
+                        onSkip={(item) => {
+                          void handleSkipRhythmItem(item);
+                        }}
+                      />
                     ) : (
                       <PlannerBlock
                         key={segment.id}
@@ -796,6 +860,22 @@ export function DayPlanner({
 
           <div className="planner__sidebar-pane" style={sidebarStyle}>
             <div className="planner__sidebar-stack">
+              {dailyRhythmPlan ? (
+                <DailyRhythmLane
+                  plan={dailyRhythmPlan}
+                  readOnly={!isEditable}
+                  isPending={Boolean(isRhythmActionPending) || actions.isPending}
+                  onReserve={(item) => {
+                    void handleReserveRhythmItem(item);
+                  }}
+                  onComplete={(item) => {
+                    void handleCompleteRhythmItem(item);
+                  }}
+                  onSkip={(item) => {
+                    void handleSkipRhythmItem(item);
+                  }}
+                />
+              ) : null}
               {recoveryTasks.length > 0 ? (
                 <UnplannedTasks
                   title="Recover overdue"

@@ -10,6 +10,7 @@ const emptyHabitForm: HabitFormValues = {
   category: "",
   habitType: "maintenance",
   targetPerDay: "1",
+  durationMinutes: "25",
   recurrenceRule: null,
   goalId: "",
   timingMode: "anytime",
@@ -31,6 +32,7 @@ function hasAdvancedValues(values: HabitFormValues) {
     values.goalId ||
     values.habitType !== "maintenance" ||
     Number(values.targetPerDay) > 1 ||
+    values.durationMinutes !== "25" ||
     values.stretchVersion ||
     values.obstaclePlan ||
     values.repairRule ||
@@ -68,10 +70,12 @@ export function HabitForm({
       values.windowStartTime.length > 0 &&
       values.windowEndTime.length > 0 &&
       values.windowStartTime < values.windowEndTime);
+  const parsedDuration = Number.parseInt(values.durationMinutes, 10);
+  const hasValidDuration = Number.isFinite(parsedDuration) && parsedDuration > 0 && parsedDuration <= 720;
 
   function handleSubmit(event: FormEvent) {
     event.preventDefault();
-    if (!values.title.trim() || !hasValidTiming) return;
+    if (!values.title.trim() || !hasValidTiming || !hasValidDuration) return;
 
     onSubmit(values);
   }
@@ -103,10 +107,10 @@ export function HabitForm({
           />
         </div>
         <div className="manage-form__section">
-          <span className="manage-form__section-label">Timing</span>
+          <span className="manage-form__section-label">Timing and duration</span>
           <div className="manage-form__row">
             <label className="field" style={{ flex: 1 }}>
-              <span>When</span>
+              <span>Planning style</span>
               <select
                 value={values.timingMode}
                 onChange={(event) =>
@@ -131,6 +135,36 @@ export function HabitForm({
                 />
               </label>
             ) : null}
+          </div>
+          <div className="manage-form__row">
+            <label className="field" style={{ width: "9rem" }}>
+              <span>Time needed</span>
+              <input
+                type="number"
+                min="1"
+                max="720"
+                value={values.durationMinutes}
+                onChange={(event) =>
+                  setValues((current) => ({ ...current, durationMinutes: event.target.value }))
+                }
+              />
+            </label>
+            <div className="habit-duration-presets" aria-label="Habit duration presets">
+              {[5, 10, 20, 30, 45].map((minutes) => (
+                <button
+                  key={minutes}
+                  className={`habit-duration-presets__button${
+                    values.durationMinutes === String(minutes) ? " habit-duration-presets__button--active" : ""
+                  }`}
+                  type="button"
+                  onClick={() =>
+                    setValues((current) => ({ ...current, durationMinutes: String(minutes) }))
+                  }
+                >
+                  {minutes}m
+                </button>
+              ))}
+            </div>
           </div>
           {values.timingMode === "anchor" ? (
             <label className="field">
@@ -315,7 +349,7 @@ export function HabitForm({
         <button
           className="button button--primary button--small"
           type="submit"
-          disabled={isPending || !values.title.trim() || !hasValidTiming}
+          disabled={isPending || !values.title.trim() || !hasValidTiming || !hasValidDuration}
         >
           {isPending ? "Saving..." : submitLabel}
         </button>

@@ -129,6 +129,7 @@ export function useHabitsPageController() {
         category: values.category.trim() || null,
         habitType: values.habitType,
         targetPerDay: Math.max(1, Number.parseInt(values.targetPerDay, 10) || 1),
+        durationMinutes: Math.max(1, Number.parseInt(values.durationMinutes, 10) || 25),
         recurrence: values.recurrenceRule
           ? buildRecurrenceInput(values.recurrenceRule)
           : undefined,
@@ -157,6 +158,7 @@ export function useHabitsPageController() {
         category: values.category.trim() || null,
         habitType: values.habitType,
         targetPerDay: Math.max(1, Number.parseInt(values.targetPerDay, 10) || 1),
+        durationMinutes: Math.max(1, Number.parseInt(values.durationMinutes, 10) || 25),
         recurrence: values.recurrenceRule
           ? buildRecurrenceInput(values.recurrenceRule)
           : undefined,

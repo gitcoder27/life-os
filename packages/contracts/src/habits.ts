@@ -35,6 +35,7 @@ export interface HabitItem {
   goalId: EntityId | null;
   goal: GoalSummary | null;
   targetPerDay: number;
+  durationMinutes: number;
   timingMode: HabitTimingMode;
   anchorText: string | null;
   targetTimeMinutes: number | null;
@@ -50,6 +51,7 @@ export interface HabitItem {
   identityMeaning: string | null;
   status: HabitStatus;
   dueToday: boolean;
+  skippedToday: boolean;
   completedToday: boolean;
   completedCountToday: number;
   achievedLevelToday: HabitCheckinLevel | null;
@@ -133,6 +135,7 @@ export interface CreateHabitRequest {
   recurrence?: RecurrenceInput;
   goalId?: EntityId | null;
   targetPerDay?: number;
+  durationMinutes?: number;
   timingMode?: HabitTimingMode;
   anchorText?: string | null;
   targetTimeMinutes?: number | null;
@@ -154,6 +157,7 @@ export interface UpdateHabitRequest {
   recurrence?: RecurrenceInput;
   goalId?: EntityId | null;
   targetPerDay?: number;
+  durationMinutes?: number;
   timingMode?: HabitTimingMode;
   anchorText?: string | null;
   targetTimeMinutes?: number | null;

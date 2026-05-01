@@ -1,6 +1,7 @@
 /* Day planner stylesheet entry point. Keep imports ordered to preserve cascade behavior. */
 @import "./planner/base.css";
 @import "./planner/blocks.css";
+@import "./planner/daily-rhythm.css";
 @import "./planner/unplanned.css";
 @import "./planner/execution.css";
 @import "./planner/effects.css";

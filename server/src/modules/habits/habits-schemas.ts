@@ -29,6 +29,7 @@ const routineStatusSchema = z.enum(["active", "archived"]);
 const routineTimingModeSchema = z.enum(["anytime", "period", "custom_window"]) as z.ZodType<RoutineTimingMode>;
 const routinePeriodSchema = z.enum(["morning", "evening"]) as z.ZodType<RoutinePeriod>;
 const minuteOfDaySchema = z.number().int().min(0).max(1439);
+const habitDurationSchema = z.number().int().min(1).max(720);
 
 const habitScheduleRuleSchema = z.object({
   daysOfWeek: z.array(z.number().int().min(0).max(6)).max(7).optional(),
@@ -84,6 +85,7 @@ export const createHabitSchema = z.object({
   recurrence: recurrenceInputSchema.optional(),
   goalId: z.string().uuid().nullable().optional(),
   targetPerDay: z.number().int().positive().max(20).optional(),
+  durationMinutes: habitDurationSchema.optional(),
   timingMode: habitTimingModeSchema.optional(),
   anchorText: z.string().max(240).nullable().optional(),
   targetTimeMinutes: minuteOfDaySchema.nullable().optional(),
@@ -154,6 +156,7 @@ export const updateHabitSchema = z
     recurrence: recurrenceInputSchema.optional(),
     goalId: z.string().uuid().nullable().optional(),
     targetPerDay: z.number().int().positive().max(20).optional(),
+    durationMinutes: habitDurationSchema.optional(),
     timingMode: habitTimingModeSchema.optional(),
     anchorText: z.string().max(240).nullable().optional(),
     targetTimeMinutes: minuteOfDaySchema.nullable().optional(),

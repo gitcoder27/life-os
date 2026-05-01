@@ -119,8 +119,14 @@ export {
   useHabitCheckinMutation,
   useHabitsQuery,
   useRoutineCheckinMutation,
+  useSkipHabitMutation,
   useUpdateHabitMutation,
   useUpdateRoutineMutation,
+} from "./api/habits";
+export type {
+  HabitItem,
+  HabitsData,
+  RoutineItem,
 } from "./api/habits";
 export {
   useAddMealMutation,

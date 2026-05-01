@@ -1,0 +1,301 @@
+/* ── Daily Rhythm ───────────────────────────────────── */
+
+.daily-rhythm {
+  display: flex;
+  flex-direction: column;
+  gap: 0.58rem;
+  padding: 0.82rem;
+  border-radius: 1.15rem;
+  border: 1px solid rgba(146, 176, 150, 0.16);
+  background:
+    linear-gradient(180deg, rgba(146, 176, 150, 0.055), rgba(255,255,255,0.016)),
+    rgba(18,20,17,0.52);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.035),
+    0 14px 34px rgba(0,0,0,0.14);
+}
+
+.daily-rhythm__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.65rem;
+}
+
+.daily-rhythm__title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 0.48rem;
+  min-width: 0;
+}
+
+.daily-rhythm__title {
+  font-size: 0.72rem;
+  font-weight: 800;
+  color: rgba(188, 207, 181, 0.84);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.daily-rhythm__count,
+.daily-rhythm__meter {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--r-pill);
+  font-variant-numeric: tabular-nums;
+}
+
+.daily-rhythm__count {
+  min-width: 1.12rem;
+  height: 1.12rem;
+  padding: 0 0.32rem;
+  color: #cfe1c7;
+  background: rgba(146, 176, 150, 0.12);
+  font-size: 0.58rem;
+  font-weight: 800;
+}
+
+.daily-rhythm__meter {
+  padding: 0.18rem 0.48rem;
+  color: rgba(207, 225, 199, 0.68);
+  border: 1px solid rgba(146, 176, 150, 0.12);
+  background: rgba(255,255,255,0.025);
+  font-size: 0.62rem;
+  font-weight: 700;
+}
+
+.daily-rhythm__rail {
+  position: relative;
+  height: 3px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: rgba(255,255,255,0.055);
+}
+
+.daily-rhythm__rail-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-radius: inherit;
+  background: linear-gradient(90deg, rgba(146, 176, 150, 0.48), rgba(217,153,58,0.55));
+  transition: width var(--dur) var(--ease);
+}
+
+.daily-rhythm__list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.daily-rhythm-item {
+  display: grid;
+  grid-template-columns: 0.45rem minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.62rem;
+  padding: 0.68rem 0.68rem 0.68rem 0.52rem;
+  border-radius: 0.92rem;
+  border: 1px solid rgba(255,255,255,0.045);
+  background: rgba(255,255,255,0.018);
+  transition:
+    border-color var(--dur-fast) var(--ease),
+    background var(--dur-fast) var(--ease),
+    transform var(--dur-fast) var(--ease);
+}
+
+.daily-rhythm-item:hover {
+  transform: translateY(-1px);
+  border-color: rgba(146, 176, 150, 0.14);
+  background: rgba(255,255,255,0.034);
+}
+
+.daily-rhythm-item__mark {
+  width: 0.28rem;
+  height: 2.1rem;
+  border-radius: 999px;
+  background: rgba(146, 176, 150, 0.5);
+}
+
+.daily-rhythm-item--conflict .daily-rhythm-item__mark {
+  background: rgba(221, 131, 122, 0.76);
+}
+
+.daily-rhythm-item--needs_slot .daily-rhythm-item__mark,
+.daily-rhythm-item--checklist .daily-rhythm-item__mark {
+  background: rgba(217,153,58,0.64);
+}
+
+.daily-rhythm-item--done .daily-rhythm-item__mark,
+.daily-rhythm-item--skipped .daily-rhythm-item__mark,
+.daily-rhythm-item--planned .daily-rhythm-item__mark {
+  background: rgba(113, 163, 112, 0.68);
+}
+
+.daily-rhythm-item__body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.26rem;
+  min-width: 0;
+}
+
+.daily-rhythm-item__top {
+  display: flex;
+  align-items: center;
+  gap: 0.52rem;
+  min-width: 0;
+}
+
+.daily-rhythm-item__title {
+  min-width: 0;
+  color: var(--text);
+  font-size: 0.94rem;
+  font-weight: 650;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.daily-rhythm-item__state {
+  flex-shrink: 0;
+  color: rgba(207, 225, 199, 0.72);
+  font-size: 0.58rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.daily-rhythm-item--conflict .daily-rhythm-item__state {
+  color: rgba(239, 164, 154, 0.86);
+}
+
+.daily-rhythm-item__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.22rem 0.42rem;
+  color: rgba(190, 180, 160, 0.68);
+  font-size: 0.72rem;
+  line-height: 1.3;
+}
+
+.daily-rhythm-item__actions,
+.daily-rhythm-block__actions {
+  display: flex;
+  align-items: center;
+  gap: 0.34rem;
+}
+
+.daily-rhythm__text-btn,
+.daily-rhythm__icon-btn {
+  border: 1px solid rgba(146, 176, 150, 0.14);
+  background: rgba(146, 176, 150, 0.075);
+  color: rgba(207, 225, 199, 0.92);
+  cursor: pointer;
+  transition:
+    border-color var(--dur-fast) var(--ease),
+    background var(--dur-fast) var(--ease),
+    color var(--dur-fast) var(--ease),
+    transform var(--dur-fast) var(--ease);
+}
+
+.daily-rhythm__text-btn {
+  min-height: 1.85rem;
+  padding: 0.34rem 0.58rem;
+  border-radius: var(--r-pill);
+  font-family: var(--font-body);
+  font-size: 0.72rem;
+  font-weight: 750;
+  white-space: nowrap;
+}
+
+.daily-rhythm__icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.84rem;
+  height: 1.84rem;
+  border-radius: 50%;
+  padding: 0;
+}
+
+.daily-rhythm__text-btn:hover:not(:disabled),
+.daily-rhythm__icon-btn:hover:not(:disabled) {
+  border-color: rgba(217,153,58,0.26);
+  background: rgba(217,153,58,0.09);
+  color: var(--accent-bright);
+}
+
+.daily-rhythm__text-btn--quiet {
+  border-color: rgba(255,255,255,0.06);
+  background: rgba(255,255,255,0.018);
+  color: rgba(190, 180, 160, 0.72);
+}
+
+.daily-rhythm__text-btn--quiet:hover:not(:disabled) {
+  border-color: rgba(221, 131, 122, 0.2);
+  background: rgba(221, 131, 122, 0.07);
+  color: rgba(239, 164, 154, 0.9);
+}
+
+.daily-rhythm__text-btn:active:not(:disabled),
+.daily-rhythm__icon-btn:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.daily-rhythm__text-btn:disabled,
+.daily-rhythm__icon-btn:disabled {
+  opacity: 0.48;
+  cursor: not-allowed;
+}
+
+.daily-rhythm-block {
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.72rem;
+  padding: 0.62rem 0.72rem;
+  border-radius: var(--r-sm);
+  border: 1px solid rgba(146, 176, 150, 0.18);
+  border-left: 3px solid rgba(146, 176, 150, 0.72);
+  background:
+    linear-gradient(135deg, rgba(146, 176, 150, 0.08), rgba(255,255,255,0.018)),
+    rgba(17,20,16,0.54);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.04),
+    0 10px 28px rgba(0,0,0,0.12);
+  overflow: hidden;
+}
+
+.daily-rhythm-block--routine {
+  border-color: rgba(135, 165, 178, 0.18);
+  border-left-color: rgba(135, 165, 178, 0.72);
+  background:
+    linear-gradient(135deg, rgba(135, 165, 178, 0.08), rgba(255,255,255,0.018)),
+    rgba(17,19,20,0.54);
+}
+
+.daily-rhythm-block__copy {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.42rem;
+  min-width: 0;
+}
+
+.daily-rhythm-block__time,
+.daily-rhythm-block__detail {
+  color: rgba(190, 180, 160, 0.75);
+  font-size: 0.68rem;
+  font-weight: 650;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.daily-rhythm-block__title {
+  color: rgba(236, 232, 222, 0.94);
+  font-size: 0.98rem;
+  font-weight: 700;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

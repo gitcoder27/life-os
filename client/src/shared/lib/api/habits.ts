@@ -39,6 +39,7 @@ type HabitsResponse = {
     goalId: string | null;
     goal: LinkedGoal | null;
     targetPerDay: number;
+    durationMinutes: number;
     timingMode: "anytime" | "anchor" | "exact_time" | "time_window";
     anchorText: string | null;
     targetTimeMinutes: number | null;
@@ -54,6 +55,7 @@ type HabitsResponse = {
     identityMeaning: string | null;
     status: "active" | "paused" | "archived";
     dueToday: boolean;
+    skippedToday: boolean;
     completedToday: boolean;
     completedCountToday: number;
     achievedLevelToday: "minimum" | "standard" | "stretch" | null;
@@ -85,6 +87,7 @@ type HabitsResponse = {
     goalId: string | null;
     goal: LinkedGoal | null;
     targetPerDay: number;
+    durationMinutes: number;
     timingMode: "anytime" | "anchor" | "exact_time" | "time_window";
     anchorText: string | null;
     targetTimeMinutes: number | null;
@@ -100,6 +103,7 @@ type HabitsResponse = {
     identityMeaning: string | null;
     status: "active" | "paused" | "archived";
     dueToday: boolean;
+    skippedToday: boolean;
     completedToday: boolean;
     completedCountToday: number;
     achievedLevelToday: "minimum" | "standard" | "stretch" | null;
@@ -144,6 +148,10 @@ type HabitsResponse = {
     }>;
   }>;
 };
+
+export type HabitItem = HabitsResponse["habits"][number];
+export type RoutineItem = HabitsResponse["routines"][number];
+export type HabitsData = HabitsResponse;
 
 type HabitMutationResponse = {
   generatedAt: string;
@@ -191,6 +199,26 @@ export const useHabitCheckinMutation = (date: string) => {
     meta: {
       successMessage: "Habit logged.",
       errorMessage: "Habit log failed.",
+    },
+    onSuccess: () => invalidateCoreData(queryClient, date),
+  });
+};
+
+export const useSkipHabitMutation = (date: string) => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (habitId: string) =>
+      apiRequest<HabitMutationResponse>(`/api/habits/${habitId}/checkins`, {
+        method: "POST",
+        body: {
+          date,
+          status: "skipped",
+        },
+      }),
+    meta: {
+      successMessage: "Habit skipped for today.",
+      errorMessage: "Habit skip failed.",
     },
     onSuccess: () => invalidateCoreData(queryClient, date),
   });
@@ -258,6 +286,7 @@ export const useCreateHabitMutation = () => {
       scheduleRule?: { daysOfWeek?: number[] };
       recurrence?: RecurrenceInput;
       targetPerDay?: number;
+      durationMinutes?: number;
       goalId?: string | null;
       timingMode?: "anytime" | "anchor" | "exact_time" | "time_window";
       anchorText?: string | null;
@@ -294,6 +323,7 @@ export const useUpdateHabitMutation = () => {
     scheduleRule?: { daysOfWeek?: number[] };
     recurrence?: RecurrenceInput;
     targetPerDay?: number;
+    durationMinutes?: number;
     status?: "active" | "paused" | "archived";
     goalId?: string | null;
     timingMode?: "anytime" | "anchor" | "exact_time" | "time_window";

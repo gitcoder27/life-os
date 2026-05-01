@@ -36,7 +36,7 @@ type StoredPlannerVisibleHours = {
 
 export type PlannerTimelineSegment = {
   id: string;
-  kind: "block" | "gap";
+  kind: "block" | "gap" | "reservation";
   startsAt: string;
   endsAt: string;
   startMinutes: number;
@@ -50,6 +50,18 @@ export type PlannerTimelineSegment = {
   topPx: number;
   heightPx: number;
   block?: DayPlannerBlockItem;
+  reservation?: PlannerTimelineReservation;
+};
+
+export type PlannerTimelineReservation = {
+  id: string;
+  itemId: string;
+  kind: "habit" | "routine";
+  title: string;
+  durationLabel: string;
+  detailLabel: string;
+  startsAt: string;
+  endsAt: string;
 };
 
 export type TimeGutterMarker = {
@@ -164,11 +176,30 @@ export const sortPlannerBlocksByTime = (blocks: DayPlannerBlockItem[]) =>
 
 export const buildPlannerTimelineModel = (input: {
   blocks: DayPlannerBlockItem[];
+  reservations?: PlannerTimelineReservation[];
   now: Date;
   preferredHours: PlannerVisibleHoursPreference;
   isLiveDate: boolean;
 }): PlannerTimelineModel => {
   const blocks = sortPlannerBlocksByTime(input.blocks);
+  const reservations = sortPlannerReservationsByTime(input.reservations ?? []);
+  const timelineEntries = [
+    ...blocks.map((block) => ({ id: block.id, kind: "block" as const, startsAt: block.startsAt, endsAt: block.endsAt, block })),
+    ...reservations.map((reservation) => ({
+      id: reservation.id,
+      kind: "reservation" as const,
+      startsAt: reservation.startsAt,
+      endsAt: reservation.endsAt,
+      reservation,
+    })),
+  ].sort((left, right) => {
+    const timeDiff = new Date(left.startsAt).getTime() - new Date(right.startsAt).getTime();
+    if (timeDiff !== 0) {
+      return timeDiff;
+    }
+
+    return left.kind === "block" ? -1 : 1;
+  });
   const currentBlock = input.isLiveDate
     ? blocks.find((block) => isNowWithinRange(block.startsAt, block.endsAt, input.now)) ?? null
     : null;
@@ -178,9 +209,9 @@ export const buildPlannerTimelineModel = (input: {
 
   const preferredStartMinutes = timeStringToMinutes(input.preferredHours.startTime);
   const preferredEndMinutes = timeStringToMinutes(input.preferredHours.endTime);
-  const earliestBlockMinutes = blocks.length > 0 ? getFloorHour(blocks[0].startsAt) : preferredStartMinutes;
+  const earliestBlockMinutes = timelineEntries.length > 0 ? getFloorHour(timelineEntries[0].startsAt) : preferredStartMinutes;
   const latestBlockMinutes =
-    blocks.length > 0 ? getCeilHour(blocks[blocks.length - 1].endsAt) : preferredEndMinutes;
+    timelineEntries.length > 0 ? getCeilHour(timelineEntries[timelineEntries.length - 1].endsAt) : preferredEndMinutes;
   const nowMinutes = input.now.getHours() * 60 + input.now.getMinutes();
   const liveStartMinutes = input.isLiveDate
     ? Math.floor(nowMinutes / 60) * 60
@@ -199,26 +230,26 @@ export const buildPlannerTimelineModel = (input: {
 
   const segments: PlannerTimelineSegment[] = [];
   let cursorMinutes = renderedStartMinutes;
-  let cursorIso = buildIsoAtMinutes(blocks[0]?.startsAt ?? input.now.toISOString(), renderedStartMinutes);
+  let cursorIso = buildIsoAtMinutes(timelineEntries[0]?.startsAt ?? input.now.toISOString(), renderedStartMinutes);
   let totalFreeMinutes = 0;
 
-  for (const block of blocks) {
-    const blockStartMinutes = getMinutesFromIso(block.startsAt);
-    const blockEndMinutes = getMinutesFromIso(block.endsAt);
+  for (const entry of timelineEntries) {
+    const entryStartMinutes = getMinutesFromIso(entry.startsAt);
+    const entryEndMinutes = getMinutesFromIso(entry.endsAt);
 
-    if (blockStartMinutes > cursorMinutes) {
+    if (entryStartMinutes > cursorMinutes) {
       const gapStartsAt = cursorIso;
-      const gapEndsAt = block.startsAt;
-      const gapDuration = blockStartMinutes - cursorMinutes;
+      const gapEndsAt = entry.startsAt;
+      const gapDuration = entryStartMinutes - cursorMinutes;
       totalFreeMinutes += gapDuration;
       segments.push(
         buildSegment({
-          id: `gap-${cursorMinutes}-${blockStartMinutes}`,
+          id: `gap-${cursorMinutes}-${entryStartMinutes}`,
           kind: "gap",
           startsAt: gapStartsAt,
           endsAt: gapEndsAt,
           startMinutes: cursorMinutes,
-          endMinutes: blockStartMinutes,
+          endMinutes: entryStartMinutes,
           durationMinutes: gapDuration,
           renderedStartMinutes,
           now: input.now,
@@ -229,22 +260,23 @@ export const buildPlannerTimelineModel = (input: {
 
     segments.push(
       buildSegment({
-        id: block.id,
-        kind: "block",
-        startsAt: block.startsAt,
-        endsAt: block.endsAt,
-        startMinutes: blockStartMinutes,
-        endMinutes: blockEndMinutes,
-        durationMinutes: Math.max(blockEndMinutes - blockStartMinutes, 0),
+        id: entry.id,
+        kind: entry.kind,
+        startsAt: entry.startsAt,
+        endsAt: entry.endsAt,
+        startMinutes: entryStartMinutes,
+        endMinutes: entryEndMinutes,
+        durationMinutes: Math.max(entryEndMinutes - entryStartMinutes, 0),
         renderedStartMinutes,
         now: input.now,
         isLiveDate: input.isLiveDate,
-        block,
+        block: entry.kind === "block" ? entry.block : undefined,
+        reservation: entry.kind === "reservation" ? entry.reservation : undefined,
       }),
     );
 
-    cursorMinutes = blockEndMinutes;
-    cursorIso = block.endsAt;
+    cursorMinutes = entryEndMinutes;
+    cursorIso = entry.endsAt;
   }
 
   if (cursorMinutes < renderedEndMinutes) {
@@ -275,6 +307,8 @@ export const buildPlannerTimelineModel = (input: {
     const contentHeight =
       seg.kind === "block" && seg.block
         ? estimateBlockContentHeight(seg.block.tasks.length)
+        : seg.kind === "reservation"
+          ? estimateReservationContentHeight()
         : seg.heightPx;
     seg.topPx = pxCursor;
     seg.heightPx = Math.max(seg.heightPx, contentHeight);
@@ -333,7 +367,7 @@ export const buildPlannerTimelineModel = (input: {
 
 const buildSegment = (input: {
   id: string;
-  kind: "block" | "gap";
+  kind: "block" | "gap" | "reservation";
   startsAt: string;
   endsAt: string;
   startMinutes: number;
@@ -343,6 +377,7 @@ const buildSegment = (input: {
   now: Date;
   isLiveDate: boolean;
   block?: DayPlannerBlockItem;
+  reservation?: PlannerTimelineReservation;
 }): PlannerTimelineSegment => ({
   id: input.id,
   kind: input.kind,
@@ -363,10 +398,13 @@ const buildSegment = (input: {
           input.block && input.block.tasks.length > 0 ? BLOCK_MIN_HEIGHT_WITH_TASKS : BLOCK_MIN_HEIGHT,
           Math.round(input.durationMinutes * SEGMENT_PIXELS_PER_MINUTE),
         )
-      : Math.max(GAP_MIN_HEIGHT, Math.round(input.durationMinutes * GAP_PIXELS_PER_MINUTE)),
+      : input.kind === "reservation"
+        ? Math.max(76, Math.round(input.durationMinutes * SEGMENT_PIXELS_PER_MINUTE))
+        : Math.max(GAP_MIN_HEIGHT, Math.round(input.durationMinutes * GAP_PIXELS_PER_MINUTE)),
   topPx: Math.round((input.startMinutes - input.renderedStartMinutes) * CALENDAR_PIXELS_PER_MINUTE),
   heightPx: Math.max(Math.round(input.durationMinutes * CALENDAR_PIXELS_PER_MINUTE), input.kind === "block" ? 40 : 20),
   block: input.block,
+  reservation: input.reservation,
 });
 
 const getSegmentStatus = (
@@ -447,6 +485,13 @@ const estimateBlockContentHeight = (taskCount: number): number => {
     : EMPTY_HINT_PX;
   return BLOCK_HEADER_PX + body + RESIZE_HANDLE_PX;
 };
+
+const estimateReservationContentHeight = (): number => 78;
+
+const sortPlannerReservationsByTime = <T extends PlannerTimelineReservation>(reservations: T[]) =>
+  [...reservations].sort((left, right) =>
+    new Date(left.startsAt).getTime() - new Date(right.startsAt).getTime(),
+  );
 
 const buildAdjustedGutterMarkers = (
   startMinutes: number,

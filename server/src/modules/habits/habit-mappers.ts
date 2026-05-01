@@ -224,6 +224,9 @@ export const serializeHabit = (
   const dueToday = isHabitPermanentlyInactive(habit)
     ? false
     : isHabitDueOnIsoDate(recurrence, targetIsoDate, pauseWindows);
+  const skippedToday = checkins.some(
+    (checkin) => toIsoDateString(checkin.occurredOn) === targetIsoDate && checkin.status === "SKIPPED",
+  );
   const completedCountToday = getHabitCompletionCountForIsoDate(checkins, targetIsoDate);
   const completedToday = isHabitCompletedOnIsoDate(checkins, targetIsoDate, habit.targetPerDay);
   const completedAtToday =
@@ -249,6 +252,7 @@ export const serializeHabit = (
     goalId: habit.goalId ?? null,
     goal: habit.goal ? serializeGoalSummary(habit.goal) : null,
     targetPerDay: habit.targetPerDay,
+    durationMinutes: habit.durationMinutes,
     timingMode,
     anchorText: habit.anchorText ?? null,
     targetTimeMinutes: habit.targetTimeMinutes ?? null,
@@ -280,6 +284,7 @@ export const serializeHabit = (
     identityMeaning: habit.identityMeaning ?? null,
     status: fromPrismaHabitStatus(habit.status),
     dueToday,
+    skippedToday,
     completedToday,
     completedCountToday,
     achievedLevelToday: fromPrismaHabitCheckinLevel(

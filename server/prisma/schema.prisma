@@ -732,6 +732,7 @@ model Habit {
   goalId           String?
   recurrenceRuleId String?
   targetPerDay     Int            @default(1)
+  durationMinutes  Int            @default(25)
   timingMode       HabitTimingMode @default(ANYTIME)
   anchorText       String?
   targetTimeMinutes Int?
