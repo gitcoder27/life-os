@@ -4223,6 +4223,79 @@ describe("module route smoke tests", () => {
     );
   });
 
+  it("supports oldest-first task list pagination for stale inbox triage", async () => {
+    const firstTask = buildTaskRecord({
+      id: "11111111-1111-4111-8111-111111111111",
+      createdAt: new Date("2026-03-14T08:00:00.000Z"),
+    });
+    const secondTask = buildTaskRecord({
+      id: "22222222-2222-4222-8222-222222222222",
+      createdAt: new Date("2026-03-15T08:00:00.000Z"),
+    });
+    const thirdTask = buildTaskRecord({
+      id: "33333333-3333-4333-8333-333333333333",
+      createdAt: new Date("2026-03-16T08:00:00.000Z"),
+    });
+    const findMany = vi
+      .fn()
+      .mockResolvedValueOnce([firstTask, secondTask, thirdTask])
+      .mockResolvedValueOnce([thirdTask]);
+
+    prisma.task = {
+      findMany,
+    } as any;
+
+    const firstResponse = await app!.inject({
+      method: "GET",
+      url: "/api/tasks?status=pending&originType=quick_capture&scheduledState=unscheduled&limit=2&sort=oldest",
+    });
+
+    expect(firstResponse.statusCode).toBe(200);
+    const firstBody = JSON.parse(firstResponse.body);
+    expect(firstBody.tasks).toHaveLength(2);
+    expect(firstBody.nextCursor).toEqual(expect.any(String));
+    expect(findMany).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        take: 3,
+        orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+      }),
+    );
+
+    const secondResponse = await app!.inject({
+      method: "GET",
+      url: `/api/tasks?status=pending&originType=quick_capture&scheduledState=unscheduled&limit=2&sort=oldest&cursor=${encodeURIComponent(firstBody.nextCursor)}`,
+    });
+
+    expect(secondResponse.statusCode).toBe(200);
+    expect(JSON.parse(secondResponse.body)).toEqual(
+      expect.objectContaining({
+        tasks: [expect.objectContaining({ id: thirdTask.id })],
+        nextCursor: null,
+      }),
+    );
+    expect(findMany).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        where: expect.objectContaining({
+          AND: expect.arrayContaining([
+            expect.objectContaining({
+              OR: expect.arrayContaining([
+                expect.objectContaining({
+                  createdAt: {
+                    gt: secondTask.createdAt,
+                  },
+                }),
+              ]),
+            }),
+          ]),
+        }),
+        take: 3,
+        orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+      }),
+    );
+  });
+
   it("rejects invalid task cursors", async () => {
     prisma.task = {
       findMany: vi.fn(),

@@ -8,6 +8,7 @@ import {
   type LinkedGoal,
   type TaskItem,
 } from "../../shared/lib/api";
+import { FocusTaskPicker } from "../../shared/ui/FocusTaskPicker";
 import { taskTextAutocompleteProps } from "../../shared/ui/task-autocomplete";
 import { StartProtocolSheet } from "../today/components/StartProtocolSheet";
 import { StuckFlowSheet } from "../today/components/StuckFlowSheet";
@@ -50,9 +51,7 @@ const DERAILMENTS = [
 function eyebrowFor(phase: TimePhase, hasMustWin: boolean, setupDone: boolean, rescueActive: boolean) {
   if (rescueActive) return "Reduced day";
   if (!setupDone) {
-    if (phase === "morning") return "Morning";
-    if (phase === "midday") return "Afternoon setup";
-    return "Evening";
+    return "Daily focus";
   }
   if (!hasMustWin) {
     if (phase === "evening") return "Close the day";
@@ -283,11 +282,17 @@ function FocusStageSetup({
   });
   const updateTaskMutation = useUpdateTaskMutation(date);
   const upsertDayLaunchMutation = useUpsertDayLaunchMutation(date);
+  const focusTasks = useMemo(() => {
+    if (
+      !mustWinTask ||
+      mustWinTask.status !== "pending" ||
+      executionTasks.some((task) => task.id === mustWinTask.id)
+    ) {
+      return executionTasks;
+    }
 
-  const selectableTasks = useMemo(
-    () => executionTasks.filter((task) => task.status === "pending"),
-    [executionTasks],
-  );
+    return [mustWinTask, ...executionTasks];
+  }, [executionTasks, mustWinTask]);
 
   const [selectedTaskId, setSelectedTaskId] = useState("");
   const [newTaskTitle, setNewTaskTitle] = useState("");
@@ -303,12 +308,18 @@ function FocusStageSetup({
     setNewTaskTitle("");
   }, [launch, mustWinTask]);
 
+  useEffect(() => {
+    if (selectedTaskId && !focusTasks.some((task) => task.id === selectedTaskId)) {
+      setSelectedTaskId("");
+    }
+  }, [focusTasks, selectedTaskId]);
+
   const isBusy =
     createTaskMutation.isPending ||
     updateTaskMutation.isPending ||
     upsertDayLaunchMutation.isPending;
 
-  const canSubmit = nextAction.trim() && (selectedTaskId || newTaskTitle.trim());
+  const canSubmit = Boolean(nextAction.trim() && (selectedTaskId || newTaskTitle.trim()));
 
   async function handleSave() {
     let mustWinTaskId = selectedTaskId || null;
@@ -342,15 +353,15 @@ function FocusStageSetup({
 
   const headline =
     phase === "evening"
-      ? "Ready to close the day."
+      ? "Pick the final task."
       : phase === "midday"
         ? "Set a focus for the afternoon."
         : "Pick the one thing worth protecting.";
 
   const subline =
     phase === "evening"
-      ? "A light setup keeps tomorrow coherent."
-      : "Choose one task, the first visible step, and what might get in the way.";
+      ? "Choose the work, name the first step, then close it cleanly."
+      : "Choose the work, name the first step, then start with less noise.";
 
   return (
     <div className={`focus-stage focus-stage--setup${expanded ? " focus-stage--expanded" : ""}`}>
@@ -367,7 +378,7 @@ function FocusStageSetup({
             className="focus-stage__cta"
             onClick={() => setExpanded(true)}
           >
-            {launch ? "Continue setup" : "Begin setup"}
+            {launch ? "Continue focus" : "Set focus"}
           </button>
           <Link to="/today" className="focus-stage__action focus-stage__action--subtle">
             Open Today
@@ -375,20 +386,13 @@ function FocusStageSetup({
         </div>
       ) : (
         <div className="focus-stage__setup">
-          <div className="focus-stage__field">
-            <label className="focus-stage__field-label" htmlFor="fs-task">Focus</label>
-            <select
-              id="fs-task"
-              className="focus-stage__select"
-              value={selectedTaskId}
-              onChange={(event) => setSelectedTaskId(event.target.value)}
-            >
-              <option value="">Create something new…</option>
-              {selectableTasks.map((task) => (
-                <option key={task.id} value={task.id}>{task.title}</option>
-              ))}
-            </select>
-          </div>
+          <FocusTaskPicker
+            id="home-focus-task"
+            label="Task"
+            tasks={focusTasks}
+            selectedTaskId={selectedTaskId}
+            onSelectTaskId={setSelectedTaskId}
+          />
 
           {!selectedTaskId ? (
             <div className="focus-stage__field">

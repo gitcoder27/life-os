@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { useLocation } from "react-router-dom";
 
 import { useAppFeedback } from "../../app/providers";
 import {
@@ -15,6 +16,7 @@ import {
   type TaskListCounts,
 } from "../../shared/lib/api";
 import type { ClarificationProtocol } from "./InboxInspector";
+import { readHomeDestinationState } from "../../shared/lib/homeNavigation";
 import { getQuickCaptureText } from "../../shared/lib/quickCapture";
 import {
   InlineErrorState,
@@ -55,6 +57,7 @@ function getBulkSuccessMessage(
 }
 
 export function InboxPage() {
+  const location = useLocation();
   const today = getTodayDate();
   const { pushFeedback } = useAppFeedback();
   const goalsListQuery = useGoalsListQuery();
@@ -77,15 +80,27 @@ export function InboxPage() {
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [promptClarification, setPromptClarification] = useState(false);
   const [pendingCommitDate, setPendingCommitDate] = useState<string | null>(null);
+  const [ignoreStaleTriageIntent, setIgnoreStaleTriageIntent] = useState(false);
 
   const activeKind = activeFilter === "all" ? undefined : activeFilter;
+  const homeDestination = readHomeDestinationState(location.state);
+  const isStaleTriageIntent =
+    homeDestination?.kind === "inbox_triage" &&
+    homeDestination.focus === "stale" &&
+    !ignoreStaleTriageIntent;
   const inboxQuery = useInboxQuery({
     kind: activeKind,
     limit: INBOX_PAGE_SIZE,
     includeSummary: true,
+    sort: isStaleTriageIntent ? "oldest" : "newest",
   });
   const loadMoreQuery = useInboxQuery(
-    { kind: activeKind, cursor: nextCursor ?? undefined, limit: INBOX_PAGE_SIZE },
+    {
+      kind: activeKind,
+      cursor: nextCursor ?? undefined,
+      limit: INBOX_PAGE_SIZE,
+      sort: isStaleTriageIntent ? "oldest" : "newest",
+    },
     { enabled: false },
   );
 
@@ -101,6 +116,11 @@ export function InboxPage() {
 
   // Reset on filter change
   useEffect(() => {
+    setIgnoreStaleTriageIntent(false);
+  }, [location.key]);
+
+  // Reset on filter or sort-intent change
+  useEffect(() => {
     setLoadedItems([]);
     setNextCursor(null);
     setSelectedItemId(null);
@@ -108,7 +128,7 @@ export function InboxPage() {
     setIsLoadingMore(false);
     setPromptClarification(false);
     setPendingCommitDate(null);
-  }, [activeKind]);
+  }, [activeKind, isStaleTriageIntent]);
 
   // Sync loaded items from query
   useEffect(() => {
@@ -364,6 +384,24 @@ export function InboxPage() {
           Templates
         </button>
       </div>
+
+      {isStaleTriageIntent ? (
+        <div className="inbox-triage-banner" role="status">
+          <div>
+            <span className="inbox-triage-banner__label">Stale triage</span>
+            <p className="inbox-triage-banner__copy">
+              Oldest captures are shown first so the aging items Home flagged are easy to clear.
+            </p>
+          </div>
+          <button
+            className="button button--ghost button--small"
+            type="button"
+            onClick={() => setIgnoreStaleTriageIntent(true)}
+          >
+            View newest first
+          </button>
+        </div>
+      ) : null}
 
       <div className="inbox-filters" role="tablist" aria-label="Inbox filters">
         {filterOptions.map((option) => {

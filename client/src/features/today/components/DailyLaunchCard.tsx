@@ -6,6 +6,7 @@ import {
   type DailyLaunchItem,
   type TaskItem,
 } from "../../../shared/lib/api";
+import { FocusTaskPicker } from "../../../shared/ui/FocusTaskPicker";
 import { taskTextAutocompleteProps } from "../../../shared/ui/task-autocomplete";
 
 const ENERGY_LEVELS = [
@@ -18,7 +19,7 @@ const ENERGY_LEVELS = [
 
 const DERAILMENT_OPTIONS = [
   { value: "", label: "None" },
-  { value: "unclear", label: "Unclear task" },
+  { value: "unclear", label: "Unclear" },
   { value: "too_big", label: "Too big" },
   { value: "avoidance", label: "Avoidance" },
   { value: "low_energy", label: "Low energy" },
@@ -38,17 +39,23 @@ export function DailyLaunchCard({
   mustWinTask: TaskItem | null;
 }) {
   const createTaskMutation = useCreateTaskMutation(date, {
-    successMessage: "Must-win created.",
-    errorMessage: "Could not create must-win.",
+    successMessage: "Daily focus set.",
+    errorMessage: "Could not save daily focus.",
   });
   const updateTaskMutation = useUpdateTaskMutation(date);
   const upsertDayLaunchMutation = useUpsertDayLaunchMutation(date);
+  const focusTasks = useMemo(() => {
+    if (
+      !mustWinTask ||
+      mustWinTask.status !== "pending" ||
+      tasks.some((task) => task.id === mustWinTask.id)
+    ) {
+      return tasks;
+    }
 
-  const selectableTasks = useMemo(
-    () => tasks.filter((task) => task.status === "pending"),
-    [tasks],
-  );
-  const hasSelectableTasks = selectableTasks.length > 0;
+    return [mustWinTask, ...tasks];
+  }, [mustWinTask, tasks]);
+
   const [selectedTaskId, setSelectedTaskId] = useState("");
   const [newTaskTitle, setNewTaskTitle] = useState("");
   const [energyRating, setEnergyRating] = useState("3");
@@ -64,6 +71,12 @@ export function DailyLaunchCard({
     setLikelyDerailmentNote(launch?.likelyDerailmentNote ?? "");
     setNewTaskTitle("");
   }, [launch, mustWinTask]);
+
+  useEffect(() => {
+    if (selectedTaskId && !focusTasks.some((task) => task.id === selectedTaskId)) {
+      setSelectedTaskId("");
+    }
+  }, [focusTasks, selectedTaskId]);
 
   async function handleSave() {
     let mustWinTaskId = selectedTaskId || null;
@@ -101,43 +114,34 @@ export function DailyLaunchCard({
     updateTaskMutation.isPending ||
     upsertDayLaunchMutation.isPending;
 
-  const canSubmit = Boolean(selectedTaskId || newTaskTitle.trim());
+  const canSubmit = Boolean(nextAction.trim() && (selectedTaskId || newTaskTitle.trim()));
 
   return (
     <section className="daily-launch" aria-labelledby="daily-launch-title">
       <div className="daily-launch__header">
         <div className="daily-launch__heading">
-          <span className="daily-launch__eyebrow">Daily setup</span>
-          <h2 className="daily-launch__title" id="daily-launch-title">Choose today's anchor.</h2>
+          <span className="daily-launch__eyebrow">Daily focus</span>
+          <h2 className="daily-launch__title" id="daily-launch-title">Pick one task to protect.</h2>
         </div>
         <p className="daily-launch__intro">
-          Keep the queue visible. Mark the one task that deserves protection, then continue working.
+          Choose the work, name the first step, then start with less noise.
         </p>
       </div>
 
       <div className="daily-launch__fields">
-        <div className="daily-launch__primary-fields">
-          {hasSelectableTasks ? (
-            <div className="daily-launch__field">
-              <label className="daily-launch__label" htmlFor="dl-must-win">Anchor task</label>
-              <select
-                id="dl-must-win"
-                className="daily-launch__select"
-                value={selectedTaskId}
-                onChange={(event) => setSelectedTaskId(event.target.value)}
-              >
-                <option value="">Create a new task below</option>
-                {selectableTasks.map((task) => (
-                  <option key={task.id} value={task.id}>{task.title}</option>
-                ))}
-              </select>
-            </div>
-          ) : null}
+        <FocusTaskPicker
+          id="daily-focus-task"
+          label="Task"
+          tasks={focusTasks}
+          selectedTaskId={selectedTaskId}
+          onSelectTaskId={setSelectedTaskId}
+        />
 
+        <div className="daily-launch__primary-fields">
           {!selectedTaskId ? (
             <div className="daily-launch__field">
               <label className="daily-launch__label" htmlFor="dl-new-task">
-                {hasSelectableTasks ? "New anchor" : "Anchor task"}
+                New task
               </label>
               <input
                 id="dl-new-task"
@@ -216,16 +220,13 @@ export function DailyLaunchCard({
       </div>
 
       <div className="daily-launch__footer">
-        <p className="daily-launch__hint">
-          Optional, but useful when the day is noisy.
-        </p>
         <button
           className="button button--primary"
           type="button"
           disabled={isBusy || !canSubmit}
           onClick={() => void handleSave()}
         >
-          {isBusy ? "Saving..." : "Set today's anchor"}
+          {isBusy ? "Saving..." : "Set daily focus"}
         </button>
       </div>
     </section>

@@ -32,6 +32,32 @@
   font-weight: 700;
 }
 
+.inbox-triage-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-top: 1rem;
+  padding: 0.85rem 1rem;
+  border: 1px solid color-mix(in srgb, var(--accent) 34%, transparent);
+  border-radius: var(--r-sm);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
+.inbox-triage-banner__label {
+  display: block;
+  color: var(--accent);
+  font-size: var(--fs-small);
+  font-weight: 700;
+}
+
+.inbox-triage-banner__copy {
+  margin: 0.15rem 0 0;
+  color: var(--text-secondary);
+  font-size: var(--fs-small);
+  line-height: 1.45;
+}
+
 /* Filters */
 .inbox-filters {
   display: flex;
@@ -819,6 +845,11 @@
 
 /* Small screens: full screen inspector */
 @media (max-width: 640px) {
+  .inbox-triage-banner {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
   .inbox-workspace__inspector {
     width: 100%;
     right: 0;

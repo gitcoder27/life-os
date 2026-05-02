@@ -29,6 +29,7 @@ type TaskQueryKeyFilters = {
   includeSummary?: boolean;
   originType?: string;
   scheduledState?: string;
+  sort?: string;
 };
 
 type ReviewHistoryQueryKeyParams = {

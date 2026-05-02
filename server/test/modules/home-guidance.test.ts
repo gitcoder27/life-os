@@ -45,6 +45,7 @@ describe("home guidance builder", () => {
           status: "pending",
         },
       ],
+      mustWinTask: null,
       planning: {
         date: "2026-03-14",
         hasPlannerBlocks: false,
@@ -114,6 +115,7 @@ describe("home guidance builder", () => {
       habits: [],
       priorities: [],
       tasks: [],
+      mustWinTask: null,
       planning: {
         date: "2026-03-14",
         hasPlannerBlocks: false,
@@ -150,6 +152,69 @@ describe("home guidance builder", () => {
     );
   });
 
+  it("targets the actual must-win instead of the first task in the list", () => {
+    const guidance = buildHomeGuidance({
+      score: {
+        label: "Solid Day",
+        value: 72,
+        topReasons: [],
+      },
+      momentum: {
+        strongDayStreak: 0,
+      },
+      habits: [],
+      priorities: [],
+      tasks: [
+        {
+          id: "support-task",
+          title: "Support task",
+          status: "pending",
+          progressState: "not_started",
+        },
+        {
+          id: "must-win-task",
+          title: "Write the proposal",
+          status: "pending",
+          progressState: "not_started",
+        },
+      ],
+      mustWinTask: {
+        id: "must-win-task",
+        title: "Write the proposal",
+        status: "pending",
+        progressState: "not_started",
+      },
+      planning: {
+        date: "2026-03-14",
+        hasPlannerBlocks: true,
+        pendingPriorityCount: 0,
+        openTaskCount: 2,
+        launchComplete: true,
+      },
+      accountability: {
+        staleInboxCount: 0,
+        staleInboxTaskId: null,
+        overdueTaskCount: 0,
+        overdueTaskId: null,
+      },
+      weeklyChallenge: null,
+      dailyReviewAvailable: false,
+      dailyReviewRoute: null,
+      currentHour: 15,
+      health: {
+        waterMl: 2500,
+        waterTargetMl: 2500,
+      },
+    });
+
+    expect(guidance.recommendations[0]).toEqual(
+      expect.objectContaining({
+        id: "must-win-start:must-win-task",
+        title: "Start Write the proposal",
+      }),
+    );
+  });
+
   it("maps daily review actions into semantic review destinations", () => {
     const guidance = buildHomeGuidance({
       score: {
@@ -163,6 +228,7 @@ describe("home guidance builder", () => {
       habits: [],
       priorities: [],
       tasks: [],
+      mustWinTask: null,
       planning: {
         date: "2026-03-14",
         hasPlannerBlocks: true,
@@ -232,6 +298,7 @@ describe("home guidance builder", () => {
       ],
       priorities: [],
       tasks: [],
+      mustWinTask: null,
       planning: {
         date: "2026-03-14",
         hasPlannerBlocks: true,
