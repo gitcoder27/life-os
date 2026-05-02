@@ -16,6 +16,7 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import { taskTextAutocompleteProps } from "../../shared/ui/task-autocomplete";
 
 type ActiveGoalOption = {
   id: string;
@@ -109,6 +110,7 @@ function SortablePlanningCard({
       <input
         className="priority-card__input"
         type="text"
+        {...taskTextAutocompleteProps}
         value={draft.title}
         placeholder={titlePlaceholder}
         onChange={(event) => onChange({ title: event.target.value })}

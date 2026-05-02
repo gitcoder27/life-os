@@ -24,7 +24,7 @@ import { WorkspaceLaunchStrip } from "./WorkspaceLaunchStrip";
 export function HomePage() {
   const today = getTodayDate();
   const homeQuery = useHomeOverviewQuery(today);
-  const inboxQuery = useInboxQuery({ limit: 4 });
+  const inboxQuery = useInboxQuery({ limit: 4, includeSummary: true });
   const activeFocusSessionQuery = useActiveFocusSessionQuery();
   const scoreQuery = useDailyScoreQuery(today);
   const weeklyMomentumQuery = useWeeklyMomentumQuery(today);
@@ -83,6 +83,7 @@ export function HomePage() {
     )[0] ?? null;
 
   const inboxItems = inboxQuery.data?.tasks ?? [];
+  const inboxTotalCount = inboxQuery.data?.counts?.all ?? inboxItems.length;
   const priorityIds = new Set(home.topPriorities.map((p) => p.id));
   const nonPriorityOpenTasks = openExecutionTasks.filter((t) => !priorityIds.has(t.id));
 
@@ -130,7 +131,8 @@ export function HomePage() {
           priorities={home.topPriorities}
           openTaskCount={nonPriorityOpenTasks.length}
           inboxItems={inboxItems.slice(0, 4)}
-          inboxHasMore={inboxItems.length > 4}
+          inboxTotalCount={inboxTotalCount}
+          inboxHasMore={Boolean(inboxQuery.data?.nextCursor) || inboxTotalCount > inboxItems.length}
         />
       </section>
 

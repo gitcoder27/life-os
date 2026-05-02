@@ -720,6 +720,20 @@ async function buildHomeOverview(
       progressState: fromPrismaTaskProgressState(task.progressState),
       lastStuckAt: task.lastStuckAt?.toISOString() ?? null,
     })),
+    mustWinTask: dailyLaunch?.mustWinTask
+      ? {
+          id: dailyLaunch.mustWinTask.id,
+          title: dailyLaunch.mustWinTask.title,
+          status:
+            dailyLaunch.mustWinTask.status === "COMPLETED"
+              ? "completed"
+              : dailyLaunch.mustWinTask.status === "DROPPED"
+                ? "dropped"
+                : "pending",
+          progressState: fromPrismaTaskProgressState(dailyLaunch.mustWinTask.progressState),
+          lastStuckAt: dailyLaunch.mustWinTask.lastStuckAt?.toISOString() ?? null,
+        }
+      : null,
     planning: {
       date: targetIsoDate,
       hasPlannerBlocks: plannerBlockCount > 0,

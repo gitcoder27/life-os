@@ -4,6 +4,7 @@ import {
   type TaskItem,
 } from "../../../shared/lib/api";
 import { InlineErrorState } from "../../../shared/ui/PageState";
+import { taskTextAutocompleteProps } from "../../../shared/ui/task-autocomplete";
 import {
   getQuickCaptureDisplayText,
   getQuickCaptureText,
@@ -161,6 +162,7 @@ function DayNoteRow({
         <div className="today-day-note__editor">
           <textarea
             className="today-day-note__input"
+            {...taskTextAutocompleteProps}
             rows={3}
             value={draftText}
             onChange={(event) => setDraftText(event.target.value)}

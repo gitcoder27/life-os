@@ -9,6 +9,7 @@ import {
   type TaskTemplate,
 } from "../../shared/lib/api";
 import { EmptyState, InlineErrorState } from "../../shared/ui/PageState";
+import { taskTextAutocompleteProps } from "../../shared/ui/task-autocomplete";
 
 type TemplateFormState = {
   name: string;
@@ -169,6 +170,7 @@ export function WorkflowTemplatesSection() {
           <label className="field">
             <span>Tasks</span>
             <textarea
+              {...taskTextAutocompleteProps}
               rows={8}
               value={form.taskLines}
               placeholder={"Check passport\nPack chargers\nPause subscriptions"}

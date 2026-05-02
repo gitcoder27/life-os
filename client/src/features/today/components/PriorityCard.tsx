@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import { taskTextAutocompleteProps } from "../../../shared/ui/task-autocomplete";
 import { GripIcon, CheckIcon, MoreIcon } from "../helpers/icons";
 import type { EditablePriority, PriorityTaskFill } from "../hooks/usePriorityDraft";
 
@@ -139,6 +140,7 @@ export function PriorityCard({
         <input
           className="today-priority-card__input"
           type="text"
+          {...taskTextAutocompleteProps}
           value={item.title}
           placeholder="What's the focus?"
           onChange={(e) => onTitleChange(e.target.value)}

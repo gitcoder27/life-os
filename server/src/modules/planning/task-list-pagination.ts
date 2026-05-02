@@ -9,6 +9,8 @@ interface TaskListCursorPayload {
   id: string;
 }
 
+export type TaskListCursorDirection = "newest" | "oldest";
+
 export function encodeTaskListCursor(task: Pick<Task, "id" | "createdAt">) {
   return Buffer.from(
     JSON.stringify({
@@ -41,21 +43,23 @@ function decodeTaskListCursor(cursor: string): TaskListCursorPayload {
   }
 }
 
-export function buildTaskListCursorWhere(cursor: string) {
+export function buildTaskListCursorWhere(cursor: string, direction: TaskListCursorDirection = "newest") {
   const decoded = decodeTaskListCursor(cursor);
   const createdAt = new Date(decoded.createdAt);
+  const createdAtOperator = direction === "oldest" ? "gt" : "lt";
+  const idOperator = direction === "oldest" ? "gt" : "lt";
 
   return {
     OR: [
       {
         createdAt: {
-          lt: createdAt,
+          [createdAtOperator]: createdAt,
         },
       },
       {
         createdAt,
         id: {
-          lt: decoded.id,
+          [idOperator]: decoded.id,
         },
       },
     ],

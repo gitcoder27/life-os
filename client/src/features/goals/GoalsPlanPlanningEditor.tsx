@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 
 import type { GoalOverviewItem } from "../../shared/lib/api";
+import { taskTextAutocompleteProps } from "../../shared/ui/task-autocomplete";
 import type {
   PlanningItem,
   PlanningLane,
@@ -72,6 +73,7 @@ export function GoalsPlanPlanningEditor({
           <input
             className="ghq-planning-form__input"
             type="text"
+            {...taskTextAutocompleteProps}
             value={title}
             onChange={(event) => setTitle(event.target.value)}
             disabled={isPending}

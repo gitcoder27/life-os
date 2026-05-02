@@ -8,6 +8,7 @@ import {
   type LinkedGoal,
   type TaskItem,
 } from "../../shared/lib/api";
+import { taskTextAutocompleteProps } from "../../shared/ui/task-autocomplete";
 import { StartProtocolSheet } from "../today/components/StartProtocolSheet";
 import { StuckFlowSheet } from "../today/components/StuckFlowSheet";
 
@@ -395,6 +396,7 @@ function FocusStageSetup({
               <input
                 id="fs-new"
                 className="focus-stage__input"
+                {...taskTextAutocompleteProps}
                 placeholder="Finish the proposal intro"
                 value={newTaskTitle}
                 onChange={(event) => setNewTaskTitle(event.target.value)}
@@ -407,6 +409,7 @@ function FocusStageSetup({
             <input
               id="fs-next"
               className="focus-stage__input"
+              {...taskTextAutocompleteProps}
               placeholder="Open the doc and draft the opening line"
               value={nextAction}
               onChange={(event) => setNextAction(event.target.value)}

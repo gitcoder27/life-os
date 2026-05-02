@@ -55,6 +55,7 @@ type QuietRailProps = {
   priorities: Priority[];
   openTaskCount: number;
   inboxItems: InboxItem[];
+  inboxTotalCount: number;
   inboxHasMore: boolean;
 };
 
@@ -79,6 +80,7 @@ export function QuietRail({
   priorities,
   openTaskCount,
   inboxItems,
+  inboxTotalCount,
   inboxHasMore,
 }: QuietRailProps) {
   const storageKey = `home-warning-dismissals:${sessionKey}`;
@@ -129,6 +131,7 @@ export function QuietRail({
 
       <InboxSection
         inboxItems={inboxItems}
+        inboxTotalCount={inboxTotalCount}
         inboxHasMore={inboxHasMore}
       />
     </aside>
@@ -175,6 +178,7 @@ function AtRiskSection({
               <li key={item.id} className="rail-list__item">
                 <Link
                   to={radarRoute(item.kind, item.id)}
+                  state={item.kind === "stale_inbox" ? { homeDestination: { kind: "inbox_triage", focus: "stale" } } : undefined}
                   className="rail-list__link"
                 >
                   <span className="rail-list__title">
@@ -226,7 +230,11 @@ function AtRiskSection({
               </Link>
             ) : null}
             {staleInboxCount > 0 ? (
-              <Link to="/inbox" className="rail-block__link">
+              <Link
+                to="/inbox"
+                state={{ homeDestination: { kind: "inbox_triage", focus: "stale" } }}
+                className="rail-block__link"
+              >
                 {staleInboxCount} stale inbox
               </Link>
             ) : null}
@@ -322,9 +330,11 @@ function TodaySection({
 
 function InboxSection({
   inboxItems,
+  inboxTotalCount,
   inboxHasMore,
 }: {
   inboxItems: InboxItem[];
+  inboxTotalCount: number;
   inboxHasMore: boolean;
 }) {
   const hasInbox = inboxItems.length > 0;
@@ -350,17 +360,17 @@ function InboxSection({
       <div className="rail-block__head">
         <span className="rail-block__label">Inbox</span>
         <span className="rail-block__meta">
-          {inboxItems.length}
-          {inboxHasMore ? "+" : ""}
+          {inboxTotalCount}
+          {inboxHasMore && inboxTotalCount <= inboxItems.length ? "+" : ""}
         </span>
       </div>
 
       <Link to="/inbox" className="rail-inbox-preview">
         <span className="rail-inbox-preview__text">{formatInboxPreview(preview)}</span>
         <span className="rail-inbox-preview__detail">
-          {inboxItems.length === 1
+          {inboxTotalCount === 1
             ? "1 waiting for triage"
-            : `${inboxItems.length}${inboxHasMore ? "+" : ""} waiting for triage`}
+            : `${inboxTotalCount} waiting for triage`}
         </span>
       </Link>
     </section>

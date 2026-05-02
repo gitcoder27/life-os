@@ -12,6 +12,7 @@ import {
 } from "../../shared/lib/quickCapture";
 import { GoalCombobox } from "../../shared/ui/GoalCombobox";
 import { SmartDatePicker } from "../../shared/ui/SmartDatePicker";
+import { taskTextAutocompleteProps } from "../../shared/ui/task-autocomplete";
 import { formatCreatedAt } from "./inbox-utils";
 
 type InboxInspectorProps = {
@@ -280,6 +281,7 @@ export function InboxInspector({
           <input
             className="inbox-inspector__title-input"
             type="text"
+            {...taskTextAutocompleteProps}
             value={editTitle}
             onChange={(e) => setEditTitle(e.target.value)}
             onBlur={commitTitle}
@@ -305,6 +307,7 @@ export function InboxInspector({
         {isEditingNotes ? (
           <textarea
             className="inbox-inspector__notes-input"
+            {...taskTextAutocompleteProps}
             value={editNotes}
             onChange={(e) => setEditNotes(e.target.value)}
             onBlur={commitNotes}
@@ -360,6 +363,7 @@ export function InboxInspector({
                   <input
                     className="inbox-inspector__field-input"
                     type="text"
+                    {...taskTextAutocompleteProps}
                     value={nextAction}
                     onChange={(e) => setNextAction(e.target.value)}
                     placeholder="Open the file and write the first paragraph"
@@ -375,6 +379,7 @@ export function InboxInspector({
                       <input
                         className="inbox-inspector__field-input"
                         type="text"
+                        {...taskTextAutocompleteProps}
                         value={fiveMinuteVersion}
                         onChange={(e) => setFiveMinuteVersion(e.target.value)}
                         placeholder="Write three bullets"
@@ -387,6 +392,7 @@ export function InboxInspector({
                         <input
                           className="inbox-inspector__field-input"
                           type="text"
+                          {...taskTextAutocompleteProps}
                           inputMode="numeric"
                           value={estimatedMinutes}
                           onChange={(e) => setEstimatedMinutes(e.target.value)}
@@ -399,6 +405,7 @@ export function InboxInspector({
                         <input
                           className="inbox-inspector__field-input"
                           type="text"
+                          {...taskTextAutocompleteProps}
                           inputMode="numeric"
                           value={focusLength}
                           onChange={(e) => setFocusLength(e.target.value)}
@@ -412,6 +419,7 @@ export function InboxInspector({
                       <input
                         className="inbox-inspector__field-input"
                         type="text"
+                        {...taskTextAutocompleteProps}
                         value={likelyObstacle}
                         onChange={(e) => setLikelyObstacle(e.target.value)}
                         placeholder="I keep avoiding the blank page"

@@ -15,6 +15,7 @@ export type TaskOriginType =
   | "template"
   | "meal_plan";
 export type TaskScheduledState = "all" | "scheduled" | "unscheduled";
+export type TaskListSort = "newest" | "oldest";
 export type TaskStuckReason =
   | "unclear"
   | "too_big"
@@ -439,6 +440,7 @@ export interface TasksQuery {
   includeSummary?: boolean;
   originType?: TaskOriginType;
   scheduledState?: TaskScheduledState;
+  sort?: TaskListSort;
 }
 
 export interface TaskListCounts {

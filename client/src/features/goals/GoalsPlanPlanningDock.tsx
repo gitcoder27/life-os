@@ -1,4 +1,5 @@
 import type { GoalOverviewItem, WeekPlanResponse } from "../../shared/lib/api";
+import { taskTextAutocompleteProps } from "../../shared/ui/task-autocomplete";
 import type {
   PlanningDraft,
   PlanningItem,
@@ -154,6 +155,7 @@ const PlanningDockSlot = ({
           <input
             className="ghq-plan-dock__input"
             type="text"
+            {...taskTextAutocompleteProps}
             value={draft.title}
             placeholder="Planning item title"
             onChange={(event) => onPlanningDraftChange({ title: event.target.value })}

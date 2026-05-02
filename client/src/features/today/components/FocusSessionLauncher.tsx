@@ -9,6 +9,7 @@ import {
   type FocusSessionItem,
   type TaskItem,
 } from "../../../shared/lib/api";
+import { taskTextAutocompleteProps } from "../../../shared/ui/task-autocomplete";
 import { FocusSessionInsightCard } from "./FocusSessionInsightCard";
 import { StartProtocolSheet } from "./StartProtocolSheet";
 
@@ -167,6 +168,7 @@ export function FocusSessionLauncher({
                   <label className="field">
                     <span>Planned minutes</span>
                     <input
+                      {...taskTextAutocompleteProps}
                       value={plannedMinutes}
                       onChange={(event) => {
                         setPlannedMinutes(event.target.value);

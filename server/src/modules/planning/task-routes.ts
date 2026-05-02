@@ -256,6 +256,7 @@ export const registerPlanningTaskRoutes: FastifyPluginAsync = async (app) => {
     const query = parseOrThrow(taskListQuerySchema, request.query);
     const includeSummary = query.includeSummary === "true";
     const limit = query.limit ?? (query.cursor ? TASK_LIST_DEFAULT_LIMIT : undefined);
+    const listSort = query.sort ?? "newest";
     const scheduledForDate = query.scheduledForDate ? parseIsoDate(query.scheduledForDate) : null;
     const fromDate = query.from ? parseIsoDate(query.from) : null;
     const toDateExclusive = query.to ? addDays(parseIsoDate(query.to), 1) : null;
@@ -291,7 +292,7 @@ export const registerPlanningTaskRoutes: FastifyPluginAsync = async (app) => {
               ...summaryWhere,
               kind: query.kind ? toPrismaTaskKind(query.kind) : undefined,
             },
-            buildTaskListCursorWhere(query.cursor),
+            buildTaskListCursorWhere(query.cursor, listSort),
           ],
         }
       : {
@@ -304,7 +305,9 @@ export const registerPlanningTaskRoutes: FastifyPluginAsync = async (app) => {
         where: listWhere,
         take: limit ? limit + 1 : undefined,
         orderBy: limit
-          ? [{ createdAt: "desc" }, { id: "desc" }]
+          ? listSort === "oldest"
+            ? [{ createdAt: "asc" }, { id: "asc" }]
+            : [{ createdAt: "desc" }, { id: "desc" }]
           : [{ scheduledForDate: "asc" }, { todaySortOrder: "asc" }, { createdAt: "asc" }, { id: "asc" }],
         include: planningTaskInclude,
       }),

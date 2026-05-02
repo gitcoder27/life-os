@@ -80,6 +80,7 @@ export const queryKeys = {
       filters.includeSummary ? "summary" : "no-summary",
       filters.originType ?? "all",
       filters.scheduledState ?? "all",
+      filters.sort ?? "newest",
     ] as const,
   habits: ["habits"] as const,
   health: (date: string) => ["health", date] as const,

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useCreateTaskMutation } from "../../../shared/lib/api";
+import { taskTextAutocompleteProps } from "../../../shared/ui/task-autocomplete";
 
 type TodayTaskCaptureSheetProps = {
   open: boolean;
@@ -115,6 +116,7 @@ export function TodayTaskCaptureSheet({
             <span>Task</span>
             <textarea
               ref={firstInputRef}
+              {...taskTextAutocompleteProps}
               placeholder="What needs to happen today?"
               rows={4}
               value={textValue}

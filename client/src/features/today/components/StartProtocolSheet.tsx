@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { useUpdateTaskMutation, type TaskItem } from "../../../shared/lib/api";
+import { taskTextAutocompleteProps } from "../../../shared/ui/task-autocomplete";
 
 type StartProtocolSheetProps = {
   open: boolean;
@@ -80,29 +81,29 @@ export function StartProtocolSheet({
         <div className="stack-form">
           <label className="field">
             <span>Next visible action</span>
-            <input value={nextAction} onChange={(event) => setNextAction(event.target.value)} placeholder="Open the file and write the first paragraph" />
+            <input {...taskTextAutocompleteProps} value={nextAction} onChange={(event) => setNextAction(event.target.value)} placeholder="Open the file and write the first paragraph" />
           </label>
 
           <label className="field">
             <span>5-minute version</span>
-            <input value={fiveMinuteVersion} onChange={(event) => setFiveMinuteVersion(event.target.value)} placeholder="Write three bullets" />
+            <input {...taskTextAutocompleteProps} value={fiveMinuteVersion} onChange={(event) => setFiveMinuteVersion(event.target.value)} placeholder="Write three bullets" />
           </label>
 
           <div className="stack-form stack-form--two">
             <label className="field">
               <span>Estimated minutes</span>
-              <input value={estimatedDurationMinutes} onChange={(event) => setEstimatedDurationMinutes(event.target.value)} inputMode="numeric" placeholder="45" />
+              <input {...taskTextAutocompleteProps} value={estimatedDurationMinutes} onChange={(event) => setEstimatedDurationMinutes(event.target.value)} inputMode="numeric" placeholder="45" />
             </label>
 
             <label className="field">
               <span>Focus length</span>
-              <input value={focusLengthMinutes} onChange={(event) => setFocusLengthMinutes(event.target.value)} inputMode="numeric" placeholder="25" />
+              <input {...taskTextAutocompleteProps} value={focusLengthMinutes} onChange={(event) => setFocusLengthMinutes(event.target.value)} inputMode="numeric" placeholder="25" />
             </label>
           </div>
 
           <label className="field">
             <span>Likely obstacle</span>
-            <input value={likelyObstacle} onChange={(event) => setLikelyObstacle(event.target.value)} placeholder="I keep avoiding the blank page" />
+            <input {...taskTextAutocompleteProps} value={likelyObstacle} onChange={(event) => setLikelyObstacle(event.target.value)} placeholder="I keep avoiding the blank page" />
           </label>
 
           <div className="button-row">

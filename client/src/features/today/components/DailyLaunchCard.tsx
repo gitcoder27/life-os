@@ -6,6 +6,7 @@ import {
   type DailyLaunchItem,
   type TaskItem,
 } from "../../../shared/lib/api";
+import { taskTextAutocompleteProps } from "../../../shared/ui/task-autocomplete";
 
 const ENERGY_LEVELS = [
   { value: "1", label: "Very low", short: "1" },
@@ -141,6 +142,7 @@ export function DailyLaunchCard({
               <input
                 id="dl-new-task"
                 className="daily-launch__input"
+                {...taskTextAutocompleteProps}
                 value={newTaskTitle}
                 onChange={(event) => setNewTaskTitle(event.target.value)}
                 placeholder="Finish the proposal intro"
@@ -153,6 +155,7 @@ export function DailyLaunchCard({
             <input
               id="dl-next-action"
               className="daily-launch__input"
+              {...taskTextAutocompleteProps}
               value={nextAction}
               onChange={(event) => setNextAction(event.target.value)}
               placeholder="Open the proposal and write the opening paragraph"
@@ -203,6 +206,7 @@ export function DailyLaunchCard({
             <input
               id="dl-note"
               className="daily-launch__input"
+              {...taskTextAutocompleteProps}
               value={likelyDerailmentNote}
               onChange={(event) => setLikelyDerailmentNote(event.target.value)}
               placeholder="Meetings will cut the morning in half"

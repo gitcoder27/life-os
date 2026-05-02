@@ -5,6 +5,7 @@ import {
   useLogTaskStuckMutation,
   type TaskItem,
 } from "../../../shared/lib/api";
+import { taskTextAutocompleteProps } from "../../../shared/ui/task-autocomplete";
 
 type StuckFlowSheetProps = {
   open: boolean;
@@ -123,7 +124,7 @@ export function StuckFlowSheet({
 
           <label className="field">
             <span>Note</span>
-            <textarea value={note} onChange={(event) => setNote(event.target.value)} rows={3} placeholder="What needs to change so this becomes doable?" />
+            <textarea {...taskTextAutocompleteProps} value={note} onChange={(event) => setNote(event.target.value)} rows={3} placeholder="What needs to change so this becomes doable?" />
           </label>
 
           <div className="button-row">

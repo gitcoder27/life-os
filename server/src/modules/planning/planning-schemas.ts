@@ -420,6 +420,7 @@ export const taskListQuerySchema = z
     includeSummary: z.enum(["true", "false"]).optional(),
     originType: taskOriginSchema.optional(),
     scheduledState: z.enum(["all", "scheduled", "unscheduled"]).optional(),
+    sort: z.enum(["newest", "oldest"]).optional(),
   })
   .refine(
     (value) =>

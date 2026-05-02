@@ -17,6 +17,7 @@ import {
 } from "../../shared/lib/api";
 import { type RecurrenceRuleInput } from "../../shared/lib/recurrence";
 import { RecurrenceToggle, buildRecurrenceInput } from "../../shared/ui/RecurrenceEditor";
+import { taskTextAutocompleteProps } from "../../shared/ui/task-autocomplete";
 
 const LAST_EXPENSE_CATEGORY_KEY = "lifeos_last_expense_category";
 
@@ -353,6 +354,7 @@ export function QuickCaptureSheet({
               <span>{activeType === "Note" ? "Note" : activeType === "Reminder" ? "Reminder" : "Task"}</span>
               <textarea
                 ref={(el) => { firstInputRef.current = el; }}
+                {...taskTextAutocompleteProps}
                 placeholder={activeType === "Note" ? "What do you want to remember?" : activeType === "Reminder" ? "What should you be reminded about?" : "Quick task..."}
                 rows={3}
                 value={textValue}

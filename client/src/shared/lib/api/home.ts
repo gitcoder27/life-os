@@ -23,6 +23,7 @@ export type HomeDestination =
     }
   | {
       kind: "inbox_triage";
+      focus?: "stale";
     }
   | {
       kind: "habit_focus";

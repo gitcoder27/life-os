@@ -62,6 +62,7 @@ interface GuidanceInput {
   habits: GuidanceHabit[];
   priorities: GuidancePriority[];
   tasks: GuidanceTask[];
+  mustWinTask: GuidanceTask | null;
   planning: GuidancePlanning;
   accountability: GuidanceAccountability;
   weeklyChallenge: WeeklyHabitChallenge | null;
@@ -196,7 +197,7 @@ function buildRecommendations(input: GuidanceInput): HomeGuidanceRecommendation[
     });
   }
 
-  const mustWinTask = input.tasks.find((task) => task.progressState !== undefined);
+  const mustWinTask = input.mustWinTask;
   if (
     mustWinTask &&
     mustWinTask.status === "pending" &&
@@ -251,6 +252,7 @@ function buildRecommendations(input: GuidanceInput): HomeGuidanceRecommendation[
         type: "open_destination",
         destination: {
           kind: "inbox_triage",
+          focus: "stale",
         },
       },
     });
