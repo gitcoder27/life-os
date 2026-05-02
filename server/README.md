@@ -29,6 +29,9 @@ Common bootstrap commands:
   - Development: `npm run prisma:migrate`
   - Production: `npx prisma migrate deploy`
 - Manage users:
+  - Interactive menu from repo root: `npm run users:interactive`
+  - Interactive menu from the server workspace: `npm run users:interactive`
+  - The interactive menu auto-selects development in `/home/ubuntu/Development/life-os` and production in `/home/ubuntu/apps/life-os-prod`.
   - Production-safe example: `ENV_FILE=/home/ubuntu/apps/life-os-prod/server/.env.production NODE_ENV=production npm run users -w server -- list`
   - From the server workspace: `npm run users -- list`
   - From the server workspace: `npm run users -- create --email user@example.com --password change-me-please --display-name "User"`

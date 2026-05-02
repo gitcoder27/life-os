@@ -18,6 +18,22 @@ Run from the production checkout:
 cd /home/ubuntu/apps/life-os-prod
 ```
 
+## Interactive menu
+
+For day-to-day account administration, use the guided menu:
+
+```bash
+npm run users:interactive
+```
+
+The menu can list users, create users, reset passwords, disable users, enable users, and show the selected environment.
+
+Environment detection:
+
+- In `/home/ubuntu/Development/life-os`, it uses development mode and the development env file.
+- In `/home/ubuntu/apps/life-os-prod`, it uses production mode and `server/.env.production`.
+- Production write actions require typing `yes` before they run.
+
 ## Safe default command
 
 Use this exact format for production user-management commands:
