@@ -1,0 +1,34 @@
+/* App-wide readability calibration.
+   Keep the warm, quiet dashboard tone while lifting secondary text above
+   comfortable contrast thresholds on dark panels. */
+
+:where(input, textarea)::placeholder {
+  color: var(--text-placeholder);
+  opacity: 1;
+}
+
+:where(input, textarea, select):disabled,
+:where(button):disabled,
+:where([aria-disabled="true"]) {
+  color: var(--text-disabled);
+}
+
+.field > span,
+.field > label {
+  color: var(--text-label);
+}
+
+:where(
+  .page-description,
+  .support-copy,
+  .empty-state__copy,
+  [class$="__copy"],
+  [class$="__detail"],
+  [class$="__hint"],
+  [class$="__note"],
+  [class$="__meta"],
+  [class$="__intro"],
+  [class$="__subline"]
+) {
+  line-height: 1.55;
+}

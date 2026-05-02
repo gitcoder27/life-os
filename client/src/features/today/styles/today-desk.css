@@ -10,8 +10,8 @@
   --today-hairline-strong: rgba(216, 166, 95, 0.14);
   --today-ink: var(--text);
   --today-ink-soft: var(--text-secondary);
-  --today-ink-faint: rgba(177, 166, 142, 0.72);
-  --today-ink-muted: rgba(160, 149, 126, 0.58);
+  --today-ink-faint: var(--text-label);
+  --today-ink-muted: var(--text-tertiary);
   --today-rail-inset: 0.85rem;
 }
 
@@ -41,9 +41,9 @@
 .today-desk .daily-launch__label,
 .today-desk .recovery-tray__label,
 .today-desk .today-day-notes__label {
-  font-size: 0.68rem;
+  font-size: 0.72rem;
   font-weight: 650;
-  letter-spacing: 0.14em;
+  letter-spacing: 0.11em;
   text-transform: uppercase;
   color: var(--today-ink-faint);
 }
