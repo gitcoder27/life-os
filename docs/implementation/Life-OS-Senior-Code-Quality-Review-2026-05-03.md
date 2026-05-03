@@ -628,6 +628,29 @@ Recommended fix:
 - Document historical no-ops/misnames if needed.
 - Keep future migration names aligned with actual schema changes.
 
+## P3 Completion Notes
+
+Date completed: 2026-05-03
+
+25. Production bundle size/code splitting: completed. Route components now load through `React.lazy` boundaries in `client/src/app/router.tsx`, which splits heavy domains including goals, meal planner, finance, today/planner drag/drop workflows, reviews, settings, health, habits, inbox, onboarding, and login out of the initial entry. Bundle-size baseline before this P3 pass: one JS entry chunk at 1,182.75 kB before gzip, 327.34 kB gzip, and one CSS chunk at 560.92 kB before gzip, 80.67 kB gzip. After this P3 pass: main JS entry is 341.29 kB before gzip, 104.14 kB gzip; heavy route chunks include `GoalsPage` at 281.30 kB before gzip, 85.40 kB gzip, `TodayPage` at 149.52 kB before gzip, 40.84 kB gzip, `FinancePage` at 70.57 kB before gzip, 14.49 kB gzip, and `MealPlannerPage` at 32.49 kB before gzip, 8.44 kB gzip. CSS is now split into `index` 360.95 kB before gzip, 53.03 kB gzip, `TodayPage` 184.43 kB before gzip, 26.21 kB gzip, and `GoalsPage` 15.85 kB before gzip, 2.66 kB gzip. Vite no longer reports a large chunk warning. Tests added: none for routing; covered by `npm run typecheck` and `npm run build`. Remaining manual verification: browser route-transition smoke test for lazy fallback/loading behavior.
+
+26. Goal date logic UTC/date slicing: completed. Goal milestone overdue and due-label logic moved to `client/src/features/goals/goal-date-logic.ts`, using `getTodayDate()` by default and accepting explicit context dates for deterministic date-only comparisons. `GoalInspectorMilestones` and `GoalDetailPanel` now use the shared helper instead of `new Date().toISOString().slice(0, 10)` style logic. Tests added: `client/src/features/goals/goal-date-logic.test.ts` covers overdue checks, due labels, and ISO date-time display handling. Remaining manual verification: none.
+
+27. Keyboard-accessible goal graph interactions: completed for the graph workspace. Graph goal nodes are focusable, expose treeitem semantics with selected/expanded state, support Space selection, Enter open-details, ArrowLeft/ArrowRight collapse/expand, and ArrowUp/ArrowDown roving selection across visible nodes. The selected-goal toolbar now includes a keyboard-operable parent selector so reparenting no longer depends on drag/drop; the existing drag/drop path remains intact. Tests added: covered by `npm run typecheck`, `npm run build`, and the existing client test runner for extracted date helpers; no React component test was added in this focused P3 pass. Remaining manual verification: browser keyboard smoke test for node focus order, Space/Enter actions, ArrowUp/ArrowDown roving selection, branch expand/collapse, and parent-select reparenting.
+
+28. Unused root `bubblewrap` dependency: completed. `bubblewrap` was removed from root `package.json` and `package-lock.json`; no non-review non-lockfile references remain. Tests added: not applicable for dependency removal. Remaining manual verification: none. Final audit: `npm audit --omit=dev` found 0 vulnerabilities.
+
+29. Historical migration no-ops/misnames: completed. Added `server/prisma/migrations/README.md` documenting the intentional no-op `20260402094100_goals_hq` migration and the misnamed `20260417203901_weekly_capacity_planning` migration without rewriting applied migration history. Tests added: documentation-only. Remaining manual verification: keep future migration names aligned with actual schema changes during review.
+
+Final P3 verification on 2026-05-03:
+
+- `npm audit --omit=dev`: passed, 0 vulnerabilities.
+- `npm run typecheck`: passed.
+- `npm run test -w server`: passed, 49 test files and 275 tests.
+- `npm run build`: passed; bundle split described in item 25.
+- `npm run test:coverage -w server`: passed, 49 test files and 275 tests. Aggregate coverage: 79.24% lines/statements, 65.73% branches, 90.19% functions.
+- Additional check: `npm run test -w client` passed, 3 test files and 7 tests.
+
 ## Highest-Value Cleanup Plan
 
 ### Phase 1: Production/Data Safety

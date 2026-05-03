@@ -640,6 +640,7 @@ export function TodayPage({ routeMode }: { routeMode?: "execute" | "plan" }) {
 
   const deskClass = mode === "execute" ? "today-desk " : "";
   const focusActiveClass = activeFocusSession ? " today-layout--focus-active" : "";
+  const driftRecoveryIsPrimaryMove = adaptiveToday.nextMove?.state === "recover_drift";
 
   return (
     <div className={`${deskClass}today-layout today-layout--v2${focusActiveClass}`} style={todayLayoutStyle}>
@@ -700,10 +701,12 @@ export function TodayPage({ routeMode }: { routeMode?: "execute" | "plan" }) {
                   onAction={handleAdaptiveAction}
                 />
 
-                <DriftRecoveryBar
-                  execution={todayPlannerExecution}
-                  onOpen={() => setDriftRecoveryOpen(true)}
-                />
+                {!driftRecoveryIsPrimaryMove ? (
+                  <DriftRecoveryBar
+                    execution={todayPlannerExecution}
+                    onOpen={() => setDriftRecoveryOpen(true)}
+                  />
+                ) : null}
 
                 <ExecutionStream
                   date={data.today}

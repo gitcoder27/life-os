@@ -21,6 +21,11 @@ import {
   useUpdateGoalMilestonesMutation,
   type GoalMilestoneItem,
 } from "../../shared/lib/api";
+import {
+  formatGoalDate as formatDate,
+  getGoalMilestoneDueLabel as getDueLabel,
+  isGoalMilestoneOverdue as isOverdue,
+} from "./goal-date-logic";
 
 type MilestoneDraft = {
   draftKey: string;
@@ -31,33 +36,6 @@ type MilestoneDraft = {
 };
 
 const MAX_MILESTONES = 12;
-
-const formatDate = (iso: string | null) => {
-  if (!iso) return "";
-
-  const date = new Date(`${iso}T12:00:00`);
-  return date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-};
-
-const isOverdue = (targetDate: string | null) => {
-  if (!targetDate) return false;
-
-  const today = new Date().toISOString().slice(0, 10);
-  return targetDate < today;
-};
-
-const getDueLabel = (targetDate: string | null) => {
-  if (!targetDate) return null;
-
-  const now = new Date();
-  const target = new Date(`${targetDate}T12:00:00`);
-  const diffDays = Math.ceil((target.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
-
-  if (diffDays < 0) return "Overdue";
-  if (diffDays === 0) return "Due today";
-  if (diffDays === 1) return "Due tomorrow";
-  return `Due in ${diffDays} days`;
-};
 
 const toDrafts = (milestones: GoalMilestoneItem[]): MilestoneDraft[] =>
   milestones.map((milestone) => ({

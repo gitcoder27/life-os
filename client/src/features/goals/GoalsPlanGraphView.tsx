@@ -40,12 +40,15 @@ const domainEmoji = (key: string | null) => {
 
 type GoalNodeData = {
   goal: GoalOverviewItem;
+  level: number;
   isSelected: boolean;
   isInBranch: boolean;
   isDimmed: boolean;
   isSpotlightMatch: boolean;
   canExpand: boolean;
   isExpanded: boolean;
+  previousVisibleGoalId: string | null;
+  nextVisibleGoalId: string | null;
   childCount: number;
   isInMonthFocus: boolean;
   isInWeekFocus: boolean;
@@ -124,6 +127,30 @@ const sortGoals = (left: GoalOverviewItem, right: GoalOverviewItem) => {
   return left.createdAt.localeCompare(right.createdAt);
 };
 
+const isGoalDescendant = (
+  goals: GoalOverviewItem[],
+  ancestorGoalId: string,
+  candidateGoalId: string,
+) => {
+  const goalMap = new Map(goals.map((goal) => [goal.id, goal]));
+  let current = goalMap.get(candidateGoalId) ?? null;
+
+  while (current?.parentGoalId) {
+    if (current.parentGoalId === ancestorGoalId) {
+      return true;
+    }
+    current = goalMap.get(current.parentGoalId) ?? null;
+  }
+
+  return false;
+};
+
+const focusGraphGoalNode = (goalId: string) => {
+  window.requestAnimationFrame(() => {
+    document.querySelector<HTMLElement>(`[data-goal-node-id="${goalId}"]`)?.focus();
+  });
+};
+
 const GoalGraphNode = memo(function GoalGraphNode({ data }: NodeProps) {
   const d = data as unknown as GoalNodeData;
   const [isDragOver, setIsDragOver] = useState(false);
@@ -182,7 +209,64 @@ const GoalGraphNode = memo(function GoalGraphNode({ data }: NodeProps) {
         d.onSelect(d.goal.id);
         setMenuOpen(true);
       }}
-      title="Click to select. Double-click for details. Drag onto another goal to make it a child."
+      onKeyDown={(event) => {
+        if (event.target !== event.currentTarget) {
+          return;
+        }
+
+        if (event.key === " ") {
+          event.preventDefault();
+          event.stopPropagation();
+          d.onSelect(d.goal.id);
+          return;
+        }
+
+        if (event.key === "Enter") {
+          event.preventDefault();
+          event.stopPropagation();
+          d.onSelect(d.goal.id);
+          d.onOpenDetails(d.goal.id);
+          return;
+        }
+
+        if (event.key === "ArrowRight" && d.canExpand && !d.isExpanded) {
+          event.preventDefault();
+          event.stopPropagation();
+          d.onToggleExpanded(d.goal.id);
+          return;
+        }
+
+        if (event.key === "ArrowLeft" && d.canExpand && d.isExpanded) {
+          event.preventDefault();
+          event.stopPropagation();
+          d.onToggleExpanded(d.goal.id);
+          return;
+        }
+
+        if (event.key === "ArrowDown" && d.nextVisibleGoalId) {
+          event.preventDefault();
+          event.stopPropagation();
+          d.onSelect(d.nextVisibleGoalId);
+          focusGraphGoalNode(d.nextVisibleGoalId);
+          return;
+        }
+
+        if (event.key === "ArrowUp" && d.previousVisibleGoalId) {
+          event.preventDefault();
+          event.stopPropagation();
+          d.onSelect(d.previousVisibleGoalId);
+          focusGraphGoalNode(d.previousVisibleGoalId);
+        }
+      }}
+      role="treeitem"
+      tabIndex={0}
+      data-goal-node-id={d.goal.id}
+      aria-label={`${d.goal.title}, ${d.goal.domain}${d.goal.horizonName ? `, ${d.goal.horizonName}` : ""}`}
+      aria-level={d.level}
+      aria-selected={d.isSelected}
+      aria-expanded={d.canExpand ? d.isExpanded : undefined}
+      aria-keyshortcuts="Space Enter ArrowRight ArrowLeft ArrowDown ArrowUp"
+      title="Click to select. Double-click or press Enter for details. Drag onto another goal or use the parent control to re-parent."
     >
       <Handle type="target" position={Position.Top} className="graph-handle--hidden" />
       <div className="graph-goal-node__row">
@@ -595,6 +679,8 @@ const buildSpotlightState = (goals: GoalOverviewItem[], filters: GraphFilters): 
 const buildLayout = (props: LayoutProps) => {
   const activeGoals = props.goals.filter((goal) => goal.status === "active");
   const { goalMap, childrenByParent, roots, visibleIds } = buildVisibleTree(activeGoals, props.expandedGoalIds);
+  const visibleGoalIds = [...visibleIds];
+  const visibleGoalIndexById = new Map(visibleGoalIds.map((goalId, index) => [goalId, index]));
   const branchIds = buildBranchIds(props.selectedGoalId, goalMap, childrenByParent, visibleIds);
 
   const nodes: Node[] = [];
@@ -654,6 +740,7 @@ const buildLayout = (props: LayoutProps) => {
   ) => {
     const childItems = childItemsForGoal(goal);
     const goalWidth = measureGoalWidth(goal);
+    const visibleGoalIndex = visibleGoalIndexById.get(goal.id) ?? -1;
     const childrenWidth = childItems.reduce((total, item, index) => {
       return total + measureItemWidth(item) + (index > 0 ? SIBLING_GAP : 0);
     }, 0);
@@ -672,6 +759,7 @@ const buildLayout = (props: LayoutProps) => {
             : 1,
       data: {
         goal,
+        level: depth + 1,
         isSelected: props.selectedGoalId === goal.id,
         isInBranch: branchIds.has(goal.id),
         isDimmed:
@@ -680,6 +768,8 @@ const buildLayout = (props: LayoutProps) => {
         isSpotlightMatch: props.spotlightExactGoalIds.has(goal.id),
         canExpand: (childrenByParent.get(goal.id)?.length ?? 0) > 0,
         isExpanded: props.expandedGoalIds.has(goal.id),
+        previousVisibleGoalId: visibleGoalIndex > 0 ? visibleGoalIds[visibleGoalIndex - 1] : null,
+        nextVisibleGoalId: visibleGoalIndex >= 0 ? visibleGoalIds[visibleGoalIndex + 1] ?? null : null,
         childCount: childrenByParent.get(goal.id)?.length ?? 0,
         isInMonthFocus: props.monthFocusGoalIds.has(goal.id),
         isInWeekFocus: props.weekFocusGoalIds.has(goal.id),
@@ -771,7 +861,7 @@ const buildLayout = (props: LayoutProps) => {
   return {
     nodes,
     edges,
-    visibleGoalIds: [...visibleIds],
+    visibleGoalIds,
     branchNodeIds: [...branchIds].filter((goalId) => visibleIds.has(goalId)),
   };
 };
@@ -1044,36 +1134,38 @@ const GraphInner = (props: GraphInnerProps) => {
   }, [fitView, fitVisibleGoals, props.selectedGoalId]);
 
   return (
-    <ReactFlow
-      nodes={animatedNodes}
-      edges={stableEdges}
-      nodeTypes={nodeTypes}
-      onNodeClick={handleNodeClick}
-      onPaneClick={props.onCanvasClear}
-      panOnScroll
-      zoomOnScroll={false}
-      nodesConnectable={false}
-      nodesDraggable={false}
-      minZoom={0.22}
-      maxZoom={1.35}
-      proOptions={{ hideAttribution: true }}
-    >
-      <Background color="rgba(216, 166, 95, 0.03)" gap={40} size={1} />
-      <div className="ghq-graph__viewport-controls nopan" aria-label="Canvas view controls">
-        <button type="button" onClick={() => void zoomIn({ duration: 180 })} aria-label="Zoom in">
-          +
-        </button>
-        <button type="button" onClick={() => void zoomOut({ duration: 180 })} aria-label="Zoom out">
-          −
-        </button>
-        <button type="button" onClick={fitVisibleGoals}>
-          Fit
-        </button>
-        <button type="button" onClick={centerSelectedGoal}>
-          Center
-        </button>
-      </div>
-    </ReactFlow>
+    <div className="ghq-graph__canvas" role="tree" aria-label="Goal hierarchy graph">
+      <ReactFlow
+        nodes={animatedNodes}
+        edges={stableEdges}
+        nodeTypes={nodeTypes}
+        onNodeClick={handleNodeClick}
+        onPaneClick={props.onCanvasClear}
+        panOnScroll
+        zoomOnScroll={false}
+        nodesConnectable={false}
+        nodesDraggable={false}
+        minZoom={0.22}
+        maxZoom={1.35}
+        proOptions={{ hideAttribution: true }}
+      >
+        <Background color="rgba(216, 166, 95, 0.03)" gap={40} size={1} />
+        <div className="ghq-graph__viewport-controls nopan" aria-label="Canvas view controls">
+          <button type="button" onClick={() => void zoomIn({ duration: 180 })} aria-label="Zoom in">
+            +
+          </button>
+          <button type="button" onClick={() => void zoomOut({ duration: 180 })} aria-label="Zoom out">
+            −
+          </button>
+          <button type="button" onClick={fitVisibleGoals}>
+            Fit
+          </button>
+          <button type="button" onClick={centerSelectedGoal}>
+            Center
+          </button>
+        </div>
+      </ReactFlow>
+    </div>
   );
 };
 
@@ -1100,6 +1192,7 @@ export type GoalsPlanGraphViewProps = {
   onOpenPlanning: (goalId: string) => void;
   onEditGoal: (goal: GoalOverviewItem) => void;
   onDetachGoal: (goalId: string) => void;
+  onReparentGoal: (goalId: string, parentGoalId: string | null) => void;
   onDuplicateGoal: (goal: GoalOverviewItem) => void;
   onArchiveGoal: (goal: GoalOverviewItem) => void;
   onAddToLane: (lane: "month" | "week", goalId: string) => void;
@@ -1136,6 +1229,7 @@ export const GoalsPlanGraphView = ({
   onOpenPlanning,
   onEditGoal,
   onDetachGoal,
+  onReparentGoal,
   onDuplicateGoal,
   onArchiveGoal,
   onAddToLane,
@@ -1156,6 +1250,20 @@ export const GoalsPlanGraphView = ({
     health: "",
   });
   const activeGoals = useMemo(() => goals.filter((goal) => goal.status === "active"), [goals]);
+  const selectedGoal = useMemo(
+    () => (selectedGoalId ? activeGoals.find((goal) => goal.id === selectedGoalId) ?? null : null),
+    [activeGoals, selectedGoalId],
+  );
+  const parentGoalOptions = useMemo(
+    () => (
+      selectedGoalId
+        ? activeGoals
+            .filter((goal) => goal.id !== selectedGoalId && !isGoalDescendant(activeGoals, selectedGoalId, goal.id))
+            .sort(sortGoals)
+        : []
+    ),
+    [activeGoals, selectedGoalId],
+  );
   const activeDomains = useMemo(() => {
     const domainMap = new Map<string, string>();
     for (const goal of activeGoals) {
@@ -1305,6 +1413,24 @@ export const GoalsPlanGraphView = ({
             >
               {isFocusMode ? "Exit focus" : "Focus"}
             </button>
+            {selectedGoal ? (
+              <label className="ghq-graph__parent-field">
+                <span className="sr-only">Move selected goal under</span>
+                <select
+                  className="ghq-graph__select ghq-graph__parent-select"
+                  value={selectedGoal.parentGoalId ?? ""}
+                  onChange={(event) => onReparentGoal(selectedGoal.id, event.target.value || null)}
+                  aria-label="Move selected goal under"
+                >
+                  <option value="">Top-level</option>
+                  {parentGoalOptions.map((goal) => (
+                    <option key={goal.id} value={goal.id}>
+                      {goal.title}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
           </div>
         ) : null}
         <div className="ghq-graph__toolbar-group ghq-graph__toolbar-group--view" aria-label="Canvas view actions">

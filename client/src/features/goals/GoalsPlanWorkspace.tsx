@@ -1142,6 +1142,23 @@ export function GoalsPlanWorkspace({
     [activeGoals, updateGoalMutation],
   );
 
+  const handleReparentGoal = useCallback(
+    (goalId: string, parentGoalId: string | null) => {
+      const goal = activeGoals.find((item) => item.id === goalId);
+      if (!goal || goal.parentGoalId === parentGoalId) {
+        return;
+      }
+
+      if (!parentGoalId) {
+        void handleDetachGoal(goalId);
+        return;
+      }
+
+      void handleDropGoalOnGoal(parentGoalId, goalId);
+    },
+    [activeGoals, handleDetachGoal, handleDropGoalOnGoal],
+  );
+
   const handleDuplicateGoal = useCallback(
     async (goal: GoalOverviewItem) => {
       try {
@@ -1506,6 +1523,7 @@ export function GoalsPlanWorkspace({
                   onOpenPlanning={handleOpenPlanningBoard}
                   onEditGoal={onEditGoal}
                   onDetachGoal={handleDetachGoal}
+                  onReparentGoal={handleReparentGoal}
                   onDuplicateGoal={(goal) => void handleDuplicateGoal(goal)}
                   onArchiveGoal={(goal) => void handleArchiveGoal(goal)}
                   onAddToLane={handleAddGoalIdToLane}

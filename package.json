@@ -28,8 +28,5 @@
   },
   "devDependencies": {
     "concurrently": "^9.2.1"
-  },
-  "dependencies": {
-    "bubblewrap": "^0.2.0"
   }
 }

@@ -1,18 +1,5 @@
+import { Suspense, lazy } from "react";
 import { Navigate, createBrowserRouter } from "react-router-dom";
-
-import { LoginPage } from "../features/auth/LoginPage";
-import { FinancePage } from "../features/finance/FinancePage";
-import { GoalsPage } from "../features/goals/GoalsPage";
-import { HabitsPage } from "../features/habits/HabitsPage";
-import { HealthPage } from "../features/health/HealthPage";
-import { MealPlannerPage } from "../features/health/MealPlannerPage";
-import { HomePage } from "../features/home/HomePage";
-import { InboxPage } from "../features/inbox/InboxPage";
-import { OnboardingPage } from "../features/onboarding/OnboardingPage";
-import { ReviewsPage } from "../features/reviews/ReviewsPage";
-import { ReviewHistoryPage } from "../features/reviews/ReviewHistoryPage";
-import { SettingsPage } from "../features/settings/SettingsPage";
-import { TodayPage } from "../features/today/TodayPage";
 import {
   useOnboardingStateQuery,
   useSettingsProfileQuery,
@@ -22,6 +9,20 @@ import { BrandMark } from "../shared/ui/BrandMark";
 import { LoadingIndicator } from "../shared/ui/PageState";
 import { resolveLandingPagePath } from "../shared/lib/landing-page";
 import { AppShell } from "./shell/AppShell";
+
+const LoginPage = lazy(() => import("../features/auth/LoginPage").then((module) => ({ default: module.LoginPage })));
+const FinancePage = lazy(() => import("../features/finance/FinancePage").then((module) => ({ default: module.FinancePage })));
+const GoalsPage = lazy(() => import("../features/goals/GoalsPage").then((module) => ({ default: module.GoalsPage })));
+const HabitsPage = lazy(() => import("../features/habits/HabitsPage").then((module) => ({ default: module.HabitsPage })));
+const HealthPage = lazy(() => import("../features/health/HealthPage").then((module) => ({ default: module.HealthPage })));
+const MealPlannerPage = lazy(() => import("../features/health/MealPlannerPage").then((module) => ({ default: module.MealPlannerPage })));
+const HomePage = lazy(() => import("../features/home/HomePage").then((module) => ({ default: module.HomePage })));
+const InboxPage = lazy(() => import("../features/inbox/InboxPage").then((module) => ({ default: module.InboxPage })));
+const OnboardingPage = lazy(() => import("../features/onboarding/OnboardingPage").then((module) => ({ default: module.OnboardingPage })));
+const ReviewsPage = lazy(() => import("../features/reviews/ReviewsPage").then((module) => ({ default: module.ReviewsPage })));
+const ReviewHistoryPage = lazy(() => import("../features/reviews/ReviewHistoryPage").then((module) => ({ default: module.ReviewHistoryPage })));
+const SettingsPage = lazy(() => import("../features/settings/SettingsPage").then((module) => ({ default: module.SettingsPage })));
+const TodayPage = lazy(() => import("../features/today/TodayPage").then((module) => ({ default: module.TodayPage })));
 
 function RouteLoading() {
   return (
@@ -110,12 +111,16 @@ function DefaultLandingRoute() {
   );
 }
 
+function lazyRoute(element: JSX.Element) {
+  return <Suspense fallback={<RouteLoading />}>{element}</Suspense>;
+}
+
 export const router = createBrowserRouter([
   {
     path: "/login",
     element: (
       <GuestRoute>
-        <LoginPage />
+        {lazyRoute(<LoginPage />)}
       </GuestRoute>
     ),
   },
@@ -123,7 +128,7 @@ export const router = createBrowserRouter([
     path: "/onboarding",
     element: (
       <ProtectedRoute allowIncompleteOnboarding>
-        <OnboardingPage />
+        {lazyRoute(<OnboardingPage />)}
       </ProtectedRoute>
     ),
   },
@@ -141,27 +146,27 @@ export const router = createBrowserRouter([
       },
       {
         path: "home",
-        element: <HomePage />,
+        element: lazyRoute(<HomePage />),
       },
       {
         path: "inbox",
-        element: <InboxPage />,
+        element: lazyRoute(<InboxPage />),
       },
       {
         path: "today",
-        element: <TodayPage routeMode="execute" />,
+        element: lazyRoute(<TodayPage routeMode="execute" />),
       },
       {
         path: "planner",
-        element: <TodayPage routeMode="plan" />,
+        element: lazyRoute(<TodayPage routeMode="plan" />),
       },
       {
         path: "habits",
-        element: <HabitsPage />,
+        element: lazyRoute(<HabitsPage />),
       },
       {
         path: "health",
-        element: <HealthPage />,
+        element: lazyRoute(<HealthPage />),
       },
       {
         path: "health/meals",
@@ -169,27 +174,27 @@ export const router = createBrowserRouter([
       },
       {
         path: "meals",
-        element: <MealPlannerPage />,
+        element: lazyRoute(<MealPlannerPage />),
       },
       {
         path: "finance",
-        element: <FinancePage />,
+        element: lazyRoute(<FinancePage />),
       },
       {
         path: "goals",
-        element: <GoalsPage />,
+        element: lazyRoute(<GoalsPage />),
       },
       {
         path: "reviews/history",
-        element: <ReviewHistoryPage />,
+        element: lazyRoute(<ReviewHistoryPage />),
       },
       {
         path: "reviews/:cadence",
-        element: <ReviewsPage />,
+        element: lazyRoute(<ReviewsPage />),
       },
       {
         path: "settings",
-        element: <SettingsPage />,
+        element: lazyRoute(<SettingsPage />),
       },
     ],
   },

@@ -12,23 +12,13 @@ import {
   type GoalOverviewItem,
 } from "../../shared/lib/api";
 import { EmptyState, InlineErrorState } from "../../shared/ui/PageState";
+import {
+  formatGoalDate as formatDate,
+  isGoalMilestoneOverdue as isOverdue,
+} from "./goal-date-logic";
 import { useGoalTodayAction } from "./useGoalTodayAction";
 
-/* ── Helpers ── */
-
 const cycleLabels: Record<string, string> = { day: "D", week: "W", month: "M" };
-
-function formatDate(iso: string | null): string {
-  if (!iso) return "";
-  const d = new Date(`${iso}T12:00:00`);
-  return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-}
-
-function isOverdue(targetDate: string | null, contextDate?: string): boolean {
-  if (!targetDate) return false;
-  const ref = contextDate ?? new Date().toISOString().slice(0, 10);
-  return targetDate < ref;
-}
 
 /* ── Milestone Editor ── */
 
