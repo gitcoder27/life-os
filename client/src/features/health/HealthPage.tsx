@@ -876,7 +876,10 @@ export function HealthPage() {
                   <HealthIcon name="water" />
                   <span>Water</span>
                 </div>
-                <div className="health-water-orb" aria-label={`${(waterMl / 1000).toFixed(1)} liters of ${(waterTargetMl / 1000).toFixed(1)} liters`}>
+                <div
+                  className={`health-water-orb health-water-orb--${signals.water.status}`}
+                  aria-label={`${(waterMl / 1000).toFixed(1)} liters of ${(waterTargetMl / 1000).toFixed(1)} liters`}
+                >
                   <svg className="health-water-orb__ring" height={waterRingSize} width={waterRingSize} viewBox={`0 0 ${waterRingSize} ${waterRingSize}`}>
                     <circle
                       className="health-water-orb__track"
@@ -1059,7 +1062,7 @@ export function HealthPage() {
         </div>
 
         <aside className="health-secondary-stack">
-          <section className="health-side-panel">
+          <section className="health-side-panel health-side-panel--recovery">
             <div className="health-side-panel__header">
               <HealthIcon name="heart" />
               <h2>Recovery actions</h2>
