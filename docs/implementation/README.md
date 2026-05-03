@@ -4,6 +4,7 @@ This folder holds the active operating docs for running and supporting Life OS.
 
 Current docs:
 
+- `Life-OS-Adaptive-Today-Planning-v2-Implementation-Plan-2026-05-03.md`: implementation plan for the next major product upgrade, focused on single-next-move guidance, shape-my-day planning, capacity guardrails, inline drift recovery, and review feedback loops while preserving a minimal, high-taste Today/Home design
 - `Life-OS-Today-Page-Redesign-Implementation-Brief-2026-04-19.md`: implementation-ready redesign brief for the Today page, focused on making it the primary daily execution workspace with stronger hierarchy, fewer boxed modules, and a closer visual relationship to the redesigned Home page
 - `Life-OS-Home-Page-Redesign-Implementation-Brief-2026-04-19.md`: implementation-ready redesign brief for the home page, focused on taste, hierarchy, mode clarity, and reducing dashboard/card clutter while preserving the top status strip
 - `Life-OS-CEO-Implementation-Brief.md`: executive summary of the behavioral operating system direction, with codebase-grounded implementation entry points for future agents and contributors
