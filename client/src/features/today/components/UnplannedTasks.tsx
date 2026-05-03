@@ -287,8 +287,6 @@ function UnplannedTaskRow({
         isSuppressed ? " unplanned-task--suppressed" : "",
       ].join("")}
       aria-grabbed={isDragging || isActiveDrag}
-      {...attributes}
-      {...listeners}
     >
       {batchMode ? (
         <label className="unplanned-task__check">
@@ -303,18 +301,21 @@ function UnplannedTaskRow({
       ) : null}
 
       {isDraggable ? (
-        <span
+        <button
           className="unplanned-task__drag-handle"
-          aria-hidden="true"
+          type="button"
+          aria-label={`Drag ${task.title} to a time block`}
+          {...attributes}
+          {...listeners}
         >
           <span className="unplanned-task__drag-handle-mark" aria-hidden="true" />
-        </span>
+        </button>
       ) : null}
 
       <div className="unplanned-task__info" title={task.title}>
         <div className="unplanned-task__title-row">
           <span className="unplanned-task__title">{task.title}</span>
-          {compactMeta ? (
+          {compactMeta && tone !== "recovery" ? (
             <span className="unplanned-task__status">{compactMeta.overdueLabel}</span>
           ) : null}
         </div>
@@ -322,6 +323,9 @@ function UnplannedTaskRow({
           <div className="unplanned-task__meta-row">
             {compactMeta ? (
               <span className="unplanned-task__meta-pill">{compactMeta.scheduledLabel}</span>
+            ) : null}
+            {compactMeta && tone === "recovery" ? (
+              <span className="unplanned-task__status">{compactMeta.overdueLabel}</span>
             ) : null}
             {task.goal ? (
               <span className={`unplanned-task__goal goal-chip__dot--${task.goal.domain}`}>

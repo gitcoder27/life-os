@@ -7,7 +7,7 @@
   padding: 0.7rem 0.72rem;
   border-radius: 1rem;
   border: 1px solid rgba(255,255,255,0.07);
-  background: rgba(18,18,15,0.74);
+  background: rgba(18,18,15,0.86);
   box-shadow: inset 0 1px 0 rgba(255,255,255,0.035);
   flex-shrink: 0;
 }
@@ -32,35 +32,36 @@
   display: flex;
   flex-direction: column;
   gap: 0;
-  border-top: 1px solid rgba(255,255,255,0.055);
+  border-top: 1px solid rgba(255,255,255,0.045);
 }
 
 .daily-rhythm-item {
   display: grid;
-  grid-template-columns: 0.24rem minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 0.58rem;
-  padding: 0.62rem 0.08rem 0.62rem 0;
-  border-bottom: 1px solid rgba(255,255,255,0.055);
+  grid-template-columns: 0.56rem minmax(0, 1fr);
+  align-items: flex-start;
+  gap: 0.64rem;
+  padding: 0.72rem 0.06rem 0.7rem 0;
+  border-bottom: 1px solid rgba(255,255,255,0.048);
   border-radius: 0;
   background: transparent;
   transition:
     background var(--dur-fast) var(--ease),
     transform var(--dur-fast) var(--ease);
+  contain: content;
   touch-action: pan-y;
 }
 
 .daily-rhythm-item:hover {
   transform: translateX(1px);
-  background: rgba(255,255,255,0.018);
+  background: rgba(255,255,255,0.014);
 }
 
 .daily-rhythm-item--draggable {
-  cursor: grab;
+  cursor: default;
 }
 
 .daily-rhythm-item--draggable:active {
-  cursor: grabbing;
+  cursor: default;
 }
 
 .daily-rhythm-item--dragging {
@@ -70,8 +71,8 @@
 
 .daily-rhythm-item--overlay {
   width: min(19rem, 40vw);
-  grid-template-columns: 0.24rem minmax(0, 1fr);
-  align-items: center;
+  grid-template-columns: 0.56rem minmax(0, 1fr);
+  align-items: flex-start;
   padding: 0.72rem 0.8rem;
   border-radius: 1rem;
   border: 1px solid rgba(146, 176, 150, 0.18);
@@ -83,9 +84,33 @@
 
 .daily-rhythm-item__mark {
   width: 0.18rem;
-  height: 2rem;
+  height: 2.25rem;
   border-radius: 999px;
   background: rgba(146, 176, 150, 0.55);
+  margin-top: 0.08rem;
+}
+
+.daily-rhythm-item__drag-handle {
+  display: inline-flex;
+  align-items: flex-start;
+  justify-content: center;
+  width: 0.56rem;
+  min-height: 2.5rem;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  cursor: grab;
+  touch-action: none;
+}
+
+.daily-rhythm-item__drag-handle:focus-visible {
+  outline: 1px solid rgba(217,153,58,0.32);
+  outline-offset: 3px;
+}
+
+.daily-rhythm-item__drag-handle:active {
+  cursor: grabbing;
 }
 
 .daily-rhythm-item--conflict .daily-rhythm-item__mark {
@@ -106,31 +131,36 @@
 .daily-rhythm-item__body {
   display: flex;
   flex-direction: column;
-  gap: 0.26rem;
+  gap: 0.34rem;
   min-width: 0;
 }
 
-.daily-rhythm-item__top {
+.daily-rhythm-item__header {
   display: flex;
-  align-items: center;
-  gap: 0.42rem;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.6rem;
   min-width: 0;
 }
 
 .daily-rhythm-item__title {
+  flex: 1;
   min-width: 0;
   color: var(--text);
-  font-size: 0.88rem;
-  font-weight: 680;
+  font-size: 0.92rem;
+  line-height: 1.18;
+  font-weight: 720;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 
 .daily-rhythm-item__state {
   flex-shrink: 0;
-  color: rgba(207, 225, 199, 0.72);
-  font-size: 0.53rem;
+  margin-top: 0.12rem;
+  color: rgba(207, 225, 199, 0.74);
+  font-size: 0.55rem;
   font-weight: 800;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -143,9 +173,9 @@
 .daily-rhythm-item__meta {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.16rem 0.38rem;
+  gap: 0.16rem 0.42rem;
   color: rgba(190, 180, 160, 0.62);
-  font-size: 0.68rem;
+  font-size: 0.7rem;
   line-height: 1.3;
 }
 
@@ -157,7 +187,17 @@
 .daily-rhythm-block__actions {
   display: flex;
   align-items: center;
-  gap: 0.25rem;
+  gap: 0.32rem;
+}
+
+.daily-rhythm-item__actions {
+  padding-top: 0.06rem;
+  opacity: 0.72;
+}
+
+.daily-rhythm-item:hover .daily-rhythm-item__actions,
+.daily-rhythm-item:focus-within .daily-rhythm-item__actions {
+  opacity: 1;
 }
 
 .daily-rhythm__text-btn,
@@ -174,11 +214,11 @@
 }
 
 .daily-rhythm__text-btn {
-  min-height: 1.65rem;
-  padding: 0.28rem 0.5rem;
+  min-height: 1.58rem;
+  padding: 0.24rem 0.52rem;
   border-radius: var(--r-pill);
   font-family: var(--font-body);
-  font-size: 0.68rem;
+  font-size: 0.66rem;
   font-weight: 750;
   white-space: nowrap;
 }
@@ -191,6 +231,11 @@
   height: 1.65rem;
   border-radius: 50%;
   padding: 0;
+}
+
+.daily-rhythm__text-btn--primary {
+  border-color: rgba(146, 176, 150, 0.18);
+  background: rgba(146, 176, 150, 0.09);
 }
 
 .daily-rhythm__text-btn:hover:not(:disabled),

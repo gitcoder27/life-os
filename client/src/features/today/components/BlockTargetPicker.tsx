@@ -89,13 +89,28 @@ export function BlockTargetPicker({
       });
     };
 
+    let frameId: number | null = null;
+    const schedulePositionUpdate = () => {
+      if (frameId !== null) {
+        return;
+      }
+
+      frameId = window.requestAnimationFrame(() => {
+        frameId = null;
+        updatePosition();
+      });
+    };
+
     updatePosition();
-    window.addEventListener("resize", updatePosition);
-    document.addEventListener("scroll", updatePosition, true);
+    window.addEventListener("resize", schedulePositionUpdate);
+    document.addEventListener("scroll", schedulePositionUpdate, true);
 
     return () => {
-      window.removeEventListener("resize", updatePosition);
-      document.removeEventListener("scroll", updatePosition, true);
+      if (frameId !== null) {
+        window.cancelAnimationFrame(frameId);
+      }
+      window.removeEventListener("resize", schedulePositionUpdate);
+      document.removeEventListener("scroll", schedulePositionUpdate, true);
     };
   }, [blocks.length, open]);
 

@@ -197,12 +197,22 @@ function DailyRhythmRow({
         isDragging ? " daily-rhythm-item--dragging" : "",
       ].join("")}
       aria-grabbed={isDragging}
-      {...attributes}
-      {...listeners}
     >
-      <div className="daily-rhythm-item__mark" aria-hidden="true" />
+      {canDrag ? (
+        <button
+          className="daily-rhythm-item__drag-handle"
+          type="button"
+          aria-label={`Drag ${item.title} to the timeline`}
+          {...attributes}
+          {...listeners}
+        >
+          <span className="daily-rhythm-item__mark" aria-hidden="true" />
+        </button>
+      ) : (
+        <div className="daily-rhythm-item__mark" aria-hidden="true" />
+      )}
       <div className="daily-rhythm-item__body">
-        <div className="daily-rhythm-item__top">
+        <div className="daily-rhythm-item__header">
           <span className="daily-rhythm-item__title">{item.title}</span>
           <span className="daily-rhythm-item__state">{getStateLabel(item)}</span>
         </div>
@@ -212,46 +222,46 @@ function DailyRhythmRow({
             <span className="daily-rhythm-item__conflict">{item.conflictLabel}</span>
           ) : null}
         </div>
+        {canReserve || canComplete || canSkip ? (
+          <div
+            className="daily-rhythm-item__actions"
+            onPointerDown={(event) => event.stopPropagation()}
+          >
+            {canReserve ? (
+              <button
+                className="daily-rhythm__text-btn daily-rhythm__text-btn--primary"
+                type="button"
+                onClick={() => onReserve(item)}
+                disabled={isPending}
+              >
+                {item.state === "reserved" ? "Make block" : item.state === "conflict" ? "Move" : "Reserve"}
+              </button>
+            ) : null}
+            {canComplete ? (
+              <button
+                className="daily-rhythm__icon-btn"
+                type="button"
+                onClick={() => onComplete(item)}
+                disabled={isPending}
+                title={item.kind === "routine" ? "Complete routine" : "Mark done"}
+                aria-label={item.kind === "routine" ? `Complete ${item.title}` : `Mark ${item.title} done`}
+              >
+                <CheckMiniIcon />
+              </button>
+            ) : null}
+            {canSkip ? (
+              <button
+                className="daily-rhythm__text-btn daily-rhythm__text-btn--quiet"
+                type="button"
+                onClick={() => onSkip(item)}
+                disabled={isPending}
+              >
+                Skip
+              </button>
+            ) : null}
+          </div>
+        ) : null}
       </div>
-      {canReserve || canComplete || canSkip ? (
-        <div
-          className="daily-rhythm-item__actions"
-          onPointerDown={(event) => event.stopPropagation()}
-        >
-          {canReserve ? (
-            <button
-              className="daily-rhythm__text-btn"
-              type="button"
-              onClick={() => onReserve(item)}
-              disabled={isPending}
-            >
-              {item.state === "reserved" ? "Make block" : item.state === "conflict" ? "Move" : "Reserve"}
-            </button>
-          ) : null}
-          {canComplete ? (
-            <button
-              className="daily-rhythm__icon-btn"
-              type="button"
-              onClick={() => onComplete(item)}
-              disabled={isPending}
-              title={item.kind === "routine" ? "Complete routine" : "Mark done"}
-              aria-label={item.kind === "routine" ? `Complete ${item.title}` : `Mark ${item.title} done`}
-            >
-              <CheckMiniIcon />
-            </button>
-          ) : null}
-          {canSkip ? (
-            <button
-              className="daily-rhythm__text-btn daily-rhythm__text-btn--quiet"
-              type="button"
-              onClick={() => onSkip(item)}
-              disabled={isPending}
-            >
-              Skip
-            </button>
-          ) : null}
-        </div>
-      ) : null}
     </div>
   );
 }

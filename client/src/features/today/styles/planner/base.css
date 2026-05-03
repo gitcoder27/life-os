@@ -351,6 +351,7 @@ body.planner-dragging-cursor * {
   overflow-y: auto;
   overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
+  contain: layout paint;
   padding-right: 0.28rem;
   scrollbar-width: thin;
   scrollbar-color: rgba(255,255,255,0.14) transparent;
@@ -368,7 +369,7 @@ body.planner-dragging-cursor * {
 
 .planner__sidebar-stack > .unplanned-lane {
   max-height: none;
-  overflow: hidden;
+  overflow: visible;
   flex-shrink: 0;
 }
 

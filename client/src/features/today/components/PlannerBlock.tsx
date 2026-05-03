@@ -395,13 +395,28 @@ export function PlannerBlock({
       });
     };
 
+    let frameId: number | null = null;
+    const scheduleOverflowMenuPositionUpdate = () => {
+      if (frameId !== null) {
+        return;
+      }
+
+      frameId = window.requestAnimationFrame(() => {
+        frameId = null;
+        updateOverflowMenuPosition();
+      });
+    };
+
     updateOverflowMenuPosition();
-    window.addEventListener("resize", updateOverflowMenuPosition);
-    document.addEventListener("scroll", updateOverflowMenuPosition, true);
+    window.addEventListener("resize", scheduleOverflowMenuPositionUpdate);
+    document.addEventListener("scroll", scheduleOverflowMenuPositionUpdate, true);
 
     return () => {
-      window.removeEventListener("resize", updateOverflowMenuPosition);
-      document.removeEventListener("scroll", updateOverflowMenuPosition, true);
+      if (frameId !== null) {
+        window.cancelAnimationFrame(frameId);
+      }
+      window.removeEventListener("resize", scheduleOverflowMenuPositionUpdate);
+      document.removeEventListener("scroll", scheduleOverflowMenuPositionUpdate, true);
     };
   }, [showOverflow]);
 

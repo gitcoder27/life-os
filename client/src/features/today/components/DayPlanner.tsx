@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type WheelEvent } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import {
   DndContext,
   DragOverlay,
@@ -597,29 +597,6 @@ export function DayPlanner({
     setDraggedRhythmItemId(null);
   }
 
-  function handleSidebarWheelCapture(event: WheelEvent<HTMLDivElement>) {
-    const sidebar = event.currentTarget;
-    const verticalDelta = event.deltaY;
-
-    if (Math.abs(verticalDelta) <= Math.abs(event.deltaX)) {
-      return;
-    }
-
-    const maxScrollTop = sidebar.scrollHeight - sidebar.clientHeight;
-    if (maxScrollTop <= 0) {
-      return;
-    }
-
-    const canScrollUp = verticalDelta < 0 && sidebar.scrollTop > 0;
-    const canScrollDown = verticalDelta > 0 && sidebar.scrollTop < maxScrollTop - 1;
-
-    if (canScrollUp || canScrollDown) {
-      event.preventDefault();
-      event.stopPropagation();
-      sidebar.scrollTop = Math.max(0, Math.min(maxScrollTop, sidebar.scrollTop + verticalDelta));
-    }
-  }
-
   return (
     <div className="planner">
       <div className="planner__header">
@@ -965,7 +942,7 @@ export function DayPlanner({
           </div>
 
           <div className="planner__sidebar-pane" style={sidebarStyle}>
-            <div className="planner__sidebar-stack" onWheelCapture={handleSidebarWheelCapture}>
+            <div className="planner__sidebar-stack">
               {dailyRhythmPlan ? (
                 <DailyRhythmLane
                   plan={dailyRhythmPlan}

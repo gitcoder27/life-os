@@ -797,6 +797,18 @@ describe("day planner planning routes", () => {
   });
 
   it("clears every planner block without completing or deleting assigned tasks", async () => {
+    const previousCycle = ensurePlanningCycleRecord(PREVIOUS_DAY_START);
+    plannerBlocks.push({
+      id: "previous-template-block",
+      planningCycleId: previousCycle.id,
+      title: "Previous template",
+      startsAt: new Date("2026-03-13T08:00:00.000Z"),
+      endsAt: new Date("2026-03-13T09:00:00.000Z"),
+      sortOrder: 1,
+      createdAt: new Date("2026-03-13T07:00:00.000Z"),
+      updatedAt: new Date("2026-03-13T07:00:00.000Z"),
+    });
+
     const createFirstBlock = await app!.inject({
       method: "POST",
       url: `/api/planning/days/${DAY_ISO}/planner-blocks`,
@@ -830,7 +842,8 @@ describe("day planner planning routes", () => {
 
     expect(clearTimeline.statusCode).toBe(200);
     expect(JSON.parse(clearTimeline.body).plannerBlocks).toEqual([]);
-    expect(plannerBlocks).toEqual([]);
+    expect(plannerBlocks.filter((block) => block.planningCycleId !== previousCycle.id)).toEqual([]);
+    expect(planningCyclesByDate.get(DAY_START.toISOString())?.plannerBlocksClearedAt).toBeInstanceOf(Date);
     expect(plannerLinks).toEqual([]);
     expect(tasksById.get(TASK_ONE_ID)).toEqual(expect.objectContaining({
       dueAt: null,

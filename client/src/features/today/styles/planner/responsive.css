@@ -358,6 +358,10 @@
     width: 100%;
   }
 
+  .unplanned-task--recovery .unplanned-task__actions {
+    width: 100%;
+  }
+
   .unplanned-task__assign-btn {
     width: 100%;
     justify-content: center;
@@ -392,6 +396,13 @@
 
   .planner-block__task-actions {
     opacity: 1;
+  }
+
+  .daily-rhythm-item__actions,
+  .unplanned-task__actions {
+    opacity: 1;
+    pointer-events: auto;
+    transform: none;
   }
 
   .planner-block__task-handle {
