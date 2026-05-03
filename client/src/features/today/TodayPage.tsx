@@ -582,9 +582,10 @@ export function TodayPage({ routeMode }: { routeMode?: "execute" | "plan" }) {
   } as CSSProperties;
 
   const deskClass = mode === "execute" ? "today-desk " : "";
+  const focusActiveClass = activeFocusSession ? " today-layout--focus-active" : "";
 
   return (
-    <div className={`${deskClass}today-layout today-layout--v2`} style={todayLayoutStyle}>
+    <div className={`${deskClass}today-layout today-layout--v2${focusActiveClass}`} style={todayLayoutStyle}>
       <div className="today-top-rail" ref={topRailRef}>
         <CommandBar
           mode={mode}
@@ -613,7 +614,7 @@ export function TodayPage({ routeMode }: { routeMode?: "execute" | "plan" }) {
         <div className="today-execute-v2">
           <div className="today-main-v2">
             <section
-              className={`today-workbench${workbenchResizing ? " today-workbench--resizing" : ""}`}
+              className={`today-workbench${workbenchResizing ? " today-workbench--resizing" : ""}${activeFocusSession ? " today-workbench--focus-active" : ""}`}
               aria-label="Today workbench"
               ref={workbenchRef}
             >

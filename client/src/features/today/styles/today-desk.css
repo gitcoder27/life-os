@@ -224,6 +224,18 @@
   transform: translateY(-1px);
 }
 
+.today-desk.today-layout--focus-active .command-bar__capture,
+.today-desk.today-layout--focus-active .command-bar__mode-toggle,
+.today-desk.today-layout--focus-active .command-bar__overdue {
+  opacity: 0.48;
+  transition: opacity var(--dur) var(--ease);
+}
+
+.today-desk.today-layout--focus-active .command-bar__capture:hover,
+.today-desk.today-layout--focus-active .command-bar__mode-toggle:hover {
+  opacity: 1;
+}
+
 /* Mode toggle — minimal segmented control */
 .today-desk .command-bar__mode-toggle {
   display: inline-flex;
@@ -443,10 +455,19 @@
   box-shadow: none;
 }
 
+.today-desk .today-workbench--focus-active .task-inspector .focus-session-panel {
+  padding: 0 0 1.15rem;
+  border-bottom-color: rgba(240, 192, 96, 0.22);
+}
+
 .today-desk .task-inspector .focus-session-panel__title {
   font-family: var(--font-body);
   font-size: 1rem;
   letter-spacing: -0.01em;
+}
+
+.today-desk .today-workbench--focus-active .task-inspector .focus-session-panel__title {
+  color: var(--today-ink);
 }
 
 .today-desk .task-inspector .focus-session-panel__actions {
@@ -2182,6 +2203,51 @@
   line-height: 1.5;
 }
 
+.today-desk .execution-stream__focus-banner {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0.45rem;
+  padding: 0.85rem 0.95rem;
+  border: 1px solid rgba(240, 192, 96, 0.16);
+  border-radius: 0.75rem;
+  background:
+    linear-gradient(90deg, rgba(240, 192, 96, 0.11), rgba(240, 192, 96, 0.026) 68%, transparent);
+  box-shadow: inset 0.18rem 0 0 var(--accent-bright);
+}
+
+.today-desk .execution-stream__focus-copy {
+  display: flex;
+  align-items: baseline;
+  gap: 0.7rem;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.today-desk .execution-stream__focus-copy span {
+  color: var(--accent-bright);
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.today-desk .execution-stream__focus-copy strong {
+  min-width: 0;
+  color: var(--today-ink);
+  font-size: 0.98rem;
+  font-weight: 650;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.today-desk .execution-stream__focus-banner p {
+  margin: 0;
+  color: var(--today-ink-soft);
+  font-size: 0.84rem;
+  line-height: 1.45;
+}
+
 /* Completed — typography-led */
 .today-desk .execution-stream__completed {
   padding-top: 0.85rem;
@@ -2283,6 +2349,76 @@
 .today-desk .stream-task--selected .stream-task__quick-actions,
 .today-desk .stream-task--selected .stream-task__more {
   opacity: 1;
+}
+
+.today-desk .execution-stream--focus-active .execution-stream__section:not(.execution-stream__section--now) .execution-stream__section-header,
+.today-desk .execution-stream--focus-active .execution-stream__section-note {
+  opacity: 0.58;
+}
+
+.today-desk .stream-task--focus-muted {
+  opacity: 0.44;
+  filter: saturate(0.75);
+}
+
+.today-desk .stream-task--focus-muted:hover,
+.today-desk .stream-task--focus-muted:focus-within {
+  opacity: 0.72;
+}
+
+.today-desk .stream-task--focus-muted .stream-task__quick-actions,
+.today-desk .stream-task--focus-muted .stream-task__more,
+.today-desk .stream-task--focus-muted .stream-task__drag-handle {
+  opacity: 0;
+}
+
+.today-desk .stream-task--focus-muted:hover .stream-task__quick-actions,
+.today-desk .stream-task--focus-muted:hover .stream-task__more,
+.today-desk .stream-task--focus-muted:focus-within .stream-task__quick-actions,
+.today-desk .stream-task--focus-muted:focus-within .stream-task__more {
+  opacity: 0.32;
+}
+
+.today-desk .stream-task--focus-muted .stream-task__check,
+.today-desk .stream-task--focus-muted .stream-task__quick-btn,
+.today-desk .stream-task--focus-muted .stream-task__more {
+  cursor: not-allowed;
+}
+
+.today-desk .stream-task--focus-task {
+  padding-left: 0.95rem;
+  background:
+    radial-gradient(circle at 0 50%, rgba(240, 192, 96, 0.13), transparent 36%),
+    linear-gradient(90deg, rgba(240, 192, 96, 0.11), rgba(240, 192, 96, 0.024) 64%, transparent);
+  box-shadow: inset 0.22rem 0 0 var(--accent-bright);
+}
+
+.today-desk .stream-task--focus-task .stream-task__title {
+  color: var(--today-ink);
+  font-weight: 680;
+}
+
+.today-desk .stream-task--focus-task .stream-task__quick-actions,
+.today-desk .stream-task--focus-task .stream-task__more {
+  opacity: 1;
+}
+
+.today-desk .today-workbench--focus-active .today-workbench__support {
+  opacity: 0.46;
+  filter: saturate(0.8);
+  transition:
+    opacity var(--dur) var(--ease),
+    filter var(--dur) var(--ease);
+}
+
+.today-desk .today-workbench--focus-active .today-workbench__support:hover,
+.today-desk .today-workbench--focus-active .today-workbench__support:focus-within {
+  opacity: 0.86;
+  filter: none;
+}
+
+.today-desk .today-workbench--focus-active .task-inspector__body {
+  opacity: 0.84;
 }
 
 /* Context rail - compact summaries, no stacked card wall. */

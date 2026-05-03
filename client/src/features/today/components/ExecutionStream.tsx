@@ -124,7 +124,7 @@ export function ExecutionStream({
   const totalAll = executionTasks.length + pendingOverdueTasks.length;
 
   return (
-    <section className="execution-stream">
+    <section className={`execution-stream${activeFocusSession ? " execution-stream--focus-active" : ""}`}>
       <div className="execution-stream__header">
         <div className="execution-stream__heading">
           <p className="execution-stream__eyebrow">Today&apos;s work</p>
@@ -141,6 +141,18 @@ export function ExecutionStream({
           </div>
         </div>
       </div>
+
+      {activeFocusSession ? (
+        <div className="execution-stream__focus-banner" aria-live="polite">
+          <div className="execution-stream__focus-copy">
+            <span>{activeFocusSession.depth === "deep" ? "Deep focus active" : "Focus active"}</span>
+            <strong>{activeFocusSession.task.title}</strong>
+          </div>
+          {activeFocusSession.task.nextAction?.trim() ? (
+            <p>{activeFocusSession.task.nextAction}</p>
+          ) : null}
+        </div>
+      ) : null}
 
       {sections.length === 0 && completedTasks.length === 0 ? (
         <div className="execution-stream__empty">
@@ -291,7 +303,7 @@ function StreamSectionGroup({
                   selected={selectedTaskId === task.id}
                   isOverdue={isOverdue}
                   onSelectTask={onSelectTask}
-                  sortableDisabled={!isSortable || taskActions.isPending}
+                  sortableDisabled={!isSortable || taskActions.isPending || Boolean(activeFocusSession)}
                 />
               );
             })}
@@ -379,6 +391,8 @@ function StreamTaskRow({
   const isDone = task.status === "completed";
   const isDropped = task.status === "dropped";
   const isPending = task.status === "pending";
+  const isFocusedTask = activeFocusSession?.taskId === task.id;
+  const isFocusLocked = Boolean(activeFocusSession && !isFocusedTask);
 
   return (
     <div
@@ -389,6 +403,8 @@ function StreamTaskRow({
         (isDropped ? " stream-task--dropped" : "") +
         (highlight ? " stream-task--highlight" : "") +
         (selected ? " stream-task--selected" : "") +
+        (isFocusedTask ? " stream-task--focus-task" : "") +
+        (isFocusLocked ? " stream-task--focus-muted" : "") +
         (isOverdue ? " stream-task--overdue" : "") +
         (isDragging ? " stream-task--dragging" : "")
       }
@@ -434,7 +450,7 @@ function StreamTaskRow({
         onClick={() =>
           taskActions.changeStatus(task.id, isDone || isDropped ? "pending" : "completed")
         }
-        disabled={taskActions.isPending}
+        disabled={taskActions.isPending || isFocusLocked}
         aria-label={isDone || isDropped ? "Reopen task" : "Complete task"}
       >
         {isDone ? <CheckIcon /> : null}
@@ -476,8 +492,8 @@ function StreamTaskRow({
             className="stream-task__quick-btn"
             type="button"
             onClick={() => taskActions.moveToTomorrow(task.id)}
-            disabled={taskActions.isPending}
-            title="Move to tomorrow"
+            disabled={taskActions.isPending || isFocusLocked}
+            title={isFocusLocked ? "Finish or stop the active focus before changing another task." : "Move to tomorrow"}
             aria-label="Move to tomorrow"
           >
             →
@@ -491,7 +507,9 @@ function StreamTaskRow({
           className="stream-task__more"
           type="button"
           onClick={() => setMenuOpen(!menuOpen)}
+          disabled={isFocusLocked}
           aria-label="Task actions"
+          title={isFocusLocked ? "Finish or stop the active focus before changing another task." : undefined}
         >
           <MoreIcon />
         </button>
