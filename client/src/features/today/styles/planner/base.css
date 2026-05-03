@@ -700,6 +700,23 @@ body.planner-dragging-cursor * {
   flex-wrap: wrap;
 }
 
+.planner__hours-danger {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.55rem;
+  padding-left: 0.85rem;
+  border-left: 1px solid rgba(201,85,76,0.16);
+}
+
+.planner__hours-danger span {
+  align-self: center;
+  font-size: var(--fs-micro);
+  font-weight: 700;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
 .planner__hours-error {
   width: 100%;
   font-size: var(--fs-small);

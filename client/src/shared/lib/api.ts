@@ -87,6 +87,7 @@ export {
   useApplyTaskTemplateMutation,
   useBulkUpdateTasksMutation,
   useCarryForwardTaskMutation,
+  useClearPlannerBlocksMutation,
   useCommitTaskMutation,
   useCreatePlannerBlockMutation,
   useCreateTaskMutation,

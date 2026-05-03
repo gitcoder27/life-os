@@ -442,6 +442,32 @@ export const useDeletePlannerBlockMutation = (date: string) => {
   });
 };
 
+export const useClearPlannerBlocksMutation = (date: string) => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: () =>
+      apiRequest<DayPlannerBlocksMutationResponse>(`/api/planning/days/${date}/planner-blocks`, {
+        method: "DELETE",
+      }),
+    meta: { errorMessage: "Timeline clear failed." },
+    onSuccess: (response) => {
+      queryClient.setQueryData<DayPlanResponse>(
+        queryKeys.dayPlan(date),
+        (current) =>
+          current
+            ? {
+                ...current,
+                generatedAt: response.generatedAt,
+                plannerBlocks: response.plannerBlocks,
+              }
+            : current,
+      );
+      invalidateCoreData(queryClient, date);
+    },
+  });
+};
+
 export const useReorderPlannerBlocksMutation = (date: string) => {
   const queryClient = useQueryClient();
 

@@ -58,6 +58,7 @@ type PlanningCycleRecord = {
   cycleType: "DAY";
   cycleStartDate: Date;
   cycleEndDate: Date;
+  plannerBlocksClearedAt: Date | null;
   theme: null;
   priorities: [];
 };
@@ -75,6 +76,7 @@ type CyclePriorityRecord = {
 
 const DAY_ISO = "2026-03-14";
 const DAY_START = new Date("2026-03-14T00:00:00.000Z");
+const PREVIOUS_DAY_START = new Date("2026-03-13T00:00:00.000Z");
 const NEXT_DAY_ISO = "2026-03-15";
 const NEXT_DAY_START = new Date("2026-03-15T00:00:00.000Z");
 const TASK_ONE_ID = "11111111-1111-4111-8111-111111111111";
@@ -153,6 +155,7 @@ describe("day planner planning routes", () => {
       cycleType: "DAY",
       cycleStartDate,
       cycleEndDate: cycleStartDate,
+      plannerBlocksClearedAt: null,
       theme: null,
       priorities: [],
     };
@@ -220,6 +223,23 @@ describe("day planner planning routes", () => {
           where?.userId_cycleType_cycleStartDate?.cycleStartDate ?? create.cycleStartDate;
 
         return ensurePlanningCycleRecord(cycleStartDate);
+      }),
+      update: vi.fn().mockImplementation(async ({ where, data }: any) => {
+        const cycle = getPlanningCycleById(where.id);
+        if (!cycle) {
+          throw new Error("Planning cycle not found");
+        }
+
+        const updatedCycle = {
+          ...cycle,
+          cycleEndDate: data.cycleEndDate ?? cycle.cycleEndDate,
+          plannerBlocksClearedAt:
+            data.plannerBlocksClearedAt === undefined
+              ? cycle.plannerBlocksClearedAt
+              : data.plannerBlocksClearedAt,
+        };
+        planningCyclesByDate.set(getCycleDateKey(updatedCycle.cycleStartDate), updatedCycle);
+        return { ...updatedCycle };
       }),
       findFirst: vi.fn().mockImplementation(async ({ where, orderBy, select }: any) => {
         let cycles = [...planningCyclesByDate.values()].filter((entry) => {
@@ -492,6 +512,13 @@ describe("day planner planning routes", () => {
 
         return getHydratedBlock(where.id);
       }),
+      deleteMany: vi.fn().mockImplementation(async ({ where }: any) => {
+        const ids = new Set((where?.id?.in ?? []) as string[]);
+        const before = plannerBlocks.length;
+        plannerBlocks = plannerBlocks.filter((entry) => !ids.has(entry.id));
+        plannerLinks = plannerLinks.filter((entry) => !ids.has(entry.blockId));
+        return { count: before - plannerBlocks.length };
+      }),
       delete: vi.fn().mockImplementation(async ({ where }: any) => {
         plannerBlocks = plannerBlocks.filter((entry) => entry.id !== where.id);
         plannerLinks = plannerLinks.filter((entry) => entry.blockId !== where.id);
@@ -503,7 +530,11 @@ describe("day planner planning routes", () => {
         let links = plannerLinks;
 
         if (where?.blockId) {
-          links = links.filter((entry) => entry.blockId === where.blockId);
+          if (where.blockId.in) {
+            links = links.filter((entry) => where.blockId.in.includes(entry.blockId));
+          } else {
+            links = links.filter((entry) => entry.blockId === where.blockId);
+          }
         }
 
         if (where?.taskId?.in) {
@@ -763,6 +794,66 @@ describe("day planner planning routes", () => {
         tasks: [],
       }),
     ]);
+  });
+
+  it("clears every planner block without completing or deleting assigned tasks", async () => {
+    const createFirstBlock = await app!.inject({
+      method: "POST",
+      url: `/api/planning/days/${DAY_ISO}/planner-blocks`,
+      payload: {
+        title: "Deep work",
+        startsAt: "2026-03-14T09:00:00.000Z",
+        endsAt: "2026-03-14T10:30:00.000Z",
+        taskIds: [TASK_ONE_ID],
+      },
+    });
+    const createSecondBlock = await app!.inject({
+      method: "POST",
+      url: `/api/planning/days/${DAY_ISO}/planner-blocks`,
+      payload: {
+        title: "Admin",
+        startsAt: "2026-03-14T13:00:00.000Z",
+        endsAt: "2026-03-14T13:30:00.000Z",
+        taskIds: [TASK_TWO_ID],
+      },
+    });
+
+    expect(createFirstBlock.statusCode).toBe(201);
+    expect(createSecondBlock.statusCode).toBe(201);
+    expect(tasksById.get(TASK_ONE_ID)?.dueAt?.toISOString()).toBe("2026-03-14T09:00:00.000Z");
+    expect(tasksById.get(TASK_TWO_ID)?.dueAt?.toISOString()).toBe("2026-03-14T13:00:00.000Z");
+
+    const clearTimeline = await app!.inject({
+      method: "DELETE",
+      url: `/api/planning/days/${DAY_ISO}/planner-blocks`,
+    });
+
+    expect(clearTimeline.statusCode).toBe(200);
+    expect(JSON.parse(clearTimeline.body).plannerBlocks).toEqual([]);
+    expect(plannerBlocks).toEqual([]);
+    expect(plannerLinks).toEqual([]);
+    expect(tasksById.get(TASK_ONE_ID)).toEqual(expect.objectContaining({
+      dueAt: null,
+      status: "PENDING",
+    }));
+    expect(tasksById.get(TASK_TWO_ID)).toEqual(expect.objectContaining({
+      dueAt: null,
+      status: "PENDING",
+    }));
+
+    const dayPlan = await app!.inject({
+      method: "GET",
+      url: `/api/planning/days/${DAY_ISO}`,
+    });
+
+    expect(dayPlan.statusCode).toBe(200);
+    expect(JSON.parse(dayPlan.body)).toEqual(expect.objectContaining({
+      plannerBlocks: [],
+      tasks: expect.arrayContaining([
+        expect.objectContaining({ id: TASK_ONE_ID, status: "pending" }),
+        expect.objectContaining({ id: TASK_TWO_ID, status: "pending" }),
+      ]),
+    }));
   });
 
   it("seeds a new day with the most recent planner block structure without carrying tasks", async () => {

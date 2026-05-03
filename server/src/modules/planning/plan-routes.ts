@@ -137,12 +137,14 @@ export const registerPlanningPlanRoutes: FastifyPluginAsync = async (app) => {
       cycleStartDate,
       cycleEndDate: cycleStartDate,
     });
-    await seedPlannerBlocksFromMostRecentDay(app.prisma, {
-      userId: user.id,
-      date: parsedDate,
-      planningCycleId: cycle.id,
-      timezone,
-    });
+    if (!cycle.plannerBlocksClearedAt) {
+      await seedPlannerBlocksFromMostRecentDay(app.prisma, {
+        userId: user.id,
+        date: parsedDate,
+        planningCycleId: cycle.id,
+        timezone,
+      });
+    }
     const [tasks, activeGoals, plannerBlocks, launch] = await Promise.all([
       app.prisma.task.findMany({
         where: {
@@ -512,9 +514,114 @@ export const registerPlanningPlanRoutes: FastifyPluginAsync = async (app) => {
         },
       });
       await normalizePlannerBlockSortOrders(tx, block.planningCycle.id);
+      const remainingBlocksCount = await tx.dayPlannerBlock.count({
+        where: {
+          planningCycleId: block.planningCycle.id,
+        },
+      });
+
+      if (remainingBlocksCount === 0) {
+        await tx.planningCycle.update({
+          where: {
+            id: block.planningCycle.id,
+          },
+          data: {
+            plannerBlocksClearedAt: new Date(),
+          },
+        });
+      }
     });
 
     return reply.status(204).send();
+  });
+
+  app.delete("/planning/days/:date/planner-blocks", async (request, reply) => {
+    const user = requireAuthenticatedUser(request);
+    const { date } = request.params as { date: IsoDateString };
+    const parsedDate = parseOrThrow(isoDateSchema, date);
+    const cycleStartDate = parseIsoDate(parsedDate);
+    const cycle = await ensurePlanningCycle(app, {
+      userId: user.id,
+      cycleType: "DAY",
+      cycleStartDate,
+      cycleEndDate: cycleStartDate,
+    });
+    const blocks = await app.prisma.dayPlannerBlock.findMany({
+      where: {
+        planningCycleId: cycle.id,
+      },
+      select: {
+        id: true,
+      },
+    });
+    const blockIds = blocks.map((block) => block.id);
+
+    if (blockIds.length === 0) {
+      await app.prisma.planningCycle.update({
+        where: {
+          id: cycle.id,
+        },
+        data: {
+          plannerBlocksClearedAt: new Date(),
+        },
+      });
+
+      const response: DayPlannerBlocksMutationResponse = withGeneratedAt({
+        plannerBlocks: [],
+      });
+
+      return reply.send(response);
+    }
+
+    const taskLinks = await app.prisma.dayPlannerBlockTask.findMany({
+      where: {
+        blockId: {
+          in: blockIds,
+        },
+      },
+      select: {
+        taskId: true,
+      },
+    });
+    const taskIds = [...new Set(taskLinks.map((link) => link.taskId))];
+
+    await app.prisma.$transaction(async (tx) => {
+      if (taskIds.length > 0) {
+        await tx.task.updateMany({
+          where: {
+            id: {
+              in: taskIds,
+            },
+          },
+          data: {
+            dueAt: null,
+          },
+        });
+      }
+
+      await tx.dayPlannerBlock.deleteMany({
+        where: {
+          id: {
+            in: blockIds,
+          },
+        },
+      });
+
+      await tx.planningCycle.update({
+        where: {
+          id: cycle.id,
+        },
+        data: {
+          plannerBlocksClearedAt: new Date(),
+        },
+      });
+    });
+
+    const response: DayPlannerBlocksMutationResponse = withGeneratedAt({
+      plannerBlocks: [],
+    });
+
+    return reply.send(response);
   });
 
   app.put("/planning/days/:date/planner-blocks/order", async (request, reply) => {

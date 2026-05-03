@@ -2,6 +2,7 @@ import {
   useCreatePlannerBlockMutation,
   useUpdatePlannerBlockMutation,
   useDeletePlannerBlockMutation,
+  useClearPlannerBlocksMutation,
   useReorderPlannerBlocksMutation,
   useReplacePlannerBlockTasksMutation,
   useRemovePlannerBlockTaskMutation,
@@ -12,6 +13,7 @@ export function usePlannerActions(date: string) {
   const createBlock = useCreatePlannerBlockMutation(date);
   const updateBlock = useUpdatePlannerBlockMutation(date);
   const deleteBlock = useDeletePlannerBlockMutation(date);
+  const clearBlocks = useClearPlannerBlocksMutation(date);
   const reorderBlocks = useReorderPlannerBlocksMutation(date);
   const replaceBlockTasks = useReplacePlannerBlockTasksMutation(date);
   const removeBlockTask = useRemovePlannerBlockTaskMutation(date);
@@ -20,6 +22,7 @@ export function usePlannerActions(date: string) {
     createBlock.isPending ||
     updateBlock.isPending ||
     deleteBlock.isPending ||
+    clearBlocks.isPending ||
     reorderBlocks.isPending ||
     replaceBlockTasks.isPending ||
     removeBlockTask.isPending;
@@ -28,6 +31,7 @@ export function usePlannerActions(date: string) {
     createBlock.error,
     updateBlock.error,
     deleteBlock.error,
+    clearBlocks.error,
     reorderBlocks.error,
     replaceBlockTasks.error,
     removeBlockTask.error,
@@ -61,6 +65,10 @@ export function usePlannerActions(date: string) {
     }
 
     await deleteBlock.mutateAsync(block.id);
+  }
+
+  function clearTimeline() {
+    return clearBlocks.mutateAsync();
   }
 
   function reorder(blockIds: string[]) {
@@ -215,6 +223,7 @@ export function usePlannerActions(date: string) {
     assignTaskToBlock,
     assignTasksToBlock,
     removeTaskFromBlock,
+    clearTimeline,
     unplanTaskIdsFromBlock,
     unplanPendingTasksFromBlocks,
     reorderTasksInBlock,

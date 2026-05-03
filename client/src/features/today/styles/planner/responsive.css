@@ -99,6 +99,15 @@
     width: 100%;
   }
 
+  .planner__hours-danger {
+    width: 100%;
+    justify-content: space-between;
+    padding-left: 0;
+    padding-top: 0.65rem;
+    border-left: 0;
+    border-top: 1px solid rgba(201,85,76,0.16);
+  }
+
   .planner__sidebar-pane {
     position: static;
     max-height: none;
@@ -231,6 +240,15 @@
 
   .planner__hours-actions .button {
     flex: 1;
+  }
+
+  .planner__hours-danger {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .planner__hours-danger span {
+    align-self: flex-start;
   }
 
   /* On mobile, blocks still use absolute positioning */

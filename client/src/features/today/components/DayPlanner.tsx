@@ -489,6 +489,23 @@ export function DayPlanner({
     setShowHoursEditor(false);
   }
 
+  function handleClearTimeline() {
+    if (!isEditable || orderedBlocks.length === 0 || actions.isPending) {
+      return;
+    }
+
+    const confirmed = window.confirm(
+      "Clear the timeline? Time blocks will be deleted and assigned tasks will move back to unplanned.",
+    );
+    if (!confirmed) {
+      return;
+    }
+
+    setFormDraft(null);
+    setQuickEditRequest(null);
+    void actions.clearTimeline();
+  }
+
   function handleCleanupUnplanAll() {
     if (!isLiveDate || !isEditable || execution.slippedBlocks.length === 0) {
       return;
@@ -704,6 +721,20 @@ export function DayPlanner({
               </button>
             </div>
           </div>
+          {isEditable ? (
+            <div className="planner__hours-danger">
+              <span>Timeline</span>
+              <button
+                className="button button--danger button--small"
+                type="button"
+                onClick={handleClearTimeline}
+                disabled={orderedBlocks.length === 0 || actions.isPending}
+                title="Delete all time blocks and move assigned tasks back to unplanned"
+              >
+                Clear timeline
+              </button>
+            </div>
+          ) : null}
           {hoursValidation ? <div className="planner__hours-error">{hoursValidation}</div> : null}
         </div>
       ) : null}
