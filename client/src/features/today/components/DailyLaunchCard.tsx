@@ -34,7 +34,7 @@ export function DailyLaunchCard({
   mustWinTask,
 }: {
   date: string;
-  tasks: Array<Pick<TaskItem, "id" | "title" | "status">>;
+  tasks: Array<Pick<TaskItem, "id" | "title" | "status" | "scheduledForDate">>;
   launch: DailyLaunchItem | null;
   mustWinTask: TaskItem | null;
 }) {
@@ -80,6 +80,9 @@ export function DailyLaunchCard({
 
   async function handleSave() {
     let mustWinTaskId = selectedTaskId || null;
+    const selectedTask = mustWinTaskId
+      ? focusTasks.find((task) => task.id === mustWinTaskId)
+      : null;
 
     if (!mustWinTaskId && newTaskTitle.trim()) {
       const response = await createTaskMutation.mutateAsync({
@@ -96,10 +99,18 @@ export function DailyLaunchCard({
       return;
     }
 
-    await updateTaskMutation.mutateAsync({
-      taskId: mustWinTaskId,
-      nextAction: nextAction.trim() || null,
-    });
+    if (selectedTask?.scheduledForDate && selectedTask.scheduledForDate < date) {
+      await updateTaskMutation.mutateAsync({
+        taskId: mustWinTaskId,
+        scheduledForDate: date,
+        nextAction: nextAction.trim() || null,
+      });
+    } else {
+      await updateTaskMutation.mutateAsync({
+        taskId: mustWinTaskId,
+        nextAction: nextAction.trim() || null,
+      });
+    }
 
     await upsertDayLaunchMutation.mutateAsync({
       mustWinTaskId,
@@ -135,6 +146,7 @@ export function DailyLaunchCard({
           tasks={focusTasks}
           selectedTaskId={selectedTaskId}
           onSelectTaskId={setSelectedTaskId}
+          referenceDate={date}
         />
 
         <div className="daily-launch__primary-fields">

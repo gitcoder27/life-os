@@ -392,6 +392,7 @@ function FocusStageSetup({
             tasks={focusTasks}
             selectedTaskId={selectedTaskId}
             onSelectTaskId={setSelectedTaskId}
+            referenceDate={date}
           />
 
           {!selectedTaskId ? (

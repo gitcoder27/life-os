@@ -627,7 +627,7 @@ export function TodayPage({ routeMode }: { routeMode?: "execute" | "plan" }) {
                     />
                     <DailyLaunchCard
                       date={data.today}
-                      tasks={data.executionTasks}
+                      tasks={selectableTasks}
                       launch={data.launch}
                       mustWinTask={data.mustWinTask}
                     />
