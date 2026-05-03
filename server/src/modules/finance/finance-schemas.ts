@@ -1,11 +1,15 @@
 import type { IsoDateString, IsoMonthString } from "@life-os/contracts";
+import {
+  isoMonthStringSchema,
+  recurrenceInputSchema,
+} from "@life-os/contracts";
 import { z } from "zod";
 
 import { createIsoDateRangeQuerySchema, isoDateStringSchema } from "../../lib/validation/date-range.js";
 
 const isoDateSchema = isoDateStringSchema;
 
-export const isoMonthSchema = z.string().regex(/^\d{4}-\d{2}$/) as unknown as z.ZodType<IsoMonthString>;
+export const isoMonthSchema = isoMonthStringSchema as z.ZodType<IsoMonthString>;
 
 const expenseSourceSchema = z.enum(["manual", "quick_capture", "template"]);
 const recurringExpenseStatusSchema = z.enum(["active", "paused", "archived"]);
@@ -14,39 +18,6 @@ const financeTransactionTypeSchema = z.enum(["income", "expense", "transfer", "a
 const recurringIncomeStatusSchema = z.enum(["active", "paused", "archived"]);
 const creditCardStatusSchema = z.enum(["active", "archived"]);
 const loanStatusSchema = z.enum(["active", "paid_off", "archived"]);
-const recurrenceExceptionActionSchema = z.enum(["skip", "do_once", "reschedule"]);
-const recurrenceRuleSchema = z.object({
-  frequency: z.enum(["daily", "weekly", "monthly_nth_weekday", "interval"]),
-  startsOn: isoDateSchema,
-  interval: z.number().int().positive().max(365).optional(),
-  daysOfWeek: z.array(z.number().int().min(0).max(6)).max(7).optional(),
-  nthWeekday: z
-    .object({
-      ordinal: z.union([z.literal(-1), z.literal(1), z.literal(2), z.literal(3), z.literal(4)]),
-      dayOfWeek: z.number().int().min(0).max(6),
-    })
-    .optional(),
-  end: z
-    .object({
-      type: z.enum(["never", "on_date", "after_occurrences"]),
-      until: isoDateSchema.nullable().optional(),
-      occurrenceCount: z.number().int().positive().optional(),
-    })
-    .optional(),
-});
-const recurrenceInputSchema = z.object({
-  rule: recurrenceRuleSchema,
-  exceptions: z
-    .array(
-      z.object({
-        occurrenceDate: isoDateSchema,
-        action: recurrenceExceptionActionSchema,
-        targetDate: isoDateSchema.nullable().optional(),
-      }),
-    )
-    .max(180)
-    .optional(),
-});
 
 export const createExpenseSchema = z.object({
   expenseCategoryId: z.string().uuid().nullable().optional(),

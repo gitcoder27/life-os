@@ -308,8 +308,8 @@ const MonthlyLockedReviewPanels = ({
     return null;
   }
 
-  const monthlyThreeOutcomes = Array.isArray(existingReview.threeOutcomes)
-    ? existingReview.threeOutcomes
+  const monthlyThreeOutcomes = Array.isArray(existingReview.nextMonthOutcomes)
+    ? existingReview.nextMonthOutcomes.map((outcome) => outcome.title)
     : [];
   const monthlyHabitChanges = Array.isArray(existingReview.habitChanges)
     ? existingReview.habitChanges

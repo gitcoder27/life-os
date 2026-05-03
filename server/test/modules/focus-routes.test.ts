@@ -374,6 +374,26 @@ describe("focus routes", () => {
     );
   });
 
+  it("maps concurrent active-session unique conflicts to a safe 409", async () => {
+    (prisma.focusSession as { create: ReturnType<typeof vi.fn> }).create.mockRejectedValueOnce({
+      code: "P2002",
+    });
+
+    const response = await app!.inject({
+      method: "POST",
+      url: "/api/focus/sessions",
+      payload: {
+        taskId: TASK_ID,
+        plannedMinutes: 30,
+      },
+    });
+
+    expect(response.statusCode).toBe(409);
+    expect(parseBody<{ message: string }>(response.body).message).toBe(
+      "Finish the current focus session before starting another one.",
+    );
+  });
+
   it("captures distractions and exposes the active session", async () => {
     sessionsById.set(SESSION_ID, buildSession(SESSION_ID));
 

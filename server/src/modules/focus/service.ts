@@ -110,6 +110,23 @@ function appendLine(currentValue: string | null | undefined, nextLine: string | 
   return currentValue ? `${currentValue}\n${nextLine}` : nextLine;
 }
 
+function isPrismaUniqueConstraintError(error: unknown) {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    (error as { code?: unknown }).code === "P2002"
+  );
+}
+
+function buildActiveSessionConflictError() {
+  return new AppError({
+    statusCode: 409,
+    code: "CONFLICT",
+    message: "Finish the current focus session before starting another one.",
+  });
+}
+
 function buildGoalSummary(goal: FocusSessionRecord["task"]["goal"]) {
   if (!goal) {
     return null;
@@ -319,11 +336,7 @@ export async function createFocusSession(
   });
 
   if (activeSession) {
-    throw new AppError({
-      statusCode: 409,
-      code: "CONFLICT",
-      message: "Finish the current focus session before starting another one.",
-    });
+    throw buildActiveSessionConflictError();
   }
 
   const task = ensureTaskCanStartFocus(await prisma.task.findFirst({
@@ -356,6 +369,12 @@ export async function createFocusSession(
       startedAt: now,
     },
     include: focusSessionInclude,
+  }).catch((error: unknown) => {
+    if (isPrismaUniqueConstraintError(error)) {
+      throw buildActiveSessionConflictError();
+    }
+
+    throw error;
   });
 
   return serializeFocusSession(session);

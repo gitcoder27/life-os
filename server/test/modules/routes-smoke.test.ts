@@ -4584,7 +4584,7 @@ describe("module route smoke tests", () => {
     const update = vi.fn().mockResolvedValue({});
     const findFirst = vi.fn().mockResolvedValue(null);
     const notificationFindFirst = vi.fn().mockResolvedValue(null);
-    const notificationCreate = vi.fn().mockResolvedValue({});
+    const notificationCreateMany = vi.fn().mockResolvedValue({ count: 1 });
     const auditEventCreate = vi.fn().mockResolvedValue({});
 
     prisma.task = {
@@ -4607,7 +4607,7 @@ describe("module route smoke tests", () => {
     } as any;
     prisma.notification = {
       findFirst: notificationFindFirst,
-      create: notificationCreate,
+      createMany: notificationCreateMany,
     } as any;
     prisma.auditEvent = {
       create: auditEventCreate,
@@ -4644,13 +4644,15 @@ describe("module route smoke tests", () => {
         }),
       }),
     );
-    expect(notificationCreate).toHaveBeenCalledWith(
+    expect(notificationCreateMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        data: expect.objectContaining({
-          notificationType: "inbox",
-          entityType: "inbox_zero",
-          entityId: expect.any(String),
-        }),
+        data: [
+          expect.objectContaining({
+            notificationType: "inbox",
+            entityType: "inbox_zero",
+            entityId: expect.any(String),
+          }),
+        ],
       }),
     );
     expect(notificationFindFirst).toHaveBeenCalled();

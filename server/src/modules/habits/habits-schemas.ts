@@ -8,13 +8,13 @@ import type {
   HabitTimingMode,
   HabitScheduleRule,
   IsoDateString,
-  RecurrenceInput,
   RoutinePeriod,
   RoutineItemCheckinRequest,
   RoutineTimingMode,
   UpdateHabitRequest,
   UpdateRoutineRequest,
 } from "@life-os/contracts";
+import { recurrenceInputSchema } from "@life-os/contracts";
 import { z } from "zod";
 
 import { isoDateStringSchema } from "../../lib/validation/date-range.js";
@@ -36,41 +36,6 @@ const habitDurationSchema = z.number().int().min(1).max(720);
 const habitScheduleRuleSchema = z.object({
   daysOfWeek: z.array(z.number().int().min(0).max(6)).max(7).optional(),
 }) as z.ZodType<HabitScheduleRule>;
-
-const recurrenceExceptionActionSchema = z.enum(["skip", "do_once", "reschedule"]);
-const recurrenceRuleSchema = z.object({
-  frequency: z.enum(["daily", "weekly", "monthly_nth_weekday", "interval"]),
-  startsOn: isoDateSchema,
-  interval: z.number().int().positive().max(365).optional(),
-  daysOfWeek: z.array(z.number().int().min(0).max(6)).max(7).optional(),
-  nthWeekday: z
-    .object({
-      ordinal: z.union([z.literal(-1), z.literal(1), z.literal(2), z.literal(3), z.literal(4)]),
-      dayOfWeek: z.number().int().min(0).max(6),
-    })
-    .optional(),
-  end: z
-    .object({
-      type: z.enum(["never", "on_date", "after_occurrences"]),
-      until: isoDateSchema.nullable().optional(),
-      occurrenceCount: z.number().int().positive().optional(),
-    })
-    .optional(),
-});
-
-const recurrenceInputSchema = z.object({
-  rule: recurrenceRuleSchema,
-  exceptions: z
-    .array(
-      z.object({
-        occurrenceDate: isoDateSchema,
-        action: recurrenceExceptionActionSchema,
-        targetDate: isoDateSchema.nullable().optional(),
-      }),
-    )
-    .max(180)
-    .optional(),
-}) as z.ZodType<RecurrenceInput>;
 
 const routineItemInputSchema = z.object({
   id: z.string().uuid().optional(),

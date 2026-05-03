@@ -8,6 +8,10 @@ import type {
   DeleteMealLogResponse,
   DeleteWaterLogResponse,
   DeleteWeightLogResponse,
+  CreateMealLogRequest,
+  CreateMealTemplateRequest,
+  CreateWaterLogRequest,
+  CreateWeightLogRequest,
   HealthGuidanceIntent,
   HealthGuidanceItem,
   HealthSummaryResponse,
@@ -25,6 +29,11 @@ import type {
   MealTemplateMutationResponse,
   MealTemplatesResponse,
   SaveMealPlanWeekRequest,
+  UpdateMealLogRequest,
+  UpdateMealTemplateRequest,
+  UpdateWaterLogRequest,
+  UpdateWeightLogRequest,
+  UpdateWorkoutDayRequest,
   WaterLogMutationResponse,
   WaterLogsResponse,
   WaterLogSource,
@@ -59,6 +68,15 @@ export type SaveMealPlanWeekPayload = SaveMealPlanWeekRequest;
 type DeleteWaterLogMutationResponse = DeleteWaterLogResponse;
 type DeleteMealLogMutationResponse = DeleteMealLogResponse;
 type DeleteWeightLogMutationResponse = DeleteWeightLogResponse;
+
+const invalidateHealthDate = (
+  queryClient: ReturnType<typeof useQueryClient>,
+  date: string,
+) => {
+  invalidateCoreData(queryClient, date, {
+    domains: ["health", "home", "score", "notifications"],
+  });
+};
 
 export const useHealthDataQuery = (date: string) =>
   useQuery({
@@ -118,13 +136,13 @@ export const useAddWaterMutation = (date: string) => {
         body: {
           amountMl,
           source: "quick_capture",
-        },
+        } satisfies CreateWaterLogRequest,
       }),
     meta: {
       successMessage: "Water logged.",
       errorMessage: "Water log failed.",
     },
-    onSuccess: () => invalidateCoreData(queryClient, date),
+    onSuccess: () => invalidateHealthDate(queryClient, date),
   });
 };
 
@@ -135,12 +153,7 @@ export const useUpdateWaterLogMutation = (date: string) => {
     mutationFn: ({
       waterLogId,
       ...payload
-    }: {
-      waterLogId: string;
-      occurredAt?: string;
-      amountMl?: number;
-      source?: "tap" | "quick_capture" | "manual";
-    }) =>
+    }: { waterLogId: string } & UpdateWaterLogRequest) =>
       apiRequest<WaterLogMutationResponse>(`/api/health/water-logs/${waterLogId}`, {
         method: "PATCH",
         body: payload,
@@ -149,7 +162,7 @@ export const useUpdateWaterLogMutation = (date: string) => {
       successMessage: "Water log updated.",
       errorMessage: "Water log update failed.",
     },
-    onSuccess: () => invalidateCoreData(queryClient, date),
+    onSuccess: () => invalidateHealthDate(queryClient, date),
   });
 };
 
@@ -165,7 +178,7 @@ export const useDeleteWaterLogMutation = (date: string) => {
       successMessage: "Water log deleted.",
       errorMessage: "Water log deletion failed.",
     },
-    onSuccess: () => invalidateCoreData(queryClient, date),
+    onSuccess: () => invalidateHealthDate(queryClient, date),
   });
 };
 
@@ -173,13 +186,7 @@ export const useAddMealMutation = (date: string) => {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (payload: {
-      description: string;
-      loggingQuality: "partial" | "meaningful" | "full";
-      mealSlot?: "breakfast" | "lunch" | "dinner" | "snack" | null;
-      mealTemplateId?: string | null;
-      mealPlanEntryId?: string | null;
-    }) =>
+    mutationFn: (payload: CreateMealLogRequest) =>
       apiRequest<MealLogMutationResponse>("/api/health/meal-logs", {
         method: "POST",
         body: payload,
@@ -188,7 +195,7 @@ export const useAddMealMutation = (date: string) => {
       successMessage: "Meal logged.",
       errorMessage: "Meal log failed.",
     },
-    onSuccess: () => invalidateCoreData(queryClient, date),
+    onSuccess: () => invalidateHealthDate(queryClient, date),
   });
 };
 
@@ -199,14 +206,7 @@ export const useUpdateMealLogMutation = (date: string) => {
     mutationFn: ({
       mealLogId,
       ...payload
-    }: {
-      mealLogId: string;
-      occurredAt?: string;
-      mealSlot?: "breakfast" | "lunch" | "dinner" | "snack" | null;
-      mealTemplateId?: string | null;
-      description?: string;
-      loggingQuality?: "partial" | "meaningful" | "full";
-    }) =>
+    }: { mealLogId: string } & UpdateMealLogRequest) =>
       apiRequest<MealLogMutationResponse>(`/api/health/meal-logs/${mealLogId}`, {
         method: "PATCH",
         body: payload,
@@ -215,7 +215,7 @@ export const useUpdateMealLogMutation = (date: string) => {
       successMessage: "Meal log updated.",
       errorMessage: "Meal log update failed.",
     },
-    onSuccess: () => invalidateCoreData(queryClient, date),
+    onSuccess: () => invalidateHealthDate(queryClient, date),
   });
 };
 
@@ -231,7 +231,7 @@ export const useDeleteMealLogMutation = (date: string) => {
       successMessage: "Meal log deleted.",
       errorMessage: "Meal log deletion failed.",
     },
-    onSuccess: () => invalidateCoreData(queryClient, date),
+    onSuccess: () => invalidateHealthDate(queryClient, date),
   });
 };
 
@@ -239,12 +239,7 @@ export const useWorkoutMutation = (date: string) => {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (payload: {
-      planType?: "workout" | "recovery" | "none";
-      plannedLabel?: string | null;
-      actualStatus?: "completed" | "recovery_respected" | "fallback" | "missed" | "none";
-      note?: string | null;
-    }) =>
+    mutationFn: (payload: UpdateWorkoutDayRequest) =>
       apiRequest<WorkoutDayMutationResponse>(`/api/health/workout-days/${date}`, {
         method: "PUT",
         body: payload,
@@ -253,7 +248,7 @@ export const useWorkoutMutation = (date: string) => {
       successMessage: "Workout updated.",
       errorMessage: "Workout update failed.",
     },
-    onSuccess: () => invalidateCoreData(queryClient, date),
+    onSuccess: () => invalidateHealthDate(queryClient, date),
   });
 };
 
@@ -261,12 +256,7 @@ export const useAddWeightMutation = (date: string) => {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (payload: {
-      weightValue: number;
-      unit?: string;
-      measuredOn?: string;
-      note?: string | null;
-    }) =>
+    mutationFn: (payload: CreateWeightLogRequest) =>
       apiRequest<WeightLogMutationResponse>("/api/health/weight-logs", {
         method: "POST",
         body: payload,
@@ -275,7 +265,7 @@ export const useAddWeightMutation = (date: string) => {
       successMessage: "Weight logged.",
       errorMessage: "Weight log failed.",
     },
-    onSuccess: () => invalidateCoreData(queryClient, date),
+    onSuccess: () => invalidateHealthDate(queryClient, date),
   });
 };
 
@@ -286,13 +276,7 @@ export const useUpdateWeightLogMutation = (date: string) => {
     mutationFn: ({
       weightLogId,
       ...payload
-    }: {
-      weightLogId: string;
-      measuredOn?: string;
-      weightValue?: number;
-      unit?: string;
-      note?: string | null;
-    }) =>
+    }: { weightLogId: string } & UpdateWeightLogRequest) =>
       apiRequest<WeightLogMutationResponse>(`/api/health/weight-logs/${weightLogId}`, {
         method: "PATCH",
         body: payload,
@@ -301,7 +285,7 @@ export const useUpdateWeightLogMutation = (date: string) => {
       successMessage: "Weight log updated.",
       errorMessage: "Weight log update failed.",
     },
-    onSuccess: () => invalidateCoreData(queryClient, date),
+    onSuccess: () => invalidateHealthDate(queryClient, date),
   });
 };
 
@@ -317,7 +301,7 @@ export const useDeleteWeightLogMutation = (date: string) => {
       successMessage: "Weight log deleted.",
       errorMessage: "Weight log deletion failed.",
     },
-    onSuccess: () => invalidateCoreData(queryClient, date),
+    onSuccess: () => invalidateHealthDate(queryClient, date),
   });
 };
 
@@ -332,18 +316,7 @@ export const useCreateMealTemplateMutation = () => {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (payload: {
-      name: string;
-      mealSlot?: "breakfast" | "lunch" | "dinner" | "snack" | null;
-      description?: string;
-      servings?: number | null;
-      prepMinutes?: number | null;
-      cookMinutes?: number | null;
-      ingredients?: MealTemplateIngredient[];
-      instructions?: string[];
-      tags?: string[];
-      notes?: string | null;
-    }) =>
+    mutationFn: (payload: CreateMealTemplateRequest) =>
       apiRequest<MealTemplateMutationResponse>("/api/health/meal-templates", {
         method: "POST",
         body: payload,
@@ -354,7 +327,6 @@ export const useCreateMealTemplateMutation = () => {
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.mealTemplates });
-      void queryClient.invalidateQueries({ queryKey: ["health"] });
       void queryClient.invalidateQueries({ queryKey: ["mealPlanWeek"] });
     },
   });
@@ -367,20 +339,7 @@ export const useUpdateMealTemplateMutation = () => {
     mutationFn: ({
       mealTemplateId,
       ...payload
-    }: {
-      mealTemplateId: string;
-      name?: string;
-      mealSlot?: "breakfast" | "lunch" | "dinner" | "snack" | null;
-      description?: string | null;
-      servings?: number | null;
-      prepMinutes?: number | null;
-      cookMinutes?: number | null;
-      ingredients?: MealTemplateIngredient[];
-      instructions?: string[];
-      tags?: string[];
-      notes?: string | null;
-      archived?: boolean;
-    }) =>
+    }: { mealTemplateId: string } & UpdateMealTemplateRequest) =>
       apiRequest<MealTemplateMutationResponse>(`/api/health/meal-templates/${mealTemplateId}`, {
         method: "PATCH",
         body: payload,
@@ -391,7 +350,6 @@ export const useUpdateMealTemplateMutation = () => {
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.mealTemplates });
-      void queryClient.invalidateQueries({ queryKey: ["health"] });
       void queryClient.invalidateQueries({ queryKey: ["mealPlanWeek"] });
     },
   });
@@ -427,10 +385,10 @@ export const useSaveMealPlanWeekMutation = (
       errorMessage: options?.errorMessage ?? "Meal plan save failed.",
     },
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ["mealPlanWeek"] });
-      void queryClient.invalidateQueries({ queryKey: ["health"] });
-      void queryClient.invalidateQueries({ queryKey: ["tasks"] });
-      void queryClient.invalidateQueries({ queryKey: ["home"] });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.mealPlanWeek(startDate) });
+      invalidateCoreData(queryClient, startDate, {
+        domains: ["health", "tasks", "home", "score", "notifications"],
+      });
     },
   });
 };

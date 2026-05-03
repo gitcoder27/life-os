@@ -152,8 +152,8 @@ export async function ensureGeneratedNotification(
     return false;
   }
 
-  await prisma.notification.create({
-    data: {
+  const result = await prisma.notification.createMany({
+    data: [{
       userId: input.userId,
       notificationType: input.notificationType,
       severity: input.severity,
@@ -165,10 +165,11 @@ export async function ensureGeneratedNotification(
       deliveryKey,
       visibleFrom: input.visibleFrom ?? null,
       expiresAt: input.expiresAt ?? null,
-    },
+    }],
+    skipDuplicates: true,
   });
 
-  return true;
+  return result.count === 1;
 }
 
 export async function generateRuleNotifications(

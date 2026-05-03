@@ -168,7 +168,7 @@ export const useReviewDraftState = ({
       existing?.biggestWin ?? "",
       existing?.biggestLeak ?? "",
       existing?.nextMonthTheme ?? "",
-      existing?.threeOutcomes.join("\n") ?? "",
+      existing?.nextMonthOutcomes.map((outcome) => outcome.title).join("\n") ?? "",
     ];
 
     if (existing) {

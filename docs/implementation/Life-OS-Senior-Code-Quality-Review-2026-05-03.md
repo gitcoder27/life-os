@@ -252,27 +252,34 @@ Recommended fix:
 
 Date completed: 2026-05-03
 
-1. High-severity production dependency advisory: completed. `npm audit fix` updated `package-lock.json`; `fastify` now resolves to `5.8.5`, which clears `GHSA-247c-9743-5963`. Verification: `npm audit --omit=dev` to be rerun in final verification.
+1. High-severity production dependency advisory: completed. `npm audit fix` updated `package-lock.json`; `fastify` now resolves to `5.8.5`, which clears `GHSA-247c-9743-5963`. Tests added: not applicable for a lockfile-only advisory fix. Remaining manual verification: none. Final verification: `npm audit --omit=dev` found 0 vulnerabilities.
 
-2. Database separation guard ordering: completed. API, worker, and task-reminder CLI entrypoints now call `prepareRuntimeDatabase(env)`, which runs `assertDatabaseSeparation(env)` before database creation or migration. Tests added: `server/test/app/runtime-database.test.ts`.
+2. Database separation guard ordering: completed. API, worker, and task-reminder CLI entrypoints now call `prepareRuntimeDatabase(env)`, which runs `assertDatabaseSeparation(env)` before database creation or migration. Tests added: `server/test/app/runtime-database.test.ts`. Remaining manual verification: none.
 
-3. Weak/default production `SESSION_SECRET`: completed. Env parsing rejects default, common weak, repeated-character, and shorter-than-32-character production secrets. Tests added: `server/test/app/env.test.ts`.
+3. Weak/default production `SESSION_SECRET`: completed. Env parsing rejects default, common weak, repeated-character, and shorter-than-32-character production secrets. Tests added: `server/test/app/env.test.ts`. Remaining manual verification: confirm production secret rotation/value management during deployment.
 
-4. Internal 500 messages and DB URL logging: completed. Unknown 500 responses now return `Unexpected server error`, while known `AppError` messages are preserved. Startup DB connection logging now prints only host, port, and database. Tests added: `server/test/app/build-app.test.ts` and `server/test/app/env.test.ts`.
+4. Internal 500 messages and DB URL logging: completed. Unknown 500 responses now return `Unexpected server error`, while known `AppError` messages are preserved. Startup DB connection logging now prints only host, port, and database. Tests added: `server/test/app/build-app.test.ts` and `server/test/app/env.test.ts`. Remaining manual verification: inspect production startup logs after deploy to confirm only redacted database target details are emitted.
 
-5. Recurring income undo integrity: completed. Explicit undo transaction IDs must match the selected recurring income template or the legacy receipt match criteria before deletion. Test added: unrelated income transaction ID returns 404 without deleting or mutating the template in `server/test/modules/finance/routes.test.ts`.
+5. Recurring income undo integrity: completed. Explicit undo transaction IDs must match the selected recurring income template or the legacy receipt match criteria before deletion. Tests added: unrelated income transaction ID returns 404 without deleting or mutating the template in `server/test/modules/finance/routes.test.ts`. Remaining manual verification: none.
 
-6. Planning mutation response drift: completed. Client week-priority and month-focus mutations now use `PlanningPriorityMutationResponse` and `MonthFocusMutationResponse` from `@life-os/contracts`.
+6. Planning mutation response drift: completed. Client week-priority and month-focus mutations now use `PlanningPriorityMutationResponse` and `MonthFocusMutationResponse` from `@life-os/contracts`. Tests added: covered by `npm run typecheck` for the client/server/contracts boundary. Remaining manual verification: none.
 
-7. Regex-only backend ISO date validation: completed. Route/body/query schemas now import `isoDateStringSchema` for planning, reviews, admin, scoring, home, habits, onboarding, and related backend date parsing paths. Test added: impossible date `2026-02-31` is rejected in `server/test/modules/planning/day-planner-routes.test.ts`.
+7. Regex-only backend ISO date validation: completed. Route/body/query schemas now import `isoDateStringSchema` for planning, reviews, admin, scoring, home, habits, onboarding, and related backend date parsing paths. Tests added: impossible date `2026-02-31` is rejected in `server/test/modules/planning/day-planner-routes.test.ts`. Remaining manual verification: none.
 
-8. Automated off-server backups: operational path documented and template implementation added. New files: `deploy/scripts/life-os-postgres-backup.sh`, `deploy/systemd/life-os-postgres-backup.service`, and `deploy/systemd/life-os-postgres-backup.timer`. Runbooks updated in `docs/implementation/postgres-backup-strategy.md`, `production-deployment.md`, and `production-deployment-quick-reference.md`. Remaining manual verification: install on production, configure encrypted `RCLONE_REMOTE`, run the service once, and complete a restore test.
+8. Automated off-server backups: operational path documented and template implementation added. New files: `deploy/scripts/life-os-postgres-backup.sh`, `deploy/systemd/life-os-postgres-backup.service`, and `deploy/systemd/life-os-postgres-backup.timer`. Runbooks updated in `docs/implementation/postgres-backup-strategy.md`, `production-deployment.md`, and `production-deployment-quick-reference.md`. Tests added: deployment templates are covered by build/typecheck only. Remaining manual verification: install on production, configure encrypted `RCLONE_REMOTE`, run the service once, and complete a restore test.
 
 9. Worker scheduling: completed for production operation. Worker now supports `--schedule every-15-minutes|daily|weekly`, and systemd timer templates explicitly run each schedule. Tests added: `server/test/jobs/worker.test.ts`. Remaining manual verification: copy timer units to production, enable timers, and inspect `systemctl list-timers`.
 
-10. Core frontend overlay accessibility: completed for the highest-traffic overlays named in this review. Added shared `DialogSurface`/`useDialogAccessibility` with labelled dialog semantics, Escape close, focus trap/restore, and scroll locking. Migrated today task capture, shape day, stuck flow, finance setup drawer, and meal planner recipe picker/editor overlays. Remaining manual verification: keyboard/screen-reader smoke test in browser.
+10. Core frontend overlay accessibility: completed for the highest-traffic overlays named in this review. Added shared `DialogSurface`/`useDialogAccessibility` with labelled dialog semantics, Escape close, focus trap/restore, and scroll locking. Migrated today task capture, shape day, stuck flow, finance setup drawer, and meal planner recipe picker/editor overlays. Tests added: covered by `npm run typecheck` and `npm run build`; no committed client test runner exists yet. Remaining manual verification: keyboard/screen-reader smoke test in browser.
 
-11. Meal planner keyboard assignment: completed. Meal planner drag/drop now includes `KeyboardSensor`; empty slots are real buttons that open the recipe picker via keyboard, preserving the non-drag assignment path. Remaining manual verification: browser keyboard smoke test for recipe assignment.
+11. Meal planner keyboard assignment: completed. Meal planner drag/drop now includes `KeyboardSensor`; empty slots are real buttons that open the recipe picker via keyboard, preserving the non-drag assignment path. Tests added: covered by `npm run typecheck` and `npm run build`; no committed client test runner exists yet. Remaining manual verification: browser keyboard smoke test for recipe assignment.
+
+Final P1 verification on 2026-05-03:
+
+- `npm audit --omit=dev`: passed, 0 vulnerabilities.
+- `npm run typecheck`: passed.
+- `npm run test -w server`: passed, 49 test files and 273 tests.
+- `npm run build`: passed. Vite still reports the existing large-chunk warning.
 
 ## P2 Findings
 
@@ -501,6 +508,45 @@ Recommended fix:
 - Mark docs as "current-state" versus "target/aspirational".
 - Regenerate API error/contract docs from `packages/contracts`.
 - Update the implementation index to match actual active docs.
+
+## P2 Completion Notes
+
+Date completed: 2026-05-03
+
+12. Contracts package as runtime schema source of truth: completed for the shared P2 surfaces. `packages/contracts` now owns runtime Zod schemas for shared date/month strings, date-range queries, recurrence definitions/input/exceptions, common API error/meta shapes, settings requests, and notification snooze/preference shapes. Server validation now imports the shared date/range, recurrence, settings, and notification snooze schemas instead of keeping duplicate copies in the owning route/schema files. Tests added: client recurrence contract regression in `client/src/shared/lib/recurrence.test.ts`; server route/schema coverage continues through `npm run test -w server` and `npm run typecheck`. Remaining manual verification: none.
+
+13. Remaining client API modules duplicate contract types: completed for the drift-prone API DTO modules. Client API wrappers now import request/response/item types from `@life-os/contracts` for auth, onboarding, home, notifications, settings, focus, scoring, habits, health mutation payloads, reviews, goals, finance, and planning. Local client types that remain are query options, cache context shapes, UI aliases, or client-only composition results rather than server-owned DTO definitions. Tests added: `npm run typecheck` covers the client/contracts boundary; recurrence and invalidation helpers have focused client Vitest coverage. Remaining manual verification: none.
+
+14. Settings `displayName` nullability drift: completed. The settings API wrapper imports `SettingsProfileResponse`, `SettingsProfileMutationResponse`, and `UpdateSettingsProfileRequest` from contracts; `SettingsPage` coalesces `displayName: null` only at the text-input boundary and sends `null` for a blank saved name. Tests added: covered by client typecheck. Remaining manual verification: browser smoke test of clearing and saving the display name.
+
+15. Client recurrence input drift: completed. `client/src/shared/lib/recurrence.ts` imports and re-exports recurrence contract types instead of redefining `RecurrenceInput`, so recurrence exceptions are preserved at the client boundary. Tests added: `client/src/shared/lib/recurrence.test.ts` covers exception-bearing inputs and formatting helpers. Remaining manual verification: none.
+
+16. Overly broad query invalidation: completed. `invalidateCoreData` now accepts domain/date scopes and invalidates exact or predicate-matched query keys instead of clearing habits, health, finance, goals, reviews, history, and notifications for every core mutation. Health, habits, finance, reviews, and goals have domain-specific invalidation helpers or scoped invalidation calls. Tests added: `client/src/shared/lib/api/core.test.ts` covers date-scoped invalidation and task date matching. Remaining manual verification: watch the network panel around task, health, habit, finance, and review mutations in the browser.
+
+17. One active focus session per user: completed. The schema now documents/enforces the active-session invariant with a PostgreSQL partial unique index, and the P2 migration creates it idempotently for environments that do not already have it. Focus session creation now maps Prisma unique violations to the existing safe conflict response. Migration created: `server/prisma/migrations/20260503130000_p2_invariants_and_health_indexes/migration.sql`. Tests added: `server/test/modules/focus-routes.test.ts` covers the unique-violation path. Remaining manual verification: apply migrations against the target database.
+
+18. Duplicate active notifications under concurrent generation: completed. Active notification uniqueness is enforced with partial indexes for delivery keys and unread rule/entity/entityId notifications; generation now uses `createMany(..., skipDuplicates: true)` so concurrent duplicate generation is safely ignored. Migration created: `server/prisma/migrations/20260503130000_p2_invariants_and_health_indexes/migration.sql`. Tests added: `server/test/modules/notifications/service.test.ts`; notification mocks updated in planning and route smoke tests. Remaining manual verification: apply migrations against the target database.
+
+19. Health date-range indexes: completed. Prisma schema and migration now add `WaterLog(userId, occurredAt)`, `MealLog(userId, occurredAt)`, and `WeightLog(userId, measuredOn, createdAt)` indexes for health summary/history range queries. Migration created: `server/prisma/migrations/20260503130000_p2_invariants_and_health_indexes/migration.sql`. Tests added: covered by Prisma generate/typecheck/build. Remaining manual verification: apply migrations and inspect query plans only if production data volume warrants it.
+
+20. CI workflow and root quality gate: completed. Root scripts now include `audit:prod`, `test`, and `ci`; `.github/workflows/quality-gate.yml` runs `npm ci`, `npm audit --omit=dev`, `npm run typecheck`, `npm run build`, and `npm run test -w server`. Tests added: workflow is configuration-only and covered by local execution of the same commands. Remaining manual verification: first GitHub Actions run after pushing.
+
+21. Runtime/bootstrap and worker test strengthening: completed. Server test setup now builds contracts before tests that import runtime contract schemas. Worker coverage was strengthened for invalid schedule arguments, while existing startup/bootstrap coverage continues to protect runtime database ordering, env validation, error redaction, not-found responses, cookies, and CORS. Tests added/strengthened: `server/test/jobs/worker.test.ts`; server package `pretest` and `pretest:coverage` scripts. Remaining manual verification: production timer/service smoke test remains as documented in the P1 worker notes.
+
+22. Client test runner: completed. The client now has a Vitest test script and focused helper tests for contract-backed recurrence inputs and scoped query invalidation. Tests added: `client/src/shared/lib/recurrence.test.ts` and `client/src/shared/lib/api/core.test.ts`. Remaining manual verification: client component/browser flows still need manual smoke testing because this change intentionally avoided a broad React Testing Library rollout.
+
+23. Oversized files tied to P2 risks: completed with a focused boundary cleanup, not a cosmetic split. Changes avoided broad rewrites of large finance/health/goals UI and route files; only the risky API-boundary, cache-invalidation, notification, focus, and schema paths were refactored for the P2 issues. Tests added: covered by the targeted tests listed above. Remaining manual verification: future line-count refactors can be planned around concrete workflow risks rather than this P2 batch.
+
+24. Stale active docs: completed. `docs/prd/technical-architecture.md` now reflects the current stack and worker scheduling behavior; `docs/prd/api-contracts.md` now describes the flat `ApiError` and contracts runtime-schema ownership; `docs/implementation/README.md` was refreshed against the actual active implementation docs. This review document now records P2 completion notes. Tests added: documentation-only, verified by checking the implementation index paths exist. Remaining manual verification: continue updating docs as schema/routes evolve.
+
+Final P2 verification on 2026-05-03:
+
+- `npm audit --omit=dev`: passed, 0 vulnerabilities.
+- `npm run typecheck`: passed.
+- `npm run test -w server`: passed, 49 test files and 275 tests.
+- `npm run build`: passed. Vite still reports the existing large-chunk warning.
+- `npm run test:coverage -w server`: passed, 49 test files and 275 tests. Aggregate coverage: 79.24% lines/statements, 65.73% branches, 90.19% functions.
+- Additional check: `npm run test -w client` passed, 2 test files and 4 tests.
 
 ## P3 Findings
 

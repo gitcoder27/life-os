@@ -110,6 +110,15 @@ const invalidateFinanceCollections = (queryClient: ReturnType<typeof useQueryCli
   void queryClient.invalidateQueries({ queryKey: ["finance"] });
 };
 
+const invalidateFinanceDate = (
+  queryClient: ReturnType<typeof useQueryClient>,
+  date: string,
+) => {
+  invalidateCoreData(queryClient, date, {
+    domains: ["finance", "home", "score", "notifications"],
+  });
+};
+
 type FinanceDataQueryOptions = {
   enabled?: boolean;
   includeDashboard?: boolean;
@@ -333,7 +342,7 @@ export const useCreateExpenseMutation = (todayDate: string) => {
       successMessage: "Expense logged.",
       errorMessage: "Expense log failed.",
     },
-    onSuccess: () => invalidateCoreData(queryClient, todayDate),
+    onSuccess: () => invalidateFinanceDate(queryClient, todayDate),
   });
 };
 
@@ -360,7 +369,7 @@ export const useUpdateExpenseMutation = (todayDate: string) => {
       successMessage: "Expense updated.",
       errorMessage: "Expense update failed.",
     },
-    onSuccess: () => invalidateCoreData(queryClient, todayDate),
+    onSuccess: () => invalidateFinanceDate(queryClient, todayDate),
   });
 };
 
@@ -376,7 +385,7 @@ export const useDeleteExpenseMutation = (todayDate: string) => {
       successMessage: "Expense deleted.",
       errorMessage: "Expense deletion failed.",
     },
-    onSuccess: () => invalidateCoreData(queryClient, todayDate),
+    onSuccess: () => invalidateFinanceDate(queryClient, todayDate),
   });
 };
 
@@ -398,7 +407,7 @@ export const useCreateFinanceAccountMutation = (todayDate: string) => {
       successMessage: "Account added.",
       errorMessage: "Account creation failed.",
     },
-    onSuccess: () => invalidateCoreData(queryClient, todayDate),
+    onSuccess: () => invalidateFinanceDate(queryClient, todayDate),
   });
 };
 
@@ -424,7 +433,7 @@ export const useUpdateFinanceAccountMutation = (todayDate: string) => {
       successMessage: "Account updated.",
       errorMessage: "Account update failed.",
     },
-    onSuccess: () => invalidateCoreData(queryClient, todayDate),
+    onSuccess: () => invalidateFinanceDate(queryClient, todayDate),
   });
 };
 
@@ -451,7 +460,7 @@ export const useCreateFinanceTransactionMutation = (todayDate: string) => {
       successMessage: "Transaction added.",
       errorMessage: "Transaction failed.",
     },
-    onSuccess: () => invalidateCoreData(queryClient, todayDate),
+    onSuccess: () => invalidateFinanceDate(queryClient, todayDate),
   });
 };
 
@@ -476,7 +485,7 @@ export const useCreateRecurringIncomeMutation = (todayDate: string) => {
       successMessage: "Income plan added.",
       errorMessage: "Income plan failed.",
     },
-    onSuccess: () => invalidateCoreData(queryClient, todayDate),
+    onSuccess: () => invalidateFinanceDate(queryClient, todayDate),
   });
 };
 
@@ -505,7 +514,7 @@ export const useUpdateRecurringIncomeMutation = (todayDate: string) => {
       successMessage: "Income plan updated.",
       errorMessage: "Income plan update failed.",
     },
-    onSuccess: () => invalidateCoreData(queryClient, todayDate),
+    onSuccess: () => invalidateFinanceDate(queryClient, todayDate),
   });
 };
 
@@ -532,7 +541,7 @@ export const useReceiveRecurringIncomeMutation = (todayDate: string) => {
       successMessage: "Income received.",
       errorMessage: "Income receive failed.",
     },
-    onSuccess: () => invalidateCoreData(queryClient, todayDate),
+    onSuccess: () => invalidateFinanceDate(queryClient, todayDate),
   });
 };
 
@@ -558,7 +567,7 @@ export const useUndoRecurringIncomeReceiptMutation = (todayDate: string) => {
       successMessage: "Income receipt undone.",
       errorMessage: "Income undo failed.",
     },
-    onSuccess: () => invalidateCoreData(queryClient, todayDate),
+    onSuccess: () => invalidateFinanceDate(queryClient, todayDate),
   });
 };
 
@@ -586,7 +595,7 @@ export const useCreateCreditCardMutation = (todayDate: string) => {
       successMessage: "Card added.",
       errorMessage: "Card creation failed.",
     },
-    onSuccess: () => invalidateCoreData(queryClient, todayDate),
+    onSuccess: () => invalidateFinanceDate(queryClient, todayDate),
   });
 };
 
@@ -618,7 +627,7 @@ export const useUpdateCreditCardMutation = (todayDate: string) => {
       successMessage: "Card updated.",
       errorMessage: "Card update failed.",
     },
-    onSuccess: () => invalidateCoreData(queryClient, todayDate),
+    onSuccess: () => invalidateFinanceDate(queryClient, todayDate),
   });
 };
 
@@ -643,7 +652,7 @@ export const usePayCreditCardMutation = (todayDate: string) => {
       successMessage: "Card payment logged.",
       errorMessage: "Card payment failed.",
     },
-    onSuccess: () => invalidateCoreData(queryClient, todayDate),
+    onSuccess: () => invalidateFinanceDate(queryClient, todayDate),
   });
 };
 
@@ -673,7 +682,7 @@ export const useCreateLoanMutation = (todayDate: string) => {
       successMessage: "Loan added.",
       errorMessage: "Loan creation failed.",
     },
-    onSuccess: () => invalidateCoreData(queryClient, todayDate),
+    onSuccess: () => invalidateFinanceDate(queryClient, todayDate),
   });
 };
 
@@ -707,7 +716,7 @@ export const useUpdateLoanMutation = (todayDate: string) => {
       successMessage: "Loan updated.",
       errorMessage: "Loan update failed.",
     },
-    onSuccess: () => invalidateCoreData(queryClient, todayDate),
+    onSuccess: () => invalidateFinanceDate(queryClient, todayDate),
   });
 };
 
@@ -732,7 +741,7 @@ export const usePayLoanMutation = (todayDate: string) => {
       successMessage: "EMI logged.",
       errorMessage: "EMI payment failed.",
     },
-    onSuccess: () => invalidateCoreData(queryClient, todayDate),
+    onSuccess: () => invalidateFinanceDate(queryClient, todayDate),
   });
 };
 
@@ -755,7 +764,7 @@ export const useCreateBillMutation = (todayDate: string) => {
       successMessage: "Bill added.",
       errorMessage: "Bill creation failed.",
     },
-    onSuccess: () => invalidateCoreData(queryClient, todayDate),
+    onSuccess: () => invalidateFinanceDate(queryClient, todayDate),
   });
 };
 
@@ -783,7 +792,7 @@ export const usePayAndLogBillMutation = (todayDate: string) => {
       successMessage: "Bill paid and expense logged.",
       errorMessage: "Bill payment failed.",
     },
-    onSuccess: () => invalidateCoreData(queryClient, todayDate),
+    onSuccess: () => invalidateFinanceDate(queryClient, todayDate),
   });
 };
 
@@ -806,7 +815,7 @@ export const useMarkBillPaidMutation = (todayDate: string) => {
       successMessage: "Bill marked paid.",
       errorMessage: "Bill update failed.",
     },
-    onSuccess: () => invalidateCoreData(queryClient, todayDate),
+    onSuccess: () => invalidateFinanceDate(queryClient, todayDate),
   });
 };
 
@@ -829,7 +838,7 @@ export const useLinkBillExpenseMutation = (todayDate: string) => {
       successMessage: "Expense linked to bill.",
       errorMessage: "Expense link failed.",
     },
-    onSuccess: () => invalidateCoreData(queryClient, todayDate),
+    onSuccess: () => invalidateFinanceDate(queryClient, todayDate),
   });
 };
 
@@ -852,7 +861,7 @@ export const useRescheduleBillMutation = (todayDate: string) => {
       successMessage: "Bill rescheduled.",
       errorMessage: "Bill reschedule failed.",
     },
-    onSuccess: () => invalidateCoreData(queryClient, todayDate),
+    onSuccess: () => invalidateFinanceDate(queryClient, todayDate),
   });
 };
 
@@ -868,7 +877,7 @@ export const useDismissBillMutation = (todayDate: string) => {
       successMessage: "Bill dismissed.",
       errorMessage: "Bill dismissal failed.",
     },
-    onSuccess: () => invalidateCoreData(queryClient, todayDate),
+    onSuccess: () => invalidateFinanceDate(queryClient, todayDate),
   });
 };
 
@@ -986,7 +995,6 @@ export const useUpdateFinanceMonthPlanMutation = (month: string) => {
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.finance(month) });
-      void queryClient.invalidateQueries({ queryKey: ["finance"] });
     },
   });
 };
@@ -1009,7 +1017,6 @@ export const useUpdateFinanceGoalMutation = (month: string) => {
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.finance(month) });
-      void queryClient.invalidateQueries({ queryKey: ["finance"] });
       void queryClient.invalidateQueries({ queryKey: queryKeys.goalsAll });
     },
   });

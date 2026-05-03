@@ -7,14 +7,14 @@ describe("reminder execution", () => {
     const now = new Date("2026-03-14T06:30:00.000Z");
     const update = vi.fn().mockResolvedValue({});
     const notificationFindFirst = vi.fn().mockResolvedValue(null);
-    const notificationCreate = vi.fn().mockResolvedValue({});
+    const notificationCreateMany = vi.fn().mockResolvedValue({ count: 1 });
     const transaction = {
       task: {
         update,
       },
       notification: {
         findFirst: notificationFindFirst,
-        create: notificationCreate,
+        createMany: notificationCreateMany,
       },
     };
     const prisma = {
@@ -55,13 +55,15 @@ describe("reminder execution", () => {
         }),
       }),
     );
-    expect(notificationCreate).toHaveBeenCalledWith(
+    expect(notificationCreateMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        data: expect.objectContaining({
-          notificationType: "task",
-          entityType: "task",
-          ruleKey: "reminder_due",
-        }),
+        data: [
+          expect.objectContaining({
+            notificationType: "task",
+            entityType: "task",
+            ruleKey: "reminder_due",
+          }),
+        ],
       }),
     );
   });
@@ -75,14 +77,14 @@ describe("reminder execution", () => {
       .mockResolvedValueOnce({
         id: "existing-notification",
       });
-    const notificationCreate = vi.fn().mockResolvedValue({});
+    const notificationCreateMany = vi.fn().mockResolvedValue({ count: 1 });
     const transaction = {
       task: {
         update,
       },
       notification: {
         findFirst: notificationFindFirst,
-        create: notificationCreate,
+        createMany: notificationCreateMany,
       },
     };
     const prisma = {
@@ -115,6 +117,6 @@ describe("reminder execution", () => {
       skippedNotifications: 1,
     });
     expect(update).toHaveBeenCalledTimes(1);
-    expect(notificationCreate).not.toHaveBeenCalled();
+    expect(notificationCreateMany).not.toHaveBeenCalled();
   });
 });

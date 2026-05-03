@@ -115,7 +115,7 @@ export function SettingsPage() {
     if (!settingsQuery.data) return;
     const { user, preferences } = settingsQuery.data;
     setForm({
-      displayName: user.displayName,
+      displayName: user.displayName ?? "",
       timezone: preferences.timezone,
       currencyCode: preferences.currencyCode,
       weekStartsOn: preferences.weekStartsOn,
@@ -156,7 +156,7 @@ export function SettingsPage() {
 
   async function handleSave() {
     await updateMutation.mutateAsync({
-      displayName: form.displayName,
+      displayName: form.displayName.trim() || null,
       timezone: form.timezone,
       currencyCode: form.currencyCode,
       weekStartsOn: form.weekStartsOn,

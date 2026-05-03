@@ -3,165 +3,31 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
-
 import type {
-  RecurrenceDefinition,
-  RecurrenceInput,
-} from "../recurrence";
+  CreateHabitPauseWindowRequest,
+  CreateHabitRequest,
+  CreateRoutineRequest,
+  HabitItem,
+  HabitMutationResponse,
+  HabitsResponse,
+  IsoDateString,
+  RoutineMutationResponse,
+  RoutineRecord,
+  UpdateHabitRequest,
+  UpdateRoutineRequest,
+} from "@life-os/contracts";
 import { getTodayDate } from "../date";
 import {
   apiRequest,
   invalidateCoreData,
   queryKeys,
 } from "./core";
-import type { LinkedGoal } from "./goals";
 
-type HabitsResponse = {
-  generatedAt: string;
-  date: string;
-  weeklyChallenge: {
-    habitId: string;
-    title: string;
-    streakCount: number;
-    completedToday: boolean;
-    weekCompletions: number;
-    weekTarget: number;
-    status: "on_track" | "due_today" | "behind";
-    message: string;
-  } | null;
-  habits: Array<{
-    id: string;
-    title: string;
-    category: string | null;
-    habitType: "maintenance" | "growth" | "identity";
-    scheduleRule: { daysOfWeek?: number[] };
-    recurrence: RecurrenceDefinition | null;
-    goalId: string | null;
-    goal: LinkedGoal | null;
-    targetPerDay: number;
-    durationMinutes: number;
-    timingMode: "anytime" | "anchor" | "exact_time" | "time_window";
-    anchorText: string | null;
-    targetTimeMinutes: number | null;
-    windowStartMinutes: number | null;
-    windowEndMinutes: number | null;
-    timingStatusToday: "none" | "upcoming" | "due_now" | "late" | "complete_on_time" | "complete_late";
-    timingLabel: string | null;
-    minimumVersion: string | null;
-    standardVersion: string | null;
-    stretchVersion: string | null;
-    obstaclePlan: string | null;
-    repairRule: string | null;
-    identityMeaning: string | null;
-    status: "active" | "paused" | "archived";
-    dueToday: boolean;
-    skippedToday: boolean;
-    completedToday: boolean;
-    completedCountToday: number;
-    achievedLevelToday: "minimum" | "standard" | "stretch" | null;
-    streakCount: number;
-    risk: {
-      level: "none" | "at_risk" | "drifting";
-      reason: "streak_at_risk" | "missed_recently" | "low_completion_rate" | null;
-      message: string | null;
-      dueCount7d: number;
-      completedCount7d: number;
-      completionRate7d: number;
-    };
-    pauseWindows: Array<{
-      id: string;
-      kind: "rest_day" | "vacation";
-      startsOn: string;
-      endsOn: string;
-      note: string | null;
-      isActiveToday: boolean;
-    }>;
-  }>;
-  dueHabits: Array<{
-    id: string;
-    title: string;
-    category: string | null;
-    habitType: "maintenance" | "growth" | "identity";
-    scheduleRule: { daysOfWeek?: number[] };
-    recurrence: RecurrenceDefinition | null;
-    goalId: string | null;
-    goal: LinkedGoal | null;
-    targetPerDay: number;
-    durationMinutes: number;
-    timingMode: "anytime" | "anchor" | "exact_time" | "time_window";
-    anchorText: string | null;
-    targetTimeMinutes: number | null;
-    windowStartMinutes: number | null;
-    windowEndMinutes: number | null;
-    timingStatusToday: "none" | "upcoming" | "due_now" | "late" | "complete_on_time" | "complete_late";
-    timingLabel: string | null;
-    minimumVersion: string | null;
-    standardVersion: string | null;
-    stretchVersion: string | null;
-    obstaclePlan: string | null;
-    repairRule: string | null;
-    identityMeaning: string | null;
-    status: "active" | "paused" | "archived";
-    dueToday: boolean;
-    skippedToday: boolean;
-    completedToday: boolean;
-    completedCountToday: number;
-    achievedLevelToday: "minimum" | "standard" | "stretch" | null;
-    streakCount: number;
-    risk: {
-      level: "none" | "at_risk" | "drifting";
-      reason: "streak_at_risk" | "missed_recently" | "low_completion_rate" | null;
-      message: string | null;
-      dueCount7d: number;
-      completedCount7d: number;
-      completionRate7d: number;
-    };
-    pauseWindows: Array<{
-      id: string;
-      kind: "rest_day" | "vacation";
-      startsOn: string;
-      endsOn: string;
-      note: string | null;
-      isActiveToday: boolean;
-    }>;
-  }>;
-  routines: Array<{
-    id: string;
-    name: string;
-    sortOrder: number;
-    status: "active" | "archived";
-    timingMode: "anytime" | "period" | "custom_window";
-    period: "morning" | "evening" | null;
-    windowStartMinutes: number | null;
-    windowEndMinutes: number | null;
-    timingStatusToday: "none" | "upcoming" | "due_now" | "late" | "complete_on_time" | "complete_late";
-    timingLabel: string | null;
-    completedAtToday: string | null;
-    completedItems: number;
-    totalItems: number;
-    items: Array<{
-      id: string;
-      title: string;
-      sortOrder: number;
-      isRequired: boolean;
-      completedToday: boolean;
-    }>;
-  }>;
+export type {
+  HabitItem,
 };
-
-export type HabitItem = HabitsResponse["habits"][number];
-export type RoutineItem = HabitsResponse["routines"][number];
+export type RoutineItem = RoutineRecord;
 export type HabitsData = HabitsResponse;
-
-type HabitMutationResponse = {
-  generatedAt: string;
-  habit: HabitsResponse["habits"][number];
-};
-
-type RoutineMutationResponse = {
-  generatedAt: string;
-  routine: HabitsResponse["routines"][number];
-};
 
 const invalidateHabits = (queryClient: ReturnType<typeof useQueryClient>) => {
   void queryClient.invalidateQueries({ queryKey: queryKeys.habits });
@@ -169,7 +35,18 @@ const invalidateHabits = (queryClient: ReturnType<typeof useQueryClient>) => {
 
 const invalidateHabitsAndCore = (queryClient: ReturnType<typeof useQueryClient>) => {
   invalidateHabits(queryClient);
-  invalidateCoreData(queryClient, getTodayDate());
+  invalidateCoreData(queryClient, getTodayDate(), {
+    domains: ["habits", "home", "score", "notifications"],
+  });
+};
+
+const invalidateHabitDate = (
+  queryClient: ReturnType<typeof useQueryClient>,
+  date: string,
+) => {
+  invalidateCoreData(queryClient, date, {
+    domains: ["habits", "home", "score", "notifications"],
+  });
 };
 
 export const useHabitsQuery = () =>
@@ -190,17 +67,17 @@ export const useHabitCheckinMutation = (date: string) => {
       return apiRequest<HabitMutationResponse>(`/api/habits/${habitId}/checkins`, {
         method: "POST",
         body: {
-          date,
+          date: date as IsoDateString,
           status: "completed",
           level,
-        },
+        } satisfies { date: IsoDateString; status: "completed"; level: NonNullable<HabitsResponse["habits"][number]["achievedLevelToday"]> },
       });
     },
     meta: {
       successMessage: "Habit logged.",
       errorMessage: "Habit log failed.",
     },
-    onSuccess: () => invalidateCoreData(queryClient, date),
+    onSuccess: () => invalidateHabitDate(queryClient, date),
   });
 };
 
@@ -212,15 +89,15 @@ export const useSkipHabitMutation = (date: string) => {
       apiRequest<HabitMutationResponse>(`/api/habits/${habitId}/checkins`, {
         method: "POST",
         body: {
-          date,
+          date: date as IsoDateString,
           status: "skipped",
-        },
+        } satisfies { date: IsoDateString; status: "skipped" },
       }),
     meta: {
       successMessage: "Habit skipped for today.",
       errorMessage: "Habit skip failed.",
     },
-    onSuccess: () => invalidateCoreData(queryClient, date),
+    onSuccess: () => invalidateHabitDate(queryClient, date),
   });
 };
 
@@ -237,7 +114,7 @@ export const useDeleteHabitCheckinMutation = (date: string) => {
       successMessage: "Habit reopened.",
       errorMessage: "Habit update failed.",
     },
-    onSuccess: () => invalidateCoreData(queryClient, date),
+    onSuccess: () => invalidateHabitDate(queryClient, date),
   });
 };
 
@@ -254,7 +131,7 @@ export const useRoutineCheckinMutation = (date: string) => {
       successMessage: "Routine item completed.",
       errorMessage: "Routine update failed.",
     },
-    onSuccess: () => invalidateCoreData(queryClient, date),
+    onSuccess: () => invalidateHabitDate(queryClient, date),
   });
 };
 
@@ -271,7 +148,7 @@ export const useDeleteRoutineCheckinMutation = (date: string) => {
       successMessage: "Routine item reopened.",
       errorMessage: "Routine update failed.",
     },
-    onSuccess: () => invalidateCoreData(queryClient, date),
+    onSuccess: () => invalidateHabitDate(queryClient, date),
   });
 };
 
@@ -279,27 +156,7 @@ export const useCreateHabitMutation = () => {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (payload: {
-      title: string;
-      category?: string | null;
-      habitType?: "maintenance" | "growth" | "identity";
-      scheduleRule?: { daysOfWeek?: number[] };
-      recurrence?: RecurrenceInput;
-      targetPerDay?: number;
-      durationMinutes?: number;
-      goalId?: string | null;
-      timingMode?: "anytime" | "anchor" | "exact_time" | "time_window";
-      anchorText?: string | null;
-      targetTimeMinutes?: number | null;
-      windowStartMinutes?: number | null;
-      windowEndMinutes?: number | null;
-      minimumVersion?: string | null;
-      standardVersion?: string | null;
-      stretchVersion?: string | null;
-      obstaclePlan?: string | null;
-      repairRule?: string | null;
-      identityMeaning?: string | null;
-    }) =>
+    mutationFn: (payload: CreateHabitRequest) =>
       apiRequest<HabitMutationResponse>("/api/habits", {
         method: "POST",
         body: payload,
@@ -317,27 +174,7 @@ export const useUpdateHabitMutation = () => {
 
   type UpdateHabitVariables = {
     habitId: string;
-    title?: string;
-    category?: string | null;
-    habitType?: "maintenance" | "growth" | "identity";
-    scheduleRule?: { daysOfWeek?: number[] };
-    recurrence?: RecurrenceInput;
-    targetPerDay?: number;
-    durationMinutes?: number;
-    status?: "active" | "paused" | "archived";
-    goalId?: string | null;
-    timingMode?: "anytime" | "anchor" | "exact_time" | "time_window";
-    anchorText?: string | null;
-    targetTimeMinutes?: number | null;
-    windowStartMinutes?: number | null;
-    windowEndMinutes?: number | null;
-    minimumVersion?: string | null;
-    standardVersion?: string | null;
-    stretchVersion?: string | null;
-    obstaclePlan?: string | null;
-    repairRule?: string | null;
-    identityMeaning?: string | null;
-  };
+  } & UpdateHabitRequest;
 
   return useMutation<HabitMutationResponse, Error, UpdateHabitVariables>({
     mutationFn: ({
@@ -363,13 +200,7 @@ export const useCreateHabitPauseWindowMutation = () => {
     mutationFn: ({
       habitId,
       ...payload
-    }: {
-      habitId: string;
-      kind: "rest_day" | "vacation";
-      startsOn: string;
-      endsOn?: string;
-      note?: string | null;
-    }) =>
+    }: { habitId: string } & CreateHabitPauseWindowRequest) =>
       apiRequest<HabitMutationResponse>(`/api/habits/${habitId}/pause-windows`, {
         method: "POST",
         body: payload,
@@ -402,14 +233,7 @@ export const useCreateRoutineMutation = () => {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (payload: {
-      name: string;
-      timingMode?: "anytime" | "period" | "custom_window";
-      period?: "morning" | "evening" | null;
-      windowStartMinutes?: number | null;
-      windowEndMinutes?: number | null;
-      items: Array<{ title: string; sortOrder: number; isRequired?: boolean }>;
-    }) =>
+    mutationFn: (payload: CreateRoutineRequest) =>
       apiRequest<RoutineMutationResponse>("/api/routines", {
         method: "POST",
         body: payload,
@@ -429,17 +253,7 @@ export const useUpdateRoutineMutation = () => {
     mutationFn: ({
       routineId,
       ...payload
-    }: {
-      routineId: string;
-      name?: string;
-      sortOrder?: number;
-      status?: "active" | "archived";
-      timingMode?: "anytime" | "period" | "custom_window";
-      period?: "morning" | "evening" | null;
-      windowStartMinutes?: number | null;
-      windowEndMinutes?: number | null;
-      items?: Array<{ id?: string; title: string; sortOrder: number; isRequired?: boolean }>;
-    }) =>
+    }: { routineId: string } & UpdateRoutineRequest) =>
       apiRequest<RoutineMutationResponse>(`/api/routines/${routineId}`, {
         method: "PATCH",
         body: payload,

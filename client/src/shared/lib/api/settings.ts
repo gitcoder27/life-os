@@ -3,68 +3,18 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
-
 import type {
-  NotificationCategory,
-  NotificationCategoryPreference,
-  NotificationCategoryPreferences,
-} from "./notifications";
-import type { LandingPagePreference } from "../landing-page";
+  ResetWorkspaceRequest,
+  ResetWorkspaceResponse,
+  SessionResponse,
+  SettingsProfileMutationResponse,
+  SettingsProfileResponse,
+  UpdateSettingsProfileRequest,
+} from "@life-os/contracts";
 import {
   apiRequest,
   queryKeys,
 } from "./core";
-
-type SettingsProfileResponse = {
-  generatedAt: string;
-  user: {
-    id: string;
-    email: string;
-    displayName: string;
-  };
-  preferences: {
-    timezone: string;
-    currencyCode: string;
-    weekStartsOn: number;
-    dailyWaterTargetMl: number;
-    dailyReviewStartTime: string | null;
-    dailyReviewEndTime: string | null;
-    defaultLandingPage: LandingPagePreference;
-    notificationPreferences: NotificationCategoryPreferences;
-  };
-};
-
-type UpdateSettingsProfileRequest = {
-  displayName?: string;
-  timezone?: string;
-  currencyCode?: string;
-  weekStartsOn?: number;
-  dailyWaterTargetMl?: number;
-  dailyReviewStartTime?: string | null;
-  dailyReviewEndTime?: string | null;
-  defaultLandingPage?: LandingPagePreference;
-  notificationPreferences?: Partial<Record<NotificationCategory, Partial<NotificationCategoryPreference>>>;
-};
-
-type ResetWorkspaceRequest = {
-  confirmationText: string;
-};
-
-type ResetWorkspaceResponse = {
-  success: true;
-  generatedAt: string;
-  resetAt: string;
-};
-
-type SessionResponse = {
-  authenticated: boolean;
-  generatedAt: string;
-  user: {
-    id: string;
-    email: string;
-    displayName: string;
-  } | null;
-};
 
 export const useSettingsProfileQuery = () =>
   useQuery({
@@ -78,7 +28,7 @@ export const useUpdateSettingsProfileMutation = () => {
 
   return useMutation({
     mutationFn: (payload: UpdateSettingsProfileRequest) =>
-      apiRequest<SettingsProfileResponse>("/api/settings/profile", {
+      apiRequest<SettingsProfileMutationResponse>("/api/settings/profile", {
         method: "PUT",
         body: payload,
       }),

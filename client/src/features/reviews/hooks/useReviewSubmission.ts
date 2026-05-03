@@ -142,6 +142,25 @@ export const useReviewSubmission = ({
       return;
     }
 
+    const nextMonthOutcomeTitles = splitEntries(responses[4]);
+    const nextMonthOutcomes = (
+      nextMonthOutcomeTitles.length
+        ? nextMonthOutcomeTitles
+        : ["Protect momentum", "Close one important loop", "Reduce one recurring drain"]
+    )
+      .slice(0, 3)
+      .map((title, index) => ({
+        slot: (index + 1) as 1 | 2 | 3,
+        title,
+      }));
+
+    while (nextMonthOutcomes.length < 3) {
+      nextMonthOutcomes.push({
+        slot: (nextMonthOutcomes.length + 1) as 1 | 2 | 3,
+        title: `Outcome ${nextMonthOutcomes.length + 1}`,
+      });
+    }
+
     try {
       await submitMonthlyReviewMutation.mutateAsync({
         monthVerdict: responses[0] || "Steady progress",
@@ -151,7 +170,7 @@ export const useReviewSubmission = ({
           overall: 3,
         },
         nextMonthTheme: responses[3] || "Protect momentum",
-        threeOutcomes: splitEntries(responses[4]),
+        nextMonthOutcomes,
         habitChanges: [],
         simplifyText: responses[2] || "Remove low-signal commitments",
         notes: responses.join("\n\n"),

@@ -3,96 +3,39 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
+import type {
+  AbortFocusSessionRequest,
+  ActiveFocusSessionResponse,
+  CaptureFocusDistractionRequest,
+  CompleteFocusSessionRequest,
+  CreateFocusSessionRequest,
+  FocusSessionDepth,
+  FocusSessionExitReason,
+  FocusSessionHistoryItem,
+  FocusSessionItem,
+  FocusSessionMutationResponse,
+  FocusSessionStatus,
+  FocusSessionSuggestedAdjustment,
+  FocusSessionTaskOutcome,
+  FocusTaskInsight,
+  FocusTaskInsightResponse,
+} from "@life-os/contracts";
 
 import {
   apiRequest,
   invalidateCoreData,
   queryKeys,
 } from "./core";
-import type { LinkedGoal } from "./goals";
 
-export type FocusSessionSuggestedAdjustment =
-  | "keep_current_setup"
-  | "shorten_session"
-  | "clarify_next_action";
-
-export type FocusSessionHistoryItem = {
-  id: string;
-  depth: FocusSessionDepth;
-  plannedMinutes: number;
-  actualMinutes: number | null;
-  status: FocusSessionStatus;
-  exitReason: FocusSessionExitReason | null;
-  endedAt: string | null;
-};
-
-export type FocusTaskInsight = {
-  taskId: string;
-  totalSessions: number;
-  completedSessions: number;
-  abortedSessions: number;
-  averagePlannedMinutes: number | null;
-  averageActualMinutes: number | null;
-  mostCommonExitReason: FocusSessionExitReason | null;
-  recommendedPlannedMinutes: number | null;
-  suggestedAdjustment: FocusSessionSuggestedAdjustment;
-  summaryMessage: string;
-  recentSessions: FocusSessionHistoryItem[];
-};
-
-type FocusTaskInsightResponse = {
-  generatedAt: string;
-  insight: FocusTaskInsight;
-};
-
-export type FocusSessionDepth = "deep" | "shallow";
-export type FocusSessionStatus = "active" | "completed" | "aborted";
-export type FocusSessionExitReason =
-  | "interrupted"
-  | "low_energy"
-  | "unclear"
-  | "switched_context"
-  | "done_enough";
-export type FocusSessionTaskOutcome = "started" | "advanced" | "completed";
-
-export type FocusSessionTaskSummary = {
-  id: string;
-  title: string;
-  nextAction: string | null;
-  status: "pending" | "completed" | "dropped";
-  progressState: "not_started" | "started" | "advanced";
-  goalId: string | null;
-  goal: LinkedGoal | null;
-  focusLengthMinutes: number | null;
-  startedAt: string | null;
-  completedAt: string | null;
-};
-
-export type FocusSessionItem = {
-  id: string;
-  taskId: string;
-  task: FocusSessionTaskSummary;
-  depth: FocusSessionDepth;
-  plannedMinutes: number;
-  actualMinutes: number | null;
-  startedAt: string;
-  endedAt: string | null;
-  status: FocusSessionStatus;
-  exitReason: FocusSessionExitReason | null;
-  distractionNotes: string | null;
-  completionNote: string | null;
-  createdAt: string;
-  updatedAt: string;
-};
-
-type ActiveFocusSessionResponse = {
-  generatedAt: string;
-  session: FocusSessionItem | null;
-};
-
-type FocusSessionMutationResponse = {
-  generatedAt: string;
-  session: FocusSessionItem;
+export type {
+  FocusSessionDepth,
+  FocusSessionExitReason,
+  FocusSessionHistoryItem,
+  FocusSessionItem,
+  FocusSessionStatus,
+  FocusSessionSuggestedAdjustment,
+  FocusSessionTaskOutcome,
+  FocusTaskInsight,
 };
 
 export const useActiveFocusSessionQuery = () =>
@@ -139,7 +82,7 @@ export const useStartFocusSessionMutation = (date: string) => {
           taskId,
           depth,
           plannedMinutes,
-        },
+        } satisfies CreateFocusSessionRequest,
       }),
     meta: {
       successMessage: "Focus session started.",
@@ -156,7 +99,7 @@ export const useCaptureFocusDistractionMutation = (date: string) => {
     mutationFn: ({ sessionId, note }: { sessionId: string; note: string }) =>
       apiRequest<FocusSessionMutationResponse>(`/api/focus/sessions/${sessionId}/distraction`, {
         method: "POST",
-        body: { note },
+        body: { note } satisfies CaptureFocusDistractionRequest,
       }),
     meta: {
       successMessage: "Distraction saved.",
@@ -184,7 +127,7 @@ export const useCompleteFocusSessionMutation = (date: string) => {
         body: {
           taskOutcome,
           completionNote,
-        },
+        } satisfies CompleteFocusSessionRequest,
       }),
     meta: {
       successMessage: "Focus session completed.",
@@ -217,7 +160,7 @@ export const useAbortFocusSessionMutation = (date: string) => {
         body: {
           exitReason,
           note,
-        },
+        } satisfies AbortFocusSessionRequest,
       }),
     meta: {
       successMessage: "Focus session ended.",

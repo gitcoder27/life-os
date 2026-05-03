@@ -20,8 +20,10 @@
     "users:interactive:dist": "node dist/cli/user-admin.js",
     "pretypecheck": "npm run prisma:generate",
     "typecheck": "tsc -p tsconfig.json --noEmit",
+    "pretest": "npm run build -w @life-os/contracts",
     "test": "vitest run",
     "test:watch": "vitest",
+    "pretest:coverage": "npm run build -w @life-os/contracts",
     "test:coverage": "vitest run --coverage",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev"

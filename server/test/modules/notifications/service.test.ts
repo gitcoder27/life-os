@@ -1,6 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { generateRuleNotifications, cleanupOldNotifications } from "../../../src/modules/notifications/service.js";
+import {
+  cleanupOldNotifications,
+  ensureGeneratedNotification,
+  generateRuleNotifications,
+} from "../../../src/modules/notifications/service.js";
 
 vi.mock("../../../src/modules/scoring/service.js", () => ({
   ensureCycle: (...args: unknown[]) => ensureCycleMock(...args),
@@ -46,7 +50,7 @@ describe("notifications service", () => {
       },
       notification: {
         findFirst: vi.fn().mockResolvedValue(null),
-        create: vi.fn().mockResolvedValue({}),
+        createMany: vi.fn().mockResolvedValue({ count: 1 }),
       },
       adminItem: {
         findMany: vi.fn().mockResolvedValue([
@@ -153,7 +157,7 @@ describe("notifications service", () => {
       },
       notification: {
         findFirst: vi.fn().mockResolvedValue(null),
-        create: vi.fn().mockResolvedValue({}),
+        createMany: vi.fn().mockResolvedValue({ count: 1 }),
       },
       adminItem: {
         findMany: vi.fn().mockResolvedValue([]),
@@ -191,11 +195,9 @@ describe("notifications service", () => {
     const result = await generateRuleNotifications(prisma as any, now);
 
     expect(result.created).toBe(3);
-    expect(prisma.notification.create).not.toHaveBeenCalledWith(
+    expect(prisma.notification.createMany).not.toHaveBeenCalledWith(
       expect.objectContaining({
-        data: expect.objectContaining({
-          notificationType: "health",
-        }),
+        data: [expect.objectContaining({ notificationType: "health" })],
       }),
     );
   });
@@ -218,7 +220,7 @@ describe("notifications service", () => {
       },
       notification: {
         findFirst: vi.fn().mockResolvedValue(null),
-        create: vi.fn().mockResolvedValue({}),
+        createMany: vi.fn().mockResolvedValue({ count: 1 }),
       },
       adminItem: {
         findMany: vi.fn().mockResolvedValue([]),
@@ -247,13 +249,52 @@ describe("notifications service", () => {
     const result = await generateRuleNotifications(prisma as any, now);
 
     expect(result.created).toBe(4);
-    expect(prisma.notification.create).toHaveBeenCalledWith(
+    expect(prisma.notification.createMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        data: expect.objectContaining({
-          notificationType: "review",
-          deliveryKey:
-            "daily_review_due|daily_review|daily-review:2026-03-14|2026-03-14|h20",
-        }),
+        data: [
+          expect.objectContaining({
+            notificationType: "review",
+            deliveryKey:
+              "daily_review_due|daily_review|daily-review:2026-03-14|2026-03-14|h20",
+          }),
+        ],
+      }),
+    );
+  });
+
+  it("treats duplicate active notification inserts as skipped generation", async () => {
+    const prisma = {
+      notification: {
+        findFirst: vi.fn().mockResolvedValue(null),
+        createMany: vi.fn().mockResolvedValue({ count: 0 }),
+      },
+    } as any;
+
+    const created = await ensureGeneratedNotification(prisma, {
+      userId: "user-1",
+      notificationType: "review",
+      severity: "WARNING",
+      title: "Daily review is still open",
+      body: "Complete the review.",
+      entityType: "daily_review",
+      entityId: "daily-review:2026-03-14",
+      ruleKey: "daily_review_due",
+      now: new Date("2026-03-14T20:30:00.000Z"),
+      notificationPreferences: {
+        task: { enabled: true, minSeverity: "warning", repeatCadence: "off" },
+        inbox: { enabled: true, minSeverity: "info", repeatCadence: "off" },
+        review: { enabled: true, minSeverity: "info", repeatCadence: "hourly" },
+        finance: { enabled: true, minSeverity: "warning", repeatCadence: "every_3_hours" },
+        health: { enabled: true, minSeverity: "warning", repeatCadence: "off" },
+        habit: { enabled: true, minSeverity: "warning", repeatCadence: "off" },
+        routine: { enabled: true, minSeverity: "warning", repeatCadence: "off" },
+      },
+    });
+
+    expect(created).toBe(false);
+    expect(prisma.notification.createMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        skipDuplicates: true,
       }),
     );
   });

@@ -51,5 +51,8 @@ describe("worker scheduling", () => {
     expect(() => parseWorkerScheduleFilter(["--schedule", "hourly"])).toThrow(
       /Unsupported --schedule value/,
     );
+    expect(() => parseWorkerScheduleFilter(["--schedule"])).toThrow(
+      /Unsupported --schedule value/,
+    );
   });
 });

@@ -3,34 +3,17 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
+import type {
+  LoginRequest,
+  LoginResponse,
+  LogoutResponse,
+  SessionResponse,
+} from "@life-os/contracts";
 
 import {
   apiRequest,
   queryKeys,
 } from "./core";
-
-type SessionUser = {
-  id: string;
-  email: string;
-  displayName: string;
-};
-
-type SessionResponse = {
-  authenticated: boolean;
-  generatedAt: string;
-  user: SessionUser | null;
-};
-
-type LoginResponse = {
-  success: true;
-  generatedAt: string;
-  user: SessionUser;
-};
-
-type LogoutResponse = {
-  success: true;
-  generatedAt: string;
-};
 
 export const useSessionQuery = () =>
   useQuery({
@@ -43,7 +26,7 @@ export const useLoginMutation = () => {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (payload: { email: string; password: string }) =>
+    mutationFn: (payload: LoginRequest) =>
       apiRequest<LoginResponse>("/api/auth/login", {
         method: "POST",
         body: payload,

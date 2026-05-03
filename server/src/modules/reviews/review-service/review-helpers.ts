@@ -87,10 +87,10 @@ export function throwReviewAlreadySubmitted(reviewLabel: "Weekly review" | "Mont
 }
 
 export function listIsoDates(startDate: string, endDate: string) {
-  const dates: Array<`${number}-${number}-${number}`> = [];
+  const dates: string[] = [];
 
   for (
-    let currentDate = startDate as `${number}-${number}-${number}`;
+    let currentDate = startDate;
     currentDate <= endDate;
     currentDate = addIsoDays(currentDate, 1)
   ) {

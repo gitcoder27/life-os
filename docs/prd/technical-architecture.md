@@ -10,7 +10,7 @@ This document defines the current Life OS architecture and separates the system 
 - Avoid infrastructure that is unnecessary for the first release
 - Leave room for stronger security and future integrations later
 
-## Recommended stack
+## Current Stack
 
 ### Frontend
 
@@ -19,9 +19,9 @@ This document defines the current Life OS architecture and separates the system 
 - Vite
 - React Router
 - TanStack Query
-- React Hook Form
-- Zod
-- Tailwind CSS
+- plain React form state for current screens
+- shared API hooks in `client/src/shared/lib/api`
+- global CSS in `client/src/styles`
 
 ### Backend
 
@@ -30,6 +30,7 @@ This document defines the current Life OS architecture and separates the system 
 - Fastify
 - Prisma
 - PostgreSQL
+- Zod runtime validation
 - Argon2id for password hashing
 
 ### Deployment
@@ -98,15 +99,15 @@ This keeps deployment simple while preserving clean boundaries inside the codeba
 - recurring item materialization
 - notifications and reminders
 
-### Shared contract boundary
+### Shared Contract Boundary
 
-Use a shared contract package for request and response schemas.
+Use the shared contracts package for request/response types and shared runtime schemas.
 
-Recommended path:
+Current path:
 
 - `packages/contracts/`
 
-The backend is the source of truth for API behavior. The frontend consumes published schemas and generated types.
+`packages/contracts` owns shared ISO date, recurrence, notification/settings preference, and common API response schemas. Backend route validation imports these shared schemas where the shape crosses the frontend/backend boundary, while domain modules can add stricter server-only refinements such as supported timezone or currency checks. The frontend imports contract types for API hooks and uses local form state only at the UI boundary.
 
 ## Recommended repository layout
 
@@ -192,7 +193,7 @@ The backend is the source of truth for API behavior. The frontend consumes publi
 Use three state layers:
 
 1. Server state via TanStack Query
-2. Form state via React Hook Form
+2. Form state via React state and feature-specific hooks
 3. Small local UI state via React state
 
 Avoid a heavy global store in MVP unless a real shared client-only problem appears.
@@ -207,7 +208,7 @@ Avoid a heavy global store in MVP unless a real shared client-only problem appea
 
 The MVP should avoid a queue system like Redis unless necessary.
 
-Use a lightweight worker process with cron-style jobs for:
+Use lightweight worker entrypoints selected by `--schedule every-15-minutes|daily|weekly`, run by systemd timer units in production, for:
 
 - daily rollover
 - creation of recurring tasks and reminders

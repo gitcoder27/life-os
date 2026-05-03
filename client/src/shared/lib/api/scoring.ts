@@ -1,75 +1,28 @@
 import { useQuery } from "@tanstack/react-query";
+import type {
+  DailyScoreBreakdownResponse,
+  ScoreHistoryDay,
+  ScoreHistoryResponse,
+  ScoreHistorySummary,
+  WeeklyMomentumResponse,
+} from "@life-os/contracts";
 
 import {
   apiRequest,
   queryKeys,
 } from "./core";
 
-type ScoreBucket = {
-  key: string;
-  label: string;
-  earnedPoints: number;
-  applicablePoints: number;
-  explanation: string;
-};
-
-type DailyScoreResponse = {
-  generatedAt: string;
-  date: string;
-  value: number;
-  label: string;
-  earnedPoints: number;
-  possiblePoints: number;
-  buckets: ScoreBucket[];
-  topReasons: Array<{
-    label: string;
-    missingPoints: number;
-  }>;
-  finalizedAt: string | null;
-};
-
-export type WeeklyMomentumResponse = {
-  generatedAt: string;
-  endingOn: string;
-  value: number;
-  basedOnDays: number;
-  weeklyReviewBonus: number;
-  strongDayStreak: number;
-  dailyScores: Array<{
-    date: string;
-    value: number;
-    label: string;
-  }>;
-};
-
-export type ScoreHistoryDay = {
-  date: string;
-  value: number | null;
-  label: "Strong Day" | "Solid Day" | "Recovering Day" | "Off-Track Day" | null;
-  finalized: boolean;
-  isToday: boolean;
-};
-
-export type ScoreHistorySummary = {
-  consistencyRun: number;
-  solidPlusDays: number;
-  strongDays: number;
-  current7DayAverage: number | null;
-  previous7DayAverage: number | null;
-};
-
-export type ScoreHistoryResponse = {
-  generatedAt: string;
-  endingOn: string;
-  days: number;
-  entries: ScoreHistoryDay[];
-  summary: ScoreHistorySummary;
+export type {
+  ScoreHistoryDay,
+  ScoreHistoryResponse,
+  ScoreHistorySummary,
+  WeeklyMomentumResponse,
 };
 
 export const useDailyScoreQuery = (date: string) =>
   useQuery({
     queryKey: queryKeys.score(date),
-    queryFn: () => apiRequest<DailyScoreResponse>(`/api/scores/daily/${date}`),
+    queryFn: () => apiRequest<DailyScoreBreakdownResponse>(`/api/scores/daily/${date}`),
     retry: false,
   });
 

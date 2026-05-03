@@ -7,6 +7,11 @@ import type {
   SettingsProfileResponse,
   UpdateSettingsProfileRequest,
 } from "@life-os/contracts";
+import {
+  landingPagePreferenceSchema,
+  resetWorkspaceRequestSchema,
+  updateSettingsProfileRequestSchema,
+} from "@life-os/contracts";
 import { z } from "zod";
 
 import { requireAuthenticatedUser } from "../../lib/auth/require-auth.js";
@@ -20,11 +25,6 @@ import {
 } from "../notifications/policy.js";
 import { resetWorkspaceData } from "./workspace-reset.js";
 
-const reviewTimeSchema = z
-  .string()
-  .regex(/^\d{2}:\d{2}$/)
-  .nullable();
-
 const intlWithSupportedValues = Intl as typeof Intl & {
   supportedValuesOf?: (kind: "currency") => string[];
 };
@@ -34,33 +34,7 @@ const supportedCurrencyCodes = new Set(
 );
 
 const CLIENT_TIMEZONE_HEADER = "x-client-timezone";
-const landingPageSchema = z.enum(["home", "today", "planner", "meals"]);
-
-const notificationPreferenceUpdateSchema = z
-  .object({
-    enabled: z.boolean().optional(),
-    minSeverity: z.enum(["info", "warning", "critical"]).optional(),
-    repeatCadence: z.enum(["off", "hourly", "every_3_hours"]).optional(),
-  })
-  .refine(
-    (value) => Object.keys(value).length > 0,
-    "At least one notification preference field must be updated",
-  );
-
-const notificationPreferencesUpdateSchema = z
-  .object({
-    task: notificationPreferenceUpdateSchema.optional(),
-    inbox: notificationPreferenceUpdateSchema.optional(),
-    review: notificationPreferenceUpdateSchema.optional(),
-    finance: notificationPreferenceUpdateSchema.optional(),
-    health: notificationPreferenceUpdateSchema.optional(),
-    habit: notificationPreferenceUpdateSchema.optional(),
-    routine: notificationPreferenceUpdateSchema.optional(),
-  })
-  .refine(
-    (value) => Object.values(value).some(Boolean),
-    "At least one notification category must be updated",
-  );
+const landingPageSchema = landingPagePreferenceSchema;
 
 function getRequestTimezone(request: { headers: Record<string, unknown> }) {
   const headerValue = request.headers[CLIENT_TIMEZONE_HEADER];
@@ -69,30 +43,22 @@ function getRequestTimezone(request: { headers: Record<string, unknown> }) {
   return parseTimezoneCandidate(candidate);
 }
 
-const updateSettingsProfileSchema = z
-  .object({
-    displayName: z.string().min(1).max(200).nullable().optional(),
-    timezone: timezoneSchema.optional(),
-    currencyCode: z
-      .string()
-      .length(3)
-      .transform((value) => value.toUpperCase())
-      .refine((value) => supportedCurrencyCodes.has(value), "Invalid currency code")
-      .optional(),
-    weekStartsOn: z.number().int().min(0).max(6).optional(),
-    dailyWaterTargetMl: z.number().int().positive().max(20000).optional(),
-    dailyReviewStartTime: reviewTimeSchema.optional(),
-    dailyReviewEndTime: reviewTimeSchema.optional(),
-    defaultLandingPage: landingPageSchema.optional(),
-    notificationPreferences: notificationPreferencesUpdateSchema.optional(),
-  })
-  .refine((value) => Object.keys(value).length > 0, "At least one field must be updated");
+const updateSettingsProfileSchema = updateSettingsProfileRequestSchema.superRefine((value, context) => {
+  if (value.timezone !== undefined && !timezoneSchema.safeParse(value.timezone).success) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["timezone"],
+      message: "Invalid timezone",
+    });
+  }
 
-const resetWorkspaceSchema = z.object({
-  confirmationText: z
-    .string()
-    .trim()
-    .refine((value) => value === "RESET", "Type RESET to confirm workspace reset"),
+  if (value.currencyCode !== undefined && !supportedCurrencyCodes.has(value.currencyCode)) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["currencyCode"],
+      message: "Invalid currency code",
+    });
+  }
 });
 
 function toSettingsProfileResponse(input: {
@@ -273,7 +239,7 @@ export const registerSettingsRoutes: FastifyPluginAsync = async (app) => {
   app.post("/reset-workspace", async (request, reply) => {
     const user = requireAuthenticatedUser(request);
     parseOrThrow(
-      resetWorkspaceSchema,
+      resetWorkspaceRequestSchema,
       request.body as ResetWorkspaceRequest,
     );
     const resetAt = new Date().toISOString();

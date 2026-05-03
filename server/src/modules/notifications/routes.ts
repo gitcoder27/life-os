@@ -11,7 +11,7 @@ import type {
   NotificationsResponse,
   NotificationSnoozeRequest,
 } from "@life-os/contracts";
-import { z } from "zod";
+import { notificationSnoozeRequestSchema } from "@life-os/contracts";
 
 import { requireAuthenticatedUser } from "../../lib/auth/require-auth.js";
 import { AppError } from "../../lib/errors/app-error.js";
@@ -28,10 +28,6 @@ import {
   resolveNotificationSnoozeTime,
   resolveSnoozedNotificationExpiry,
 } from "./policy.js";
-
-const snoozeRequestSchema = z.object({
-  preset: z.enum(["one_hour", "tonight", "tomorrow"]),
-});
 
 function toNotificationCategory(value: string): NotificationCategory {
   if (notificationCategories.includes(value as NotificationCategory)) {
@@ -227,7 +223,7 @@ export const registerNotificationRoutes: FastifyPluginAsync = async (app) => {
     const user = requireAuthenticatedUser(request);
     const { notificationId } = request.params as { notificationId: string };
     const payload = parseOrThrow(
-      snoozeRequestSchema,
+      notificationSnoozeRequestSchema,
       request.body as NotificationSnoozeRequest,
     );
     const notification = await findOwnedNotification(app, user.id, notificationId);

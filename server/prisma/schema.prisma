@@ -836,6 +836,8 @@ model WaterLog {
   source     WaterLogSource @default(TAP)
   createdAt  DateTime       @default(now())
   user       User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, occurredAt])
 }
 
 model MealTemplate {
@@ -935,6 +937,7 @@ model MealLog {
   mealTemplate   MealTemplate?      @relation(fields: [mealTemplateId], references: [id], onDelete: SetNull)
   mealPlanEntry  MealPlanEntry?     @relation(fields: [mealPlanEntryId], references: [id], onDelete: SetNull)
 
+  @@index([userId, occurredAt])
   @@index([mealPlanEntryId])
 }
 
@@ -961,6 +964,8 @@ model WeightLog {
   note        String?
   createdAt   DateTime @default(now())
   user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, measuredOn, createdAt])
 }
 
 model ExpenseCategory {

@@ -25,7 +25,7 @@ describe("inbox zero tracking", () => {
       },
       notification: {
         findFirst: vi.fn().mockResolvedValue(null),
-        create: vi.fn().mockResolvedValue({}),
+        createMany: vi.fn().mockResolvedValue({ count: 1 }),
       },
     } as any;
 
@@ -53,16 +53,18 @@ describe("inbox zero tracking", () => {
         }),
       }),
     );
-    expect(prisma.notification.create).toHaveBeenCalledWith(
+    expect(prisma.notification.createMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        data: expect.objectContaining({
-          notificationType: "inbox",
-          severity: "INFO",
-          entityType: "inbox_zero",
-          entityId: "2026-03-14",
-          ruleKey: "inbox_zero_achieved",
-          deliveryKey: "inbox_zero_achieved|inbox_zero|2026-03-14",
-        }),
+        data: [
+          expect.objectContaining({
+            notificationType: "inbox",
+            severity: "INFO",
+            entityType: "inbox_zero",
+            entityId: "2026-03-14",
+            ruleKey: "inbox_zero_achieved",
+            deliveryKey: "inbox_zero_achieved|inbox_zero|2026-03-14",
+          }),
+        ],
       }),
     );
   });
@@ -80,7 +82,7 @@ describe("inbox zero tracking", () => {
       },
       notification: {
         findFirst: vi.fn(),
-        create: vi.fn(),
+        createMany: vi.fn(),
       },
     } as any;
 
@@ -95,6 +97,6 @@ describe("inbox zero tracking", () => {
 
     expect(created).toBe(false);
     expect(prisma.auditEvent.create).not.toHaveBeenCalled();
-    expect(prisma.notification.create).not.toHaveBeenCalled();
+    expect(prisma.notification.createMany).not.toHaveBeenCalled();
   });
 });

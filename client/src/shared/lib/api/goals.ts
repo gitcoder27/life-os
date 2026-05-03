@@ -4,8 +4,29 @@ import {
   useQueryClient,
 } from "@tanstack/react-query";
 import type {
+  CreateGoalRequest,
+  GoalDetailResponse,
+  GoalDomain,
+  GoalMilestonesMutationResponse,
+  GoalMutationResponse,
+  GoalStatus,
+  GoalSummary,
+  GoalsConfigResponse,
+  GoalsResponse,
+  GoalsWorkspaceResponse,
+  GoalsWorkspaceTodayAlignment,
   MonthFocusMutationResponse,
+  MonthPlanResponse,
   PlanningPriorityMutationResponse,
+  UpdateGoalDomainsRequest,
+  UpdateGoalHorizonsRequest,
+  UpdateGoalMilestonesRequest,
+  UpdateGoalRequest,
+  UpdateMonthFocusRequest,
+  UpdateWeekCapacityRequest,
+  UpdateWeekPrioritiesRequest,
+  WeekCapacityMutationResponse,
+  WeekPlanResponse,
 } from "@life-os/contracts";
 
 import {
@@ -18,337 +39,38 @@ import {
   toSectionError,
   unwrapRequiredResult,
 } from "./core";
-import type { TaskItem } from "./planning";
 
-/* ── Domain & Horizon config types ── */
+export type LinkedGoal = GoalSummary;
 
-export type GoalDomainSystemKey =
-  | "unassigned"
-  | "health"
-  | "money"
-  | "work_growth"
-  | "home_admin"
-  | "discipline"
-  | "other";
+export type {
+  GoalDetailItem,
+  GoalDomain,
+  GoalDomainInput,
+  GoalDomainItem,
+  GoalDomainSystemKey,
+  GoalEngagementState,
+  GoalHealthState,
+  GoalHierarchySummary,
+  GoalHorizonInput,
+  GoalHorizonItem,
+  GoalHorizonSystemKey,
+  GoalLinkedHabitItem,
+  GoalLinkedPriorityItem,
+  GoalLinkedSummary,
+  GoalLinkedTaskItem,
+  GoalMilestoneCounts,
+  GoalMilestoneItem,
+  GoalMomentumPoint,
+  GoalMomentumSummary,
+  GoalMomentumTrend,
+  GoalOverviewItem,
+  GoalStatus,
+  GoalsWorkspaceTodayAlignment,
+  MonthPlanResponse,
+  WeekPlanResponse,
+} from "@life-os/contracts";
 
-export type GoalHorizonSystemKey =
-  | "life_vision"
-  | "five_year"
-  | "one_year"
-  | "quarter"
-  | "month";
-
-export type GoalDomainItem = {
-  id: string;
-  systemKey: GoalDomainSystemKey | null;
-  name: string;
-  sortOrder: number;
-  isArchived: boolean;
-  createdAt: string;
-  updatedAt: string;
-};
-
-export type GoalDomainInput = {
-  id?: string;
-  systemKey?: GoalDomainSystemKey | null;
-  name: string;
-  isArchived?: boolean;
-};
-
-export type GoalHorizonItem = {
-  id: string;
-  systemKey: GoalHorizonSystemKey | null;
-  name: string;
-  sortOrder: number;
-  spanMonths: number | null;
-  isArchived: boolean;
-  createdAt: string;
-  updatedAt: string;
-};
-
-export type GoalHorizonInput = {
-  id?: string;
-  systemKey?: GoalHorizonSystemKey | null;
-  name: string;
-  spanMonths?: number | null;
-  isArchived?: boolean;
-};
-
-/* ── Goal types ── */
-
-export type GoalDomain = string;
-export type GoalStatus = "active" | "paused" | "completed" | "archived";
-export type GoalEngagementState = "primary" | "secondary" | "parked" | "maintenance";
-
-export type LinkedGoal = {
-  id: string;
-  title: string;
-  domain: GoalDomain;
-  domainSystemKey: GoalDomainSystemKey | null;
-  status: GoalStatus;
-  engagementState: GoalEngagementState | null;
-};
-
-export type GoalHealthState = "on_track" | "drifting" | "stalled" | "achieved";
-export type GoalMomentumTrend = "up" | "down" | "steady";
-
-export type GoalMilestoneCounts = {
-  total: number;
-  completed: number;
-  pending: number;
-  overdue: number;
-};
-
-export type GoalMomentumPoint = {
-  startDate: string;
-  endDate: string;
-  completedCount: number;
-};
-
-export type GoalMomentumSummary = {
-  trend: GoalMomentumTrend;
-  buckets: GoalMomentumPoint[];
-};
-
-export type GoalLinkedSummary = {
-  currentDayPriorities: number;
-  currentWeekPriorities: number;
-  currentMonthPriorities: number;
-  pendingTasks: number;
-  activeHabits: number;
-  dueHabitsToday: number;
-};
-
-export type GoalOverviewItem = {
-  id: string;
-  title: string;
-  domainId: string;
-  domain: GoalDomain;
-  domainSystemKey: GoalDomainSystemKey | null;
-  horizonId: string | null;
-  horizonName: string | null;
-  horizonSystemKey: GoalHorizonSystemKey | null;
-  horizonSpanMonths: number | null;
-  parentGoalId: string | null;
-  status: GoalStatus;
-  engagementState: GoalEngagementState | null;
-  why: string | null;
-  targetDate: string | null;
-  notes: string | null;
-  weeklyProofText: string | null;
-  knownObstacle: string | null;
-  parkingRule: string | null;
-  sortOrder: number;
-  createdAt: string;
-  updatedAt: string;
-  progressPercent: number;
-  health: GoalHealthState | null;
-  nextBestAction: string | null;
-  milestoneCounts: GoalMilestoneCounts;
-  momentum: GoalMomentumSummary;
-  linkedSummary: GoalLinkedSummary;
-  lastActivityAt: string | null;
-};
-
-export type GoalHierarchySummary = {
-  id: string;
-  title: string;
-  domainId: string;
-  domain: GoalDomain;
-  domainSystemKey: GoalDomainSystemKey | null;
-  horizonId: string | null;
-  horizonName: string | null;
-  horizonSystemKey: GoalHorizonSystemKey | null;
-  parentGoalId: string | null;
-  status: GoalStatus;
-  engagementState: GoalEngagementState | null;
-  sortOrder: number;
-  targetDate: string | null;
-};
-
-export type GoalMilestoneItem = {
-  id: string;
-  goalId: string;
-  title: string;
-  targetDate: string | null;
-  status: "pending" | "completed";
-  completedAt: string | null;
-  sortOrder: number;
-  createdAt: string;
-  updatedAt: string;
-};
-
-export type GoalLinkedPriorityItem = {
-  id: string;
-  slot: 1 | 2 | 3;
-  title: string;
-  status: "pending" | "completed" | "dropped";
-  completedAt: string | null;
-  cycleType: "day" | "week" | "month";
-  cycleStartDate: string;
-  cycleEndDate: string;
-};
-
-export type GoalLinkedTaskItem = {
-  id: string;
-  title: string;
-  notes: string | null;
-  kind: TaskItem["kind"];
-  reminderAt: string | null;
-  status: "pending" | "completed" | "dropped";
-  scheduledForDate: string | null;
-  dueAt: string | null;
-  originType: TaskItem["originType"];
-  completedAt: string | null;
-  createdAt: string;
-  updatedAt: string;
-};
-
-export type GoalLinkedHabitItem = {
-  id: string;
-  title: string;
-  category: string | null;
-  status: "active" | "paused" | "archived";
-  targetPerDay: number;
-  dueToday: boolean;
-  completedToday: boolean;
-  completedCountToday: number;
-  streakCount: number;
-  completionRate7d: number;
-  riskLevel: "none" | "at_risk" | "drifting";
-  riskMessage: string | null;
-};
-
-export type GoalDetailItem = GoalOverviewItem & {
-  milestones: GoalMilestoneItem[];
-  parent: GoalHierarchySummary | null;
-  children: GoalHierarchySummary[];
-  ancestors: GoalHierarchySummary[];
-  linkedPriorities: GoalLinkedPriorityItem[];
-  currentWeekPriorities: GoalLinkedPriorityItem[];
-  currentMonthOutcomes: GoalLinkedPriorityItem[];
-  linkedTasks: GoalLinkedTaskItem[];
-  linkedHabits: GoalLinkedHabitItem[];
-};
-
-/* ── Response types ── */
-
-type GoalMutationResponse = {
-  generatedAt: string;
-  goal: GoalOverviewItem;
-};
-
-type GoalDetailResponse = {
-  generatedAt: string;
-  contextDate: string;
-  goal: GoalDetailItem;
-};
-
-type GoalMilestonesMutationResponse = {
-  generatedAt: string;
-  milestones: GoalMilestoneItem[];
-};
-
-type GoalsResponse = {
-  generatedAt: string;
-  contextDate: string;
-  goals: GoalOverviewItem[];
-};
-
-type GoalsConfigResponse = {
-  generatedAt: string;
-  domains: GoalDomainItem[];
-  horizons: GoalHorizonItem[];
-};
-
-export type GoalsWorkspaceTodayAlignment = {
-  date: string;
-  priorities: Array<{
-    id: string;
-    slot: 1 | 2 | 3;
-    title: string;
-    status: "pending" | "completed" | "dropped";
-    goalId: string | null;
-    goal: LinkedGoal | null;
-    completedAt: string | null;
-  }>;
-  tasks: Array<{
-    id: string;
-    title: string;
-    goalId: string | null;
-    status: string;
-  }>;
-  representedGoalIds: string[];
-};
-
-export type WeekPlanResponse = {
-  generatedAt: string;
-  startDate: string;
-  endDate: string;
-  priorities: Array<{
-    id: string;
-    slot: 1 | 2 | 3;
-    title: string;
-    status: "pending" | "completed" | "dropped";
-    goalId: string | null;
-    goal: LinkedGoal | null;
-    completedAt: string | null;
-  }>;
-  capacityProfile: {
-    capacityMode: "light" | "standard" | "heavy";
-    deepWorkBlockTarget: number;
-  };
-  capacityAssessment: {
-    status: "healthy" | "tight" | "overloaded";
-    plannedPriorityCount: number;
-    scheduledTaskCount: number;
-    estimatedMinutesTotal: number;
-    unsizedTaskCount: number;
-    focusGoalCount: number;
-    primaryMessage: string;
-    signals: Array<
-      | "too_many_priorities"
-      | "too_many_estimated_minutes"
-      | "too_many_unsized_tasks"
-      | "too_many_focus_goals"
-      | "deep_work_target_too_high"
-    >;
-  };
-  capacityProgress: {
-    completedDeepBlocks: number;
-    remainingDeepBlocks: number;
-    overBudgetBlocks: number;
-    status: "within_budget" | "at_budget" | "over_budget";
-    message: string;
-  };
-};
-
-export type MonthPlanResponse = {
-  generatedAt: string;
-  startDate: string;
-  endDate: string;
-  theme: string | null;
-  topOutcomes: Array<{
-    id: string;
-    slot: 1 | 2 | 3;
-    title: string;
-    status: "pending" | "completed" | "dropped";
-    goalId: string | null;
-    goal: LinkedGoal | null;
-    completedAt: string | null;
-  }>;
-};
-
-type GoalsWorkspaceFullResponse = {
-  generatedAt: string;
-  contextDate: string;
-  domains: GoalDomainItem[];
-  horizons: GoalHorizonItem[];
-  goals: GoalOverviewItem[];
-  weekPlan: WeekPlanResponse;
-  monthPlan: MonthPlanResponse;
-  todayAlignment: GoalsWorkspaceTodayAlignment;
-};
+type GoalsWorkspaceFullResponse = GoalsWorkspaceResponse;
 
 /* ── Invalidation helper ── */
 
@@ -432,7 +154,7 @@ export const useFilteredGoalsQuery = (filters?: { domain?: GoalDomain; status?: 
     queryFn: () =>
       apiRequest<GoalsResponse>("/api/goals", {
         query: {
-          domain,
+          domainId: domain,
           status,
         },
       }),
@@ -454,20 +176,7 @@ export const useCreateGoalMutation = () => {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (payload: {
-      title: string;
-      domainId: string;
-      horizonId?: string | null;
-      parentGoalId?: string | null;
-      why?: string | null;
-      targetDate?: string | null;
-      notes?: string | null;
-      engagementState?: GoalEngagementState | null;
-      weeklyProofText?: string | null;
-      knownObstacle?: string | null;
-      parkingRule?: string | null;
-      sortOrder?: number;
-    }) =>
+    mutationFn: (payload: CreateGoalRequest) =>
       apiRequest<GoalMutationResponse>("/api/goals", {
         method: "POST",
         body: payload,
@@ -487,21 +196,8 @@ export const useUpdateGoalMutation = () => {
     mutationFn: ({
       goalId,
       ...payload
-    }: {
+    }: UpdateGoalRequest & {
       goalId: string;
-      title?: string;
-      domainId?: string;
-      horizonId?: string | null;
-      parentGoalId?: string | null;
-      why?: string | null;
-      status?: GoalStatus;
-      targetDate?: string | null;
-      notes?: string | null;
-      engagementState?: GoalEngagementState | null;
-      weeklyProofText?: string | null;
-      knownObstacle?: string | null;
-      parkingRule?: string | null;
-      sortOrder?: number;
     }) =>
       apiRequest<GoalMutationResponse>(`/api/goals/${goalId}`, {
         method: "PATCH",
@@ -519,14 +215,7 @@ export const useUpdateGoalMilestonesMutation = (goalId: string) => {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (payload: {
-      milestones: Array<{
-        id?: string;
-        title: string;
-        targetDate?: string | null;
-        status: "pending" | "completed";
-      }>;
-    }) =>
+    mutationFn: (payload: UpdateGoalMilestonesRequest) =>
       apiRequest<GoalMilestonesMutationResponse>(
         `/api/goals/${goalId}/milestones`,
         { method: "PUT", body: payload },
@@ -542,21 +231,11 @@ export const useUpdateGoalMilestonesMutation = (goalId: string) => {
   });
 };
 
-export type WeekCapacityMutationResponse = {
-  generatedAt: string;
-  capacityProfile: WeekPlanResponse["capacityProfile"];
-  capacityAssessment: WeekPlanResponse["capacityAssessment"];
-  capacityProgress: WeekPlanResponse["capacityProgress"];
-};
-
 export const useUpdateWeekCapacityMutation = (weekStartDate: string) => {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (payload: {
-      capacityMode: "light" | "standard" | "heavy";
-      deepWorkBlockTarget?: number | null;
-    }) =>
+    mutationFn: (payload: UpdateWeekCapacityRequest) =>
       apiRequest<WeekCapacityMutationResponse>(`/api/planning/weeks/${weekStartDate}/capacity`, {
         method: "PUT",
         body: payload,
@@ -576,14 +255,7 @@ export const useUpdateWeekPrioritiesMutation = (weekStartDate: string) => {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (payload: {
-      priorities: Array<{
-        id?: string;
-        slot: 1 | 2 | 3;
-        title: string;
-        goalId?: string | null;
-      }>;
-    }) =>
+    mutationFn: (payload: UpdateWeekPrioritiesRequest) =>
       apiRequest<PlanningPriorityMutationResponse>(`/api/planning/weeks/${weekStartDate}/priorities`, {
         method: "PUT",
         body: payload,
@@ -602,15 +274,7 @@ export const useUpdateMonthFocusMutation = (monthStartDate: string) => {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (payload: {
-      theme: string | null;
-      topOutcomes: Array<{
-        id?: string;
-        slot: 1 | 2 | 3;
-        title: string;
-        goalId?: string | null;
-      }>;
-    }) =>
+    mutationFn: (payload: UpdateMonthFocusRequest) =>
       apiRequest<MonthFocusMutationResponse>(`/api/planning/months/${monthStartDate}/focus`, {
         method: "PUT",
         body: payload,
@@ -629,7 +293,7 @@ export const useUpdateGoalDomainsMutation = () => {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (payload: { domains: GoalDomainInput[] }) =>
+    mutationFn: (payload: UpdateGoalDomainsRequest) =>
       apiRequest<GoalsConfigResponse>("/api/goals/config/domains", {
         method: "PUT",
         body: payload,
@@ -648,7 +312,7 @@ export const useUpdateGoalHorizonsMutation = () => {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (payload: { horizons: GoalHorizonInput[] }) =>
+    mutationFn: (payload: UpdateGoalHorizonsRequest) =>
       apiRequest<GoalsConfigResponse>("/api/goals/config/horizons", {
         method: "PUT",
         body: payload,

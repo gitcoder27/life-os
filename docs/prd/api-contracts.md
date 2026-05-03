@@ -8,7 +8,8 @@ This document defines the MVP API surface between the frontend and backend. It i
 - Frontend should not reimplement scoring or review rules
 - Endpoints should be resource-oriented and easy to cache
 - Response payloads should include only what the screen needs
-- Shared schemas should live in `packages/contracts`
+- Shared runtime schemas and inferred/shared types should live in `packages/contracts`
+- API errors use the flat `ApiError` shape exported from `packages/contracts/src/common.ts`
 
 ## Authentication
 
@@ -271,9 +272,9 @@ Purpose: fetch the owner profile and core preferences.
 
 Purpose: update profile and app preferences.
 
-### `PUT /api/settings/security/password`
+### `PUT /api/settings/security/password` (target)
 
-Purpose: change the password for the owner account.
+Purpose: change the password for the owner account. This endpoint is not implemented in the current source tree.
 
 ## Common response conventions
 
@@ -285,13 +286,16 @@ Use plain JSON resource responses for reads and writes. Do not wrap every respon
 
 ```json
 {
-  "error": {
-    "code": "VALIDATION_ERROR",
-    "message": "Water amount must be greater than zero",
-    "fieldErrors": {
-      "amountMl": "Required"
+  "success": false,
+  "code": "VALIDATION_ERROR",
+  "message": "Water amount must be greater than zero",
+  "fieldErrors": [
+    {
+      "field": "amountMl",
+      "message": "Required"
     }
-  }
+  ],
+  "generatedAt": "2026-05-03T00:00:00.000Z"
 }
 ```
 
@@ -299,4 +303,4 @@ Use plain JSON resource responses for reads and writes. Do not wrap every respon
 
 - Backend owns endpoint behavior and schema evolution.
 - Frontend may request additions but should not assume undeclared fields.
-- Contract-breaking changes require coordinated updates to the contract package and both implementation tracks.
+- Contract-breaking changes require coordinated updates to `packages/contracts`, backend route validation, client API hooks, and consuming screens.

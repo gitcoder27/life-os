@@ -18,6 +18,7 @@ import type {
   UpdateGoalDomainsRequest,
   UpdateGoalHorizonsRequest,
 } from "@life-os/contracts";
+import { recurrenceInputSchema } from "@life-os/contracts";
 import { z } from "zod";
 
 import { isoDateStringSchema } from "../../lib/validation/date-range.js";
@@ -71,40 +72,6 @@ export const rescueReasonSchema = z.enum([
   "missed_day",
 ]) as z.ZodType<RescueReason>;
 const taskProtocolTextSchema = z.string().trim().max(300).nullable().optional();
-const recurrenceExceptionActionSchema = z.enum(["skip", "do_once", "reschedule"]);
-const recurrenceRuleSchema = z.object({
-  frequency: z.enum(["daily", "weekly", "monthly_nth_weekday", "interval"]),
-  startsOn: isoDateSchema,
-  interval: z.number().int().positive().max(365).optional(),
-  daysOfWeek: z.array(z.number().int().min(0).max(6)).max(7).optional(),
-  nthWeekday: z
-    .object({
-      ordinal: z.union([z.literal(-1), z.literal(1), z.literal(2), z.literal(3), z.literal(4)]),
-      dayOfWeek: z.number().int().min(0).max(6),
-    })
-    .optional(),
-  end: z
-    .object({
-      type: z.enum(["never", "on_date", "after_occurrences"]),
-      until: isoDateSchema.nullable().optional(),
-      occurrenceCount: z.number().int().positive().optional(),
-    })
-    .optional(),
-});
-
-export const recurrenceInputSchema = z.object({
-  rule: recurrenceRuleSchema,
-  exceptions: z
-    .array(
-      z.object({
-        occurrenceDate: isoDateSchema,
-        action: recurrenceExceptionActionSchema,
-        targetDate: isoDateSchema.nullable().optional(),
-      }),
-    )
-    .max(180)
-    .optional(),
-});
 
 export const priorityInputSchema = z.object({
   id: z.string().uuid().optional(),

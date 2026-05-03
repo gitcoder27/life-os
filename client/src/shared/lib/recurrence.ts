@@ -1,45 +1,23 @@
-// Recurrence types and formatting utilities — mirrors packages/contracts/src/recurrence.ts
-// for the client-side, keeping a lightweight footprint.
+import type {
+  RecurrenceDefinition,
+  RecurrenceEndCondition,
+  RecurrenceInput,
+  RecurrenceRuleInput,
+  RecurringTaskCarryPolicy,
+} from "@life-os/contracts";
 
-export type RecurrenceFrequency = "daily" | "weekly" | "monthly_nth_weekday" | "interval";
-export type RecurrenceEndType = "never" | "on_date" | "after_occurrences";
-export type RecurringTaskCarryPolicy = "complete_and_clone" | "move_due_date" | "cancel";
-
-export type RecurrenceEndCondition = {
-  type: RecurrenceEndType;
-  until?: string | null;
-  occurrenceCount?: number | null;
-};
-
-export type MonthlyNthWeekdayRule = {
-  ordinal: 1 | 2 | 3 | 4 | -1;
-  dayOfWeek: number;
-};
-
-export type RecurrenceRuleInput = {
-  frequency: RecurrenceFrequency;
-  startsOn: string;
-  interval?: number;
-  daysOfWeek?: number[];
-  nthWeekday?: MonthlyNthWeekdayRule;
-  end?: RecurrenceEndCondition;
-};
-
-export type RecurrenceInput = {
-  rule: RecurrenceRuleInput;
-};
-
-export type RecurrenceDefinition = {
-  id: string;
-  rule: RecurrenceRuleInput;
-  exceptions: Array<{
-    occurrenceDate: string;
-    action: "skip" | "do_once" | "reschedule";
-    targetDate?: string | null;
-  }>;
-  carryPolicy?: RecurringTaskCarryPolicy | null;
-  legacyRuleText?: string | null;
-};
+export type {
+  MonthlyNthWeekdayRule,
+  RecurrenceDefinition,
+  RecurrenceEndCondition,
+  RecurrenceEndType,
+  RecurrenceExceptionAction,
+  RecurrenceExceptionItem,
+  RecurrenceFrequency,
+  RecurrenceInput,
+  RecurrenceRuleInput,
+  RecurringTaskCarryPolicy,
+} from "@life-os/contracts";
 
 // ── Day labels ──────────────────────────────────
 

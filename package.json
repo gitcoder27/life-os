@@ -9,6 +9,9 @@
   ],
   "scripts": {
     "postinstall": "npm run prisma:generate -w server",
+    "audit:prod": "npm audit --omit=dev",
+    "test": "npm run test -w server",
+    "ci": "npm ci && npm run audit:prod && npm run typecheck && npm run build && npm run test -w server",
     "dev": "concurrently --kill-others-on-fail --names server,client --prefix-colors green,blue \"npm run dev:server\" \"npm run dev:client\"",
     "build": "npm run build:contracts && npm run build:server && npm run build:client",
     "deploy:prod": "bash deploy/deploy-production.sh",

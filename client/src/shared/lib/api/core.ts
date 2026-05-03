@@ -1,18 +1,13 @@
 import type { QueryClient } from "@tanstack/react-query";
-import { getPreferredTimezone } from "../date";
-
-type ApiFieldError = {
-  field: string;
-  message: string;
-};
-
-type ApiErrorResponse = {
-  success: false;
-  code: string;
-  message: string;
-  fieldErrors?: ApiFieldError[];
-  generatedAt: string;
-};
+import type {
+  ApiError,
+  ApiFieldError,
+} from "@life-os/contracts";
+import {
+  getMonthString,
+  getPreferredTimezone,
+  getWeekStartDate,
+} from "../date";
 
 type SectionError = {
   message: string;
@@ -39,6 +34,20 @@ type ReviewHistoryQueryKeyParams = {
   cursor?: string;
 };
 
+export type CoreInvalidationDomain =
+  | "tasks"
+  | "home"
+  | "focus"
+  | "score"
+  | "planning"
+  | "habits"
+  | "health"
+  | "finance"
+  | "goals"
+  | "review"
+  | "reviewHistory"
+  | "notifications";
+
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? "").replace(/\/$/, "");
 const CSRF_COOKIE_NAME = (import.meta.env.VITE_CSRF_COOKIE_NAME ?? "").trim();
 const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
@@ -48,7 +57,7 @@ export class ApiClientError extends Error {
   code: string;
   fieldErrors?: ApiFieldError[];
 
-  constructor(status: number, payload?: Partial<ApiErrorResponse>) {
+  constructor(status: number, payload?: Partial<ApiError>) {
     super(payload?.message ?? "Request failed");
     this.name = "ApiClientError";
     this.status = status;
@@ -160,7 +169,7 @@ const getClientTimezone = () => {
 
 const readErrorPayload = async (response: Response) => {
   try {
-    return (await response.json()) as ApiErrorResponse;
+    return (await response.json()) as ApiError;
   } catch {
     return undefined;
   }
@@ -236,20 +245,109 @@ export const apiRequest = async <TResponse>(
   return response.json() as Promise<TResponse>;
 };
 
-export const invalidateCoreData = (queryClient: QueryClient, _date: string) => {
-  void queryClient.invalidateQueries({ queryKey: ["tasks"] });
-  void queryClient.invalidateQueries({ queryKey: ["home"] });
-  void queryClient.invalidateQueries({ queryKey: queryKeys.focusActive });
-  void queryClient.invalidateQueries({ queryKey: ["score"] });
-  void queryClient.invalidateQueries({ queryKey: ["planning", "day"] });
-  void queryClient.invalidateQueries({ queryKey: ["planning", "week"] });
-  void queryClient.invalidateQueries({ queryKey: queryKeys.habits });
-  void queryClient.invalidateQueries({ queryKey: ["health"] });
-  void queryClient.invalidateQueries({ queryKey: ["finance"] });
-  void queryClient.invalidateQueries({ queryKey: ["goals"] });
-  void queryClient.invalidateQueries({ queryKey: ["review"] });
-  void queryClient.invalidateQueries({ queryKey: ["reviewHistory"] });
-  void queryClient.invalidateQueries({ queryKey: queryKeys.notifications });
+const isString = (value: unknown): value is string => typeof value === "string";
+
+export const taskQueryTouchesDate = (queryKey: readonly unknown[], date: string) => {
+  if (queryKey[0] !== "tasks") {
+    return false;
+  }
+
+  const scheduledForDate = queryKey[1];
+  const from = queryKey[2];
+  const to = queryKey[3];
+  const scheduledState = queryKey[10];
+
+  if (scheduledForDate === date) {
+    return true;
+  }
+
+  if (isString(from) && isString(to) && from !== "all" && to !== "all") {
+    return from <= date && date <= to;
+  }
+
+  return scheduledForDate === "all" &&
+    from === "all" &&
+    to === "all" &&
+    scheduledState !== "unscheduled";
+};
+
+export const invalidateCoreData = (
+  queryClient: QueryClient,
+  date: string,
+  options: {
+    domains?: CoreInvalidationDomain[];
+  } = {},
+) => {
+  const domains = new Set<CoreInvalidationDomain>(
+    options.domains ?? [
+      "tasks",
+      "home",
+      "focus",
+      "score",
+      "planning",
+      "goals",
+      "review",
+      "notifications",
+    ],
+  );
+
+  if (domains.has("tasks")) {
+    void queryClient.invalidateQueries({
+      predicate: (query) => taskQueryTouchesDate(query.queryKey, date),
+    });
+  }
+
+  if (domains.has("home")) {
+    void queryClient.invalidateQueries({ queryKey: queryKeys.home(date) });
+  }
+
+  if (domains.has("focus")) {
+    void queryClient.invalidateQueries({ queryKey: queryKeys.focusActive });
+  }
+
+  if (domains.has("score")) {
+    void queryClient.invalidateQueries({ queryKey: queryKeys.score(date) });
+    void queryClient.invalidateQueries({ queryKey: queryKeys.weeklyMomentum(date) });
+  }
+
+  if (domains.has("planning")) {
+    void queryClient.invalidateQueries({ queryKey: queryKeys.dayPlan(date) });
+    void queryClient.invalidateQueries({ queryKey: queryKeys.adaptiveToday(date) });
+    void queryClient.invalidateQueries({ queryKey: queryKeys.dayCapacity(date) });
+    void queryClient.invalidateQueries({ queryKey: queryKeys.weekPlan(getWeekStartDate(date)) });
+  }
+
+  if (domains.has("habits")) {
+    void queryClient.invalidateQueries({ queryKey: queryKeys.habits });
+  }
+
+  if (domains.has("health")) {
+    void queryClient.invalidateQueries({ queryKey: queryKeys.health(date) });
+  }
+
+  if (domains.has("finance")) {
+    void queryClient.invalidateQueries({ queryKey: queryKeys.finance(getMonthString(date)) });
+    void queryClient.invalidateQueries({ queryKey: queryKeys.financeCategories });
+    void queryClient.invalidateQueries({ queryKey: queryKeys.financeRecurring });
+  }
+
+  if (domains.has("goals")) {
+    void queryClient.invalidateQueries({
+      queryKey: queryKeys.goals(getWeekStartDate(date), `${getMonthString(date)}-01`),
+    });
+  }
+
+  if (domains.has("review")) {
+    void queryClient.invalidateQueries({ queryKey: queryKeys.review("daily", date) });
+  }
+
+  if (domains.has("reviewHistory")) {
+    void queryClient.invalidateQueries({ queryKey: ["reviewHistory"] });
+  }
+
+  if (domains.has("notifications")) {
+    void queryClient.invalidateQueries({ queryKey: queryKeys.notifications });
+  }
 };
 
 export const invalidateTaskTemplateData = (queryClient: QueryClient) => {
