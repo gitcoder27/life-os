@@ -678,6 +678,92 @@ describe("reviews service", () => {
     expect(prisma.monthlyReview.create).toHaveBeenCalledTimes(1);
   });
 
+  it("rejects weekly review focus habits owned by another user", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-03-18T14:00:00.000Z"));
+    ensureCycleMock.mockResolvedValue({
+      id: "week-cycle",
+      cycleEndDate: new Date("2026-03-15T00:00:00.000Z"),
+      weeklyReview: null,
+    } as any);
+
+    const prisma = {
+      userPreference: { findUnique: vi.fn().mockResolvedValue({ timezone: "UTC", weekStartsOn: 1 }) },
+      habit: { count: vi.fn().mockResolvedValue(0) },
+      weeklyReview: { create: vi.fn() },
+    } as any;
+
+    await expect(
+      submitWeeklyReview(prisma, "user-1", new Date("2026-03-09T00:00:00.000Z"), {
+        biggestWin: "X",
+        biggestMiss: "Y",
+        mainLesson: "Lesson",
+        keepText: "Keep",
+        improveText: "Improve",
+        focusHabitId: "00000000-0000-0000-0000-000000000001",
+        nextWeekPriorities: [
+          { slot: 1, title: "Next 1" },
+          { slot: 2, title: "Next 2" },
+          { slot: 3, title: "Next 3" },
+        ],
+      }),
+    ).rejects.toMatchObject({
+      code: "BAD_REQUEST",
+      message: "Weekly review focus habit must belong to the current user",
+    });
+
+    expect(prisma.habit.count).toHaveBeenCalledWith({
+      where: {
+        id: "00000000-0000-0000-0000-000000000001",
+        userId: "user-1",
+      },
+    });
+    expect(prisma.weeklyReview.create).not.toHaveBeenCalled();
+  });
+
+  it("rejects weekly review spending watch categories owned by another user", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-03-18T14:00:00.000Z"));
+    ensureCycleMock.mockResolvedValue({
+      id: "week-cycle",
+      cycleEndDate: new Date("2026-03-15T00:00:00.000Z"),
+      weeklyReview: null,
+    } as any);
+
+    const prisma = {
+      userPreference: { findUnique: vi.fn().mockResolvedValue({ timezone: "UTC", weekStartsOn: 1 }) },
+      expenseCategory: { count: vi.fn().mockResolvedValue(0) },
+      weeklyReview: { create: vi.fn() },
+    } as any;
+
+    await expect(
+      submitWeeklyReview(prisma, "user-1", new Date("2026-03-09T00:00:00.000Z"), {
+        biggestWin: "X",
+        biggestMiss: "Y",
+        mainLesson: "Lesson",
+        keepText: "Keep",
+        improveText: "Improve",
+        spendingWatchCategoryId: "00000000-0000-0000-0000-000000000002",
+        nextWeekPriorities: [
+          { slot: 1, title: "Next 1" },
+          { slot: 2, title: "Next 2" },
+          { slot: 3, title: "Next 3" },
+        ],
+      }),
+    ).rejects.toMatchObject({
+      code: "BAD_REQUEST",
+      message: "Weekly review spending watch category must belong to the current user",
+    });
+
+    expect(prisma.expenseCategory.count).toHaveBeenCalledWith({
+      where: {
+        id: "00000000-0000-0000-0000-000000000002",
+        userId: "user-1",
+      },
+    });
+    expect(prisma.weeklyReview.create).not.toHaveBeenCalled();
+  });
+
   it("rejects weekly review resubmission after the period is already closed", async () => {
     ensureCycleMock.mockResolvedValue({
       id: "week-cycle",

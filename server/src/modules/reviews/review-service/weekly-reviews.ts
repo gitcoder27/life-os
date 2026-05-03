@@ -1,5 +1,6 @@
 import type { PrismaClient } from "@prisma/client";
 
+import { AppError } from "../../../lib/errors/app-error.js";
 import { getHabitCompletionCountForIsoDate, isHabitDueOnIsoDate, resolveHabitRecurrence } from "../../../lib/habits/schedule.js";
 import { countWaterTargetHits } from "../../../lib/health/water.js";
 import { addDays, getWeekEndDate } from "../../../lib/time/cycle.js";
@@ -302,6 +303,50 @@ export async function getWeeklyReviewModel(
   };
 }
 
+async function assertOwnedWeeklyReviewReferences(
+  prisma: PrismaClient,
+  userId: string,
+  input: {
+    focusHabitId?: string | null;
+    spendingWatchCategoryId?: string | null;
+  },
+) {
+  const [focusHabitCount, spendingWatchCategoryCount] = await Promise.all([
+    input.focusHabitId
+      ? prisma.habit.count({
+          where: {
+            id: input.focusHabitId,
+            userId,
+          },
+        })
+      : Promise.resolve(1),
+    input.spendingWatchCategoryId
+      ? prisma.expenseCategory.count({
+          where: {
+            id: input.spendingWatchCategoryId,
+            userId,
+          },
+        })
+      : Promise.resolve(1),
+  ]);
+
+  if (focusHabitCount !== 1) {
+    throw new AppError({
+      statusCode: 400,
+      code: "BAD_REQUEST",
+      message: "Weekly review focus habit must belong to the current user",
+    });
+  }
+
+  if (spendingWatchCategoryCount !== 1) {
+    throw new AppError({
+      statusCode: 400,
+      code: "BAD_REQUEST",
+      message: "Weekly review spending watch category must belong to the current user",
+    });
+  }
+}
+
 export async function submitWeeklyReview(
   prisma: PrismaClient,
   userId: string,
@@ -324,6 +369,11 @@ export async function submitWeeklyReview(
     "Weekly review",
     resolveWeeklyReviewSubmissionWindow(toIsoDateString(startDate), new Date(), preferences),
   );
+  await assertOwnedPriorityGoalReferences(prisma, userId, payload.nextWeekPriorities);
+  await assertOwnedWeeklyReviewReferences(prisma, userId, {
+    focusHabitId: payload.focusHabitId,
+    spendingWatchCategoryId: payload.spendingWatchCategoryId,
+  });
   const nextWeekStart = addDays(startDate, 7);
   const nextWeekCycle = await ensureCycle(prisma, {
     userId,
@@ -331,7 +381,6 @@ export async function submitWeeklyReview(
     cycleStartDate: nextWeekStart,
     cycleEndDate: getWeekEndDate(nextWeekStart),
   });
-  await assertOwnedPriorityGoalReferences(prisma, userId, payload.nextWeekPriorities);
   const completedAt = new Date();
 
   await prisma.weeklyReview.create({
