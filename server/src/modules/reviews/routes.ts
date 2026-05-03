@@ -4,6 +4,7 @@ import { z } from "zod";
 
 import { requireAuthenticatedUser } from "../../lib/auth/require-auth.js";
 import { parseIsoDate } from "../../lib/time/cycle.js";
+import { isoDateStringSchema } from "../../lib/validation/date-range.js";
 import { parseOrThrow } from "../../lib/validation/parse.js";
 import {
   getDailyReviewModel,
@@ -15,7 +16,7 @@ import {
   submitWeeklyReview,
 } from "./service.js";
 
-const isoDateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/) as unknown as z.ZodType<IsoDateString>;
+const isoDateSchema = isoDateStringSchema as z.ZodType<IsoDateString>;
 const reviewHistoryQuerySchema = z.object({
   cadence: z.enum(["all", "daily", "weekly", "monthly"]).optional() as z.ZodType<ReviewHistoryCadenceFilter | undefined>,
   range: z.enum(["30d", "90d", "365d", "all"]).optional() as z.ZodType<ReviewHistoryRange | undefined>,

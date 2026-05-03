@@ -17,7 +17,9 @@ import type {
 } from "@life-os/contracts";
 import { z } from "zod";
 
-export const isoDateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/) as unknown as z.ZodType<IsoDateString>;
+import { isoDateStringSchema } from "../../lib/validation/date-range.js";
+
+export const isoDateSchema = isoDateStringSchema as z.ZodType<IsoDateString>;
 
 const habitStatusSchema = z.enum(["active", "paused", "archived"]);
 const habitTypeSchema = z.enum(["maintenance", "growth", "identity"]) as z.ZodType<HabitType>;

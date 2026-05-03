@@ -4,10 +4,11 @@ import type { TaskKind as PrismaTaskKind } from "@prisma/client";
 import { AppError } from "../../lib/errors/app-error.js";
 import { getMonthStartIsoDate, getWeekStartIsoDate, parseIsoDate } from "../../lib/time/cycle.js";
 import { getUserLocalDate, getUtcDateForLocalTime } from "../../lib/time/user-time.js";
+import { isoDateStringSchema } from "../../lib/validation/date-range.js";
 import { toPrismaTaskKind } from "./planning-mappers.js";
 import type { PlanningApp } from "./planning-types.js";
 
-const isIsoDateInput = (value: string): value is IsoDateString => /^\d{4}-\d{2}-\d{2}$/.test(value);
+const isIsoDateInput = (value: string): value is IsoDateString => isoDateStringSchema.safeParse(value).success;
 
 export function toTaskReminderAt(reminderAt: string | null | undefined, timezone?: string | null) {
   if (reminderAt === undefined) {

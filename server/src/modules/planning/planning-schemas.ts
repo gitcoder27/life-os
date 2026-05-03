@@ -20,7 +20,9 @@ import type {
 } from "@life-os/contracts";
 import { z } from "zod";
 
-export const isoDateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/) as unknown as z.ZodType<IsoDateString>;
+import { isoDateStringSchema } from "../../lib/validation/date-range.js";
+
+export const isoDateSchema = isoDateStringSchema as z.ZodType<IsoDateString>;
 export const isoDateTimeSchema = z.string().datetime({ offset: true });
 const reminderAtSchema = z.union([isoDateSchema, isoDateTimeSchema]);
 const entityIdSchema = z.string().trim().min(1);

@@ -1,0 +1,11 @@
+[Unit]
+Description=Run Life OS PostgreSQL backup nightly
+
+[Timer]
+OnCalendar=*-*-* 02:45:00
+AccuracySec=10min
+Persistent=true
+Unit=life-os-postgres-backup.service
+
+[Install]
+WantedBy=timers.target

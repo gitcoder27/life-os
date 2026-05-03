@@ -659,6 +659,16 @@ describe("day planner planning routes", () => {
     expect(JSON.parse(response.body).message).toBe("Request validation failed");
   });
 
+  it("rejects impossible calendar dates", async () => {
+    const response = await app!.inject({
+      method: "GET",
+      url: "/api/planning/days/2026-02-31",
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(JSON.parse(response.body).message).toBe("Request validation failed");
+  });
+
   it("creates, updates, reorders, and clears day planner blocks while syncing task times", async () => {
     const createBlock = await app!.inject({
       method: "POST",

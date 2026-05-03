@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import {
   DndContext,
   DragOverlay,
+  KeyboardSensor,
   type Modifier,
   PointerSensor,
   pointerWithin,
@@ -36,6 +37,7 @@ import type {
 import {
   PageLoadingState,
 } from "../../shared/ui/PageState";
+import { useDialogAccessibility } from "../../shared/ui/DialogSurface";
 import { HealthSubNav } from "./HealthSubNav";
 
 /* ═══════════════════════════════════════════════
@@ -618,12 +620,11 @@ function DroppableMealSlot({
   }
 
   return (
-    <div
+    <button
+      type="button"
       ref={setNodeRef}
       className={`mp-slot mp-slot--empty${isToday ? " mp-slot--today" : ""}${isDragActive ? " mp-slot--drop-ready" : ""}${isOver ? " mp-slot--drop-over" : ""}`}
-      onClick={() => !isDragActive && onAssign(date, slot)}
-      role="button"
-      tabIndex={0}
+      onClick={() => onAssign(date, slot)}
       aria-label={`Assign ${formatMealSlotLabel(slot)} for ${formatShortDate(date)}`}
     >
       {isOver ? (
@@ -633,7 +634,7 @@ function DroppableMealSlot({
       ) : (
         <span className="mp-slot__add">+</span>
       )}
-    </div>
+    </button>
   );
 }
 
@@ -713,10 +714,14 @@ function TemplatePicker({
 }) {
   const [search, setSearch] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    inputRef.current?.focus();
-  }, []);
+  useDialogAccessibility({
+    open: true,
+    onClose,
+    dialogRef,
+    initialFocusRef: inputRef,
+  });
 
   const filtered = useMemo(() => {
     if (!search.trim()) return templates;
@@ -731,6 +736,7 @@ function TemplatePicker({
   return createPortal(
     <div className="mp-picker-overlay" onClick={onClose}>
       <div
+        ref={dialogRef}
         className="mp-picker"
         onClick={(e) => e.stopPropagation()}
         role="dialog"
@@ -815,10 +821,20 @@ function PlannedEntryEditor({
     entry.servings ? String(entry.servings) : ""
   );
   const [note, setNote] = useState(entry.note ?? "");
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const servingsInputRef = useRef<HTMLInputElement>(null);
+
+  useDialogAccessibility({
+    open: true,
+    onClose,
+    dialogRef,
+    initialFocusRef: servingsInputRef,
+  });
 
   return createPortal(
     <div className="mp-picker-overlay" onClick={onClose}>
       <div
+        ref={dialogRef}
         className="mp-picker mp-picker--editor"
         onClick={(e) => e.stopPropagation()}
         role="dialog"
@@ -842,6 +858,7 @@ function PlannedEntryEditor({
           </div>
           <div className="mp-template-creator__fields">
             <input
+              ref={servingsInputRef}
               type="number"
               className="mp-input"
               placeholder="Servings"
@@ -1337,6 +1354,8 @@ function RecipeComposer({
 }) {
   const createMutation = useCreateMealTemplateMutation();
   const updateMutation = useUpdateMealTemplateMutation();
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const nameInputRef = useRef<HTMLInputElement>(null);
   const [name, setName] = useState(initialTemplate?.name ?? "");
   const [slot, setSlot] = useState<MealSlot | "">(
     initialTemplate?.mealSlot ?? ""
@@ -1369,6 +1388,13 @@ function RecipeComposer({
   const [notes, setNotes] = useState(initialTemplate?.notes ?? "");
 
   const isPending = createMutation.isPending || updateMutation.isPending;
+
+  useDialogAccessibility({
+    open: true,
+    onClose: onCancel,
+    dialogRef,
+    initialFocusRef: nameInputRef,
+  });
 
   function parseIngredients(): MealTemplateIngredient[] {
     return ingredients
@@ -1427,6 +1453,7 @@ function RecipeComposer({
   return createPortal(
     <div className="mp-picker-overlay" onClick={onCancel}>
       <div
+        ref={dialogRef}
         className="mp-picker mp-picker--editor"
         onClick={(e) => e.stopPropagation()}
         role="dialog"
@@ -1451,6 +1478,7 @@ function RecipeComposer({
             <div className="rc-field">
               <label className="rc-field__label">Recipe name</label>
               <input
+                ref={nameInputRef}
                 type="text"
                 className="rc-field__input"
                 placeholder="e.g. Overnight Oats"
@@ -1649,7 +1677,8 @@ export function MealPlannerPage() {
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: { distance: 5 },
-    })
+    }),
+    useSensor(KeyboardSensor)
   );
 
   function handleDragStart(event: DragStartEvent) {

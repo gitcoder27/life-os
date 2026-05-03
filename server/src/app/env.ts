@@ -92,32 +92,68 @@ export function loadSelectedEnv(options: LoadSelectedEnvOptions = {}) {
 
 const envPath = loadSelectedEnv();
 
-const envSchema = z.object({
-  NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
-  HOST: z.string().default("0.0.0.0"),
-  PORT: z.coerce.number().int().positive().default(3004),
-  APP_ORIGIN: z.string().default("http://localhost:5174"),
-  DATABASE_URL: z
-    .string()
-    .default("postgresql://postgres:postgres@localhost:5432/life_os"),
-  DEV_DATABASE_URL: z.string().optional(),
-  PROD_DATABASE_URL: z.string().optional(),
-  DATABASE_SEPARATION_STRICT: z.coerce.boolean().default(false),
-  AUTO_CREATE_DATABASE: z.coerce.boolean().default(false),
-  AUTO_APPLY_MIGRATIONS: z.coerce.boolean().default(false),
-  SESSION_COOKIE_NAME: z.string().default("life_os_session"),
-  SESSION_SECRET: z.string().min(16).default("dev-only-change-me"),
-  SESSION_TTL_DAYS: z.coerce.number().int().positive().default(14),
-  CSRF_COOKIE_NAME: z.string().default("life_os_csrf"),
-  AUTH_RATE_LIMIT_WINDOW_MINUTES: z.coerce.number().int().positive().default(15),
-  AUTH_RATE_LIMIT_MAX_ATTEMPTS: z.coerce.number().int().positive().default(5),
-  BOOTSTRAP_USER_EMAIL: z.string().email().optional(),
-  BOOTSTRAP_USER_PASSWORD: z.string().min(8).optional(),
-  BOOTSTRAP_USER_DISPLAY_NAME: z.string().optional(),
-  OWNER_EMAIL: z.string().email().optional(),
-  OWNER_PASSWORD: z.string().min(8).optional(),
-  OWNER_DISPLAY_NAME: z.string().default("Owner"),
-});
+const defaultSessionSecret = "dev-only-change-me";
+const minimumProductionSessionSecretLength = 32;
+const weakProductionSessionSecrets = new Set([
+  defaultSessionSecret,
+  "change-me",
+  "changeme",
+  "changeit",
+  "password",
+  "secret",
+  "session-secret",
+  "life-os-session-secret",
+]);
+
+const envSchema = z
+  .object({
+    NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
+    HOST: z.string().default("0.0.0.0"),
+    PORT: z.coerce.number().int().positive().default(3004),
+    APP_ORIGIN: z.string().default("http://localhost:5174"),
+    DATABASE_URL: z
+      .string()
+      .default("postgresql://postgres:postgres@localhost:5432/life_os"),
+    DEV_DATABASE_URL: z.string().optional(),
+    PROD_DATABASE_URL: z.string().optional(),
+    DATABASE_SEPARATION_STRICT: z.coerce.boolean().default(false),
+    AUTO_CREATE_DATABASE: z.coerce.boolean().default(false),
+    AUTO_APPLY_MIGRATIONS: z.coerce.boolean().default(false),
+    SESSION_COOKIE_NAME: z.string().default("life_os_session"),
+    SESSION_SECRET: z.string().min(16).default(defaultSessionSecret),
+    SESSION_TTL_DAYS: z.coerce.number().int().positive().default(14),
+    CSRF_COOKIE_NAME: z.string().default("life_os_csrf"),
+    AUTH_RATE_LIMIT_WINDOW_MINUTES: z.coerce.number().int().positive().default(15),
+    AUTH_RATE_LIMIT_MAX_ATTEMPTS: z.coerce.number().int().positive().default(5),
+    BOOTSTRAP_USER_EMAIL: z.string().email().optional(),
+    BOOTSTRAP_USER_PASSWORD: z.string().min(8).optional(),
+    BOOTSTRAP_USER_DISPLAY_NAME: z.string().optional(),
+    OWNER_EMAIL: z.string().email().optional(),
+    OWNER_PASSWORD: z.string().min(8).optional(),
+    OWNER_DISPLAY_NAME: z.string().default("Owner"),
+  })
+  .superRefine((value, context) => {
+    if (value.NODE_ENV !== "production") {
+      return;
+    }
+
+    const trimmedSecret = value.SESSION_SECRET.trim();
+    const normalizedSecret = trimmedSecret.toLowerCase();
+    const isRepeatedCharacter = /^(.)(\1)+$/.test(trimmedSecret);
+
+    if (
+      trimmedSecret.length < minimumProductionSessionSecretLength ||
+      weakProductionSessionSecrets.has(normalizedSecret) ||
+      isRepeatedCharacter
+    ) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["SESSION_SECRET"],
+        message:
+          "SESSION_SECRET must be explicitly set to a strong production-only value of at least 32 characters",
+      });
+    }
+  });
 
 export type AppEnv = z.infer<typeof envSchema>;
 
@@ -139,6 +175,16 @@ function getDbIdentity(databaseUrl: string): DbIdentity | null {
   } catch {
     return null;
   }
+}
+
+export function describeDatabaseTarget(databaseUrl: string) {
+  const dbIdentity = getDbIdentity(databaseUrl);
+
+  if (!dbIdentity) {
+    return "unparseable database URL";
+  }
+
+  return `host=${dbIdentity.host} port=${dbIdentity.port} database=${dbIdentity.database}`;
 }
 
 export function getDatabaseName(databaseUrl: string) {
@@ -221,8 +267,8 @@ export function assertDatabaseSeparation(env: AppEnv) {
   }
 }
 
-export function getEnv(): AppEnv {
-  const parsed = envSchema.safeParse(process.env);
+export function parseAppEnv(input: NodeJS.ProcessEnv): AppEnv {
+  const parsed = envSchema.safeParse(input);
 
   if (!parsed.success) {
     throw new Error(
@@ -233,4 +279,8 @@ export function getEnv(): AppEnv {
   }
 
   return parsed.data;
+}
+
+export function getEnv(): AppEnv {
+  return parseAppEnv(process.env);
 }

@@ -20,9 +20,10 @@ import { AppError } from "../../lib/errors/app-error.js";
 import { withGeneratedAt } from "../../lib/http/response.js";
 import { parseIsoDate } from "../../lib/time/cycle.js";
 import { toIsoDateString } from "../../lib/time/date.js";
+import { isoDateStringSchema } from "../../lib/validation/date-range.js";
 import { parseOrThrow } from "../../lib/validation/parse.js";
 
-const isoDateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/) as unknown as z.ZodType<IsoDateString>;
+const isoDateSchema = isoDateStringSchema as z.ZodType<IsoDateString>;
 const adminItemStatusSchema = z.enum(["pending", "done", "rescheduled", "dropped"]);
 
 const adminItemsQuerySchema = z.object({

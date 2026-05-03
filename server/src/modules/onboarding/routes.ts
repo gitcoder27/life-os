@@ -15,6 +15,7 @@ import { z } from "zod";
 import { requireAuthenticatedUser } from "../../lib/auth/require-auth.js";
 import { withGeneratedAt, withWriteSuccess } from "../../lib/http/response.js";
 import { getMonthEndDate, getWeekEndDate, parseIsoDate } from "../../lib/time/cycle.js";
+import { isoDateStringSchema } from "../../lib/validation/date-range.js";
 import { parseOrThrow } from "../../lib/validation/parse.js";
 import { timezoneSchema } from "../../lib/validation/timezone.js";
 import { ensureGoalConfigSeeded } from "../planning/goal-config.js";
@@ -35,7 +36,7 @@ const routinePeriodSchema = z.enum(["morning", "evening"]);
 const onboardingGoalSchema = z.object({
   title: z.string().min(1).max(200),
   domain: goalDomainSchema,
-  targetDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
+  targetDate: isoDateStringSchema.nullable().optional(),
   notes: z.string().max(4000).nullable().optional(),
 });
 
@@ -73,7 +74,7 @@ const onboardingRecurringBillSchema = z.object({
   categoryName: z.string().max(120).nullable().optional(),
   defaultAmountMinor: z.number().int().positive().nullable().optional(),
   cadence: z.enum(["weekly", "monthly"]),
-  nextDueOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  nextDueOn: isoDateStringSchema,
   remindDaysBefore: z.number().int().min(0).max(365).optional(),
 });
 
@@ -144,8 +145,8 @@ const onboardingCompletionSchema = z.object({
   expenseCategories: z.array(onboardingExpenseCategorySchema).max(20).optional(),
   mealTemplates: z.array(onboardingMealTemplateSchema).max(20).optional(),
   firstRecurringBill: onboardingRecurringBillSchema.nullable().optional(),
-  firstWeekStartDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-  firstMonthStartDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  firstWeekStartDate: isoDateStringSchema,
+  firstMonthStartDate: isoDateStringSchema.optional(),
 });
 
 function toMealSlot(

@@ -7,7 +7,12 @@ This document defines the practical backup approach for Life OS in its current s
 - The backend uses PostgreSQL.
 - Production currently points at a local PostgreSQL instance on the same VPS.
 - The database is currently stored in a local Docker volume.
-- There is currently no confirmed automatic backup, off-server replica, dump rotation, or point-in-time recovery setup.
+- The repo now includes a production backup script and systemd timer templates:
+  - `deploy/scripts/life-os-postgres-backup.sh`
+  - `deploy/systemd/life-os-postgres-backup.service`
+  - `deploy/systemd/life-os-postgres-backup.timer`
+- The backup script creates a custom-format `pg_dump`, writes a SHA-256 checksum, uploads both files to an encrypted off-server `rclone` remote, and prunes local backups after `BACKUP_RETENTION_DAYS`.
+- Production is not considered backup-protected until the timer is installed on the VPS, `/etc/life-os/backup.env` defines `RCLONE_REMOTE`, and a restore test has succeeded.
 
 ## Current risk
 
@@ -71,9 +76,10 @@ This app stores sensitive personal data, including planning, health, finance, an
 
 For current usage:
 
-- run one backup every night
-- keep 7 daily backups
-- keep 4 weekly backups
+- run `life-os-postgres-backup.timer` every night at 02:45 server time
+- keep at least 14 days of local backups via `BACKUP_RETENTION_DAYS=14`
+- keep off-server copies according to the encrypted remote's retention policy
+- run a manual restore test at least monthly
 
 If the app starts receiving meaningful data throughout the day and losing up to 24 hours becomes unacceptable, increase frequency to every 6 or 12 hours.
 
@@ -152,13 +158,13 @@ The restore process should be tested into a separate database or temporary envir
 
 ## Recommended next implementation
 
-When this is implemented, the first version should do only the following:
+The first production implementation is now represented by the checked-in script and systemd templates. Install it with the production deployment runbook, then verify the following:
 
-1. Run `pg_dump` against the production database.
-2. Save the dump with a timestamped filename.
-3. Remove old local backups based on the retention policy.
-4. Upload the backup to encrypted off-server storage.
-5. Log success or failure clearly.
+1. `rclone config` includes an encrypted remote.
+2. `/etc/life-os/backup.env` contains `RCLONE_REMOTE=<encrypted-remote>:<path>`.
+3. `systemctl list-timers life-os-postgres-backup.timer --no-pager` shows the next run.
+4. `journalctl -u life-os-postgres-backup.service -n 80 --no-pager` shows successful upload.
+5. A backup can be restored into a separate database with `pg_restore`.
 
 Keep the first version intentionally small and boring.
 

@@ -3,6 +3,10 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
+import type {
+  MonthFocusMutationResponse,
+  PlanningPriorityMutationResponse,
+} from "@life-os/contracts";
 
 import {
   getMonthStartDate,
@@ -580,7 +584,7 @@ export const useUpdateWeekPrioritiesMutation = (weekStartDate: string) => {
         goalId?: string | null;
       }>;
     }) =>
-      apiRequest<WeekPlanResponse>(`/api/planning/weeks/${weekStartDate}/priorities`, {
+      apiRequest<PlanningPriorityMutationResponse>(`/api/planning/weeks/${weekStartDate}/priorities`, {
         method: "PUT",
         body: payload,
       }),
@@ -607,7 +611,7 @@ export const useUpdateMonthFocusMutation = (monthStartDate: string) => {
         goalId?: string | null;
       }>;
     }) =>
-      apiRequest<MonthPlanResponse>(`/api/planning/months/${monthStartDate}/focus`, {
+      apiRequest<MonthFocusMutationResponse>(`/api/planning/months/${monthStartDate}/focus`, {
         method: "PUT",
         body: payload,
       }),

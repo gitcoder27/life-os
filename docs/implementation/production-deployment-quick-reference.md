@@ -36,6 +36,7 @@ sudo systemctl start life-os.service
 
 ```bash
 systemctl is-active life-os.service
+systemctl list-timers 'life-os-worker*' 'life-os-postgres-backup*' --no-pager
 curl -fsS http://127.0.0.1:3104/healthz
 curl -I https://personal.daycommand.online
 ```
@@ -44,7 +45,22 @@ curl -I https://personal.daycommand.online
 
 ```bash
 sudo journalctl -u life-os.service -n 80 --no-pager
+sudo journalctl -u 'life-os-worker@every-15-minutes.service' -n 80 --no-pager
+sudo journalctl -u life-os-postgres-backup.service -n 80 --no-pager
 ```
+
+## Worker and backup timers
+
+Production must have these timers enabled:
+
+```bash
+sudo systemctl enable --now life-os-worker-every-15-minutes.timer
+sudo systemctl enable --now life-os-worker-daily.timer
+sudo systemctl enable --now life-os-worker-weekly.timer
+sudo systemctl enable --now life-os-postgres-backup.timer
+```
+
+`/etc/life-os/backup.env` must define `RCLONE_REMOTE` for encrypted off-server backups.
 
 ## Fast paths
 

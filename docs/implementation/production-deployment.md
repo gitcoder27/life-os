@@ -8,6 +8,14 @@ If a release includes Prisma migration files, production also needs the database
 
 - Production template: `deploy/systemd/life-os.service`
 - Development template: `deploy/systemd/life-os-dev.service`
+- Worker service template: `deploy/systemd/life-os-worker@.service`
+- Worker timers:
+  - `deploy/systemd/life-os-worker-every-15-minutes.timer`
+  - `deploy/systemd/life-os-worker-daily.timer`
+  - `deploy/systemd/life-os-worker-weekly.timer`
+- Backup templates:
+  - `deploy/systemd/life-os-postgres-backup.service`
+  - `deploy/systemd/life-os-postgres-backup.timer`
 - Copy the appropriate template into `/etc/systemd/system/` before enabling or restarting the service.
 
 ## Current production wiring
@@ -15,6 +23,11 @@ If a release includes Prisma migration files, production also needs the database
 - API service: `life-os.service` (`/etc/systemd/system/life-os.service`)
   - Starts `npm run start` in `/home/ubuntu/apps/life-os-prod/server`
   - Listens on `127.0.0.1:3104`
+- Worker timers:
+  - `life-os-worker-every-15-minutes.timer` runs reminder and notification evaluator jobs every 15 minutes.
+  - `life-os-worker-daily.timer` runs daily maintenance jobs at 02:15.
+  - `life-os-worker-weekly.timer` runs weekly cleanup jobs at 03:15 on Sunday.
+- Backup timer: `life-os-postgres-backup.timer` runs an encrypted off-server PostgreSQL dump at 02:45.
 - Frontend static files: served by nginx from `/var/www/personal.daycommand.online`
 - Nginx config: `/etc/nginx/sites-available/personal.daycommand.online`
 
@@ -80,6 +93,7 @@ If `npm install` or another command rewrites only `package-lock.json` on the ser
 
 ```bash
 systemctl is-active life-os.service
+systemctl list-timers 'life-os-worker*' 'life-os-postgres-backup*' --no-pager
 systemctl status life-os.service --no-pager
 curl -fsS http://127.0.0.1:3104/healthz
 curl -I https://personal.daycommand.online
@@ -89,6 +103,69 @@ If the API is not healthy, check logs:
 
 ```bash
 sudo journalctl -u life-os.service -n 80 --no-pager
+sudo journalctl -u 'life-os-worker@every-15-minutes.service' -n 80 --no-pager
+sudo journalctl -u life-os-postgres-backup.service -n 80 --no-pager
+```
+
+## Worker timers
+
+The worker entrypoint is one-shot by design. Production scheduling is owned by systemd timers, and each timer passes a schedule filter into `npm run worker`:
+
+- `life-os-worker@every-15-minutes.service`: runs only jobs registered with `schedule: "every-15-minutes"`.
+- `life-os-worker@daily.service`: runs only jobs registered with `schedule: "daily"`.
+- `life-os-worker@weekly.service`: runs only jobs registered with `schedule: "weekly"`.
+
+Install or refresh the production worker timers:
+
+```bash
+cd /home/ubuntu/apps/life-os-prod
+sudo cp deploy/systemd/life-os-worker@.service /etc/systemd/system/life-os-worker@.service
+sudo cp deploy/systemd/life-os-worker-*.timer /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now life-os-worker-every-15-minutes.timer
+sudo systemctl enable --now life-os-worker-daily.timer
+sudo systemctl enable --now life-os-worker-weekly.timer
+systemctl list-timers 'life-os-worker*' --no-pager
+```
+
+To run a schedule manually:
+
+```bash
+cd /home/ubuntu/apps/life-os-prod/server
+NODE_ENV=production npm run worker -- --schedule every-15-minutes
+NODE_ENV=production npm run worker -- --schedule daily
+NODE_ENV=production npm run worker -- --schedule weekly
+```
+
+## Backups
+
+Production backups require `pg_dump`, `rclone`, an encrypted rclone remote, and `/etc/life-os/backup.env` with `RCLONE_REMOTE` set. The backup script fails if `RCLONE_REMOTE` is missing so production does not silently fall back to local-only backups.
+
+Install or refresh the backup timer:
+
+```bash
+sudo install -d -m 700 /etc/life-os
+sudo install -d -m 700 -o ubuntu -g ubuntu /var/backups/life-os/postgres
+sudo editor /etc/life-os/backup.env
+# Required line:
+# RCLONE_REMOTE=life-os-crypt:postgres
+
+cd /home/ubuntu/apps/life-os-prod
+sudo cp deploy/systemd/life-os-postgres-backup.service /etc/systemd/system/life-os-postgres-backup.service
+sudo cp deploy/systemd/life-os-postgres-backup.timer /etc/systemd/system/life-os-postgres-backup.timer
+sudo systemctl daemon-reload
+sudo systemctl enable --now life-os-postgres-backup.timer
+sudo systemctl start life-os-postgres-backup.service
+systemctl list-timers 'life-os-postgres-backup*' --no-pager
+sudo journalctl -u life-os-postgres-backup.service -n 80 --no-pager
+```
+
+Monthly restore test:
+
+```bash
+createdb life_os_restore_test
+pg_restore --dbname life_os_restore_test --clean --if-exists /var/backups/life-os/postgres/<backup-file>.dump
+dropdb life_os_restore_test
 ```
 
 ## Frontend-only quick update (only if backend unchanged)
@@ -123,6 +200,7 @@ sudo systemctl start life-os.service
 - `npm run build:client` uses `vite build --mode production`, so the shipped bundle reads `client/.env.production`.
 - Nginx only proxies `/api/*` to the backend; everything else is static frontend files.
 - Keep `server/.env.production` in place as it contains `PORT=3104` and production DB/secret values.
+- Keep `/etc/life-os/backup.env` outside git. It contains the encrypted off-server backup destination.
 - Keep `client/.env.development` on the dev CSRF cookie and `client/.env.production` on the prod CSRF cookie; do not swap them.
 - If `life-os.service` fails with `Failed to load environment files` or `Failed to spawn 'start' task`, verify that `WorkingDirectory` and `EnvironmentFile` point to `/home/ubuntu/apps/life-os-prod/server` and `/home/ubuntu/apps/life-os-prod/server/.env.production`.
 

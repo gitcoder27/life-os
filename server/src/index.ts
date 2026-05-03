@@ -1,14 +1,12 @@
 import { buildApp } from "./app/build-app.js";
-import { assertDatabaseSeparation, getEnv } from "./app/env.js";
-import { ensureDatabaseExists, ensureDatabaseMigrations } from "./app/db-bootstrap.js";
+import { describeDatabaseTarget, getEnv } from "./app/env.js";
+import { prepareRuntimeDatabase } from "./app/runtime-database.js";
 
 async function start() {
   const env = getEnv();
-  await ensureDatabaseExists(env);
-  await ensureDatabaseMigrations(env);
-  assertDatabaseSeparation(env);
 
   try {
+    await prepareRuntimeDatabase(env);
     const app = await buildApp(env);
     await app.listen({
       host: env.HOST,
@@ -22,7 +20,7 @@ async function start() {
       console.error(
         `[server] Prisma connection failed. Start Postgres first and confirm DATABASE_URL in ${process.cwd()}/server/.env`,
       );
-      console.error(`Current DATABASE_URL: ${process.env.DATABASE_URL}`);
+      console.error(`Current database target: ${describeDatabaseTarget(env.DATABASE_URL)}`);
     }
 
     if (error instanceof Error && /database .* does not exist/i.test(error.message)) {

@@ -718,11 +718,14 @@
 
 /* Empty — default */
 .mp-slot--empty {
+  appearance: none;
   border: 1px dashed var(--border);
   justify-content: center;
   color: var(--text-tertiary);
   cursor: pointer;
   background: transparent;
+  font: inherit;
+  padding: 0;
   width: 100%;
 }
 

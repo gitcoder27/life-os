@@ -638,6 +638,67 @@ describe("finance bill reconciliation routes", () => {
     expect(payload.undone).toBe(true);
   });
 
+  it("does not undo a recurring income receipt with an unrelated transaction id", async () => {
+    const receiptDate = new Date("2026-05-28T00:00:00.000Z");
+    const existingIncome = {
+      id: RECURRING_INCOME_ID,
+      userId: USER_ID,
+      accountId: ACCOUNT_ID,
+      title: "Salary",
+      amountMinor: 8000000,
+      currencyCode: "INR",
+      recurrenceRule: "monthly",
+      nextExpectedOn: new Date("2026-06-28T00:00:00.000Z"),
+      status: "ACTIVE",
+      createdAt: new Date("2026-04-28T00:00:00.000Z"),
+      updatedAt: receiptDate,
+    };
+    const unrelatedTransactionId = "00000000-0000-4000-8000-000000000099";
+    const unrelatedTransaction = {
+      id: unrelatedTransactionId,
+      userId: USER_ID,
+      accountId: ACCOUNT_ID,
+      transferAccountId: null,
+      transactionType: "INCOME",
+      amountMinor: 12345,
+      currencyCode: "INR",
+      occurredOn: receiptDate,
+      description: "Unrelated income",
+      expenseCategoryId: null,
+      billId: null,
+      recurringIncomeTemplateId: "00000000-0000-4000-8000-000000000098",
+      createdAt: receiptDate,
+      updatedAt: receiptDate,
+    };
+
+    prisma.recurringIncomeTemplate.findFirst.mockResolvedValueOnce(existingIncome);
+    prisma.financeTransaction.findFirst.mockImplementationOnce(async ({ where }: any) => {
+      const serializedWhere = JSON.stringify(where);
+
+      if (
+        where.id === unrelatedTransactionId &&
+        where.userId === USER_ID &&
+        !serializedWhere.includes(RECURRING_INCOME_ID)
+      ) {
+        return unrelatedTransaction;
+      }
+
+      return null;
+    });
+
+    const response = await app!.inject({
+      method: "POST",
+      url: `/api/finance/recurring-income/${RECURRING_INCOME_ID}/undo-latest-receive`,
+      payload: {
+        transactionId: unrelatedTransactionId,
+      },
+    });
+
+    expect(response.statusCode).toBe(404);
+    expect(prisma.financeTransaction.delete).not.toHaveBeenCalled();
+    expect(prisma.recurringIncomeTemplate.update).not.toHaveBeenCalled();
+  });
+
   it("builds a monthly timeline with income, bills, cards, and loans grouped by status", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-04-28T12:00:00.000Z"));

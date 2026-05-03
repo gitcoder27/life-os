@@ -55,6 +55,7 @@ import {
   isValidTimezone,
   resolveDisplayTimezone,
 } from "../../lib/time/user-time.js";
+import { isoDateStringSchema } from "../../lib/validation/date-range.js";
 import { parseOrThrow } from "../../lib/validation/parse.js";
 import { buildFinanceAttentionItems } from "./finance-attention.js";
 import { buildHomeGuidance } from "./guidance.js";
@@ -73,7 +74,7 @@ import { buildFinanceTimeline } from "../finance/finance-timeline-service.js";
 import { getOpenDailyReviewRoute } from "../reviews/submission-window.js";
 import { calculateDailyScore, ensureCycle, getWeeklyMomentum } from "../scoring/service.js";
 
-const isoDateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/) as unknown as z.ZodType<IsoDateString>;
+const isoDateSchema = isoDateStringSchema as z.ZodType<IsoDateString>;
 const dateQuerySchema = z.object({
   date: isoDateSchema.optional(),
 });

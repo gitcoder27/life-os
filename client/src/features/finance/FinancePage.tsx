@@ -1,4 +1,4 @@
-import { useMemo, useState, type CSSProperties, type Dispatch, type ReactNode, type SetStateAction } from "react";
+import { useCallback, useMemo, useRef, useState, type CSSProperties, type Dispatch, type ReactNode, type SetStateAction } from "react";
 
 import {
   daysUntil,
@@ -52,6 +52,7 @@ import {
   PageErrorState,
   PageLoadingState,
 } from "../../shared/ui/PageState";
+import { useDialogAccessibility } from "../../shared/ui/DialogSurface";
 import { buildRecurrenceInput } from "../../shared/ui/RecurrenceEditor";
 import { FinanceInsightsPanel } from "./FinanceInsightsPanel";
 import { FinancePlanPanel } from "./FinancePlanPanel";
@@ -158,6 +159,9 @@ export function FinancePage() {
   const [selectedMonth, setSelectedMonth] = useState(currentMonth);
   const [tab, setTab] = useState<CockpitTab>("overview");
   const [showSetup, setShowSetup] = useState(false);
+  const setupDrawerRef = useRef<HTMLElement | null>(null);
+  const setupCloseButtonRef = useRef<HTMLButtonElement | null>(null);
+  const closeSetup = useCallback(() => setShowSetup(false), []);
   const [setupTab, setSetupTab] = useState<SetupTab>("accounts");
   const [showTransactionForm, setShowTransactionForm] = useState(false);
   const [showBillForm, setShowBillForm] = useState(false);
@@ -165,6 +169,13 @@ export function FinancePage() {
   const [payingBillId, setPayingBillId] = useState<string | null>(null);
   const [reschedulingBillId, setReschedulingBillId] = useState<string | null>(null);
   const [rescheduleDate, setRescheduleDate] = useState("");
+
+  useDialogAccessibility({
+    open: showSetup,
+    onClose: closeSetup,
+    dialogRef: setupDrawerRef,
+    initialFocusRef: setupCloseButtonRef,
+  });
 
   const financeQuery = useFinanceDataQuery(selectedMonth);
   const financeData = financeQuery.data;
@@ -991,11 +1002,19 @@ export function FinancePage() {
       </div>
 
       {showSetup ? (
-        <div className="setup-drawer__backdrop" onClick={() => setShowSetup(false)}>
-          <aside className="setup-drawer setup-drawer--money" onClick={(event) => event.stopPropagation()}>
+        <div className="setup-drawer__backdrop" onClick={closeSetup}>
+          <aside
+            ref={setupDrawerRef}
+            className="setup-drawer setup-drawer--money"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="finance-setup-drawer-title"
+            tabIndex={-1}
+            onClick={(event) => event.stopPropagation()}
+          >
             <div className="setup-drawer__header">
-              <h2 className="setup-drawer__title">Money setup</h2>
-              <button className="button button--ghost button--small" type="button" onClick={() => setShowSetup(false)}>Close</button>
+              <h2 className="setup-drawer__title" id="finance-setup-drawer-title">Money setup</h2>
+              <button ref={setupCloseButtonRef} className="button button--ghost button--small" type="button" onClick={closeSetup}>Close</button>
             </div>
             <div className="setup-drawer__tabs">
               {setupNavItems.map((item) => (

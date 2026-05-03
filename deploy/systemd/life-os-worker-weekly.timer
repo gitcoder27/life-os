@@ -1,0 +1,11 @@
+[Unit]
+Description=Run Life OS weekly worker jobs
+
+[Timer]
+OnCalendar=Sun *-*-* 03:15:00
+AccuracySec=10min
+Persistent=true
+Unit=life-os-worker@weekly.service
+
+[Install]
+WantedBy=timers.target

@@ -16,6 +16,43 @@ import { enforceCsrfProtection } from "../lib/security/csrf.js";
 import { ensureBootstrapUserAccount } from "../modules/auth/service.js";
 import { registerModules } from "../modules/index.js";
 
+function getErrorStatusCode(error: unknown) {
+  if (isAppError(error)) {
+    return error.statusCode;
+  }
+
+  return typeof error === "object" &&
+    error !== null &&
+    "statusCode" in error &&
+    typeof error.statusCode === "number" &&
+    error.statusCode >= 400
+    ? error.statusCode
+    : 500;
+}
+
+export function buildApiErrorResponse(
+  error: unknown,
+  statusCode: number,
+  generatedAt = new Date().toISOString(),
+): ApiError {
+  const isKnownAppError = isAppError(error);
+  const message = isKnownAppError
+    ? error.message
+    : statusCode >= 500
+      ? "Unexpected server error"
+      : error instanceof Error
+        ? error.message
+        : "Unexpected server error";
+
+  return {
+    success: false,
+    code: isKnownAppError ? error.code : "INTERNAL_ERROR",
+    message,
+    fieldErrors: isKnownAppError ? error.fieldErrors : undefined,
+    generatedAt,
+  };
+}
+
 export async function buildApp(env: AppEnv) {
   const app = Fastify({
     logger: createLoggerOptions(env),
@@ -72,27 +109,13 @@ export async function buildApp(env: AppEnv) {
   });
 
   app.setErrorHandler((error, _request, reply) => {
-    const statusCode = isAppError(error)
-      ? error.statusCode
-      : typeof error === "object" &&
-          error !== null &&
-          "statusCode" in error &&
-          typeof error.statusCode === "number" &&
-          error.statusCode >= 400
-        ? error.statusCode
-        : 500;
+    const statusCode = getErrorStatusCode(error);
 
     if (statusCode >= 500) {
       reply.log.error(error);
     }
 
-    const response: ApiError = {
-      success: false,
-      code: isAppError(error) ? error.code : "INTERNAL_ERROR",
-      message: error instanceof Error ? error.message : "Unexpected server error",
-      fieldErrors: isAppError(error) ? error.fieldErrors : undefined,
-      generatedAt: new Date().toISOString(),
-    };
+    const response = buildApiErrorResponse(error, statusCode);
 
     void reply.status(statusCode).send(response);
   });

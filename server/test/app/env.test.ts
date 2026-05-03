@@ -4,7 +4,7 @@ import path from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
-import { loadSelectedEnv, resolveEnvPath } from "../../src/app/env.js";
+import { describeDatabaseTarget, loadSelectedEnv, parseAppEnv, resolveEnvPath } from "../../src/app/env.js";
 
 type EnvFixture = {
   rootDir: string;
@@ -109,5 +109,50 @@ describe("env loading", () => {
         serverRootDir,
       }),
     ).toThrow("[env] ENV_FILE was set but no env file was found.");
+  });
+});
+
+describe("env validation", () => {
+  const baseProductionEnv: NodeJS.ProcessEnv = {
+    NODE_ENV: "production",
+    DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/life_os",
+    DEV_DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/life_os_dev",
+  };
+
+  it("rejects the default session secret in production", () => {
+    expect(() =>
+      parseAppEnv({
+        ...baseProductionEnv,
+        SESSION_SECRET: "dev-only-change-me",
+      }),
+    ).toThrow(/SESSION_SECRET/);
+  });
+
+  it("rejects short production session secrets", () => {
+    expect(() =>
+      parseAppEnv({
+        ...baseProductionEnv,
+        SESSION_SECRET: "short-production-secret",
+      }),
+    ).toThrow(/SESSION_SECRET/);
+  });
+
+  it("accepts a strong explicit production session secret", () => {
+    const parsed = parseAppEnv({
+      ...baseProductionEnv,
+      SESSION_SECRET: "prod-secret-with-at-least-thirty-two-chars",
+    });
+
+    expect(parsed.SESSION_SECRET).toBe("prod-secret-with-at-least-thirty-two-chars");
+  });
+
+  it("describes database targets without credentials", () => {
+    const description = describeDatabaseTarget(
+      "postgresql://life_os_user:super-secret@db.example.com:5439/life_os?schema=public",
+    );
+
+    expect(description).toBe("host=db.example.com port=5439 database=life_os");
+    expect(description).not.toContain("life_os_user");
+    expect(description).not.toContain("super-secret");
   });
 });

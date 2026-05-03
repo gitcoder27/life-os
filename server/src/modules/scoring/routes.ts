@@ -4,10 +4,11 @@ import { z } from "zod";
 
 import { requireAuthenticatedUser } from "../../lib/auth/require-auth.js";
 import { parseIsoDate } from "../../lib/time/cycle.js";
+import { isoDateStringSchema } from "../../lib/validation/date-range.js";
 import { parseOrThrow } from "../../lib/validation/parse.js";
 import { calculateDailyScore, getScoreHistory, getWeeklyMomentum } from "./service.js";
 
-const isoDateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/) as unknown as z.ZodType<IsoDateString>;
+const isoDateSchema = isoDateStringSchema as z.ZodType<IsoDateString>;
 
 export const registerScoringRoutes: FastifyPluginAsync = async (app) => {
   app.get("/scores/daily/:date", async (request, reply) => {

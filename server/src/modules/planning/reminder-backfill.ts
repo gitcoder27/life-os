@@ -2,6 +2,7 @@ import type { IsoDateString } from "@life-os/contracts";
 import type { PrismaClient } from "@prisma/client";
 
 import { getUtcDateForLocalTime } from "../../lib/time/user-time.js";
+import { isoDateStringSchema } from "../../lib/validation/date-range.js";
 
 interface BackfillResult {
   updated: number;
@@ -34,7 +35,7 @@ function parseLegacyQuickCapture(notes: string | null) {
       kind: parsed.kind,
       text: parsed.text.trim() || null,
       reminderDate:
-        typeof parsed.reminderDate === "string" && /^\d{4}-\d{2}-\d{2}$/.test(parsed.reminderDate)
+        typeof parsed.reminderDate === "string" && isoDateStringSchema.safeParse(parsed.reminderDate).success
           ? (parsed.reminderDate as IsoDateString)
           : null,
     };

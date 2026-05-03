@@ -2135,31 +2135,32 @@ export const registerFinanceRoutes: FastifyPluginAsync = async (app) => {
       });
     }
 
+    const recurringIncomeReceiptWhere = {
+      userId: user.id,
+      transactionType: "INCOME" as const,
+      OR: [
+        {
+          recurringIncomeTemplateId: existing.id,
+        },
+        {
+          recurringIncomeTemplateId: null,
+          accountId: existing.accountId,
+          amountMinor: existing.amountMinor,
+          currencyCode: existing.currencyCode,
+          description: existing.title,
+        },
+      ],
+    };
+
     const transaction = payload.transactionId
       ? await app.prisma.financeTransaction.findFirst({
         where: {
           id: payload.transactionId,
-          userId: user.id,
-          transactionType: "INCOME",
+          ...recurringIncomeReceiptWhere,
         },
       })
       : await app.prisma.financeTransaction.findFirst({
-        where: {
-          userId: user.id,
-          transactionType: "INCOME",
-          OR: [
-            {
-              recurringIncomeTemplateId: existing.id,
-            },
-            {
-              recurringIncomeTemplateId: null,
-              accountId: existing.accountId,
-              amountMinor: existing.amountMinor,
-              currencyCode: existing.currencyCode,
-              description: existing.title,
-            },
-          ],
-        },
+        where: recurringIncomeReceiptWhere,
         orderBy: [{ occurredOn: "desc" }, { createdAt: "desc" }],
       });
 

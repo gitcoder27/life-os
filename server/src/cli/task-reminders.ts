@@ -2,15 +2,13 @@ import { pathToFileURL } from "node:url";
 
 import { PrismaClient } from "@prisma/client";
 
-import { ensureDatabaseExists, ensureDatabaseMigrations } from "../app/db-bootstrap.js";
-import { assertDatabaseSeparation, getEnv } from "../app/env.js";
+import { getEnv } from "../app/env.js";
+import { prepareRuntimeDatabase } from "../app/runtime-database.js";
 import { backfillTaskReminders } from "../modules/planning/reminder-backfill.js";
 
 async function main() {
   const env = getEnv();
-  await ensureDatabaseExists(env);
-  await ensureDatabaseMigrations(env);
-  assertDatabaseSeparation(env);
+  await prepareRuntimeDatabase(env);
 
   const prisma = new PrismaClient();
 

@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
   useCarryForwardTaskMutation,
   useLogTaskStuckMutation,
   type TaskItem,
 } from "../../../shared/lib/api";
+import { DialogSurface } from "../../../shared/ui/DialogSurface";
 import { taskTextAutocompleteProps } from "../../../shared/ui/task-autocomplete";
 
 type StuckFlowSheetProps = {
@@ -43,6 +44,8 @@ export function StuckFlowSheet({
   const [actionTaken, setActionTaken] = useState<(typeof ACTIONS)[number]["value"]>("clarify");
   const [note, setNote] = useState("");
   const [targetDate, setTargetDate] = useState(date);
+  const reasonSelectRef = useRef<HTMLSelectElement | null>(null);
+  const titleId = "stuck-flow-sheet-title";
 
   useEffect(() => {
     if (!open) {
@@ -83,63 +86,67 @@ export function StuckFlowSheet({
   }
 
   const sheet = (
-    <div className="capture-sheet capture-sheet--open">
-      <div className="capture-sheet__backdrop" onClick={onClose} />
-      <section className="capture-sheet__panel stuck-flow-sheet">
-        <div className="capture-sheet__header">
-          <div>
-            <p className="page-eyebrow">I'm Stuck</p>
-            <h3 className="capture-sheet__title">{task.title}</h3>
-          </div>
-          <button className="button button--ghost button--small" type="button" onClick={onClose}>
-            Close
+    <DialogSurface
+      className="capture-sheet capture-sheet--open"
+      backdropClassName="capture-sheet__backdrop"
+      panelClassName="capture-sheet__panel stuck-flow-sheet"
+      titleId={titleId}
+      onClose={onClose}
+      initialFocusRef={reasonSelectRef}
+    >
+      <div className="capture-sheet__header">
+        <div>
+          <p className="page-eyebrow">I'm Stuck</p>
+          <h3 className="capture-sheet__title" id={titleId}>{task.title}</h3>
+        </div>
+        <button className="button button--ghost button--small" type="button" onClick={onClose}>
+          Close
+        </button>
+      </div>
+
+      <div className="stack-form">
+        <label className="field">
+          <span>What's blocking the start?</span>
+          <select ref={reasonSelectRef} value={reason} onChange={(event) => setReason(event.target.value as typeof reason)}>
+            {REASONS.map((item) => (
+              <option key={item.value} value={item.value}>{item.label}</option>
+            ))}
+          </select>
+        </label>
+
+        <label className="field">
+          <span>Best next move</span>
+          <select value={actionTaken} onChange={(event) => setActionTaken(event.target.value as typeof actionTaken)}>
+            {ACTIONS.map((item) => (
+              <option key={item.value} value={item.value}>{item.label}</option>
+            ))}
+          </select>
+        </label>
+
+        {actionTaken === "reschedule" ? (
+          <label className="field">
+            <span>Move to</span>
+            <input type="date" value={targetDate} onChange={(event) => setTargetDate(event.target.value)} />
+          </label>
+        ) : null}
+
+        <label className="field">
+          <span>Note</span>
+          <textarea {...taskTextAutocompleteProps} value={note} onChange={(event) => setNote(event.target.value)} rows={3} placeholder="What needs to change so this becomes doable?" />
+        </label>
+
+        <div className="button-row">
+          <button
+            className="button button--primary"
+            type="button"
+            onClick={() => void handleSave()}
+            disabled={logTaskStuckMutation.isPending || carryForwardTaskMutation.isPending}
+          >
+            {logTaskStuckMutation.isPending || carryForwardTaskMutation.isPending ? "Saving..." : "Save stuck step"}
           </button>
         </div>
-
-        <div className="stack-form">
-          <label className="field">
-            <span>What's blocking the start?</span>
-            <select value={reason} onChange={(event) => setReason(event.target.value as typeof reason)}>
-              {REASONS.map((item) => (
-                <option key={item.value} value={item.value}>{item.label}</option>
-              ))}
-            </select>
-          </label>
-
-          <label className="field">
-            <span>Best next move</span>
-            <select value={actionTaken} onChange={(event) => setActionTaken(event.target.value as typeof actionTaken)}>
-              {ACTIONS.map((item) => (
-                <option key={item.value} value={item.value}>{item.label}</option>
-              ))}
-            </select>
-          </label>
-
-          {actionTaken === "reschedule" ? (
-            <label className="field">
-              <span>Move to</span>
-              <input type="date" value={targetDate} onChange={(event) => setTargetDate(event.target.value)} />
-            </label>
-          ) : null}
-
-          <label className="field">
-            <span>Note</span>
-            <textarea {...taskTextAutocompleteProps} value={note} onChange={(event) => setNote(event.target.value)} rows={3} placeholder="What needs to change so this becomes doable?" />
-          </label>
-
-          <div className="button-row">
-            <button
-              className="button button--primary"
-              type="button"
-              onClick={() => void handleSave()}
-              disabled={logTaskStuckMutation.isPending || carryForwardTaskMutation.isPending}
-            >
-              {logTaskStuckMutation.isPending || carryForwardTaskMutation.isPending ? "Saving..." : "Save stuck step"}
-            </button>
-          </div>
-        </div>
-      </section>
-    </div>
+      </div>
+    </DialogSurface>
   );
 
   return createPortal(sheet, document.body);

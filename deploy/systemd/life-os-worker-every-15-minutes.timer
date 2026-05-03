@@ -1,0 +1,12 @@
+[Unit]
+Description=Run Life OS every-15-minutes worker jobs
+
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=15min
+AccuracySec=30s
+Persistent=true
+Unit=life-os-worker@every-15-minutes.service
+
+[Install]
+WantedBy=timers.target

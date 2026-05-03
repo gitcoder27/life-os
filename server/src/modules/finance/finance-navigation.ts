@@ -1,3 +1,5 @@
+import { isoDateStringSchema } from "../../lib/validation/date-range.js";
+
 type FinanceRouteIntent = "view" | "pay";
 type FinanceRouteSection = "due_now" | "pending_bills";
 
@@ -54,5 +56,5 @@ export const extractFinanceBillDueOn = (entityId: string | null): string | null 
   }
 
   const [, dueOn] = entityId.split(":");
-  return dueOn && /^\d{4}-\d{2}-\d{2}$/.test(dueOn) ? dueOn : null;
+  return dueOn && isoDateStringSchema.safeParse(dueOn).success ? dueOn : null;
 };
