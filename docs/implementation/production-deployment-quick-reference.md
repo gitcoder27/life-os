@@ -11,7 +11,7 @@ cd /home/ubuntu/apps/life-os-prod
 npm run deploy:prod
 ```
 
-`npm run deploy:prod` fails if the production checkout is not clean, then pulls the latest code, installs dependencies, builds the app, stops the API service, applies pending checked-in Prisma migrations, publishes the frontend files, starts the API service, and checks the health endpoint.
+`npm run deploy:prod` fails if the production checkout is not clean, then pulls the latest code, restarts itself when the checkout changed, installs dependencies, builds the app, stops the API service, applies pending checked-in Prisma migrations, publishes the frontend files, refreshes the nginx static cache policy, starts the API service, and checks the health endpoint.
 If the only local change is `package-lock.json`, the deploy script restores it automatically before continuing. Any other local changes still stop the deploy.
 
 `client/.env.production` is now the source of truth for the frontend CSRF cookie name during production builds. It must match `server/.env.production`.
@@ -29,6 +29,10 @@ npm run build
 sudo systemctl stop life-os.service
 npx prisma migrate deploy --schema server/prisma/schema.prisma
 sudo rsync -a --delete client/dist/ /var/www/personal.daycommand.online/
+sudo install -m 644 deploy/nginx/personal.daycommand.online.conf /etc/nginx/sites-available/personal.daycommand.online
+sudo ln -sfn /etc/nginx/sites-available/personal.daycommand.online /etc/nginx/sites-enabled/personal.daycommand.online
+sudo nginx -t
+sudo systemctl reload nginx
 sudo systemctl start life-os.service
 ```
 
@@ -39,6 +43,7 @@ systemctl is-active life-os.service
 systemctl list-timers 'life-os-worker*' 'life-os-postgres-backup*' --no-pager
 curl -fsS http://127.0.0.1:3104/healthz
 curl -I https://personal.daycommand.online
+curl -I https://personal.daycommand.online/release.json
 ```
 
 ## If something is wrong
@@ -71,6 +76,10 @@ cd /home/ubuntu/apps/life-os-prod
 cat client/.env.production
 npm run build:client
 sudo rsync -a --delete client/dist/ /var/www/personal.daycommand.online/
+sudo install -m 644 deploy/nginx/personal.daycommand.online.conf /etc/nginx/sites-available/personal.daycommand.online
+sudo ln -sfn /etc/nginx/sites-available/personal.daycommand.online /etc/nginx/sites-enabled/personal.daycommand.online
+sudo nginx -t
+sudo systemctl reload nginx
 ```
 
 Backend only:
@@ -88,6 +97,7 @@ sudo systemctl start life-os.service
 - App checkout: `/home/ubuntu/apps/life-os-prod`
 - API service: `/etc/systemd/system/life-os.service`
 - Frontend files: `/var/www/personal.daycommand.online`
+- Nginx config: `/etc/nginx/sites-available/personal.daycommand.online`
 - Production env file: `/home/ubuntu/apps/life-os-prod/server/.env.production`
 
 ## Full runbook

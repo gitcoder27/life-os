@@ -8,6 +8,10 @@ SERVICE_NAME="life-os.service"
 HEALTH_URL="http://127.0.0.1:3104/healthz"
 PRISMA_SCHEMA_PATH="server/prisma/schema.prisma"
 SERVER_ENV_FILE="server/.env.production"
+NGINX_SITE_NAME="personal.daycommand.online"
+NGINX_CONFIG_SOURCE="deploy/nginx/${NGINX_SITE_NAME}.conf"
+NGINX_CONFIG_TARGET="/etc/nginx/sites-available/${NGINX_SITE_NAME}"
+NGINX_CONFIG_ENABLED="/etc/nginx/sites-enabled/${NGINX_SITE_NAME}"
 service_stopped=0
 
 cd "$REPO_ROOT"
@@ -90,12 +94,68 @@ require_clean_git_state() {
   fi
 }
 
+pull_latest_code() {
+  local before_commit
+  local after_commit
+
+  before_commit="$(git rev-parse HEAD)"
+
+  log "Pulling latest code"
+  git pull --ff-only
+
+  after_commit="$(git rev-parse HEAD)"
+
+  if [[ "${LIFE_OS_DEPLOY_REEXECUTED:-0}" != "1" && "$before_commit" != "$after_commit" ]]; then
+    log "Restarting deploy script after pulling updated code"
+    export LIFE_OS_DEPLOY_REEXECUTED=1
+    exec "$BASH" "$0"
+  fi
+}
+
+refresh_nginx_config() {
+  local backup_path=""
+  local had_existing_config=0
+
+  if [[ -f "$NGINX_CONFIG_TARGET" ]]; then
+    backup_path="$(mktemp)"
+    had_existing_config=1
+    sudo cp "$NGINX_CONFIG_TARGET" "$backup_path"
+  fi
+
+  sudo install -m 644 "$NGINX_CONFIG_SOURCE" "$NGINX_CONFIG_TARGET"
+  sudo ln -sfn "$NGINX_CONFIG_TARGET" "$NGINX_CONFIG_ENABLED"
+
+  if sudo nginx -t && sudo systemctl reload nginx; then
+    if [[ -n "$backup_path" ]]; then
+      sudo rm -f "$backup_path"
+    fi
+
+    return
+  fi
+
+  if [[ $had_existing_config -eq 1 ]]; then
+    sudo cp "$backup_path" "$NGINX_CONFIG_TARGET"
+    sudo nginx -t >/dev/null 2>&1 || true
+  else
+    sudo rm -f "$NGINX_CONFIG_TARGET" "$NGINX_CONFIG_ENABLED"
+  fi
+
+  if [[ -n "$backup_path" ]]; then
+    sudo rm -f "$backup_path"
+  fi
+
+  fail "Nginx config validation failed; restored previous config."
+}
+
 require_file "server/.env.production"
 require_file "client/.env.production"
 restore_lockfile_if_only_local_change
 require_clean_git_state
 
 trap restore_service_on_error EXIT
+
+pull_latest_code
+require_file "$NGINX_CONFIG_SOURCE"
 
 server_csrf_cookie="$(read_env_value "server/.env.production" "CSRF_COOKIE_NAME")"
 client_csrf_cookie="$(read_env_value "client/.env.production" "VITE_CSRF_COOKIE_NAME")"
@@ -107,9 +167,6 @@ fi
 if [[ "$server_csrf_cookie" != "$client_csrf_cookie" ]]; then
   fail "CSRF cookie mismatch: server=${server_csrf_cookie} client=${client_csrf_cookie}"
 fi
-
-log "Pulling latest code"
-git pull --ff-only
 
 log "Installing dependencies"
 npm ci
@@ -129,6 +186,9 @@ npx prisma migrate deploy --schema "$PRISMA_SCHEMA_PATH"
 
 log "Publishing frontend bundle to nginx doc root"
 sudo rsync -a --delete client/dist/ "$DOC_ROOT/"
+
+log "Refreshing nginx static cache policy"
+refresh_nginx_config
 
 log "Starting API service"
 sudo systemctl start "$SERVICE_NAME"

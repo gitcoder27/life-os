@@ -8,6 +8,7 @@ If a release includes Prisma migration files, production also needs the database
 
 - Production template: `deploy/systemd/life-os.service`
 - Development template: `deploy/systemd/life-os-dev.service`
+- Nginx site template: `deploy/nginx/personal.daycommand.online.conf`
 - Worker service template: `deploy/systemd/life-os-worker@.service`
 - Worker timers:
   - `deploy/systemd/life-os-worker-every-15-minutes.timer`
@@ -29,7 +30,7 @@ If a release includes Prisma migration files, production also needs the database
   - `life-os-worker-weekly.timer` runs weekly cleanup jobs at 03:15 on Sunday.
 - Backup timer: `life-os-postgres-backup.timer` runs an encrypted off-server PostgreSQL dump at 02:45.
 - Frontend static files: served by nginx from `/var/www/personal.daycommand.online`
-- Nginx config: `/etc/nginx/sites-available/personal.daycommand.online`
+- Nginx config: `/etc/nginx/sites-available/personal.daycommand.online`, refreshed from `deploy/nginx/personal.daycommand.online.conf`
 
 ## Standard deploy (code + API + frontend)
 
@@ -44,13 +45,15 @@ The deploy script runs the full production flow for you:
 
 - restores `package-lock.json` first when that is the only local change
 - fails if the production checkout still has any other local git changes
-- confirms the server and client production CSRF cookie names match
 - runs `git pull --ff-only`
+- restarts the deploy script if the pull updated the checkout
+- confirms the server and client production CSRF cookie names match
 - runs `npm ci`
 - runs `npm run build`
 - stops `life-os.service`
 - runs `npx prisma migrate deploy --schema server/prisma/schema.prisma`
 - syncs `client/dist/` into `/var/www/personal.daycommand.online/`
+- refreshes the nginx static cache policy and reloads nginx
 - starts `life-os.service`
 - verifies `http://127.0.0.1:3104/healthz`
 
@@ -81,7 +84,13 @@ npx prisma migrate deploy --schema server/prisma/schema.prisma
 # 6) Deploy frontend bundle to nginx doc root
 sudo rsync -a --delete client/dist/ /var/www/personal.daycommand.online/
 
-# 7) Start the API service
+# 7) Refresh nginx cache policy
+sudo install -m 644 deploy/nginx/personal.daycommand.online.conf /etc/nginx/sites-available/personal.daycommand.online
+sudo ln -sfn /etc/nginx/sites-available/personal.daycommand.online /etc/nginx/sites-enabled/personal.daycommand.online
+sudo nginx -t
+sudo systemctl reload nginx
+
+# 8) Start the API service
 sudo systemctl start life-os.service
 ```
 
@@ -97,6 +106,7 @@ systemctl list-timers 'life-os-worker*' 'life-os-postgres-backup*' --no-pager
 systemctl status life-os.service --no-pager
 curl -fsS http://127.0.0.1:3104/healthz
 curl -I https://personal.daycommand.online
+curl -I https://personal.daycommand.online/release.json
 ```
 
 If the API is not healthy, check logs:
@@ -177,6 +187,10 @@ cd /home/ubuntu/apps/life-os-prod
 cat client/.env.production
 npm run build:client
 sudo rsync -a --delete client/dist/ /var/www/personal.daycommand.online/
+sudo install -m 644 deploy/nginx/personal.daycommand.online.conf /etc/nginx/sites-available/personal.daycommand.online
+sudo ln -sfn /etc/nginx/sites-available/personal.daycommand.online /etc/nginx/sites-enabled/personal.daycommand.online
+sudo nginx -t
+sudo systemctl reload nginx
 ```
 
 No service restart needed when only static files changed.
@@ -198,6 +212,8 @@ sudo systemctl start life-os.service
 - `npm run build` currently runs contracts + server + client build.
 - `npx prisma migrate deploy --schema server/prisma/schema.prisma` should be run in production whenever there are pending migrations.
 - `npm run build:client` uses `vite build --mode production`, so the shipped bundle reads `client/.env.production`.
+- `index.html`, route fallbacks, and `release.json` are served with `Cache-Control: no-store`; `/assets/*` files are served as immutable because Vite fingerprints their filenames.
+- The client checks `release.json` on load, focus, reconnect, and every minute in production, then reloads once when a newer deployed bundle is available.
 - Nginx only proxies `/api/*` to the backend; everything else is static frontend files.
 - Keep `server/.env.production` in place as it contains `PORT=3104` and production DB/secret values.
 - Keep `/etc/life-os/backup.env` outside git. It contains the encrypted off-server backup destination.
