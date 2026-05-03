@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from "react";
+import type { DayCapacityAssessment } from "@life-os/contracts";
 import { useDailyScoreQuery, getTodayDate } from "../../../shared/lib/api";
 import { formatDurationMinutes } from "../helpers/planner-blocks";
 import type { PlannerExecutionModel } from "../helpers/planner-execution";
+import { CapacityStatusChip } from "./CapacityStatusChip";
 
 function getScoreColor(value: number) {
   if (value >= 85) return "var(--positive)";
@@ -22,6 +24,8 @@ export function CommandBar({
   execution,
   topPriorityTitle,
   onSwitchToPlanner,
+  capacity,
+  onShapeDay,
 }: {
   mode: "execute" | "plan";
   onModeChange: (mode: "execute" | "plan") => void;
@@ -38,6 +42,8 @@ export function CommandBar({
   execution: PlannerExecutionModel;
   topPriorityTitle: string | undefined;
   onSwitchToPlanner: () => void;
+  capacity?: DayCapacityAssessment | null;
+  onShapeDay?: () => void;
 }) {
   const today = getTodayDate();
   const scoreQuery = useDailyScoreQuery(today);
@@ -89,6 +95,15 @@ export function CommandBar({
       </div>
 
       <div className="command-bar__right">
+        {capacity && onShapeDay ? (
+          <CapacityStatusChip
+            capacity={capacity}
+            onShapeDay={onShapeDay}
+            onSizeTasks={onShapeDay}
+            onReduceDay={onShapeDay}
+          />
+        ) : null}
+
         {overdueCount > 0 ? (
           <span className="command-bar__overdue" title={`${overdueCount} overdue`}>
             {overdueCount} overdue

@@ -12,11 +12,15 @@ import {
 } from "../../shared/ui/PageState";
 import { readHomeDestinationState } from "../../shared/lib/homeNavigation";
 import { CommandBar } from "./components/CommandBar";
+import { DriftRecoveryBar } from "./components/DriftRecoveryBar";
+import { DriftRecoverySheet } from "./components/DriftRecoverySheet";
 import { ExecutionStream } from "./components/ExecutionStream";
 import { DailyEssentials } from "./components/DailyEssentials";
 import { DayPlanner } from "./components/DayPlanner";
 import { DayNotes } from "./components/DayNotes";
 import { TodayTaskCaptureSheet } from "./components/TodayTaskCaptureSheet";
+import { NextMoveStrip } from "./components/NextMoveStrip";
+import { ShapeDaySheet } from "./components/ShapeDaySheet";
 import { DailyLaunchCard } from "./components/DailyLaunchCard";
 import { PreLaunchModeNotice } from "./components/PreLaunchModeNotice";
 import { buildPlannerExecutionModel } from "./helpers/planner-execution";
@@ -25,6 +29,7 @@ import { useTodayData } from "./hooks/useTodayData";
 import { usePriorityDraft } from "./hooks/usePriorityDraft";
 import { useTaskActions } from "./hooks/useTaskActions";
 import { usePlannerActions } from "./hooks/usePlannerActions";
+import { useAdaptiveToday } from "./hooks/useAdaptiveToday";
 import {
   useActiveFocusSessionQuery,
   useCreateTaskMutation,
@@ -54,6 +59,10 @@ import {
   findDailyRhythmSlot,
   type DailyRhythmItem,
 } from "./helpers/daily-rhythm";
+import type {
+  AdaptiveNextMove,
+  AdaptiveNextMoveAction,
+} from "@life-os/contracts";
 
 const ISO_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const isPlannerAssignableTask = (task: { kind: string }) => task.kind === "task";
@@ -77,6 +86,8 @@ export function TodayPage({ routeMode }: { routeMode?: "execute" | "plan" }) {
   });
   const [plannerNow, setPlannerNow] = useState(() => new Date());
   const [todayTaskCaptureOpen, setTodayTaskCaptureOpen] = useState(false);
+  const [shapeDayOpen, setShapeDayOpen] = useState(false);
+  const [driftRecoveryOpen, setDriftRecoveryOpen] = useState(false);
   const [topRailHeight, setTopRailHeight] = useState(0);
   const [stickyTop, setStickyTop] = useState(0);
   const [topRailElement, setTopRailElement] = useState<HTMLDivElement | null>(null);
@@ -95,6 +106,7 @@ export function TodayPage({ routeMode }: { routeMode?: "execute" | "plan" }) {
   const isLivePlannerDate = plannerDate === data.today;
   const isEditablePlannerDate = plannerDate >= data.today;
   const plannerDayPlanQuery = useDayPlanQuery(plannerDate);
+  const adaptiveToday = useAdaptiveToday(data.today);
   const habitsQuery = useHabitsQuery();
   const activeFocusSessionQuery = useActiveFocusSessionQuery();
   const plannerHabitCheckinMutation = useHabitCheckinMutation(data.today);
@@ -474,6 +486,9 @@ export function TodayPage({ routeMode }: { routeMode?: "execute" | "plan" }) {
     activeFocusSessionQuery.error instanceof Error
       ? activeFocusSessionQuery.error.message
       : null,
+    adaptiveToday.error instanceof Error
+      ? adaptiveToday.error.message
+      : null,
     habitsQuery.error instanceof Error
       ? habitsQuery.error.message
       : null,
@@ -495,6 +510,7 @@ export function TodayPage({ routeMode }: { routeMode?: "execute" | "plan" }) {
     .join("; ");
   const refetchEverything = () => {
     data.refetchAll();
+    adaptiveToday.refetch();
     void activeFocusSessionQuery.refetch();
     void habitsQuery.refetch();
   };
@@ -512,6 +528,47 @@ export function TodayPage({ routeMode }: { routeMode?: "execute" | "plan" }) {
       estimatedDurationMinutes: 25,
       focusLengthMinutes: 25,
     });
+  }
+
+  function handleAdaptiveAction(action: AdaptiveNextMoveAction, move: AdaptiveNextMove) {
+    if (action.type === "shape_day" || action.type === "reduce_day") {
+      setShapeDayOpen(true);
+      if (mode !== "plan" && action.type === "shape_day") {
+        navigateToMode("plan");
+      }
+      return;
+    }
+
+    if (action.type === "recover_drift") {
+      setDriftRecoveryOpen(true);
+      return;
+    }
+
+    if (action.type === "clarify_task" && (action.targetId || move.taskId)) {
+      setClarifyTaskId(action.targetId ?? move.taskId ?? null);
+      return;
+    }
+
+    if (action.type === "start_task" && (action.targetId || move.taskId)) {
+      const taskId = action.targetId ?? move.taskId;
+      const task = selectableTasks.find((candidate) => candidate.id === taskId);
+      if (task) {
+        setSelectedTaskId(task.id);
+      }
+      if (mode !== "execute") {
+        navigateToMode("execute");
+      }
+      return;
+    }
+
+    if (action.type === "add_task") {
+      setTodayTaskCaptureOpen(true);
+      return;
+    }
+
+    if (action.type === "close_day" || action.type === "open_review") {
+      navigate("/reviews");
+    }
   }
 
   async function handleReserveRhythmItem(item: DailyRhythmItem) {
@@ -603,6 +660,8 @@ export function TodayPage({ routeMode }: { routeMode?: "execute" | "plan" }) {
           execution={todayPlannerExecution}
           topPriorityTitle={data.mustWinTask?.title ?? priorityDraft.draft.find((p) => p.status === "pending")?.title}
           onSwitchToPlanner={() => navigateToMode("plan")}
+          capacity={adaptiveToday.capacity}
+          onShapeDay={() => setShapeDayOpen(true)}
         />
 
         {allErrors ? (
@@ -634,6 +693,17 @@ export function TodayPage({ routeMode }: { routeMode?: "execute" | "plan" }) {
                     />
                   </div>
                 ) : null}
+
+                <NextMoveStrip
+                  nextMove={adaptiveToday.nextMove}
+                  loading={adaptiveToday.isLoading}
+                  onAction={handleAdaptiveAction}
+                />
+
+                <DriftRecoveryBar
+                  execution={todayPlannerExecution}
+                  onOpen={() => setDriftRecoveryOpen(true)}
+                />
 
                 <ExecutionStream
                   date={data.today}
@@ -752,6 +822,7 @@ export function TodayPage({ routeMode }: { routeMode?: "execute" | "plan" }) {
           onSkipRhythmItem={handleSkipRhythmItem}
           onSelectDate={setPlannerDate}
           onStepDate={stepPlannerDate}
+          onShapeDay={() => setShapeDayOpen(true)}
           sidebarStyle={plannerSidebarStyle}
         />
       )}
@@ -760,6 +831,19 @@ export function TodayPage({ routeMode }: { routeMode?: "execute" | "plan" }) {
         open={todayTaskCaptureOpen}
         today={data.today}
         onClose={() => setTodayTaskCaptureOpen(false)}
+      />
+
+      <ShapeDaySheet
+        open={shapeDayOpen}
+        date={plannerDate}
+        onClose={() => setShapeDayOpen(false)}
+      />
+
+      <DriftRecoverySheet
+        open={driftRecoveryOpen}
+        date={data.today}
+        execution={todayPlannerExecution}
+        onClose={() => setDriftRecoveryOpen(false)}
       />
 
       <StartProtocolSheet

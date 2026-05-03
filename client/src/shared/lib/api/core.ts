@@ -67,6 +67,8 @@ export const queryKeys = {
   scoreHistory: (date: string, days: number) => ["score", "history", date, days] as const,
   weeklyMomentum: (date: string) => ["score", "weekly-momentum", date] as const,
   dayPlan: (date: string) => ["planning", "day", date] as const,
+  adaptiveToday: (date: string) => ["planning", "day", date, "adaptive"] as const,
+  dayCapacity: (date: string) => ["planning", "day", date, "capacity"] as const,
   weekPlan: (startDate: string) => ["planning", "week", startDate] as const,
   tasks: (filters: TaskQueryKeyFilters = {}) =>
     [

@@ -157,6 +157,203 @@ export interface DayPlanResponse extends ApiMeta {
   plannerBlocks: DayPlannerBlockItem[];
 }
 
+export type AdaptiveNextMoveState =
+  | "continue_focus"
+  | "start_must_win"
+  | "clarify_must_win"
+  | "work_current_block"
+  | "recover_drift"
+  | "shape_day"
+  | "size_tasks"
+  | "reduce_day"
+  | "close_day"
+  | "review_ready"
+  | "empty";
+
+export type AdaptiveNextMoveActionType =
+  | "open_focus"
+  | "start_task"
+  | "clarify_task"
+  | "shape_day"
+  | "recover_drift"
+  | "reduce_day"
+  | "close_day"
+  | "open_review"
+  | "add_task";
+
+export interface AdaptiveNextMoveAction {
+  type: AdaptiveNextMoveActionType;
+  label: string;
+  targetId?: EntityId | null;
+}
+
+export interface AdaptiveNextMove {
+  state: AdaptiveNextMoveState;
+  title: string;
+  reason: string;
+  primaryAction: AdaptiveNextMoveAction;
+  secondaryAction?: AdaptiveNextMoveAction | null;
+  taskId?: EntityId | null;
+  plannerBlockId?: EntityId | null;
+  severity: "neutral" | "helpful" | "attention" | "urgent";
+}
+
+export type DayCapacityStatus = "clear" | "tight" | "overloaded" | "unclear" | "drifting";
+export type DayCapacitySignal =
+  | "no_planner_blocks"
+  | "unplanned_tasks"
+  | "unsized_tasks"
+  | "over_capacity"
+  | "slipped_work"
+  | "current_block_at_risk"
+  | "rescue_mode"
+  | "must_win_unclear";
+
+export interface DayCapacityBlockAssessment {
+  plannerBlockId: EntityId;
+  title: string | null;
+  status: Exclude<DayCapacityStatus, "unclear">;
+  pendingTaskCount: number;
+  estimatedMinutes: number;
+  capacityMinutes: number;
+  overByMinutes: number;
+}
+
+export interface DayCapacityAssessment {
+  status: DayCapacityStatus;
+  summary: string;
+  pendingTaskCount: number;
+  plannedTaskCount: number;
+  unplannedTaskCount: number;
+  unsizedTaskCount: number;
+  estimatedTaskMinutes: number;
+  plannedBlockMinutes: number;
+  overByMinutes: number;
+  slippedTaskCount: number;
+  currentBlockId?: EntityId | null;
+  nextBlockId?: EntityId | null;
+  needsEstimateTaskIds: EntityId[];
+  signals: DayCapacitySignal[];
+  blocks: DayCapacityBlockAssessment[];
+}
+
+export interface AdaptiveTodayGuidanceResponse extends ApiMeta {
+  date: IsoDateString;
+  nextMove: AdaptiveNextMove;
+  capacity: DayCapacityAssessment;
+}
+
+export interface DayCapacityAssessmentResponse extends ApiMeta {
+  date: IsoDateString;
+  capacity: DayCapacityAssessment;
+}
+
+export interface ShapeDayPreviewRequest {
+  preserveExistingBlocks?: boolean;
+}
+
+export type ShapeDayUnplacedReason =
+  | "needs_estimate"
+  | "no_open_window"
+  | "already_planned"
+  | "not_actionable";
+
+export interface ShapeDayTaskPreviewItem {
+  taskId: EntityId;
+  title: string;
+  estimatedMinutes: number;
+  assumedMinutes: boolean;
+}
+
+export interface ShapeDayProposedBlock {
+  tempId: string;
+  title: string | null;
+  startsAt: string;
+  endsAt: string;
+  taskIds: EntityId[];
+  tasks: ShapeDayTaskPreviewItem[];
+}
+
+export interface ShapeDayPreviewAssignment {
+  taskId: EntityId;
+  taskTitle: string;
+  blockTempId: string;
+  startsAt: string;
+  endsAt: string;
+  estimatedMinutes: number;
+  assumedMinutes: boolean;
+}
+
+export interface ShapeDayUnplacedTask {
+  taskId: EntityId;
+  title: string;
+  reason: ShapeDayUnplacedReason;
+  estimatedMinutes?: number | null;
+}
+
+export interface ShapeDayExistingBlockSummary {
+  plannerBlockId: EntityId;
+  title: string | null;
+  startsAt: string;
+  endsAt: string;
+  taskCount: number;
+}
+
+export interface ShapeDayPreviewResponse extends ApiMeta {
+  date: IsoDateString;
+  summary: string;
+  capacity: DayCapacityAssessment;
+  proposedBlocks: ShapeDayProposedBlock[];
+  proposedAssignments: ShapeDayPreviewAssignment[];
+  needsEstimateTasks: ShapeDayTaskPreviewItem[];
+  unplacedTasks: ShapeDayUnplacedTask[];
+  preservedBlocks: ShapeDayExistingBlockSummary[];
+}
+
+export interface ApplyShapeDayRequest {
+  proposedBlocks: ShapeDayProposedBlock[];
+}
+
+export interface ShapeDayApplyResponse extends ApiMeta {
+  date: IsoDateString;
+  summary: string;
+  plannerBlocks: DayPlannerBlockItem[];
+  capacity: DayCapacityAssessment;
+}
+
+export type DriftRecoveryAction =
+  | "move_to_current_block"
+  | "move_to_next_block"
+  | "unplan"
+  | "carry_forward_tomorrow"
+  | "shrink_to_five_minutes"
+  | "activate_reduced_day";
+
+export interface DriftRecoveryRequest {
+  mode: "preview" | "apply";
+  action: DriftRecoveryAction;
+  taskIds?: EntityId[];
+  targetBlockId?: EntityId | null;
+}
+
+export interface DriftRecoveryChangePreview {
+  taskId: EntityId;
+  title: string;
+  from: string;
+  to: string;
+}
+
+export interface DriftRecoveryResponse extends ApiMeta {
+  date: IsoDateString;
+  action: DriftRecoveryAction;
+  mode: "preview" | "apply";
+  summary: string;
+  affectedTaskIds: EntityId[];
+  changes: DriftRecoveryChangePreview[];
+  plannerBlocks?: DayPlannerBlockItem[];
+  capacity?: DayCapacityAssessment;
+}
+
 export interface WeeklyCapacityProfile {
   capacityMode: WeeklyCapacityMode;
   deepWorkBlockTarget: number;

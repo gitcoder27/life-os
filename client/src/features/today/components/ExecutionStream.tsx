@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import {
   closestCenter,
   DndContext,
@@ -122,25 +122,49 @@ export function ExecutionStream({
   if (unplannedTasks.length > 0) sections.push({ key: "unplanned", label: "Unplanned", tasks: unplannedTasks });
 
   const totalAll = executionTasks.length + pendingOverdueTasks.length;
+  const donePercent = totalAll > 0 ? Math.round((completedTasks.length / totalAll) * 100) : 0;
 
   return (
     <section className={`execution-stream${activeFocusSession ? " execution-stream--focus-active" : ""}`}>
-      <div className="execution-stream__header">
-        <div className="execution-stream__heading">
-          <p className="execution-stream__eyebrow">Today&apos;s work</p>
-          <div className="execution-stream__title-row">
-            <h2 className="execution-stream__title">Task queue</h2>
+      <header className="execution-stream__header" aria-label="Task queue summary">
+        <div className="execution-stream__queue-bar">
+          <div className="execution-stream__summary">
+            <h2 className="execution-stream__title">Queue</h2>
             {totalAll > 0 ? (
-              <div className="execution-stream__stats">
-                <span className="execution-stream__counter">
-                  {completedTasks.length}/{totalAll} done
-                </span>
-                <MiniProgressRing percent={totalAll > 0 ? (completedTasks.length / totalAll) * 100 : 0} />
-              </div>
+              <span className="execution-stream__counter">{completedTasks.length}/{totalAll} done</span>
+            ) : (
+              <span className="execution-stream__counter">No tasks</span>
+            )}
+            {nowTasks.length > 0 ? (
+              <span className="execution-stream__pill execution-stream__pill--now">{nowTasks.length} now</span>
+            ) : null}
+            {pendingOverdueTasks.length > 0 ? (
+              <span className="execution-stream__pill execution-stream__pill--overdue">
+                {pendingOverdueTasks.length} overdue
+              </span>
+            ) : null}
+            {unplannedTasks.length > 0 ? (
+              <button
+                className="execution-stream__plan-link"
+                type="button"
+                onClick={onSwitchToPlanner}
+              >
+                {unplannedTasks.length} unplanned
+              </button>
             ) : null}
           </div>
+
+          {totalAll > 0 ? (
+            <div
+              className="execution-stream__progress"
+              style={{ "--execution-progress": `${donePercent}%` } as CSSProperties}
+              aria-hidden="true"
+            >
+              <span />
+            </div>
+          ) : null}
         </div>
-      </div>
+      </header>
 
       {activeFocusSession ? (
         <div className="execution-stream__focus-banner" aria-live="polite">
@@ -589,32 +613,6 @@ function GoalChip({ goal }: { goal: LinkedGoal }) {
       <span className={`goal-chip__dot goal-chip__dot--${goal.domain}`} />
       <span>{goal.title}</span>
     </Link>
-  );
-}
-
-function MiniProgressRing({ percent }: { percent: number }) {
-  const size = 24;
-  const strokeWidth = 2.5;
-  const radius = (size - strokeWidth * 2) / 2;
-  const circumference = 2 * Math.PI * radius;
-  const offset = circumference - (percent / 100) * circumference;
-  const color = percent >= 100 ? "var(--positive)" : "var(--accent)";
-
-  return (
-    <svg className="execution-stream__ring" viewBox={`0 0 ${size} ${size}`} width={size} height={size}>
-      <circle
-        cx={size / 2} cy={size / 2} r={radius}
-        fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth={strokeWidth}
-      />
-      <circle
-        cx={size / 2} cy={size / 2} r={radius}
-        fill="none" stroke={color} strokeWidth={strokeWidth}
-        strokeLinecap="round"
-        strokeDasharray={circumference} strokeDashoffset={offset}
-        transform={`rotate(-90 ${size / 2} ${size / 2})`}
-        style={{ transition: "stroke-dashoffset 0.5s var(--ease)" }}
-      />
-    </svg>
   );
 }
 

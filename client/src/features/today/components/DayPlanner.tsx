@@ -104,6 +104,7 @@ export function DayPlanner({
   onSkipRhythmItem,
   onSelectDate,
   onStepDate,
+  onShapeDay,
   sidebarStyle,
 }: {
   date: string;
@@ -124,6 +125,7 @@ export function DayPlanner({
   onSkipRhythmItem?: (item: DailyRhythmItem) => void | Promise<void>;
   onSelectDate: (isoDate: string) => void;
   onStepDate: (direction: -1 | 1) => void;
+  onShapeDay?: () => void;
   sidebarStyle?: CSSProperties;
 }) {
   const [formDraft, setFormDraft] = useState<PlannerFormDraft | null>(null);
@@ -627,6 +629,15 @@ export function DayPlanner({
           ) : null}
         </div>
         <div className="planner__header-actions">
+          {isEditable && onShapeDay ? (
+            <button
+              className="button button--ghost button--small"
+              type="button"
+              onClick={onShapeDay}
+            >
+              Shape day
+            </button>
+          ) : null}
           <button
             className="button button--ghost button--small"
             type="button"

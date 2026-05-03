@@ -5,12 +5,15 @@ import {
 } from "@tanstack/react-query";
 
 import type {
+  AdaptiveTodayGuidanceResponse,
   ApplyTaskTemplateResponse,
+  ApplyShapeDayRequest,
   BulkTaskMutationResponse,
   BulkUpdateTasksRequest,
   CarryForwardTaskRequest,
   CommitTaskRequest,
   CreateTaskRequest,
+  DayCapacityAssessmentResponse,
   DayLaunchMutationResponse,
   DayPlanResponse,
   DayPlannerBlockItem,
@@ -18,6 +21,8 @@ import type {
   DayPlannerBlocksMutationResponse,
   DayPlannerBlockTaskItem,
   DailyLaunchItem,
+  DriftRecoveryRequest,
+  DriftRecoveryResponse,
   GoalNudgeItem,
   IsoDateString,
   LogTaskStuckRequest,
@@ -28,6 +33,9 @@ import type {
   RecurrenceInput,
   RecurringTaskCarryPolicy,
   RescueSuggestion,
+  ShapeDayApplyResponse,
+  ShapeDayPreviewRequest,
+  ShapeDayPreviewResponse,
   TaskCommitmentGuidance,
   TaskCommitmentReadiness,
   TaskCommitmentReason,
@@ -82,11 +90,17 @@ export type BulkUpdateTasksInput = {
       };
 };
 export type {
+  AdaptiveTodayGuidanceResponse,
+  DayCapacityAssessmentResponse,
   DailyLaunchItem,
   DayPlannerBlockItem,
   DayPlannerBlockTaskItem,
+  DriftRecoveryRequest,
+  DriftRecoveryResponse,
   GoalNudgeItem,
   RescueSuggestion,
+  ShapeDayApplyResponse,
+  ShapeDayPreviewResponse,
   TaskCommitmentGuidance,
   TaskCommitmentReadiness,
   TaskCommitmentReason,
@@ -132,6 +146,22 @@ export const useDayPlanQuery = (date: string) =>
   useQuery({
     queryKey: queryKeys.dayPlan(date),
     queryFn: () => apiRequest<DayPlanResponse>(`/api/planning/days/${date}`),
+    retry: false,
+  });
+
+export const useAdaptiveTodayQuery = (date: string, options?: { enabled?: boolean }) =>
+  useQuery({
+    queryKey: queryKeys.adaptiveToday(date),
+    queryFn: () => apiRequest<AdaptiveTodayGuidanceResponse>(`/api/planning/days/${date}/adaptive-guidance`),
+    enabled: options?.enabled,
+    retry: false,
+  });
+
+export const useDayCapacityQuery = (date: string, options?: { enabled?: boolean }) =>
+  useQuery({
+    queryKey: queryKeys.dayCapacity(date),
+    queryFn: () => apiRequest<DayCapacityAssessmentResponse>(`/api/planning/days/${date}/capacity`),
+    enabled: options?.enabled,
     retry: false,
   });
 
@@ -463,6 +493,88 @@ export const useClearPlannerBlocksMutation = (date: string) => {
               }
             : current,
       );
+      invalidateCoreData(queryClient, date);
+    },
+  });
+};
+
+export const useShapeDayPreviewMutation = (date: string) =>
+  useMutation({
+    mutationFn: (payload: ShapeDayPreviewRequest = {}) =>
+      apiRequest<ShapeDayPreviewResponse>(`/api/planning/days/${date}/shape-preview`, {
+        method: "POST",
+        body: payload,
+      }),
+    meta: {
+      errorMessage: "Could not shape this day.",
+    },
+  });
+
+export const useApplyShapeDayMutation = (date: string) => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (payload: ApplyShapeDayRequest) =>
+      apiRequest<ShapeDayApplyResponse>(`/api/planning/days/${date}/shape-apply`, {
+        method: "POST",
+        body: payload,
+      }),
+    meta: {
+      successMessage: "Day shaped.",
+      errorMessage: "Could not apply this plan.",
+    },
+    onSuccess: (response) => {
+      queryClient.setQueryData<DayPlanResponse>(
+        queryKeys.dayPlan(date),
+        (current) =>
+          current
+            ? {
+                ...current,
+                generatedAt: response.generatedAt,
+                plannerBlocks: response.plannerBlocks,
+              }
+            : current,
+      );
+      void queryClient.invalidateQueries({ queryKey: queryKeys.adaptiveToday(date) });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.dayCapacity(date) });
+      invalidateCoreData(queryClient, date);
+    },
+  });
+};
+
+export const useDriftRecoveryMutation = (date: string) => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (payload: DriftRecoveryRequest) =>
+      apiRequest<DriftRecoveryResponse>(`/api/planning/days/${date}/drift-recovery`, {
+        method: "POST",
+        body: payload,
+      }),
+    meta: {
+      errorMessage: "Recovery could not be applied.",
+    },
+    onSuccess: (response) => {
+      if (response.mode !== "apply") {
+        return;
+      }
+
+      if (response.plannerBlocks) {
+        queryClient.setQueryData<DayPlanResponse>(
+          queryKeys.dayPlan(date),
+          (current) =>
+            current
+              ? {
+                  ...current,
+                  generatedAt: response.generatedAt,
+                  plannerBlocks: response.plannerBlocks ?? current.plannerBlocks,
+                }
+              : current,
+        );
+      }
+
+      void queryClient.invalidateQueries({ queryKey: queryKeys.adaptiveToday(date) });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.dayCapacity(date) });
       invalidateCoreData(queryClient, date);
     },
   });

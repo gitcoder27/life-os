@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import {
   formatShortDate,
   getWeekStartDate,
+  useAdaptiveTodayQuery,
   useDayPlanQuery,
   useMealPlanWeekQuery,
   type HomeOverviewResponse,
@@ -15,6 +16,7 @@ import {
 import { isQuickCaptureReferenceTask } from "../../shared/lib/quickCapture";
 
 type Guidance = HomeOverviewResponse["guidance"];
+type AdaptiveGuidance = ReturnType<typeof useAdaptiveTodayQuery>["data"];
 
 type LaunchTone = "neutral" | "attention" | "ready";
 
@@ -116,7 +118,32 @@ function buildMealsState(weekStart: string, mealPlan: ReturnType<typeof useMealP
   };
 }
 
-function buildGuidanceCard(guidance: Guidance): GuidanceCard | null {
+function buildAdaptiveCard(adaptive: AdaptiveGuidance | undefined): GuidanceCard | null {
+  const move = adaptive?.nextMove;
+  if (!move || move.state === "empty" || move.state === "review_ready") {
+    return null;
+  }
+
+  return {
+    tone: move.severity === "urgent" || move.severity === "attention" ? "attention" : "ready",
+    kicker: "Next move",
+    title: move.title,
+    detail: move.reason,
+    link: {
+      target: move.primaryAction.type === "shape_day" || move.primaryAction.type === "recover_drift"
+        ? { to: "/planner" }
+        : { to: "/today", state: { homeDestination: { kind: "today_execute" } } },
+      label: move.primaryAction.label,
+    },
+  };
+}
+
+function buildGuidanceCard(guidance: Guidance, adaptive: AdaptiveGuidance | undefined): GuidanceCard | null {
+  const adaptiveCard = buildAdaptiveCard(adaptive);
+  if (adaptiveCard) {
+    return adaptiveCard;
+  }
+
   if (guidance.recovery) {
     return {
       tone: "attention",
@@ -175,10 +202,11 @@ export function WorkspaceLaunchStrip({
 }) {
   const weekStart = getWeekStartDate(today);
   const dayPlanQuery = useDayPlanQuery(today);
+  const adaptiveQuery = useAdaptiveTodayQuery(today);
   const mealPlanQuery = useMealPlanWeekQuery(weekStart);
   const plannerState = buildPlannerState(today, dayPlanQuery.data);
   const mealsState = buildMealsState(weekStart, mealPlanQuery.data);
-  const guidanceCard = buildGuidanceCard(guidance);
+  const guidanceCard = buildGuidanceCard(guidance, adaptiveQuery.data);
 
   return (
     <section className="workspace-launches" aria-label="Frequent workspaces">
