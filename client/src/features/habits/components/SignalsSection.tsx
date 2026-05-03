@@ -50,17 +50,7 @@ function WeeklyChallengeCard({
   return (
     <div
       id="habits-weekly-challenge"
-      className={`challenge-card${weeklyChallenge.status === "behind" ? " challenge-card--behind" : ""}`}
-      style={{
-        cursor: "default",
-        ...(highlight
-          ? {
-              borderColor: "rgba(217, 153, 58, 0.4)",
-              boxShadow: "0 0 0 1px rgba(217, 153, 58, 0.25)",
-              background: "rgba(217, 153, 58, 0.06)",
-            }
-          : {}),
-      }}
+      className={`challenge-card${weeklyChallenge.status === "behind" ? " challenge-card--behind" : ""}${highlight ? " challenge-card--highlighted" : ""}`}
     >
       <ChallengeProgressRing
         completions={weeklyChallenge.weekCompletions}

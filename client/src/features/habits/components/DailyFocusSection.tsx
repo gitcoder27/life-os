@@ -142,14 +142,7 @@ function DueHabitsGroup({
                 key={habit.id}
                 id={`habits-focus-${habit.id}`}
                 data-habit-id={habit.id}
-                className={`habits-check-row habits-check-row--habit${riskLevel === "at_risk" ? " habits-check-row--at-risk" : riskLevel === "drifting" ? " habits-check-row--drifting" : ""}`}
-                style={highlightedHabitId === habit.id
-                  ? {
-                      borderColor: "rgba(217, 153, 58, 0.4)",
-                      boxShadow: "0 0 0 1px rgba(217, 153, 58, 0.25)",
-                      background: "rgba(217, 153, 58, 0.06)",
-                    }
-                  : undefined}
+                className={`habits-check-row habits-check-row--habit${riskLevel === "at_risk" ? " habits-check-row--at-risk" : riskLevel === "drifting" ? " habits-check-row--drifting" : ""}${highlightedHabitId === habit.id ? " habits-check-row--highlighted" : ""}`}
               >
                 <button
                   className={`habits-check-row__box${habit.completedToday ? " habits-check-row__box--done" : ""}`}
@@ -171,7 +164,7 @@ function DueHabitsGroup({
                   <div className="habits-check-row__title">
                     {habit.title}
                     {timingTag ? (
-                      <span className={timingStatusTagClass(habit.timingStatusToday)} style={{ marginLeft: "0.35rem", fontSize: "var(--fs-micro)" }}>
+                      <span className={`${timingStatusTagClass(habit.timingStatusToday)} habits-status-tag`}>
                         {timingTag}
                       </span>
                     ) : null}
@@ -283,7 +276,7 @@ function RoutineGroup({
             <span className="habits-group__timing">{routine.timingLabel}</span>
           ) : null}
           {timingTag ? (
-            <span className={timingStatusTagClass(routine.timingStatusToday)} style={{ marginLeft: "0.4rem", fontSize: "var(--fs-micro)" }}>
+            <span className={`${timingStatusTagClass(routine.timingStatusToday)} habits-status-tag`}>
               {timingTag}
             </span>
           ) : null}

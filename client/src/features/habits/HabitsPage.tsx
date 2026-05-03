@@ -69,7 +69,7 @@ export function HabitsPage() {
   }
 
   return (
-    <div className="page">
+    <div className="page habits-page">
       <PageHeader
         eyebrow="Consistency"
         title="Habits and routines"
