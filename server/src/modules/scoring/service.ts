@@ -37,6 +37,12 @@ type ScoreBucketKey =
   | "health_basics"
   | "finance_and_admin"
   | "review_and_reset";
+type DailyScoreMode = "stored" | "live";
+type StoredDailyScore = Prisma.DailyScoreGetPayload<{
+  include: {
+    planningCycle: true;
+  };
+}>;
 
 interface ScoreBucket {
   key: ScoreBucketKey;
@@ -103,6 +109,8 @@ const SUPPORT_PRIORITY_POINTS: Record<number, number> = {
   1: 8,
   2: 6,
 };
+
+const STRONG_DAY_STREAK_THRESHOLD = 70;
 
 const planningCycleInclude = {
   priorities: {
@@ -270,6 +278,111 @@ function buildBucket(
   };
 }
 
+function isScoreBucket(value: unknown): value is ScoreBucket {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+
+  const bucket = value as Partial<ScoreBucket>;
+  return (
+    typeof bucket.key === "string" &&
+    typeof bucket.label === "string" &&
+    typeof bucket.earnedPoints === "number" &&
+    typeof bucket.applicablePoints === "number" &&
+    typeof bucket.explanation === "string"
+  );
+}
+
+function isScoreReason(value: unknown): value is ScoreReason {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+
+  const reason = value as Partial<ScoreReason>;
+  return typeof reason.label === "string" && typeof reason.missingPoints === "number";
+}
+
+function parseStoredBreakdown(value: Prisma.JsonValue): Pick<DailyScoreBreakdownResponse, "buckets" | "topReasons"> {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return {
+      buckets: [],
+      topReasons: [],
+    };
+  }
+
+  const breakdown = value as { buckets?: unknown; topReasons?: unknown };
+
+  return {
+    buckets: Array.isArray(breakdown.buckets) ? breakdown.buckets.filter(isScoreBucket) : [],
+    topReasons: Array.isArray(breakdown.topReasons) ? breakdown.topReasons.filter(isScoreReason) : [],
+  };
+}
+
+function serializeStoredDailyScore(score: StoredDailyScore): DailyScoreBreakdownResponse {
+  const breakdown = parseStoredBreakdown(score.breakdownJson);
+
+  return {
+    date: toIsoDateString(score.planningCycle.cycleStartDate),
+    value: score.scoreValue,
+    label: score.scoreBand as ScoreLabel,
+    earnedPoints: Number(score.earnedPoints),
+    possiblePoints: Number(score.applicablePoints),
+    buckets: breakdown.buckets,
+    topReasons: breakdown.topReasons,
+    finalizedAt: score.finalizedAt?.toISOString() ?? null,
+    generatedAt: new Date().toISOString(),
+  };
+}
+
+async function findFinalizedDailyScore(
+  prisma: PrismaClient,
+  userId: string,
+  date: Date,
+) {
+  const targetIsoDate = toIsoDateString(date);
+  const targetDate = parseIsoDate(targetIsoDate);
+
+  if (!prisma.dailyScore?.findFirst) {
+    return null;
+  }
+
+  return prisma.dailyScore.findFirst({
+    where: {
+      userId,
+      finalizedAt: {
+        not: null,
+      },
+      planningCycle: {
+        cycleType: "DAY",
+        cycleStartDate: targetDate,
+      },
+    },
+    include: {
+      planningCycle: true,
+    },
+  });
+}
+
+function getRequiredTomorrowPriorityCount(adjustment: string | null | undefined) {
+  return adjustment === "rescue" || adjustment === "recovery" ? 1 : 2;
+}
+
+function countLoggedExpenseEntries(input: {
+  ledgerExpenses: Array<{ billId: string | null }>;
+  legacyExpenses: Array<{ billId: string | null }>;
+}) {
+  const ledgerExpenseBillIds = new Set(
+    input.ledgerExpenses
+      .map((transaction) => transaction.billId)
+      .filter((billId): billId is string => Boolean(billId)),
+  );
+  const legacyOnlyExpenses = input.legacyExpenses.filter(
+    (expense) => !expense.billId || !ledgerExpenseBillIds.has(expense.billId),
+  );
+
+  return input.ledgerExpenses.length + legacyOnlyExpenses.length;
+}
+
 async function getDayContext(prisma: PrismaClient, userId: string, date: Date) {
   const targetIsoDate = toIsoDateString(date);
   const targetDate = parseIsoDate(targetIsoDate);
@@ -333,6 +446,7 @@ async function getDayContext(prisma: PrismaClient, userId: string, date: Date) {
     waterLogs,
     mealLogs,
     workoutDay,
+    financeTransactions,
     expenses,
     dueAdminItems,
   ] = await Promise.all([
@@ -435,6 +549,16 @@ async function getDayContext(prisma: PrismaClient, userId: string, date: Date) {
         },
       },
     }),
+    prisma.financeTransaction?.findMany?.({
+      where: {
+        userId,
+        transactionType: "EXPENSE",
+        occurredOn: {
+          gte: targetDate,
+          lt: tomorrowDate,
+        },
+      },
+    }) ?? Promise.resolve([]),
     prisma.expense.findMany({
       where: {
         userId,
@@ -467,6 +591,7 @@ async function getDayContext(prisma: PrismaClient, userId: string, date: Date) {
     waterLogs,
     mealLogs,
     workoutDay,
+    financeTransactions,
     expenses,
     dueAdminItems,
     preferences,
@@ -621,7 +746,17 @@ export async function calculateDailyScore(
   prisma: PrismaClient,
   userId: string,
   date: Date,
+  options: {
+    mode?: DailyScoreMode;
+  } = {},
 ): Promise<DailyScoreBreakdownResponse> {
+  if (options.mode !== "live") {
+    const storedScore = await findFinalizedDailyScore(prisma, userId, date);
+    if (storedScore) {
+      return serializeStoredDailyScore(storedScore);
+    }
+  }
+
   const context = await getDayContext(prisma, userId, date);
   const priorities = context.dayCycle.priorities;
   const mustWinTask = context.dailyLaunch?.mustWinTaskId
@@ -763,8 +898,12 @@ export async function calculateDailyScore(
     "Water target, meal logging quality, and workout or recovery adherence.",
   );
 
-  const expenseApplicable = context.expenses.length > 0 ? 5 : 0;
-  const expenseEarned = context.expenses.length > 0 ? 5 * Math.min(1, context.expenses.length / 2) : 0;
+  const loggedExpenseCount = countLoggedExpenseEntries({
+    ledgerExpenses: context.financeTransactions,
+    legacyExpenses: context.expenses,
+  });
+  const expenseApplicable = loggedExpenseCount > 0 ? 5 : 0;
+  const expenseEarned = loggedExpenseCount > 0 ? 5 * Math.min(1, loggedExpenseCount / 2) : 0;
   const dueAdminApplicable = context.dueAdminItems.length > 0 ? 5 : 0;
   const dueAdminEarned =
     context.dueAdminItems.length > 0
@@ -780,7 +919,8 @@ export async function calculateDailyScore(
     "Same-day expense logging and due admin or bill items.",
   );
 
-  const tomorrowPrepared = context.tomorrowCycle.priorities.length >= 2 ? 4 : 0;
+  const tomorrowPriorityCount = getRequiredTomorrowPriorityCount(context.dayCycle.dailyReview?.tomorrowAdjustment);
+  const tomorrowPrepared = context.tomorrowCycle.priorities.length >= tomorrowPriorityCount ? 4 : 0;
   const reviewCompleted = context.dayCycle.dailyReview ? 6 : 0;
   const reviewBucket = buildBucket(
     "review_and_reset",
@@ -831,7 +971,7 @@ export async function finalizeDailyScore(
     cycleStartDate: date,
     cycleEndDate: date,
   });
-  const score = await calculateDailyScore(prisma, userId, date);
+  const score = await calculateDailyScore(prisma, userId, date, { mode: "live" });
   const finalizedAt = new Date();
 
   await prisma.dailyScore.upsert({
@@ -1040,7 +1180,7 @@ export async function getWeeklyMomentum(
 
   let strongDayStreak = 0;
   for (const score of allRecentScores) {
-    if (score.scoreValue >= 85) {
+    if (score.scoreValue >= STRONG_DAY_STREAK_THRESHOLD) {
       strongDayStreak += 1;
       continue;
     }

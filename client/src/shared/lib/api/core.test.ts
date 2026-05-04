@@ -74,4 +74,29 @@ describe("core query invalidation", () => {
       }),
     } as never)).toBe(true);
   });
+
+  it("invalidates score aggregates and Home queries whose windows include the changed date", () => {
+    const queryClient = createQueryClientStub();
+
+    invalidateCoreData(queryClient, "2026-05-03", {
+      domains: ["home", "score"],
+    });
+
+    const predicates = queryClient.invalidateQueries.mock.calls
+      .map(([call]) => call?.predicate)
+      .filter((predicate): predicate is (query: never) => boolean => typeof predicate === "function");
+
+    expect(predicates.some((predicate) => predicate({
+      queryKey: queryKeys.scoreHistory("2026-05-04", 7),
+    } as never))).toBe(true);
+    expect(predicates.some((predicate) => predicate({
+      queryKey: queryKeys.weeklyMomentum("2026-05-04"),
+    } as never))).toBe(true);
+    expect(predicates.some((predicate) => predicate({
+      queryKey: queryKeys.home("2026-05-04"),
+    } as never))).toBe(true);
+    expect(predicates.some((predicate) => predicate({
+      queryKey: queryKeys.scoreHistory("2026-05-12", 7),
+    } as never))).toBe(false);
+  });
 });

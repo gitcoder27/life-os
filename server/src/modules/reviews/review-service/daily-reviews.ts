@@ -537,7 +537,7 @@ export async function submitDailyReview(
   });
   const completedAt = new Date();
 
-  await prisma.$transaction(async (tx) => {
+  const tomorrowPriorities = await prisma.$transaction(async (tx) => {
     await tx.dailyReview.upsert({
       where: {
         planningCycleId: cycle.id,
@@ -564,7 +564,7 @@ export async function submitDailyReview(
       },
     });
 
-    await replacePriorities(tx, tomorrowCycle.id, payload.tomorrowPriorities, "DAILY");
+    const replacedTomorrowPriorities = await replacePriorities(tx, tomorrowCycle.id, payload.tomorrowPriorities, "DAILY");
 
     const existingTomorrowLaunch = await tx.dailyLaunch.findUnique({
       where: {
@@ -715,10 +715,11 @@ export async function submitDailyReview(
         },
       });
     }
+
+    return replacedTomorrowPriorities;
   });
 
   const finalizedScore = await finalizeDailyScore(prisma, userId, date);
-  const tomorrowPriorities = await replacePriorities(prisma, tomorrowCycle.id, payload.tomorrowPriorities, "DAILY");
 
   return {
     reviewCompletedAt: completedAt.toISOString(),

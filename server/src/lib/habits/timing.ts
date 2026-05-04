@@ -43,6 +43,11 @@ function evaluateTimedStatus(input: {
   deadlineMinutes: number;
 }): TimingStatusToday {
   if (input.completedAt) {
+    const completedIsoDate = getUserLocalDate(input.completedAt, input.timezone);
+    if (completedIsoDate !== input.targetIsoDate) {
+      return "complete_late";
+    }
+
     const completedMinutes = toLocalMinutes(input.completedAt, input.timezone);
 
     return completedMinutes <= input.deadlineMinutes ? "complete_on_time" : "complete_late";

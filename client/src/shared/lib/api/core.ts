@@ -7,6 +7,7 @@ import {
   getMonthString,
   getPreferredTimezone,
   getWeekStartDate,
+  toIsoDate,
 } from "../date";
 
 type SectionError = {
@@ -249,6 +250,41 @@ export const apiRequest = async <TResponse>(
 
 const isString = (value: unknown): value is string => typeof value === "string";
 
+const addIsoDays = (isoDate: string, days: number) => {
+  const date = new Date(`${isoDate}T12:00:00`);
+  date.setDate(date.getDate() + days);
+  return toIsoDate(date);
+};
+
+const dateFallsInTrailingWindow = (date: string, endingOn: string, days: number) =>
+  date <= endingOn && date >= addIsoDays(endingOn, -(days - 1));
+
+const scoreAggregateQueryTouchesDate = (queryKey: readonly unknown[], date: string) => {
+  if (queryKey[0] !== "score") {
+    return false;
+  }
+
+  if (queryKey[1] === "weekly-momentum" && isString(queryKey[2])) {
+    return dateFallsInTrailingWindow(date, queryKey[2], 7);
+  }
+
+  if (queryKey[1] === "history" && isString(queryKey[2])) {
+    const days = typeof queryKey[3] === "number" ? queryKey[3] : Number(queryKey[3]);
+
+    return Number.isFinite(days) && dateFallsInTrailingWindow(date, queryKey[2], days);
+  }
+
+  return false;
+};
+
+const homeQueryTouchesDate = (queryKey: readonly unknown[], date: string) => {
+  if (queryKey[0] !== "home" || !isString(queryKey[1])) {
+    return false;
+  }
+
+  return dateFallsInTrailingWindow(date, queryKey[1], 7);
+};
+
 export const taskQueryTouchesDate = (queryKey: readonly unknown[], date: string) => {
   if (queryKey[0] !== "tasks") {
     return false;
@@ -329,6 +365,9 @@ export const invalidateCoreData = (
 
   if (domains.has("home")) {
     void queryClient.invalidateQueries({ queryKey: queryKeys.home(date) });
+    void queryClient.invalidateQueries({
+      predicate: (query) => homeQueryTouchesDate(query.queryKey, date),
+    });
   }
 
   if (domains.has("focus")) {
@@ -338,6 +377,9 @@ export const invalidateCoreData = (
   if (domains.has("score")) {
     void queryClient.invalidateQueries({ queryKey: queryKeys.score(date) });
     void queryClient.invalidateQueries({ queryKey: queryKeys.weeklyMomentum(date) });
+    void queryClient.invalidateQueries({
+      predicate: (query) => scoreAggregateQueryTouchesDate(query.queryKey, date),
+    });
   }
 
   if (domains.has("planning")) {
@@ -377,6 +419,20 @@ export const invalidateCoreData = (
 
   if (domains.has("notifications")) {
     void queryClient.invalidateQueries({ queryKey: queryKeys.notifications });
+  }
+};
+
+export const invalidateCoreDataForDates = (
+  queryClient: QueryClient,
+  dates: Array<string | null | undefined>,
+  options: {
+    domains?: CoreInvalidationDomain[];
+  } = {},
+) => {
+  const uniqueDates = [...new Set(dates.filter((date): date is string => Boolean(date)))];
+
+  for (const date of uniqueDates) {
+    invalidateCoreData(queryClient, date, options);
   }
 };
 

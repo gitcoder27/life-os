@@ -72,16 +72,18 @@ In that case, the workout and finance/admin portions do not drag down the score.
 
 | Item | Points | Rule |
 | --- | --- | --- |
-| Top priority 1 | 10 | Earned only when marked complete |
-| Top priority 2 | 8 | Earned only when marked complete |
-| Top priority 3 | 6 | Earned only when marked complete |
-| Daily tasks and reminders | 6 | Based on completion ratio across up to 5 items scheduled for today |
+| Daily launch | 4 | Earned when the day launch is completed |
+| Must-win task | 10 | Earned by progress on the selected must-win task: complete, advanced, or started |
+| Support priority 1 | 8 | Earned only when marked complete |
+| Support priority 2 | 6 | Earned only when marked complete |
+| Supporting tasks and reminders | 2 | Based on completion ratio across up to 5 scheduled items outside the must-win task |
 
 Rules:
 
 - Only tasks explicitly scheduled for today count.
 - Backlog items do not affect the score.
 - Only the first 5 scheduled tasks count toward points so the user cannot inflate the score with a huge task list.
+- If no must-win task is selected, the must-win points are removed from the applicable denominator instead of counting as zero.
 
 ### B. Routines and Habits: 25 points
 
@@ -139,9 +141,11 @@ Rules:
 | Item | Points | Rule |
 | --- | --- | --- |
 | Daily review complete | 6 | Earned when the required daily review fields are submitted |
-| Tomorrow prepared | 4 | Earned when carry-forward is processed and tomorrow's top 3 priorities are set |
+| Tomorrow prepared | 4 | Earned when carry-forward is processed and tomorrow's required priorities are set |
 
 This bucket makes planning and closure part of discipline, not an optional afterthought.
+
+Standard days require two tomorrow support priorities. Rescue or recovery daily reviews are valid with one tomorrow priority, and the tomorrow-prep score follows that same requirement.
 
 ## Score bands
 
@@ -199,8 +203,10 @@ Why `70`:
 
 Example day:
 
-- top priorities completed: 2 of 3
-- tasks completed: 4 of 5
+- daily launch completed
+- must-win task completed
+- support priorities completed: 1 of 2
+- supporting tasks completed: 4 of 5
 - morning routine: fully done
 - evening routine: half done
 - due habits: 4 of 5
@@ -213,14 +219,14 @@ Example day:
 
 Earned points:
 
-- Plan and Priorities: `10 + 8 + 0 + 5 = 23`
+- Plan and Priorities: `4 + 10 + 8 + 0 + 1.6 = 23.6`
 - Routines and Habits: `5 + 2.5 + 12 = 19.5`
 - Health Basics: `8 + 4 + 10 = 22`
 - Finance and Admin: non-applicable
 - Review and Reset: `6 + 4 = 10`
 
 Applicable points: `90`  
-Earned points: `74.5`  
+Earned points: `75.1`
 Final score: `83`
 
 Result: `Solid Day`

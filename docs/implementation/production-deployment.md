@@ -147,6 +147,13 @@ NODE_ENV=production npm run worker -- --schedule daily
 NODE_ENV=production npm run worker -- --schedule weekly
 ```
 
+To backfill missed daily score history without running every daily maintenance job:
+
+```bash
+cd /home/ubuntu/apps/life-os-prod/server
+NODE_ENV=production npm run scores:finalize
+```
+
 ## Backups
 
 Production backups require `pg_dump`, `rclone`, an encrypted rclone remote, and `/etc/life-os/backup.env` with `RCLONE_REMOTE` set. The backup script fails if `RCLONE_REMOTE` is missing so production does not silently fall back to local-only backups.

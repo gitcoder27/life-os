@@ -65,6 +65,13 @@ sudo systemctl enable --now life-os-worker-weekly.timer
 sudo systemctl enable --now life-os-postgres-backup.timer
 ```
 
+Backfill missed score history after a timer outage:
+
+```bash
+cd /home/ubuntu/apps/life-os-prod/server
+NODE_ENV=production npm run scores:finalize
+```
+
 `/etc/life-os/backup.env` must define `RCLONE_REMOTE` for encrypted off-server backups.
 
 ## Fast paths

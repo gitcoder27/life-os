@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { DayCapacityAssessment } from "@life-os/contracts";
-import { useDailyScoreQuery, getTodayDate } from "../../../shared/lib/api";
+import { useDailyScoreQuery } from "../../../shared/lib/api";
 import { formatDurationMinutes } from "../helpers/planner-blocks";
 import type { PlannerExecutionModel } from "../helpers/planner-execution";
 import { CapacityStatusChip } from "./CapacityStatusChip";
@@ -26,6 +26,7 @@ export function CommandBar({
   onSwitchToPlanner,
   capacity,
   onShapeDay,
+  scoreDate,
 }: {
   mode: "execute" | "plan";
   onModeChange: (mode: "execute" | "plan") => void;
@@ -44,9 +45,9 @@ export function CommandBar({
   onSwitchToPlanner: () => void;
   capacity?: DayCapacityAssessment | null;
   onShapeDay?: () => void;
+  scoreDate: string;
 }) {
-  const today = getTodayDate();
-  const scoreQuery = useDailyScoreQuery(today);
+  const scoreQuery = useDailyScoreQuery(scoreDate);
   const score = scoreQuery.data;
   const prevValueRef = useRef<number | null>(null);
   const [bumped, setBumped] = useState(false);

@@ -11,8 +11,10 @@ import type {
   SettingsProfileResponse,
   UpdateSettingsProfileRequest,
 } from "@life-os/contracts";
+import { getTodayDate } from "../date";
 import {
   apiRequest,
+  invalidateCoreData,
   queryKeys,
 } from "./core";
 
@@ -39,6 +41,14 @@ export const useUpdateSettingsProfileMutation = () => {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.settings });
       void queryClient.invalidateQueries({ queryKey: queryKeys.session });
+      void queryClient.invalidateQueries({ queryKey: ["score"] });
+      void queryClient.invalidateQueries({ queryKey: ["home"] });
+      void queryClient.invalidateQueries({ queryKey: ["health"] });
+      void queryClient.invalidateQueries({ queryKey: ["planning"] });
+      void queryClient.invalidateQueries({ queryKey: ["review"] });
+      invalidateCoreData(queryClient, getTodayDate(), {
+        domains: ["health", "home", "score", "planning", "review", "notifications"],
+      });
     },
   });
 };

@@ -35,14 +35,22 @@ import {
   getMonthStartDate,
   getWeekEndDate,
   getWeekStartDate,
+  toIsoDate,
 } from "../date";
 import {
   apiRequest,
   invalidateCoreData,
+  invalidateCoreDataForDates,
   queryKeys,
   toSectionError,
   unwrapRequiredResult,
 } from "./core";
+
+const addDays = (date: string, days: number) => {
+  const nextDate = new Date(`${date}T12:00:00`);
+  nextDate.setDate(nextDate.getDate() + days);
+  return toIsoDate(nextDate);
+};
 
 export type ReviewCadence = "daily" | "weekly" | "monthly";
 export type DailyFrictionTag = ReviewFrictionTag;
@@ -171,7 +179,7 @@ export const useSubmitDailyReviewMutation = (date: string) => {
       errorMessage: "Daily review submission failed.",
     },
     onSuccess: () =>
-      invalidateCoreData(queryClient, date, {
+      invalidateCoreDataForDates(queryClient, [date, addDays(date, 1)], {
         domains: [
           "tasks",
           "home",

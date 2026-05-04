@@ -16,10 +16,11 @@ import type {
   UpdateHabitRequest,
   UpdateRoutineRequest,
 } from "@life-os/contracts";
-import { getTodayDate } from "../date";
+import { getTodayDate, toIsoDate } from "../date";
 import {
   apiRequest,
   invalidateCoreData,
+  invalidateCoreDataForDates,
   queryKeys,
 } from "./core";
 
@@ -47,6 +48,19 @@ const invalidateHabitDate = (
   invalidateCoreData(queryClient, date, {
     domains: ["habits", "home", "score", "notifications"],
   });
+};
+
+const getInclusiveDateRange = (startDate: string, endDate: string) => {
+  const dates: string[] = [];
+  const current = new Date(`${startDate}T12:00:00`);
+  const end = new Date(`${endDate}T12:00:00`);
+
+  while (current <= end && dates.length < 31) {
+    dates.push(toIsoDate(current));
+    current.setDate(current.getDate() + 1);
+  }
+
+  return dates;
 };
 
 export const useHabitsQuery = () =>
@@ -209,7 +223,16 @@ export const useCreateHabitPauseWindowMutation = () => {
       successMessage: "Temporary habit pause saved.",
       errorMessage: "Temporary habit pause failed.",
     },
-    onSuccess: () => invalidateHabitsAndCore(queryClient),
+    onSuccess: (_response, variables) => {
+      invalidateHabits(queryClient);
+      invalidateCoreDataForDates(
+        queryClient,
+        getInclusiveDateRange(variables.startsOn, variables.endsOn ?? variables.startsOn),
+        {
+          domains: ["habits", "home", "score", "notifications"],
+        },
+      );
+    },
   });
 };
 

@@ -54,6 +54,7 @@ import type {
 import {
   apiRequest,
   invalidateCoreData,
+  invalidateCoreDataForDates,
   invalidateTaskTemplateData,
   queryKeys,
 } from "./core";
@@ -227,11 +228,7 @@ const invalidateTaskMutationData = (
   date: string,
   task?: Pick<TaskItem, "scheduledForDate"> | null,
 ) => {
-  invalidateCoreData(queryClient, date);
-
-  if (task?.scheduledForDate && task.scheduledForDate !== date) {
-    invalidateCoreData(queryClient, task.scheduledForDate);
-  }
+  invalidateCoreDataForDates(queryClient, [date, task?.scheduledForDate]);
 };
 
 export const useTaskStatusMutation = (date: string) => {
@@ -360,8 +357,12 @@ export const useCarryForwardTaskMutation = (date: string) => {
       successMessage: "Task rescheduled.",
       errorMessage: "Task reschedule failed.",
     },
-    onSuccess: () => {
-      invalidateCoreData(queryClient, date);
+    onSuccess: (response, variables) => {
+      invalidateCoreDataForDates(queryClient, [
+        date,
+        variables.targetDate,
+        response.task.scheduledForDate,
+      ]);
       void queryClient.invalidateQueries({ queryKey: ["tasks"] });
     },
   });
@@ -837,7 +838,12 @@ export const useCommitTaskMutation = (date: string) => {
       successMessage: "Task scheduled.",
       errorMessage: "Task scheduling failed.",
     },
-    onSuccess: () => invalidateCoreData(queryClient, date),
+    onSuccess: (response, variables) =>
+      invalidateCoreDataForDates(queryClient, [
+        date,
+        variables.scheduledForDate,
+        response.task.scheduledForDate,
+      ]),
   });
 };
 
@@ -858,8 +864,19 @@ export const useBulkUpdateTasksMutation = (
     meta: {
       errorMessage: "Bulk inbox update failed.",
     },
-    onSuccess: (response) => {
-      invalidateCoreData(queryClient, date);
+    onSuccess: (response, variables) => {
+      const actionDate =
+        variables.action.type === "schedule"
+          ? variables.action.scheduledForDate
+          : variables.action.type === "carry_forward"
+            ? variables.action.targetDate
+            : null;
+
+      invalidateCoreDataForDates(queryClient, [
+        date,
+        actionDate,
+        ...response.tasks.map((task) => task.scheduledForDate),
+      ]);
       void queryClient.invalidateQueries({ queryKey: ["tasks"] });
       options?.onSuccess?.(response);
     },
@@ -909,7 +926,12 @@ export const useCreateTaskMutation = (
       successMessage: options?.successMessage ?? "Captured to inbox.",
       errorMessage: options?.errorMessage ?? "Task capture failed.",
     },
-    onSuccess: () => invalidateCoreData(queryClient, date),
+    onSuccess: (response, variables) =>
+      invalidateCoreDataForDates(queryClient, [
+        date,
+        variables.scheduledForDate,
+        response.task.scheduledForDate,
+      ]),
   });
 };
 
@@ -967,7 +989,12 @@ export const useLogTaskStuckMutation = (date: string) => {
       successMessage: "Stuck step captured.",
       errorMessage: "Could not save stuck step.",
     },
-    onSuccess: () => invalidateCoreData(queryClient, date),
+    onSuccess: (response, variables) =>
+      invalidateCoreDataForDates(queryClient, [
+        date,
+        variables.targetDate,
+        response.task.scheduledForDate,
+      ]),
   });
 };
 

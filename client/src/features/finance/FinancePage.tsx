@@ -498,7 +498,8 @@ export function FinancePage() {
 
   async function handleBillReschedule(billId: string) {
     if (!rescheduleDate) return;
-    await rescheduleBillMutation.mutateAsync({ billId, dueOn: rescheduleDate });
+    const bill = bills.find((item) => item.id === billId);
+    await rescheduleBillMutation.mutateAsync({ billId, dueOn: rescheduleDate, previousDueOn: bill?.dueOn ?? null });
     setReschedulingBillId(null);
     setRescheduleDate("");
   }

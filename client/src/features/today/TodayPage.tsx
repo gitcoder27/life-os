@@ -702,6 +702,7 @@ export function TodayPage({ routeMode }: { routeMode?: "execute" | "plan" }) {
           onSwitchToPlanner={() => navigateToMode("plan")}
           capacity={adaptiveToday.capacity}
           onShapeDay={() => setShapeDayOpen(true)}
+          scoreDate={plannerDate}
         />
 
         {allErrors ? (

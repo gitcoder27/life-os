@@ -24,7 +24,8 @@
     "build:server": "npm run build -w server",
     "typecheck:contracts": "npm run typecheck -w packages/contracts",
     "typecheck:client": "npm run typecheck -w client",
-    "typecheck:server": "npm run typecheck -w server"
+    "typecheck:server": "npm run typecheck -w server",
+    "scores:finalize": "npm run scores:finalize -w server"
   },
   "devDependencies": {
     "concurrently": "^9.2.1"

@@ -14,8 +14,14 @@ export const registerScoringRoutes: FastifyPluginAsync = async (app) => {
   app.get("/scores/daily/:date", async (request, reply) => {
     const user = requireAuthenticatedUser(request);
     const { date } = request.params as { date: IsoDateString };
+    const querySchema = z.object({
+      mode: z.enum(["stored", "live"]).optional(),
+    });
     const parsedDate = parseOrThrow(isoDateSchema, date);
-    const score = await calculateDailyScore(app.prisma, user.id, parseIsoDate(parsedDate));
+    const query = parseOrThrow(querySchema, request.query);
+    const score = await calculateDailyScore(app.prisma, user.id, parseIsoDate(parsedDate), {
+      mode: query.mode ?? "stored",
+    });
 
     return reply.send(score);
   });
