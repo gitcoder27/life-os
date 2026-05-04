@@ -271,6 +271,25 @@ export const taskQueryTouchesDate = (queryKey: readonly unknown[], date: string)
     scheduledState !== "unscheduled";
 };
 
+export const taskQueryTracksUnscheduledTasks = (queryKey: readonly unknown[]) => {
+  if (queryKey[0] !== "tasks") {
+    return false;
+  }
+
+  const scheduledForDate = queryKey[1];
+  const from = queryKey[2];
+  const to = queryKey[3];
+  const scheduledState = queryKey[10];
+
+  return scheduledForDate === "all" &&
+    from === "all" &&
+    to === "all" &&
+    scheduledState === "unscheduled";
+};
+
+const taskQueryShouldRefreshForCoreMutation = (queryKey: readonly unknown[], date: string) =>
+  taskQueryTouchesDate(queryKey, date) || taskQueryTracksUnscheduledTasks(queryKey);
+
 export const invalidateCoreData = (
   queryClient: QueryClient,
   date: string,
@@ -293,7 +312,7 @@ export const invalidateCoreData = (
 
   if (domains.has("tasks")) {
     void queryClient.invalidateQueries({
-      predicate: (query) => taskQueryTouchesDate(query.queryKey, date),
+      predicate: (query) => taskQueryShouldRefreshForCoreMutation(query.queryKey, date),
     });
   }
 
