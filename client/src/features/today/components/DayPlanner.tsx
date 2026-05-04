@@ -204,7 +204,7 @@ export function DayPlanner({
     setHoursDraft(visibleHours);
   }, [visibleHours]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (lastAutoCenteredDateRef.current === date) {
       return;
     }
@@ -299,17 +299,24 @@ export function DayPlanner({
       return;
     }
 
-    const nowLineElement = nowLineRef.current;
-    if (!nowLineElement) {
-      return;
-    }
+    // AppShell resets route scroll in a layout effect; defer so Planner owns first focus on entry.
+    const frameId = window.requestAnimationFrame(() => {
+      const nowLineElement = nowLineRef.current;
+      if (!nowLineElement) {
+        return;
+      }
 
-    hasAutoCenteredNowRef.current = true;
-    nowLineElement.scrollIntoView({
-      block: "center",
-      inline: "nearest",
-      behavior: "auto",
+      hasAutoCenteredNowRef.current = true;
+      nowLineElement.scrollIntoView({
+        block: "center",
+        inline: "nearest",
+        behavior: "auto",
+      });
     });
+
+    return () => {
+      window.cancelAnimationFrame(frameId);
+    };
   }, [isLiveDate, timeline.nowLinePx]);
 
   useLayoutEffect(() => {
