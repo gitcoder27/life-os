@@ -382,6 +382,7 @@ export const taskListQuerySchema = z
     scheduledForDate: isoDateSchema.optional(),
     from: isoDateSchema.optional(),
     to: isoDateSchema.optional(),
+    completedOn: isoDateSchema.optional(),
     status: taskStatusSchema.optional(),
     kind: taskKindSchema.optional(),
     cursor: z.string().min(1).max(500).optional(),

@@ -630,6 +630,7 @@ export interface TasksQuery {
   scheduledForDate?: IsoDateString;
   from?: IsoDateString;
   to?: IsoDateString;
+  completedOn?: IsoDateString;
   status?: TaskStatus;
   kind?: TaskKind;
   cursor?: string;

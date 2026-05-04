@@ -29,6 +29,10 @@ export function useTodayData() {
     to: yesterday,
     status: "pending",
   });
+  const completedTodayTasksQuery = useTasksQuery({
+    completedOn: today,
+    status: "completed",
+  });
   const healthQuery = useHealthDataQuery(today);
   const goalsListQuery = useGoalsListQuery();
   const scoreQuery = useDailyScoreQuery(today);
@@ -41,6 +45,7 @@ export function useTodayData() {
   const goalNudges = dayPlanQuery.data?.goalNudges ?? [];
   const plannerBlocks = dayPlanQuery.data?.plannerBlocks ?? [];
   const overdueTasks = overdueTasksQuery.data?.tasks ?? [];
+  const completedTodayTasks = completedTodayTasksQuery.data?.tasks ?? [];
   const currentDay = healthQuery.data?.summary.currentDay;
   const score = scoreQuery.data;
 
@@ -58,6 +63,21 @@ export function useTodayData() {
     () => allTasks.filter(isQuickCaptureReferenceTask),
     [allTasks],
   );
+
+  const completedTasks = useMemo(() => {
+    const tasksById = new Map<string, TaskItem>();
+    for (const task of executionTasks) {
+      if (task.status === "completed") {
+        tasksById.set(task.id, task);
+      }
+    }
+    for (const task of completedTodayTasks) {
+      if (!isQuickCaptureReferenceTask(task)) {
+        tasksById.set(task.id, task);
+      }
+    }
+    return [...tasksById.values()];
+  }, [completedTodayTasks, executionTasks]);
 
   const timedTasks = useMemo(
     () => executionTasks.filter((t) => t.dueAt),
@@ -85,9 +105,19 @@ export function useTodayData() {
   const taskGroups = useMemo(() => groupTasks(executionTasks), [executionTasks]);
 
   const completedTaskCount = useMemo(
-    () => executionTasks.filter((t) => t.status === "completed").length,
-    [executionTasks],
+    () => completedTasks.length,
+    [completedTasks],
   );
+  const totalTaskCount = useMemo(() => {
+    const taskIds = new Set<string>();
+    for (const task of executionTasks) {
+      taskIds.add(task.id);
+    }
+    for (const task of completedTasks) {
+      taskIds.add(task.id);
+    }
+    return taskIds.size;
+  }, [completedTasks, executionTasks]);
   const plannedPendingTaskCount = useMemo(
     () =>
       executionTasks.filter((t) => t.status === "pending" && plannedTaskIds.has(t.id)).length,
@@ -98,6 +128,7 @@ export function useTodayData() {
     void dayPlanQuery.refetch();
     void weekPlanQuery.refetch();
     void overdueTasksQuery.refetch();
+    void completedTodayTasksQuery.refetch();
     void healthQuery.refetch();
     void scoreQuery.refetch();
   };
@@ -112,9 +143,10 @@ export function useTodayData() {
     mustWinTask,
     rescueSuggestion,
     executionTasks,
+    completedTasks,
     taskGroups,
     completedTaskCount,
-    totalTaskCount: executionTasks.length,
+    totalTaskCount,
     quickCaptureTasks,
     timedTasks,
     goalNudges,
@@ -125,6 +157,7 @@ export function useTodayData() {
     unplannedPendingTaskCount: unplannedTasks.length,
     overdueTasks,
     overdueTasksQuery,
+    completedTodayTasksQuery,
     currentDay,
     activeGoals,
     score,

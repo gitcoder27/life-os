@@ -17,6 +17,7 @@ type TaskQueryKeyFilters = {
   scheduledForDate?: string;
   from?: string;
   to?: string;
+  completedOn?: string;
   status?: string;
   kind?: string;
   cursor?: string;
@@ -93,6 +94,7 @@ export const queryKeys = {
       filters.originType ?? "all",
       filters.scheduledState ?? "all",
       filters.sort ?? "newest",
+      filters.completedOn ?? "all",
     ] as const,
   habits: ["habits"] as const,
   health: (date: string) => ["health", date] as const,
@@ -256,9 +258,18 @@ export const taskQueryTouchesDate = (queryKey: readonly unknown[], date: string)
   const from = queryKey[2];
   const to = queryKey[3];
   const scheduledState = queryKey[10];
+  const completedOn = queryKey[12];
 
   if (scheduledForDate === date) {
     return true;
+  }
+
+  if (completedOn === date) {
+    return true;
+  }
+
+  if (isString(completedOn) && completedOn !== "all") {
+    return false;
   }
 
   if (isString(from) && isString(to) && from !== "all" && to !== "all") {

@@ -21,7 +21,6 @@ import { DayNotes } from "./components/DayNotes";
 import { TodayTaskCaptureSheet } from "./components/TodayTaskCaptureSheet";
 import { NextMoveStrip } from "./components/NextMoveStrip";
 import { ShapeDaySheet } from "./components/ShapeDaySheet";
-import { DailyLaunchCard } from "./components/DailyLaunchCard";
 import { PreLaunchModeNotice } from "./components/PreLaunchModeNotice";
 import { buildPlannerExecutionModel } from "./helpers/planner-execution";
 import { getDayPhase } from "./helpers/day-phase";
@@ -38,7 +37,9 @@ import {
   useHabitsQuery,
   useRoutineCheckinMutation,
   useSkipHabitMutation,
+  useUpsertDayLaunchMutation,
   type GoalNudgeItem,
+  type TaskItem,
 } from "../../shared/lib/api";
 import { isQuickCaptureReferenceTask } from "../../shared/lib/quickCapture";
 import { getOffsetDate } from "./helpers/date-helpers";
@@ -112,6 +113,7 @@ export function TodayPage({ routeMode }: { routeMode?: "execute" | "plan" }) {
   const plannerHabitCheckinMutation = useHabitCheckinMutation(data.today);
   const plannerSkipHabitMutation = useSkipHabitMutation(data.today);
   const plannerRoutineCheckinMutation = useRoutineCheckinMutation(data.today);
+  const upsertDayLaunchMutation = useUpsertDayLaunchMutation(data.today);
   const createGoalTaskMutation = useCreateTaskMutation(data.today, {
     successMessage: "Goal task added to Today.",
     errorMessage: "Goal task could not be added.",
@@ -198,8 +200,20 @@ export function TodayPage({ routeMode }: { routeMode?: "execute" | "plan" }) {
     [habitsQuery.data, isLivePlannerDate, plannerBlocks, plannerDate],
   );
   const selectableTasks = useMemo(
-    () => [...data.executionTasks, ...data.overdueTasks],
-    [data.executionTasks, data.overdueTasks],
+    () => {
+      const tasksById = new Map<string, TaskItem>();
+      for (const task of data.executionTasks) {
+        tasksById.set(task.id, task);
+      }
+      for (const task of data.overdueTasks) {
+        tasksById.set(task.id, task);
+      }
+      for (const task of data.completedTasks) {
+        tasksById.set(task.id, task);
+      }
+      return [...tasksById.values()];
+    },
+    [data.completedTasks, data.executionTasks, data.overdueTasks],
   );
   const selectedTask = useMemo(
     () => selectableTasks.find((task) => task.id === selectedTaskId) ?? null,
@@ -489,6 +503,9 @@ export function TodayPage({ routeMode }: { routeMode?: "execute" | "plan" }) {
     adaptiveToday.error instanceof Error
       ? adaptiveToday.error.message
       : null,
+    data.completedTodayTasksQuery.error instanceof Error
+      ? data.completedTodayTasksQuery.error.message
+      : null,
     habitsQuery.error instanceof Error
       ? habitsQuery.error.message
       : null,
@@ -503,6 +520,9 @@ export function TodayPage({ routeMode }: { routeMode?: "execute" | "plan" }) {
       : null,
     plannerRoutineCheckinMutation.error instanceof Error
       ? plannerRoutineCheckinMutation.error.message
+      : null,
+    upsertDayLaunchMutation.error instanceof Error
+      ? upsertDayLaunchMutation.error.message
       : null,
     mode === "plan" ? plannerActions.mutationError : null,
   ]
@@ -527,6 +547,26 @@ export function TodayPage({ routeMode }: { routeMode?: "execute" | "plan" }) {
       fiveMinuteVersion: nudge.suggestedPriorityTitle,
       estimatedDurationMinutes: 25,
       focusLengthMinutes: 25,
+    });
+  }
+
+  async function handleSetMustWin(task: TaskItem) {
+    let mustWinTaskId = task.id;
+    setSelectedTaskId(task.id);
+
+    if (task.id === data.mustWinTask?.id && data.launch?.completedAt) {
+      return;
+    }
+
+    if (task.scheduledForDate && task.scheduledForDate < data.today && task.status === "pending") {
+      const movedTask = await taskActions.moveToTodayAndReturn(task.id);
+      mustWinTaskId = movedTask.id;
+      setSelectedTaskId(movedTask.id);
+    }
+
+    await upsertDayLaunchMutation.mutateAsync({
+      mustWinTaskId,
+      energyRating: data.launch?.energyRating ?? 3,
     });
   }
 
@@ -628,7 +668,6 @@ export function TodayPage({ routeMode }: { routeMode?: "execute" | "plan" }) {
     (p) => p.status === "pending" && p.title.trim(),
   ).length;
   const pendingTaskCount = data.executionTasks.filter((t) => t.status === "pending").length;
-  const launchCompleted = Boolean(data.launch?.completedAt);
   const todayLayoutStyle = {
     "--today-top-rail-height": `${topRailHeight}px`,
     "--today-sticky-offset": `${stickyTop}px`,
@@ -679,21 +718,11 @@ export function TodayPage({ routeMode }: { routeMode?: "execute" | "plan" }) {
               ref={workbenchRef}
             >
               <div className="today-workbench__queue">
-                {!launchCompleted ? (
-                  <div className="today-workbench__launch" aria-label="Daily setup">
-                    <PreLaunchModeNotice
-                      date={data.today}
-                      launch={data.launch}
-                      suggestion={data.rescueSuggestion}
-                    />
-                    <DailyLaunchCard
-                      date={data.today}
-                      tasks={selectableTasks}
-                      launch={data.launch}
-                      mustWinTask={data.mustWinTask}
-                    />
-                  </div>
-                ) : null}
+                <PreLaunchModeNotice
+                  date={data.today}
+                  launch={data.launch}
+                  suggestion={data.rescueSuggestion}
+                />
 
                 <NextMoveStrip
                   nextMove={adaptiveToday.nextMove}
@@ -712,12 +741,15 @@ export function TodayPage({ routeMode }: { routeMode?: "execute" | "plan" }) {
                   date={data.today}
                   executionTasks={data.executionTasks}
                   overdueTasks={data.overdueTasks}
+                  completedTasks={data.completedTasks}
                   execution={todayPlannerExecution}
                   taskActions={taskActions}
                   plannerBlocks={data.plannerBlocks}
                   onSwitchToPlanner={() => navigateToMode("plan")}
                   activeFocusSession={activeFocusSession}
                   mustWinTaskId={data.mustWinTask?.id ?? null}
+                  onSetMustWin={handleSetMustWin}
+                  isSettingMustWin={upsertDayLaunchMutation.isPending || taskActions.isPending}
                   selectedTaskId={selectedTaskId}
                   onSelectTask={(task) => setSelectedTaskId(task.id)}
                 />
@@ -776,6 +808,9 @@ export function TodayPage({ routeMode }: { routeMode?: "execute" | "plan" }) {
                   task={selectedTask}
                   taskActions={taskActions}
                   activeFocusSession={activeFocusSession}
+                  mustWinTaskId={data.mustWinTask?.id ?? null}
+                  onSetMustWin={handleSetMustWin}
+                  isSettingMustWin={upsertDayLaunchMutation.isPending || taskActions.isPending}
                   onAddTask={() => setTodayTaskCaptureOpen(true)}
                   onPlanDay={() => navigateToMode("plan")}
                   onClarifyTask={(taskId) => setClarifyTaskId(taskId)}

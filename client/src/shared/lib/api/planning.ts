@@ -2,6 +2,7 @@ import {
   useMutation,
   useQuery,
   useQueryClient,
+  type QueryClient,
 } from "@tanstack/react-query";
 
 import type {
@@ -179,6 +180,7 @@ export const useTasksQuery = (
           scheduledForDate: filters.scheduledForDate,
           from: filters.from,
           to: filters.to,
+          completedOn: filters.completedOn,
           status: filters.status,
           kind: filters.kind,
           cursor: filters.cursor,
@@ -220,6 +222,18 @@ export const useTaskTemplatesQuery = () =>
     retry: false,
   });
 
+const invalidateTaskMutationData = (
+  queryClient: QueryClient,
+  date: string,
+  task?: Pick<TaskItem, "scheduledForDate"> | null,
+) => {
+  invalidateCoreData(queryClient, date);
+
+  if (task?.scheduledForDate && task.scheduledForDate !== date) {
+    invalidateCoreData(queryClient, task.scheduledForDate);
+  }
+};
+
 export const useTaskStatusMutation = (date: string) => {
   const queryClient = useQueryClient();
 
@@ -233,7 +247,7 @@ export const useTaskStatusMutation = (date: string) => {
       successMessage: "Task updated.",
       errorMessage: "Task update failed.",
     },
-    onSuccess: () => invalidateCoreData(queryClient, date),
+    onSuccess: (response) => invalidateTaskMutationData(queryClient, date, response.task),
   });
 };
 
@@ -346,7 +360,10 @@ export const useCarryForwardTaskMutation = (date: string) => {
       successMessage: "Task rescheduled.",
       errorMessage: "Task reschedule failed.",
     },
-    onSuccess: () => invalidateCoreData(queryClient, date),
+    onSuccess: () => {
+      invalidateCoreData(queryClient, date);
+      void queryClient.invalidateQueries({ queryKey: ["tasks"] });
+    },
   });
 };
 
@@ -790,7 +807,7 @@ export const useUpdateTaskMutation = (date: string) => {
       successMessage: "Task updated.",
       errorMessage: "Task update failed.",
     },
-    onSuccess: () => invalidateCoreData(queryClient, date),
+    onSuccess: (response) => invalidateTaskMutationData(queryClient, date, response.task),
   });
 };
 
@@ -843,6 +860,7 @@ export const useBulkUpdateTasksMutation = (
     },
     onSuccess: (response) => {
       invalidateCoreData(queryClient, date);
+      void queryClient.invalidateQueries({ queryKey: ["tasks"] });
       options?.onSuccess?.(response);
     },
   });

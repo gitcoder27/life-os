@@ -35,6 +35,9 @@ export function TaskInspectorPanel({
   task,
   taskActions,
   activeFocusSession,
+  mustWinTaskId,
+  onSetMustWin,
+  isSettingMustWin = false,
   onAddTask,
   onPlanDay,
   onClarifyTask,
@@ -43,6 +46,9 @@ export function TaskInspectorPanel({
   task: TaskItem | null;
   taskActions: TaskActions;
   activeFocusSession: FocusSessionItem | null;
+  mustWinTaskId?: string | null;
+  onSetMustWin?: (task: TaskItem) => void | Promise<void>;
+  isSettingMustWin?: boolean;
   onAddTask: () => void;
   onPlanDay: () => void;
   onClarifyTask: (taskId: string) => void;
@@ -96,7 +102,7 @@ export function TaskInspectorPanel({
           <span className="task-inspector__eyebrow">Today queue</span>
           <h2 className="task-inspector__empty-title">No task selected</h2>
           <p className="task-inspector__empty-copy">
-            Choose a task from the queue, add one, or plan the day before the work spreads out.
+            Today is open. Add a task or plan a block.
           </p>
           <div className="task-inspector__actions">
             <button className="task-inspector__text-action task-inspector__text-action--strong" type="button" onClick={onAddTask}>
@@ -115,6 +121,7 @@ export function TaskInspectorPanel({
   const isCompleted = task.status === "completed";
   const isOverdue = Boolean(task.scheduledForDate && task.scheduledForDate < date && isPending);
   const canFocus = task.kind === "task" && isPending;
+  const isMustWin = task.id === mustWinTaskId;
   const nextAction = task.nextAction?.trim() ?? "";
   const hasBriefMeta = Boolean(task.fiveMinuteVersion || task.estimatedDurationMinutes);
 
@@ -127,7 +134,12 @@ export function TaskInspectorPanel({
 
       <section className="task-inspector__body">
         <div className="task-inspector__header">
-          <span className="task-inspector__eyebrow">Selected task</span>
+          <div className="task-inspector__heading-row">
+            <span className="task-inspector__eyebrow">Selected task</span>
+            {isMustWin ? (
+              <span className="task-inspector__anchor">Must-win</span>
+            ) : null}
+          </div>
           <span className={`task-inspector__state task-inspector__state--${isOverdue ? "overdue" : task.status}`}>
             {getTaskStateLabel(task)}
           </span>
@@ -203,6 +215,17 @@ export function TaskInspectorPanel({
               }
             >
               Mark progress
+            </button>
+          ) : null}
+
+          {isPending && !isMustWin && onSetMustWin ? (
+            <button
+              className="task-inspector__text-action"
+              type="button"
+              disabled={isBusy || isSettingMustWin}
+              onClick={() => void onSetMustWin(task)}
+            >
+              Set must-win
             </button>
           ) : null}
 

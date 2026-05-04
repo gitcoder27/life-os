@@ -20,6 +20,8 @@ describe("core query invalidation", () => {
     expect(taskQueryTouchesDate(queryKeys.tasks({ scheduledForDate: "2026-05-03" }), "2026-05-03")).toBe(true);
     expect(taskQueryTouchesDate(queryKeys.tasks({ from: "2026-05-01", to: "2026-05-07" }), "2026-05-03")).toBe(true);
     expect(taskQueryTouchesDate(queryKeys.tasks({ from: "2026-05-04", to: "2026-05-07" }), "2026-05-03")).toBe(false);
+    expect(taskQueryTouchesDate(queryKeys.tasks({ completedOn: "2026-05-03", status: "completed" }), "2026-05-03")).toBe(true);
+    expect(taskQueryTouchesDate(queryKeys.tasks({ completedOn: "2026-05-04", status: "completed" }), "2026-05-03")).toBe(false);
     expect(taskQueryTouchesDate(queryKeys.tasks({ scheduledState: "unscheduled" }), "2026-05-03")).toBe(false);
   });
 

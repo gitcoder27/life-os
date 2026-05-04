@@ -4160,6 +4160,37 @@ describe("module route smoke tests", () => {
     );
   });
 
+  it("filters task list by the user's completed day", async () => {
+    const findMany = vi.fn().mockResolvedValue([]);
+    prisma.task = {
+      findMany,
+    } as any;
+    prisma.userPreference = {
+      findUnique: vi.fn().mockResolvedValue({
+        timezone: "Asia/Kolkata",
+      }),
+    } as any;
+
+    const response = await app!.inject({
+      method: "GET",
+      url: "/api/tasks?status=completed&completedOn=2026-05-04",
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          userId: "user-1",
+          status: "COMPLETED",
+          completedAt: {
+            gte: new Date("2026-05-03T18:30:00.000Z"),
+            lt: new Date("2026-05-04T18:30:00.000Z"),
+          },
+        }),
+      }),
+    );
+  });
+
   it("paginates task lists with a cursor", async () => {
     const firstTask = buildTaskRecord({
       id: "33333333-3333-4333-8333-333333333333",

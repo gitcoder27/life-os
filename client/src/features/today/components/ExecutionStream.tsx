@@ -45,24 +45,30 @@ export function ExecutionStream({
   date,
   executionTasks,
   overdueTasks = [],
+  completedTasks = [],
   execution,
   taskActions,
   plannerBlocks,
   onSwitchToPlanner,
   activeFocusSession,
   mustWinTaskId,
+  onSetMustWin,
+  isSettingMustWin = false,
   selectedTaskId,
   onSelectTask,
 }: {
   date: string;
   executionTasks: TaskItem[];
   overdueTasks?: TaskItem[];
+  completedTasks?: TaskItem[];
   execution: PlannerExecutionModel;
   taskActions: TaskActions;
   plannerBlocks: DayPlannerBlockItem[];
   onSwitchToPlanner: () => void;
   activeFocusSession: FocusSessionItem | null;
   mustWinTaskId?: string | null;
+  onSetMustWin?: (task: TaskItem) => void | Promise<void>;
+  isSettingMustWin?: boolean;
   selectedTaskId?: string | null;
   onSelectTask?: (task: TaskItem) => void;
 }) {
@@ -85,12 +91,12 @@ export function ExecutionStream({
   const nowTasks: TaskItem[] = [];
   const laterTasks: TaskItem[] = [];
   const unplannedTasks: TaskItem[] = [];
-  const completedTasks: TaskItem[] = [];
+  const completedTaskMap = new Map<string, TaskItem>();
   const pendingOverdueTasks = overdueTasks.filter((task) => task.status === "pending");
 
   for (const task of executionTasks) {
     if (task.status === "completed" || task.status === "dropped") {
-      completedTasks.push(task);
+      completedTaskMap.set(task.id, task);
     } else if (task.id === mustWinTaskId) {
       nowTasks.push(task);
     } else if (currentBlockTaskIds.has(task.id)) {
@@ -99,6 +105,11 @@ export function ExecutionStream({
       laterTasks.push(task);
     } else {
       unplannedTasks.push(task);
+    }
+  }
+  for (const task of completedTasks) {
+    if (task.status === "completed" || task.status === "dropped") {
+      completedTaskMap.set(task.id, task);
     }
   }
 
@@ -121,8 +132,14 @@ export function ExecutionStream({
   if (laterTasks.length > 0) sections.push({ key: "later", label: "Later today", tasks: laterTasks });
   if (unplannedTasks.length > 0) sections.push({ key: "unplanned", label: "Unplanned", tasks: unplannedTasks });
 
-  const totalAll = executionTasks.length + pendingOverdueTasks.length;
-  const donePercent = totalAll > 0 ? Math.round((completedTasks.length / totalAll) * 100) : 0;
+  const closedTasks = [...completedTaskMap.values()];
+  const pendingCount =
+    nowTasks.length +
+    laterTasks.length +
+    unplannedTasks.length +
+    pendingOverdueTasks.length;
+  const totalAll = pendingCount + closedTasks.length;
+  const donePercent = totalAll > 0 ? Math.round((closedTasks.length / totalAll) * 100) : 0;
 
   return (
     <section className={`execution-stream${activeFocusSession ? " execution-stream--focus-active" : ""}`}>
@@ -131,7 +148,7 @@ export function ExecutionStream({
           <div className="execution-stream__summary">
             <h2 className="execution-stream__title">Queue</h2>
             {totalAll > 0 ? (
-              <span className="execution-stream__counter">{completedTasks.length}/{totalAll} done</span>
+              <span className="execution-stream__counter">{closedTasks.length}/{totalAll} done</span>
             ) : (
               <span className="execution-stream__counter">No tasks</span>
             )}
@@ -178,7 +195,7 @@ export function ExecutionStream({
         </div>
       ) : null}
 
-      {sections.length === 0 && completedTasks.length === 0 ? (
+      {sections.length === 0 && closedTasks.length === 0 ? (
         <div className="execution-stream__empty">
           <p className="execution-stream__empty-text">No tasks scheduled for today.</p>
           <button
@@ -200,13 +217,16 @@ export function ExecutionStream({
               taskBlockMap={taskBlockMap}
               onSwitchToPlanner={onSwitchToPlanner}
               activeFocusSession={activeFocusSession}
+              mustWinTaskId={mustWinTaskId}
+              onSetMustWin={onSetMustWin}
+              isSettingMustWin={isSettingMustWin}
               selectedTaskId={selectedTaskId}
               onSelectTask={onSelectTask}
             />
           ))}
 
           {/* Completed — collapsed by default */}
-          {completedTasks.length > 0 ? (
+          {closedTasks.length > 0 ? (
             <div className="execution-stream__completed">
               <button
                 className="execution-stream__completed-toggle"
@@ -217,12 +237,12 @@ export function ExecutionStream({
                   ▸
                 </span>
                 <span className="execution-stream__completed-label">
-                  Completed ({completedTasks.length})
+                  Completed ({closedTasks.length})
                 </span>
               </button>
               {showCompleted ? (
                 <div className="execution-stream__completed-list">
-                  {completedTasks.map((task) => (
+                  {closedTasks.map((task) => (
                     <StreamTaskRow
                       key={task.id}
                       date={date}
@@ -230,6 +250,9 @@ export function ExecutionStream({
                       taskActions={taskActions}
                       blockInfo={null}
                       activeFocusSession={activeFocusSession}
+                      isMustWin={mustWinTaskId === task.id}
+                      onSetMustWin={onSetMustWin}
+                      isSettingMustWin={isSettingMustWin}
                       selected={selectedTaskId === task.id}
                       onSelectTask={onSelectTask}
                     />
@@ -251,6 +274,9 @@ function StreamSectionGroup({
   taskBlockMap,
   onSwitchToPlanner,
   activeFocusSession,
+  mustWinTaskId,
+  onSetMustWin,
+  isSettingMustWin,
   selectedTaskId,
   onSelectTask,
 }: {
@@ -260,6 +286,9 @@ function StreamSectionGroup({
   taskBlockMap: Map<string, DayPlannerBlockItem>;
   onSwitchToPlanner: () => void;
   activeFocusSession: FocusSessionItem | null;
+  mustWinTaskId?: string | null;
+  onSetMustWin?: (task: TaskItem) => void | Promise<void>;
+  isSettingMustWin?: boolean;
   selectedTaskId?: string | null;
   onSelectTask?: (task: TaskItem) => void;
 }) {
@@ -324,6 +353,9 @@ function StreamSectionGroup({
                   blockInfo={block}
                   highlight={isNow}
                   activeFocusSession={activeFocusSession}
+                  isMustWin={mustWinTaskId === task.id}
+                  onSetMustWin={onSetMustWin}
+                  isSettingMustWin={isSettingMustWin}
                   selected={selectedTaskId === task.id}
                   isOverdue={isOverdue}
                   onSelectTask={onSelectTask}
@@ -383,6 +415,9 @@ function StreamTaskRow({
   blockInfo,
   highlight = false,
   activeFocusSession,
+  isMustWin = false,
+  onSetMustWin,
+  isSettingMustWin = false,
   selected = false,
   isOverdue = false,
   onSelectTask,
@@ -397,6 +432,9 @@ function StreamTaskRow({
   blockInfo: DayPlannerBlockItem | null;
   highlight?: boolean;
   activeFocusSession: FocusSessionItem | null;
+  isMustWin?: boolean;
+  onSetMustWin?: (task: TaskItem) => void | Promise<void>;
+  isSettingMustWin?: boolean;
   selected?: boolean;
   isOverdue?: boolean;
   onSelectTask?: (task: TaskItem) => void;
@@ -426,6 +464,7 @@ function StreamTaskRow({
         (isDone ? " stream-task--done" : "") +
         (isDropped ? " stream-task--dropped" : "") +
         (highlight ? " stream-task--highlight" : "") +
+        (isMustWin ? " stream-task--must-win" : "") +
         (selected ? " stream-task--selected" : "") +
         (isFocusedTask ? " stream-task--focus-task" : "") +
         (isFocusLocked ? " stream-task--focus-muted" : "") +
@@ -496,6 +535,9 @@ function StreamTaskRow({
             </span>
           ) : null}
           {task.goal ? <GoalChip goal={task.goal} /> : null}
+          {isMustWin ? (
+            <span className="stream-task__anchor-badge">Must-win</span>
+          ) : null}
         </div>
       </div>
 
@@ -541,6 +583,19 @@ function StreamTaskRow({
           <div className="action-menu">
             {isPending ? (
               <>
+                {!isMustWin && onSetMustWin ? (
+                  <button
+                    className="action-menu__item"
+                    type="button"
+                    disabled={isSettingMustWin || isFocusLocked}
+                    onClick={() => {
+                      void onSetMustWin(task);
+                      setMenuOpen(false);
+                    }}
+                  >
+                    Set must-win
+                  </button>
+                ) : null}
                 <button className="action-menu__item" type="button"
                   onClick={() => { setProtocolOpen(true); setMenuOpen(false); }}>
                   Start protocol

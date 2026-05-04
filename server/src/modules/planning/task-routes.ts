@@ -20,6 +20,7 @@ import { withGeneratedAt } from "../../lib/http/response.js";
 import { applyRecurringTaskCarryForward, materializeNextRecurringTaskOccurrence, materializeRecurringTasksInRange } from "../../lib/recurrence/tasks.js";
 import { addDays, parseIsoDate } from "../../lib/time/cycle.js";
 import { toIsoDateString } from "../../lib/time/date.js";
+import { getDayWindowUtc } from "../../lib/time/user-time.js";
 import { parseOrThrow } from "../../lib/validation/parse.js";
 import { countStaleInboxTasks, recordInboxZeroIfEarned } from "./inbox-zero.js";
 import {
@@ -260,6 +261,9 @@ export const registerPlanningTaskRoutes: FastifyPluginAsync = async (app) => {
     const scheduledForDate = query.scheduledForDate ? parseIsoDate(query.scheduledForDate) : null;
     const fromDate = query.from ? parseIsoDate(query.from) : null;
     const toDateExclusive = query.to ? addDays(parseIsoDate(query.to), 1) : null;
+    const completedOnWindow = query.completedOn
+      ? getDayWindowUtc(query.completedOn, await getUserTimezone(app, user.id))
+      : null;
     const scheduledDateFilter =
       scheduledForDate
         ? scheduledForDate
@@ -284,6 +288,12 @@ export const registerPlanningTaskRoutes: FastifyPluginAsync = async (app) => {
       status: query.status ? toPrismaTaskStatus(query.status) : undefined,
       originType: query.originType ? toPrismaTaskOriginType(query.originType) : undefined,
       scheduledForDate: scheduledDateFilter,
+      completedAt: completedOnWindow
+        ? {
+            gte: completedOnWindow.start,
+            lt: completedOnWindow.end,
+          }
+        : undefined,
     };
     const listWhere = query.cursor
       ? {
