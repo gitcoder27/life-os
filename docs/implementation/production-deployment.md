@@ -52,8 +52,10 @@ The deploy script runs the full production flow for you:
 - runs `npm run build`
 - stops `life-os.service`
 - runs `npx prisma migrate deploy --schema server/prisma/schema.prisma`
+- runs the built score finalizer to backfill missed closed-day scores
 - syncs `client/dist/` into `/var/www/personal.daycommand.online/`
 - refreshes the nginx static cache policy and reloads nginx
+- installs, enables, and starts the worker timers
 - starts `life-os.service`
 - verifies `http://127.0.0.1:3104/healthz`
 
@@ -81,16 +83,31 @@ sudo systemctl stop life-os.service
 # 5) Apply pending production database migrations
 npx prisma migrate deploy --schema server/prisma/schema.prisma
 
-# 6) Deploy frontend bundle to nginx doc root
+# 6) Backfill closed-day score history
+cd server
+NODE_ENV=production npm run scores:finalize:dist
+cd ..
+
+# 7) Deploy frontend bundle to nginx doc root
 sudo rsync -a --delete client/dist/ /var/www/personal.daycommand.online/
 
-# 7) Refresh nginx cache policy
+# 8) Refresh nginx cache policy
 sudo install -m 644 deploy/nginx/personal.daycommand.online.conf /etc/nginx/sites-available/personal.daycommand.online
 sudo ln -sfn /etc/nginx/sites-available/personal.daycommand.online /etc/nginx/sites-enabled/personal.daycommand.online
 sudo nginx -t
 sudo systemctl reload nginx
 
-# 8) Start the API service
+# 9) Install and start worker timers
+sudo install -m 644 deploy/systemd/life-os-worker@.service /etc/systemd/system/life-os-worker@.service
+sudo install -m 644 deploy/systemd/life-os-worker-every-15-minutes.timer /etc/systemd/system/life-os-worker-every-15-minutes.timer
+sudo install -m 644 deploy/systemd/life-os-worker-daily.timer /etc/systemd/system/life-os-worker-daily.timer
+sudo install -m 644 deploy/systemd/life-os-worker-weekly.timer /etc/systemd/system/life-os-worker-weekly.timer
+sudo systemctl daemon-reload
+sudo systemctl enable --now life-os-worker-every-15-minutes.timer
+sudo systemctl enable --now life-os-worker-daily.timer
+sudo systemctl enable --now life-os-worker-weekly.timer
+
+# 10) Start the API service
 sudo systemctl start life-os.service
 ```
 

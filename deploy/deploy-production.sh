@@ -12,6 +12,18 @@ NGINX_SITE_NAME="personal.daycommand.online"
 NGINX_CONFIG_SOURCE="deploy/nginx/${NGINX_SITE_NAME}.conf"
 NGINX_CONFIG_TARGET="/etc/nginx/sites-available/${NGINX_SITE_NAME}"
 NGINX_CONFIG_ENABLED="/etc/nginx/sites-enabled/${NGINX_SITE_NAME}"
+WORKER_SERVICE_SOURCE="deploy/systemd/life-os-worker@.service"
+WORKER_SERVICE_TARGET="/etc/systemd/system/life-os-worker@.service"
+WORKER_TIMER_SOURCES=(
+  "deploy/systemd/life-os-worker-every-15-minutes.timer"
+  "deploy/systemd/life-os-worker-daily.timer"
+  "deploy/systemd/life-os-worker-weekly.timer"
+)
+WORKER_TIMERS=(
+  "life-os-worker-every-15-minutes.timer"
+  "life-os-worker-daily.timer"
+  "life-os-worker-weekly.timer"
+)
 service_stopped=0
 
 cd "$REPO_ROOT"
@@ -147,6 +159,34 @@ refresh_nginx_config() {
   fail "Nginx config validation failed; restored previous config."
 }
 
+install_worker_timers() {
+  require_file "$WORKER_SERVICE_SOURCE"
+
+  for timer_source in "${WORKER_TIMER_SOURCES[@]}"; do
+    require_file "$timer_source"
+  done
+
+  sudo install -m 644 "$WORKER_SERVICE_SOURCE" "$WORKER_SERVICE_TARGET"
+
+  for timer_source in "${WORKER_TIMER_SOURCES[@]}"; do
+    sudo install -m 644 "$timer_source" "/etc/systemd/system/$(basename "$timer_source")"
+  done
+
+  sudo systemctl daemon-reload
+
+  for timer in "${WORKER_TIMERS[@]}"; do
+    sudo systemctl enable --now "$timer"
+    systemctl is-active "$timer" >/dev/null
+  done
+}
+
+finalize_closed_day_scores() {
+  (
+    cd server
+    NODE_ENV=production npm run scores:finalize:dist
+  )
+}
+
 require_file "server/.env.production"
 require_file "client/.env.production"
 restore_lockfile_if_only_local_change
@@ -184,11 +224,17 @@ source "$SERVER_ENV_FILE"
 set +a
 npx prisma migrate deploy --schema "$PRISMA_SCHEMA_PATH"
 
+log "Finalizing missed closed-day scores"
+finalize_closed_day_scores
+
 log "Publishing frontend bundle to nginx doc root"
 sudo rsync -a --delete client/dist/ "$DOC_ROOT/"
 
 log "Refreshing nginx static cache policy"
 refresh_nginx_config
+
+log "Installing worker timers"
+install_worker_timers
 
 log "Starting API service"
 sudo systemctl start "$SERVICE_NAME"
