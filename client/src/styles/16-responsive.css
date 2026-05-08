@@ -158,6 +158,11 @@
     overflow-y: auto;
   }
 
+  .task-edit-sheet__grid,
+  .task-edit-sheet__grid--date-time {
+    grid-template-columns: 1fr;
+  }
+
   .category-grid {
     grid-template-columns: repeat(2, 1fr);
   }

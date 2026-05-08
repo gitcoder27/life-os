@@ -156,6 +156,22 @@
   font-weight: 600;
 }
 
+.task-edit-sheet {
+  width: min(100% - 2rem, 34rem);
+  max-height: calc(100dvh - 2.5rem);
+  overflow-y: auto;
+}
+
+.task-edit-sheet__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.task-edit-sheet__grid--date-time {
+  grid-template-columns: minmax(0, 1fr) 9rem;
+}
+
 .capture-grid {
   display: flex;
   flex-wrap: wrap;
