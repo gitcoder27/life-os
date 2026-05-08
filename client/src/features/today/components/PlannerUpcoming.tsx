@@ -1,93 +1,49 @@
-import { useMemo } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
-  formatLongDate,
-  formatShortDate,
+  formatEstimatedMinutes,
+  filterScheduledPendingTasks,
+  getInitialUpcomingVisibleRange,
+  getUpcomingRangeLabel,
+  groupUpcomingTasks,
+  buildUpcomingDayTotals,
+  mapTasksToCalendarEvents,
+  type UpcomingDayTotal,
+  type UpcomingView,
+  type UpcomingVisibleRange,
+} from "../helpers/upcoming-calendar";
+import {
   useTasksQuery,
   type TaskItem,
 } from "../../../shared/lib/api";
-import { getQuickCaptureDisplayText } from "../../../shared/lib/quickCapture";
 import { InlineErrorState } from "../../../shared/ui/PageState";
-import { getOffsetDate } from "../helpers/date-helpers";
+import { UpcomingAgendaView } from "./planner-upcoming/UpcomingAgendaView";
+import { UpcomingCalendarView } from "./planner-upcoming/UpcomingCalendarView";
+import { UpcomingDayDetail } from "./planner-upcoming/UpcomingDayDetail";
+import { UpcomingViewSwitch } from "./planner-upcoming/UpcomingViewSwitch";
 
 type PlannerUpcomingProps = {
   todayDate: string;
+  view: UpcomingView;
+  onViewChange: (view: UpcomingView) => void;
   onOpenDate: (date: string) => void;
   onEditTask: (task: TaskItem) => void;
 };
 
-type UpcomingGroup = {
-  date: string;
-  tasks: TaskItem[];
-};
-
-const LOOKAHEAD_DAYS = 30;
-
-const getTaskTitle = (task: TaskItem) => getQuickCaptureDisplayText(task, task.title);
-
-const getTaskKindLabel = (kind: TaskItem["kind"]) => {
-  switch (kind) {
-    case "note":
-      return "Note";
-    case "reminder":
-      return "Reminder";
-    default:
-      return "Task";
-  }
-};
-
-const getRelativeLabel = (date: string, todayDate: string) => {
-  if (date === todayDate) {
-    return "Today";
+function PlannerUpcomingSkeleton({ view }: { view: UpcomingView }) {
+  if (view !== "agenda") {
+    return (
+      <div className="planner-upcoming__calendar-skeleton" aria-label="Loading upcoming calendar">
+        <div className="planner-upcoming__calendar-skeleton-nav" />
+        <div className="planner-upcoming__calendar-skeleton-grid">
+          {Array.from({ length: view === "week" ? 7 : 35 }, (_, index) => (
+            <span key={index} />
+          ))}
+        </div>
+      </div>
+    );
   }
 
-  if (date === getOffsetDate(todayDate, 1)) {
-    return "Tomorrow";
-  }
-
-  const daysAhead = Math.round(
-    (new Date(`${date}T12:00:00`).getTime() - new Date(`${todayDate}T12:00:00`).getTime()) /
-      86_400_000,
-  );
-
-  if (daysAhead > 1 && daysAhead < 7) {
-    return new Date(`${date}T12:00:00`).toLocaleDateString(undefined, {
-      weekday: "long",
-    });
-  }
-
-  return formatShortDate(date);
-};
-
-const groupUpcomingTasks = (tasks: TaskItem[]) => {
-  const groupsByDate = new Map<string, TaskItem[]>();
-
-  for (const task of tasks) {
-    if (!task.scheduledForDate) {
-      continue;
-    }
-
-    const existing = groupsByDate.get(task.scheduledForDate) ?? [];
-    existing.push(task);
-    groupsByDate.set(task.scheduledForDate, existing);
-  }
-
-  return [...groupsByDate.entries()]
-    .sort(([leftDate], [rightDate]) => leftDate.localeCompare(rightDate))
-    .map(([date, groupTasks]) => ({
-      date,
-      tasks: groupTasks.sort((left, right) => {
-        const sortOrderDiff = left.todaySortOrder - right.todaySortOrder;
-        if (sortOrderDiff !== 0) {
-          return sortOrderDiff;
-        }
-
-        return left.createdAt.localeCompare(right.createdAt);
-      }),
-    }));
-};
-
-function PlannerUpcomingSkeleton() {
   return (
     <div className="planner-upcoming__skeleton" aria-label="Loading upcoming work">
       {[0, 1, 2].map((index) => (
@@ -103,44 +59,102 @@ function PlannerUpcomingSkeleton() {
   );
 }
 
+const getFallbackDay = (
+  selectedDate: string | null,
+  visibleRange: UpcomingVisibleRange,
+  totalsByDay: Map<string, UpcomingDayTotal>,
+) => {
+  if (
+    selectedDate &&
+    selectedDate >= visibleRange.from &&
+    selectedDate <= visibleRange.to
+  ) {
+    return selectedDate;
+  }
+
+  return [...totalsByDay.keys()].find(
+    (date) => date >= visibleRange.from && date <= visibleRange.to,
+  ) ?? visibleRange.from;
+};
+
+const visibleRangesMatch = (
+  left: UpcomingVisibleRange,
+  right: UpcomingVisibleRange,
+) => left.from === right.from && left.to === right.to;
+
 export function PlannerUpcoming({
   todayDate,
+  view,
+  onViewChange,
   onOpenDate,
   onEditTask,
 }: PlannerUpcomingProps) {
-  const rangeStartDate = getOffsetDate(todayDate, 1);
-  const horizonEndDate = getOffsetDate(todayDate, LOOKAHEAD_DAYS);
+  const [visibleRange, setVisibleRange] = useState<UpcomingVisibleRange>(() =>
+    getInitialUpcomingVisibleRange(view, todayDate),
+  );
+  const visibleRangeRef = useRef(visibleRange);
+  const [selectedDate, setSelectedDate] = useState<string | null>(null);
+
+  const updateVisibleRange = useCallback((nextRange: UpcomingVisibleRange) => {
+    if (visibleRangesMatch(visibleRangeRef.current, nextRange)) {
+      return;
+    }
+
+    visibleRangeRef.current = nextRange;
+    setVisibleRange(nextRange);
+  }, []);
+
+  useEffect(() => {
+    updateVisibleRange(getInitialUpcomingVisibleRange(view, todayDate));
+  }, [todayDate, updateVisibleRange, view]);
+
   const tasksQuery = useTasksQuery({
-    from: rangeStartDate,
-    to: horizonEndDate,
+    from: visibleRange.from,
+    to: visibleRange.to,
     status: "pending",
   });
 
   const tasks = useMemo(
-    () =>
-      (tasksQuery.data?.tasks ?? []).filter(
-        (task) => task.scheduledForDate && task.status === "pending",
-      ),
-    [tasksQuery.data?.tasks],
+    () => filterScheduledPendingTasks(tasksQuery.data?.tasks ?? [], todayDate),
+    [tasksQuery.data?.tasks, todayDate],
   );
-  const groups = useMemo<UpcomingGroup[]>(() => groupUpcomingTasks(tasks), [tasks]);
+  const groups = useMemo(() => groupUpcomingTasks(tasks), [tasks]);
+  const totalsByDay = useMemo(() => buildUpcomingDayTotals(tasks), [tasks]);
+  const events = useMemo(() => mapTasksToCalendarEvents(tasks), [tasks]);
+  const selectedDayDate = useMemo(
+    () => view === "agenda" ? null : getFallbackDay(selectedDate, visibleRange, totalsByDay),
+    [selectedDate, totalsByDay, view, visibleRange],
+  );
+  const selectedDay = selectedDayDate ? totalsByDay.get(selectedDayDate) ?? {
+    date: selectedDayDate,
+    tasks: [],
+    taskCount: 0,
+    estimatedMinutes: 0,
+  } : null;
   const taskCount = tasks.length;
-  const rangeLabel = `${formatShortDate(rangeStartDate)} to ${formatShortDate(horizonEndDate)}`;
+  const estimatedMinutes = formatEstimatedMinutes(
+    [...totalsByDay.values()].reduce((total, day) => total + day.estimatedMinutes, 0),
+  );
+  const rangeLabel = getUpcomingRangeLabel(view, visibleRange);
   const isInitialLoading = tasksQuery.isLoading && !tasksQuery.data;
   const hasBlockingError = tasksQuery.isError && !tasksQuery.data;
 
   return (
     <section className="planner-upcoming" aria-labelledby="planner-upcoming-title">
       <div className="planner-upcoming__header">
-        <div>
+        <div className="planner-upcoming__heading">
           <p className="planner-upcoming__eyebrow">Upcoming</p>
           <h2 className="planner-upcoming__title" id="planner-upcoming-title">
             Scheduled work
           </h2>
         </div>
-        <div className="planner-upcoming__summary" aria-label="Upcoming summary">
-          <span>{taskCount} item{taskCount === 1 ? "" : "s"}</span>
-          <span>{rangeLabel}</span>
+        <div className="planner-upcoming__header-tools">
+          <div className="planner-upcoming__summary" aria-label="Upcoming summary">
+            <span>{taskCount} item{taskCount === 1 ? "" : "s"}</span>
+            {estimatedMinutes ? <span>{estimatedMinutes}</span> : null}
+            <span>{rangeLabel}</span>
+          </div>
+          <UpcomingViewSwitch value={view} onChange={onViewChange} />
         </div>
       </div>
 
@@ -151,78 +165,53 @@ export function PlannerUpcoming({
         />
       ) : null}
 
-      {hasBlockingError ? null : isInitialLoading ? (
-        <PlannerUpcomingSkeleton />
-      ) : groups.length > 0 ? (
-        <div className="planner-upcoming__list">
-          {groups.map((group) => (
-            <section className="planner-upcoming__group" key={group.date}>
-              <div className="planner-upcoming__date">
-                <div>
-                  <span className="planner-upcoming__relative">
-                    {getRelativeLabel(group.date, todayDate)}
-                  </span>
-                  <span className="planner-upcoming__full-date">
-                    {formatLongDate(group.date)}
-                  </span>
-                </div>
-                <button
-                  className="planner-upcoming__open-day"
-                  type="button"
-                  onClick={() => onOpenDate(group.date)}
-                >
-                  Open day
-                </button>
-              </div>
-
-              <div className="planner-upcoming__tasks">
-                {group.tasks.map((task) => {
-                  const estimatedMinutes = task.estimatedDurationMinutes
-                    ? `${task.estimatedDurationMinutes}m`
-                    : null;
-                  const focusMinutes = task.focusLengthMinutes
-                    ? `${task.focusLengthMinutes}m focus`
-                    : null;
-
-                  return (
-                    <div className="planner-upcoming__task" key={task.id}>
-                      <button
-                        className="planner-upcoming__task-main"
-                        type="button"
-                        onClick={() => onOpenDate(group.date)}
-                      >
-                        <span className={`planner-upcoming__kind planner-upcoming__kind--${task.kind}`}>
-                          {getTaskKindLabel(task.kind)}
-                        </span>
-                        <span className="planner-upcoming__task-copy">
-                          <span className="planner-upcoming__task-title">{getTaskTitle(task)}</span>
-                          <span className="planner-upcoming__task-meta">
-                            {task.goal ? <span>{task.goal.title}</span> : null}
-                            {estimatedMinutes ? <span>{estimatedMinutes}</span> : null}
-                            {focusMinutes ? <span>{focusMinutes}</span> : null}
-                            {task.recurrence ? <span>Recurring</span> : null}
-                          </span>
-                        </span>
-                      </button>
-                      <button
-                        className="planner-upcoming__task-action"
-                        type="button"
-                        onClick={() => onEditTask(task)}
-                      >
-                        Edit
-                      </button>
-                    </div>
-                  );
-                })}
-              </div>
-            </section>
-          ))}
-        </div>
+      {hasBlockingError ? null : view === "agenda" && isInitialLoading ? (
+        <PlannerUpcomingSkeleton view={view} />
+      ) : view === "agenda" ? (
+        groups.length > 0 ? (
+          <UpcomingAgendaView
+            groups={groups}
+            todayDate={todayDate}
+            onOpenDate={onOpenDate}
+            onEditTask={onEditTask}
+          />
+        ) : (
+          <div className="planner-upcoming__empty">
+            <div className="planner-upcoming__empty-mark" aria-hidden="true" />
+            <h3>No upcoming work scheduled.</h3>
+            <p>Items scheduled from Inbox or Today will collect here.</p>
+          </div>
+        )
       ) : (
-        <div className="planner-upcoming__empty">
-          <div className="planner-upcoming__empty-mark" aria-hidden="true" />
-          <h3>No upcoming work scheduled.</h3>
-          <p>Items scheduled from Inbox or Today will collect here.</p>
+        <div className={`planner-upcoming__calendar-layout planner-upcoming__calendar-layout--${view}`}>
+          <div className="planner-upcoming__calendar-main">
+            <UpcomingCalendarView
+              mode={view}
+              todayDate={todayDate}
+              events={events}
+              totalsByDay={totalsByDay}
+              visibleRange={visibleRange}
+              selectedDate={selectedDayDate}
+              onVisibleRangeChange={updateVisibleRange}
+              onDateOpen={onOpenDate}
+              onDaySelect={setSelectedDate}
+              onTaskOpen={onEditTask}
+            />
+            {!tasksQuery.isFetching && tasks.length === 0 ? (
+              <p className="planner-upcoming__calendar-empty">
+                No upcoming work scheduled in this range.
+              </p>
+            ) : null}
+          </div>
+
+          {view === "month" ? (
+            <UpcomingDayDetail
+              day={selectedDay}
+              date={selectedDayDate}
+              onOpenDate={onOpenDate}
+              onEditTask={onEditTask}
+            />
+          ) : null}
         </div>
       )}
     </section>

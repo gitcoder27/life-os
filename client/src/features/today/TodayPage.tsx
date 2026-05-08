@@ -50,6 +50,10 @@ import { GoalNudges } from "./components/GoalNudges";
 import { TaskInspectorPanel } from "./components/TaskInspectorPanel";
 import { TaskEditSheet } from "../tasks/TaskEditSheet";
 import {
+  isUpcomingView,
+  type UpcomingView,
+} from "./helpers/upcoming-calendar";
+import {
   clearStoredWorkbenchRailWidth,
   clampWorkbenchRailWidth,
   DEFAULT_WORKBENCH_RAIL_WIDTH,
@@ -107,11 +111,13 @@ export function TodayPage({ routeMode }: { routeMode?: "execute" | "plan" }) {
   const requestedMode = searchParams.get("mode");
   const rawPlannerDate = searchParams.get("planDate");
   const rawPlannerView = searchParams.get("view");
+  const rawUpcomingView = searchParams.get("upcomingView");
   const homeDestination = readHomeDestinationState(location.state);
   const plannerDate = rawPlannerDate && ISO_DATE_PATTERN.test(rawPlannerDate)
     ? rawPlannerDate
     : data.today;
   const plannerView: PlannerView = rawPlannerView === "upcoming" ? "upcoming" : "today";
+  const upcomingView: UpcomingView = isUpcomingView(rawUpcomingView) ? rawUpcomingView : "week";
   const isPastPlannerDate = plannerDate < data.today;
   const isLivePlannerDate = plannerDate === data.today;
   const isEditablePlannerDate = plannerDate >= data.today;
@@ -321,6 +327,7 @@ export function TodayPage({ routeMode }: { routeMode?: "execute" | "plan" }) {
 
     next.delete("planDate");
     next.delete("view");
+    next.delete("upcomingView");
     navigate(
       {
         pathname: "/today",
@@ -460,6 +467,35 @@ export function TodayPage({ routeMode }: { routeMode?: "execute" | "plan" }) {
     }, { replace: true });
   }, [rawPlannerView, setSearchParams]);
 
+  useEffect(() => {
+    if (plannerView !== "upcoming") {
+      if (!rawUpcomingView) {
+        return;
+      }
+
+      setSearchParams((current) => {
+        const next = new URLSearchParams(current);
+        next.delete("upcomingView");
+        return next;
+      }, { replace: true });
+      return;
+    }
+
+    if (rawUpcomingView === "week") {
+      return;
+    }
+
+    if (isUpcomingView(rawUpcomingView)) {
+      return;
+    }
+
+    setSearchParams((current) => {
+      const next = new URLSearchParams(current);
+      next.set("upcomingView", "week");
+      return next;
+    }, { replace: true });
+  }, [plannerView, rawUpcomingView, setSearchParams]);
+
   function setPlannerDate(nextDate: string) {
     setSearchParams((current) => {
       const next = new URLSearchParams(current);
@@ -468,6 +504,7 @@ export function TodayPage({ routeMode }: { routeMode?: "execute" | "plan" }) {
       } else {
         next.set("planDate", nextDate);
       }
+      next.delete("upcomingView");
       return next;
     });
   }
@@ -476,6 +513,7 @@ export function TodayPage({ routeMode }: { routeMode?: "execute" | "plan" }) {
     setSearchParams((current) => {
       const next = new URLSearchParams(current);
       next.delete("view");
+      next.delete("upcomingView");
       if (nextDate === data.today) {
         next.delete("planDate");
       } else {
@@ -494,6 +532,20 @@ export function TodayPage({ routeMode }: { routeMode?: "execute" | "plan" }) {
     setSearchParams((current) => {
       const next = new URLSearchParams(current);
       next.set("view", "upcoming");
+      next.delete("planDate");
+      if (!isUpcomingView(next.get("upcomingView"))) {
+        next.set("upcomingView", "week");
+      }
+      return next;
+    });
+  }
+
+  function setUpcomingView(nextView: UpcomingView) {
+    setSearchParams((current) => {
+      const next = new URLSearchParams(current);
+      next.set("view", "upcoming");
+      next.delete("planDate");
+      next.set("upcomingView", nextView);
       return next;
     });
   }
@@ -897,6 +949,8 @@ export function TodayPage({ routeMode }: { routeMode?: "execute" | "plan" }) {
           {plannerView === "upcoming" ? (
             <PlannerUpcoming
               todayDate={data.today}
+              view={upcomingView}
+              onViewChange={setUpcomingView}
               onOpenDate={openPlannerDate}
               onEditTask={(task) => openTaskEditor(task, task.scheduledForDate ?? data.today)}
             />
