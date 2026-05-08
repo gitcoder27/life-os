@@ -69,6 +69,34 @@
     align-items: flex-start;
   }
 
+  .planner-view-switch {
+    width: 100%;
+  }
+
+  .planner-view-switch__tab {
+    flex: 1;
+  }
+
+  .planner-upcoming__header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .planner-upcoming__summary {
+    justify-content: flex-start;
+  }
+
+  .planner-upcoming__group,
+  .planner-upcoming__skeleton-group {
+    grid-template-columns: 1fr;
+    gap: 0.65rem;
+  }
+
+  .planner-upcoming__date {
+    flex-direction: row;
+    align-items: flex-end;
+  }
+
   .planner-date-nav {
     width: 100%;
     flex-direction: column;
@@ -209,6 +237,33 @@
 
   .planner__timeline-area {
     grid-template-columns: 40px 1fr;
+  }
+
+  .planner-upcoming__task {
+    grid-template-columns: 1fr;
+    gap: 0;
+    padding-block: 0.15rem 0.55rem;
+  }
+
+  .planner-upcoming__task-main {
+    grid-template-columns: 1fr;
+    gap: 0.45rem;
+    padding: 0.7rem 0;
+  }
+
+  .planner-upcoming__task-action {
+    justify-self: flex-start;
+    align-self: auto;
+    padding-inline: 0;
+  }
+
+  .planner-upcoming__kind {
+    justify-self: flex-start;
+    min-width: 0;
+  }
+
+  .planner-upcoming__task-title {
+    white-space: normal;
   }
 
   .planner__gutter-hour {

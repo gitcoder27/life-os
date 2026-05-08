@@ -5,6 +5,7 @@ This folder holds the active operating docs for running and supporting Life OS. 
 Current docs:
 
 - `Life-OS-Adaptive-Today-Planning-v2-Implementation-Plan-2026-05-03.md`: implementation plan for the next major product upgrade, focused on single-next-move guidance, shape-my-day planning, capacity guardrails, inline drift recovery, and review feedback loops while preserving a minimal, high-taste Today/Home design
+- `Life-OS-Planner-Upcoming-Calendar-Implementation-Plan-2026-05-08.md`: implementation plan for upgrading Planner Upcoming into Agenda, Week, and Month views with a restrained FullCalendar-backed calendar layer
 - `Life-OS-Senior-Code-Quality-Review-2026-05-03.md`: current senior code-quality review and P1/P2 remediation ledger
 - `Life-OS-Screen-Next-Steps-Audit-2026-05-02.md`: active screen-by-screen audit of high-value next steps
 - `Life-OS-Today-Page-Redesign-Implementation-Brief-2026-04-19.md`: implementation-ready redesign brief for the Today page, focused on making it the primary daily execution workspace with stronger hierarchy, fewer boxed modules, and a closer visual relationship to the redesigned Home page

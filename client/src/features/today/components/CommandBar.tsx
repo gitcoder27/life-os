@@ -5,6 +5,8 @@ import { formatDurationMinutes } from "../helpers/planner-blocks";
 import type { PlannerExecutionModel } from "../helpers/planner-execution";
 import { CapacityStatusChip } from "./CapacityStatusChip";
 
+type PlannerView = "today" | "upcoming";
+
 function getScoreColor(value: number) {
   if (value >= 85) return "var(--positive)";
   if (value >= 70) return "var(--accent-bright)";
@@ -27,6 +29,8 @@ export function CommandBar({
   capacity,
   onShapeDay,
   scoreDate,
+  plannerView,
+  onPlannerViewChange,
 }: {
   mode: "execute" | "plan";
   onModeChange: (mode: "execute" | "plan") => void;
@@ -46,6 +50,8 @@ export function CommandBar({
   capacity?: DayCapacityAssessment | null;
   onShapeDay?: () => void;
   scoreDate: string;
+  plannerView?: PlannerView;
+  onPlannerViewChange?: (view: PlannerView) => void;
 }) {
   const scoreQuery = useDailyScoreQuery(scoreDate);
   const score = scoreQuery.data;
@@ -120,25 +126,48 @@ export function CommandBar({
           + Add task
         </button>
 
-        <div className="command-bar__mode-toggle">
-          <button
-            className={`command-bar__mode-btn${mode === "execute" ? " command-bar__mode-btn--active" : ""}`}
-            type="button"
-            onClick={() => onModeChange("execute")}
-          >
-            Execute
-          </button>
-          <button
-            className={`command-bar__mode-btn${mode === "plan" ? " command-bar__mode-btn--active" : ""}`}
-            type="button"
-            onClick={() => onModeChange("plan")}
-          >
-            Plan
-            {plannerBlockCount > 0 ? (
-              <span className="command-bar__mode-badge">{plannerBlockCount}</span>
-            ) : null}
-          </button>
-        </div>
+        {plannerView && onPlannerViewChange ? (
+          <div className="planner-view-switch planner-view-switch--command" role="tablist" aria-label="Planner views">
+            <button
+              className={`planner-view-switch__tab${plannerView === "today" ? " planner-view-switch__tab--active" : ""}`}
+              type="button"
+              role="tab"
+              aria-selected={plannerView === "today"}
+              onClick={() => onPlannerViewChange("today")}
+            >
+              Today
+            </button>
+            <button
+              className={`planner-view-switch__tab${plannerView === "upcoming" ? " planner-view-switch__tab--active" : ""}`}
+              type="button"
+              role="tab"
+              aria-selected={plannerView === "upcoming"}
+              onClick={() => onPlannerViewChange("upcoming")}
+            >
+              Upcoming
+            </button>
+          </div>
+        ) : (
+          <div className="command-bar__mode-toggle">
+            <button
+              className={`command-bar__mode-btn${mode === "execute" ? " command-bar__mode-btn--active" : ""}`}
+              type="button"
+              onClick={() => onModeChange("execute")}
+            >
+              Execute
+            </button>
+            <button
+              className={`command-bar__mode-btn${mode === "plan" ? " command-bar__mode-btn--active" : ""}`}
+              type="button"
+              onClick={() => onModeChange("plan")}
+            >
+              Plan
+              {plannerBlockCount > 0 ? (
+                <span className="command-bar__mode-badge">{plannerBlockCount}</span>
+              ) : null}
+            </button>
+          </div>
+        )}
       </div>
     </header>
   );

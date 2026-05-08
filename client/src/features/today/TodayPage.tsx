@@ -18,6 +18,7 @@ import { ExecutionStream } from "./components/ExecutionStream";
 import { DailyEssentials } from "./components/DailyEssentials";
 import { DayPlanner } from "./components/DayPlanner";
 import { DayNotes } from "./components/DayNotes";
+import { PlannerUpcoming } from "./components/PlannerUpcoming";
 import { TodayTaskCaptureSheet } from "./components/TodayTaskCaptureSheet";
 import { NextMoveStrip } from "./components/NextMoveStrip";
 import { ShapeDaySheet } from "./components/ShapeDaySheet";
@@ -67,6 +68,7 @@ import type {
 } from "@life-os/contracts";
 
 const ISO_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+type PlannerView = "today" | "upcoming";
 const isPlannerAssignableTask = (task: { kind: string }) => task.kind === "task";
 
 function toSearchString(params: URLSearchParams) {
@@ -104,10 +106,12 @@ export function TodayPage({ routeMode }: { routeMode?: "execute" | "plan" }) {
   const [workbenchElement, setWorkbenchElement] = useState<HTMLElement | null>(null);
   const requestedMode = searchParams.get("mode");
   const rawPlannerDate = searchParams.get("planDate");
+  const rawPlannerView = searchParams.get("view");
   const homeDestination = readHomeDestinationState(location.state);
   const plannerDate = rawPlannerDate && ISO_DATE_PATTERN.test(rawPlannerDate)
     ? rawPlannerDate
     : data.today;
+  const plannerView: PlannerView = rawPlannerView === "upcoming" ? "upcoming" : "today";
   const isPastPlannerDate = plannerDate < data.today;
   const isLivePlannerDate = plannerDate === data.today;
   const isEditablePlannerDate = plannerDate >= data.today;
@@ -316,6 +320,7 @@ export function TodayPage({ routeMode }: { routeMode?: "execute" | "plan" }) {
     }
 
     next.delete("planDate");
+    next.delete("view");
     navigate(
       {
         pathname: "/today",
@@ -443,6 +448,18 @@ export function TodayPage({ routeMode }: { routeMode?: "execute" | "plan" }) {
     }, { replace: true });
   }, [rawPlannerDate, setSearchParams]);
 
+  useEffect(() => {
+    if (!rawPlannerView || rawPlannerView === "upcoming") {
+      return;
+    }
+
+    setSearchParams((current) => {
+      const next = new URLSearchParams(current);
+      next.delete("view");
+      return next;
+    }, { replace: true });
+  }, [rawPlannerView, setSearchParams]);
+
   function setPlannerDate(nextDate: string) {
     setSearchParams((current) => {
       const next = new URLSearchParams(current);
@@ -451,6 +468,32 @@ export function TodayPage({ routeMode }: { routeMode?: "execute" | "plan" }) {
       } else {
         next.set("planDate", nextDate);
       }
+      return next;
+    });
+  }
+
+  function openPlannerDate(nextDate: string) {
+    setSearchParams((current) => {
+      const next = new URLSearchParams(current);
+      next.delete("view");
+      if (nextDate === data.today) {
+        next.delete("planDate");
+      } else {
+        next.set("planDate", nextDate);
+      }
+      return next;
+    });
+  }
+
+  function setPlannerView(nextView: PlannerView) {
+    if (nextView === "today") {
+      openPlannerDate(data.today);
+      return;
+    }
+
+    setSearchParams((current) => {
+      const next = new URLSearchParams(current);
+      next.set("view", "upcoming");
       return next;
     });
   }
@@ -478,7 +521,7 @@ export function TodayPage({ routeMode }: { routeMode?: "execute" | "plan" }) {
     );
   }
 
-  if (mode === "plan" && plannerDayPlanQuery.isLoading && !plannerDayPlan) {
+  if (mode === "plan" && plannerView === "today" && plannerDayPlanQuery.isLoading && !plannerDayPlan) {
     return (
       <PageLoadingState
         title="Loading day plan"
@@ -487,7 +530,7 @@ export function TodayPage({ routeMode }: { routeMode?: "execute" | "plan" }) {
     );
   }
 
-  if (mode === "plan" && (plannerDayPlanQuery.isError || !plannerDayPlan)) {
+  if (mode === "plan" && plannerView === "today" && (plannerDayPlanQuery.isError || !plannerDayPlan)) {
     return (
       <PageErrorState
         title="Selected day could not load"
@@ -711,6 +754,8 @@ export function TodayPage({ routeMode }: { routeMode?: "execute" | "plan" }) {
           capacity={adaptiveToday.capacity}
           onShapeDay={() => setShapeDayOpen(true)}
           scoreDate={plannerDate}
+          plannerView={routeMode === "plan" ? plannerView : undefined}
+          onPlannerViewChange={routeMode === "plan" ? setPlannerView : undefined}
         />
 
         {allErrors ? (
@@ -848,33 +893,43 @@ export function TodayPage({ routeMode }: { routeMode?: "execute" | "plan" }) {
           </div>
         </div>
       ) : (
-        <DayPlanner
-          date={plannerDate}
-          todayDate={data.today}
-          isEditable={isEditablePlannerDate}
-          isLiveDate={isLivePlannerDate}
-          isHistoryDate={isPastPlannerDate}
-          blocks={plannerBlocks}
-          unplannedTasks={plannerUnplannedTasks}
-          recoveryTasks={plannerRecoveryTasks}
-          execution={plannerExecution}
-          dailyRhythmPlan={dailyRhythmPlan}
-          actions={plannerActions}
-          taskActions={plannerTaskActions}
-          isRhythmActionPending={
-            plannerHabitCheckinMutation.isPending ||
-            plannerSkipHabitMutation.isPending ||
-            plannerRoutineCheckinMutation.isPending
-          }
-          onReserveRhythmItem={handleReserveRhythmItem}
-          onCompleteRhythmItem={handleCompleteRhythmItem}
-          onSkipRhythmItem={handleSkipRhythmItem}
-          onSelectDate={setPlannerDate}
-          onStepDate={stepPlannerDate}
-          onShapeDay={() => setShapeDayOpen(true)}
-          onEditTask={(task) => openTaskEditor(task, plannerDate)}
-          sidebarStyle={plannerSidebarStyle}
-        />
+        <div className="planner-shell">
+          {plannerView === "upcoming" ? (
+            <PlannerUpcoming
+              todayDate={data.today}
+              onOpenDate={openPlannerDate}
+              onEditTask={(task) => openTaskEditor(task, task.scheduledForDate ?? data.today)}
+            />
+          ) : (
+            <DayPlanner
+              date={plannerDate}
+              todayDate={data.today}
+              isEditable={isEditablePlannerDate}
+              isLiveDate={isLivePlannerDate}
+              isHistoryDate={isPastPlannerDate}
+              blocks={plannerBlocks}
+              unplannedTasks={plannerUnplannedTasks}
+              recoveryTasks={plannerRecoveryTasks}
+              execution={plannerExecution}
+              dailyRhythmPlan={dailyRhythmPlan}
+              actions={plannerActions}
+              taskActions={plannerTaskActions}
+              isRhythmActionPending={
+                plannerHabitCheckinMutation.isPending ||
+                plannerSkipHabitMutation.isPending ||
+                plannerRoutineCheckinMutation.isPending
+              }
+              onReserveRhythmItem={handleReserveRhythmItem}
+              onCompleteRhythmItem={handleCompleteRhythmItem}
+              onSkipRhythmItem={handleSkipRhythmItem}
+              onSelectDate={setPlannerDate}
+              onStepDate={stepPlannerDate}
+              onShapeDay={() => setShapeDayOpen(true)}
+              onEditTask={(task) => openTaskEditor(task, plannerDate)}
+              sidebarStyle={plannerSidebarStyle}
+            />
+          )}
+        </div>
       )}
 
       <TodayTaskCaptureSheet
