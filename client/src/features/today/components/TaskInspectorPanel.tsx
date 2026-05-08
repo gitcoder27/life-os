@@ -41,6 +41,7 @@ export function TaskInspectorPanel({
   onAddTask,
   onPlanDay,
   onClarifyTask,
+  onEditTask,
 }: {
   date: string;
   task: TaskItem | null;
@@ -52,6 +53,7 @@ export function TaskInspectorPanel({
   onAddTask: () => void;
   onPlanDay: () => void;
   onClarifyTask: (taskId: string) => void;
+  onEditTask: (task: TaskItem) => void;
 }) {
   const updateTaskMutation = useUpdateTaskMutation(date);
   const [protocolOpen, setProtocolOpen] = useState(false);
@@ -190,6 +192,15 @@ export function TaskInspectorPanel({
         ) : null}
 
         <div className="task-inspector__secondary-actions">
+          <button
+            className="task-inspector__text-action"
+            type="button"
+            disabled={isBusy}
+            onClick={() => onEditTask(task)}
+          >
+            Edit
+          </button>
+
           {isPending ? (
             <button
               className="task-inspector__text-action task-inspector__text-action--strong"

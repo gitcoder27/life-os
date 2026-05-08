@@ -1197,6 +1197,20 @@
   padding: 0.15rem 0 0.05rem;
 }
 
+.today-day-note__field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.today-day-note__field > span {
+  color: var(--text-tertiary);
+  font-size: var(--fs-micro);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
 .today-day-note__input {
   width: 100%;
   min-height: 4.6rem;
@@ -1207,6 +1221,11 @@
   background: rgba(255, 255, 255, 0.03);
   color: var(--text);
   line-height: 1.55;
+}
+
+.today-day-note__input--title {
+  min-height: 2.45rem;
+  resize: none;
 }
 
 .today-day-note__input:focus {

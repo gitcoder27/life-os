@@ -40,6 +40,7 @@ type DayNoteRowProps = {
   onUpdate: (
     taskId: string,
     payload: {
+      title?: string;
       notes?: string | null;
       scheduledForDate?: string | null;
       reminderAt?: string | null;
@@ -60,9 +61,12 @@ function DayNoteRow({
   onUpdate,
 }: DayNoteRowProps) {
   const tomorrow = getTomorrowDate(today);
+  const [draftTitle, setDraftTitle] = useState(task.title);
   const [draftText, setDraftText] = useState(() => getEditableText(task));
   const [draftDate, setDraftDate] = useState(() => getTaskDate(task, today));
+  const [textTouched, setTextTouched] = useState(false);
 
+  const savedTitle = task.title;
   const savedText = getEditableText(task);
   const savedDate = getTaskDate(task, today);
   const isDone = task.status === "completed";
@@ -72,15 +76,27 @@ function DayNoteRow({
       return;
     }
 
+    setDraftTitle(savedTitle);
     setDraftText(savedText);
     setDraftDate(savedDate);
-  }, [expanded, savedDate, savedText, task.id]);
+    setTextTouched(false);
+  }, [expanded, savedDate, savedText, savedTitle, task.id]);
 
-  const hasTextChange = draftText.trim() !== savedText;
+  const nextTitle = draftTitle.trim();
+  const nextText =
+    !textTouched && savedText === savedTitle && nextTitle !== savedTitle
+      ? nextTitle
+      : draftText.trim();
+  const hasTitleChange = nextTitle !== savedTitle;
+  const hasTextChange = nextText !== savedText;
   const hasDateChange = draftDate !== savedDate;
-  const hasPendingChanges = hasTextChange || hasDateChange;
+  const hasPendingChanges = hasTitleChange || hasTextChange || hasDateChange;
 
   function handleSave() {
+    if (!nextTitle) {
+      return;
+    }
+
     if (!hasPendingChanges) {
       onCollapse();
       return;
@@ -89,7 +105,8 @@ function DayNoteRow({
     onUpdate(
       task.id,
       {
-        notes: hasTextChange ? draftText.trim() || null : undefined,
+        title: hasTitleChange ? nextTitle : undefined,
+        notes: hasTextChange ? nextText || null : undefined,
         scheduledForDate: hasDateChange ? draftDate : undefined,
         reminderAt:
           task.kind === "reminder" && hasDateChange
@@ -160,20 +177,43 @@ function DayNoteRow({
 
       {expanded ? (
         <div className="today-day-note__editor">
-          <textarea
-            className="today-day-note__input"
-            {...taskTextAutocompleteProps}
-            rows={3}
-            value={draftText}
-            onChange={(event) => setDraftText(event.target.value)}
-            onKeyDown={(event) => {
-              if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
-                event.preventDefault();
-                handleSave();
-              }
-            }}
-            disabled={disabled}
-          />
+          <label className="today-day-note__field">
+            <span>Title</span>
+            <input
+              className="today-day-note__input today-day-note__input--title"
+              {...taskTextAutocompleteProps}
+              value={draftTitle}
+              onChange={(event) => setDraftTitle(event.target.value)}
+              onKeyDown={(event) => {
+                if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
+                  event.preventDefault();
+                  handleSave();
+                }
+              }}
+              disabled={disabled}
+            />
+          </label>
+
+          <label className="today-day-note__field">
+            <span>Notes</span>
+            <textarea
+              className="today-day-note__input"
+              {...taskTextAutocompleteProps}
+              rows={3}
+              value={draftText}
+              onChange={(event) => {
+                setDraftText(event.target.value);
+                setTextTouched(true);
+              }}
+              onKeyDown={(event) => {
+                if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
+                  event.preventDefault();
+                  handleSave();
+                }
+              }}
+              disabled={disabled}
+            />
+          </label>
 
           <div className="today-day-note__schedule">
             <button
@@ -203,7 +243,7 @@ function DayNoteRow({
               className="button button--primary button--small"
               type="button"
               onClick={handleSave}
-              disabled={disabled || !hasPendingChanges}
+              disabled={disabled || !hasPendingChanges || !nextTitle}
             >
               Save
             </button>
@@ -277,6 +317,7 @@ export function DayNotes({ tasks, today }: DayNotesProps) {
   function handleUpdate(
     taskId: string,
     payload: {
+      title?: string;
       notes?: string | null;
       scheduledForDate?: string | null;
       reminderAt?: string | null;

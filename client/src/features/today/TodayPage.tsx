@@ -47,6 +47,7 @@ import { StartProtocolSheet } from "./components/StartProtocolSheet";
 import { WeekDeepWorkStrip } from "./components/WeekDeepWorkStrip";
 import { GoalNudges } from "./components/GoalNudges";
 import { TaskInspectorPanel } from "./components/TaskInspectorPanel";
+import { TaskEditSheet } from "../tasks/TaskEditSheet";
 import {
   clearStoredWorkbenchRailWidth,
   clampWorkbenchRailWidth,
@@ -94,6 +95,10 @@ export function TodayPage({ routeMode }: { routeMode?: "execute" | "plan" }) {
   const [topRailElement, setTopRailElement] = useState<HTMLDivElement | null>(null);
   const [clarifyTaskId, setClarifyTaskId] = useState<string | null>(null);
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
+  const [editingTaskTarget, setEditingTaskTarget] = useState<{
+    task: TaskItem;
+    date: string;
+  } | null>(null);
   const [workbenchRailWidth, setWorkbenchRailWidth] = useState(readStoredWorkbenchRailWidth);
   const [workbenchResizing, setWorkbenchResizing] = useState(false);
   const [workbenchElement, setWorkbenchElement] = useState<HTMLElement | null>(null);
@@ -232,6 +237,9 @@ export function TodayPage({ routeMode }: { routeMode?: "execute" | "plan" }) {
   }, []);
   const workbenchRef = useCallback((node: HTMLElement | null) => {
     setWorkbenchElement(node);
+  }, []);
+  const openTaskEditor = useCallback((task: TaskItem, date: string) => {
+    setEditingTaskTarget({ task, date });
   }, []);
 
   useEffect(() => {
@@ -753,6 +761,7 @@ export function TodayPage({ routeMode }: { routeMode?: "execute" | "plan" }) {
                   isSettingMustWin={upsertDayLaunchMutation.isPending || taskActions.isPending}
                   selectedTaskId={selectedTaskId}
                   onSelectTask={(task) => setSelectedTaskId(task.id)}
+                  onEditTask={(task) => openTaskEditor(task, data.today)}
                 />
               </div>
 
@@ -815,6 +824,7 @@ export function TodayPage({ routeMode }: { routeMode?: "execute" | "plan" }) {
                   onAddTask={() => setTodayTaskCaptureOpen(true)}
                   onPlanDay={() => navigateToMode("plan")}
                   onClarifyTask={(taskId) => setClarifyTaskId(taskId)}
+                  onEditTask={(task) => openTaskEditor(task, data.today)}
                 />
 
                 <div className="today-workbench__support">
@@ -862,6 +872,7 @@ export function TodayPage({ routeMode }: { routeMode?: "execute" | "plan" }) {
           onSelectDate={setPlannerDate}
           onStepDate={stepPlannerDate}
           onShapeDay={() => setShapeDayOpen(true)}
+          onEditTask={(task) => openTaskEditor(task, plannerDate)}
           sidebarStyle={plannerSidebarStyle}
         />
       )}
@@ -894,6 +905,13 @@ export function TodayPage({ routeMode }: { routeMode?: "execute" | "plan" }) {
             : null
         }
         onClose={() => setClarifyTaskId(null)}
+      />
+
+      <TaskEditSheet
+        open={Boolean(editingTaskTarget)}
+        task={editingTaskTarget?.task ?? null}
+        date={editingTaskTarget?.date ?? data.today}
+        onClose={() => setEditingTaskTarget(null)}
       />
     </div>
   );

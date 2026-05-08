@@ -56,6 +56,7 @@ export function ExecutionStream({
   isSettingMustWin = false,
   selectedTaskId,
   onSelectTask,
+  onEditTask,
 }: {
   date: string;
   executionTasks: TaskItem[];
@@ -71,6 +72,7 @@ export function ExecutionStream({
   isSettingMustWin?: boolean;
   selectedTaskId?: string | null;
   onSelectTask?: (task: TaskItem) => void;
+  onEditTask?: (task: TaskItem) => void;
 }) {
   const [showCompleted, setShowCompleted] = useState(false);
 
@@ -222,6 +224,7 @@ export function ExecutionStream({
               isSettingMustWin={isSettingMustWin}
               selectedTaskId={selectedTaskId}
               onSelectTask={onSelectTask}
+              onEditTask={onEditTask}
             />
           ))}
 
@@ -255,6 +258,7 @@ export function ExecutionStream({
                       isSettingMustWin={isSettingMustWin}
                       selected={selectedTaskId === task.id}
                       onSelectTask={onSelectTask}
+                      onEditTask={onEditTask}
                     />
                   ))}
                 </div>
@@ -279,6 +283,7 @@ function StreamSectionGroup({
   isSettingMustWin,
   selectedTaskId,
   onSelectTask,
+  onEditTask,
 }: {
   section: StreamSection;
   date: string;
@@ -291,6 +296,7 @@ function StreamSectionGroup({
   isSettingMustWin?: boolean;
   selectedTaskId?: string | null;
   onSelectTask?: (task: TaskItem) => void;
+  onEditTask?: (task: TaskItem) => void;
 }) {
   const isNow = section.key === "now";
   const isUnplanned = section.key === "unplanned";
@@ -359,6 +365,7 @@ function StreamSectionGroup({
                   selected={selectedTaskId === task.id}
                   isOverdue={isOverdue}
                   onSelectTask={onSelectTask}
+                  onEditTask={onEditTask}
                   sortableDisabled={!isSortable || taskActions.isPending || Boolean(activeFocusSession)}
                 />
               );
@@ -421,6 +428,7 @@ function StreamTaskRow({
   selected = false,
   isOverdue = false,
   onSelectTask,
+  onEditTask,
   dragHandleProps,
   isDragging = false,
   rowRef,
@@ -438,6 +446,7 @@ function StreamTaskRow({
   selected?: boolean;
   isOverdue?: boolean;
   onSelectTask?: (task: TaskItem) => void;
+  onEditTask?: (task: TaskItem) => void;
   dragHandleProps?: DragHandleProps;
   isDragging?: boolean;
   rowRef?: (node: HTMLDivElement | null) => void;
@@ -581,8 +590,19 @@ function StreamTaskRow({
         </button>
         {menuOpen ? (
           <div className="action-menu">
+            <button
+              className="action-menu__item"
+              type="button"
+              onClick={() => {
+                onEditTask?.(task);
+                setMenuOpen(false);
+              }}
+            >
+              Edit task
+            </button>
             {isPending ? (
               <>
+                <div className="action-menu__divider" />
                 {!isMustWin && onSetMustWin ? (
                   <button
                     className="action-menu__item"

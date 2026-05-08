@@ -21,6 +21,7 @@ export function UnplannedTasks({
   suppressedTaskId,
   onQuickAssign,
   onBulkAssign,
+  onEditTask,
 }: {
   title?: string;
   description?: string;
@@ -36,6 +37,7 @@ export function UnplannedTasks({
   suppressedTaskId: string | null;
   onQuickAssign: (taskId: string, block: DayPlannerBlockItem) => void;
   onBulkAssign: (taskIds: string[], block: DayPlannerBlockItem) => Promise<void> | void;
+  onEditTask: (task: TaskItem) => void;
 }) {
   const [batchMode, setBatchMode] = useState(false);
   const [selectedTaskIds, setSelectedTaskIds] = useState<string[]>([]);
@@ -226,6 +228,7 @@ export function UnplannedTasks({
             isActiveDrag={draggedTaskId === task.id}
             isSuppressed={suppressedTaskId === task.id}
             onQuickAssign={(block) => onQuickAssign(task.id, block)}
+            onEdit={() => onEditTask(task)}
             meta={showRecoveryDetail && task.scheduledForDate ? getRecoveryTaskDetail(task.scheduledForDate) : null}
             compactMeta={showRecoveryDetail && task.scheduledForDate ? getRecoveryTaskCompactMeta(task.scheduledForDate) : null}
             tone={tone}
@@ -247,6 +250,7 @@ function UnplannedTaskRow({
   isActiveDrag,
   isSuppressed,
   onQuickAssign,
+  onEdit,
   meta,
   compactMeta,
   tone,
@@ -261,6 +265,7 @@ function UnplannedTaskRow({
   isActiveDrag: boolean;
   isSuppressed: boolean;
   onQuickAssign: (block: DayPlannerBlockItem) => void;
+  onEdit: () => void;
   meta?: string | null;
   compactMeta?: { scheduledLabel: string; overdueLabel: string } | null;
   tone?: "default" | "recovery";
@@ -340,6 +345,14 @@ function UnplannedTaskRow({
 
       {!readOnly && !batchMode ? (
         <div className="unplanned-task__actions">
+          <button
+            className="unplanned-task__assign-btn"
+            type="button"
+            onClick={onEdit}
+            disabled={isPending}
+          >
+            Edit
+          </button>
           {blocks.length > 0 ? (
             <>
               {blocks.length === 1 ? (

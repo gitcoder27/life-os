@@ -105,6 +105,7 @@ export function DayPlanner({
   onSelectDate,
   onStepDate,
   onShapeDay,
+  onEditTask,
   sidebarStyle,
 }: {
   date: string;
@@ -126,6 +127,7 @@ export function DayPlanner({
   onSelectDate: (isoDate: string) => void;
   onStepDate: (direction: -1 | 1) => void;
   onShapeDay?: () => void;
+  onEditTask: (task: TaskItem) => void;
   sidebarStyle?: CSSProperties;
 }) {
   const [formDraft, setFormDraft] = useState<PlannerFormDraft | null>(null);
@@ -913,6 +915,7 @@ export function DayPlanner({
                         onEditBlock={(updates) => actions.editBlock(segment.block!.id, updates)}
                         onDeleteBlock={() => actions.removeBlock(segment.block!)}
                         onRemoveTask={(taskId) => actions.removeTaskFromBlock(segment.block!.id, taskId)}
+                        onEditTask={onEditTask}
                         onToggleTaskStatus={(taskId, status) => taskActions.changeStatus(taskId, status)}
                         onReorderTasks={(taskIds) => actions.reorderTasksInBlock(segment.block!, taskIds)}
                         onNudgeDuration={(direction) => handleNudgeBlock(segment.block!, direction)}
@@ -993,6 +996,7 @@ export function DayPlanner({
                   suppressedTaskId={suppressedTaskId}
                   onQuickAssign={(taskId, block) => void assignPlannerTaskToBlock(block, taskId)}
                   onBulkAssign={(taskIds, block) => assignPlannerTasksToBlock(block, taskIds)}
+                  onEditTask={onEditTask}
                 />
               ) : null}
               <UnplannedTasks
@@ -1005,6 +1009,7 @@ export function DayPlanner({
                 suppressedTaskId={suppressedTaskId}
                 onQuickAssign={(taskId, block) => void actions.assignTaskToBlock(block, taskId)}
                 onBulkAssign={(taskIds, block) => actions.assignTasksToBlock(block, taskIds)}
+                onEditTask={onEditTask}
               />
             </div>
           </div>

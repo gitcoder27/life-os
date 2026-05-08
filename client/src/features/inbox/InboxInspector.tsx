@@ -28,6 +28,7 @@ type InboxInspectorProps = {
   onConvertToNote: () => void;
   onConvertToReminder: () => void;
   onArchive: () => void;
+  onEdit: () => void;
   onUpdateTitle: (title: string) => void;
   onUpdateNotes: (notes: string | null) => void;
   promptClarification?: boolean;
@@ -85,6 +86,7 @@ export function InboxInspector({
   onConvertToNote,
   onConvertToReminder,
   onArchive,
+  onEdit,
   onUpdateTitle,
   onUpdateNotes,
   promptClarification,
@@ -501,6 +503,14 @@ export function InboxInspector({
 
         {/* Secondary actions */}
         <div className="inbox-inspector__secondary-actions">
+          <button
+            className="inbox-inspector__text-btn"
+            type="button"
+            onClick={onEdit}
+            disabled={isMutating}
+          >
+            Edit
+          </button>
           {item.kind === "task" ? (
             <button
               className="inbox-inspector__text-btn"

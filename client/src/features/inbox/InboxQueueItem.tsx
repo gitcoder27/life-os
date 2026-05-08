@@ -27,6 +27,7 @@ type InboxQueueItemProps = {
   onArchive: () => void;
   onConvertToNote: () => void;
   onLinkGoal: () => void;
+  onEdit: () => void;
 };
 
 export function InboxQueueItem({
@@ -44,6 +45,7 @@ export function InboxQueueItem({
   onArchive,
   onConvertToNote,
   onLinkGoal,
+  onEdit,
 }: InboxQueueItemProps) {
   const [showCalendar, setShowCalendar] = useState(false);
   const [showMoreMenu, setShowMoreMenu] = useState(false);
@@ -182,6 +184,17 @@ export function InboxQueueItem({
                   className="inbox-queue__dropdown"
                   onClick={(e) => e.stopPropagation()}
                 >
+                  <button
+                    className="inbox-queue__dropdown-btn"
+                    type="button"
+                    disabled={isMutating}
+                    onClick={() => {
+                      onEdit();
+                      setShowMoreMenu(false);
+                    }}
+                  >
+                    Edit
+                  </button>
                   {item.kind === "task" ? (
                     <button
                       className="inbox-queue__dropdown-btn"

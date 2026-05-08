@@ -57,6 +57,7 @@ export function PlannerBlock({
   onEditBlock,
   onDeleteBlock,
   onRemoveTask,
+  onEditTask,
   onToggleTaskStatus,
   onReorderTasks,
   onNudgeDuration,
@@ -96,6 +97,7 @@ export function PlannerBlock({
   }) => Promise<unknown> | void;
   onDeleteBlock: () => Promise<unknown> | void;
   onRemoveTask: (taskId: string) => void;
+  onEditTask: (task: TaskItem) => void;
   onToggleTaskStatus: (taskId: string, status: TaskItem["status"]) => void;
   onReorderTasks: (taskIds: string[]) => void;
   onNudgeDuration: (direction: -1 | 1) => void;
@@ -910,6 +912,7 @@ export function PlannerBlock({
                     onMoveTaskToBlock(bt.taskId, targetBlock);
                     setMovingTaskId(null);
                   }}
+                  onEdit={() => onEditTask(bt.task)}
                   onToggleStatus={() =>
                     onToggleTaskStatus(
                       bt.taskId,
@@ -941,6 +944,7 @@ function SortablePlannerTaskRow({
   currentBlockId,
   onToggleMovePicker,
   onMoveToBlock,
+  onEdit,
   onToggleStatus,
   onRemove,
 }: {
@@ -953,6 +957,7 @@ function SortablePlannerTaskRow({
   currentBlockId: string;
   onToggleMovePicker: () => void;
   onMoveToBlock: (targetBlock: DayPlannerBlockItem) => void;
+  onEdit: () => void;
   onToggleStatus: () => void;
   onRemove: () => void;
 }) {
@@ -996,6 +1001,15 @@ function SortablePlannerTaskRow({
         <span className="planner-block__task-title">{item.task.title}</span>
         {!readOnly ? (
           <div className="planner-block__task-actions">
+            <button
+              className="planner-block__task-move planner-block__task-move--label"
+              type="button"
+              onClick={onEdit}
+              disabled={isPending}
+              aria-label="Edit task"
+            >
+              Edit
+            </button>
             <button
               className="planner-block__task-move planner-block__task-move--label"
               type="button"

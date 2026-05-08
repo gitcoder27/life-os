@@ -23,6 +23,7 @@ import {
   PageErrorState,
   PageLoadingState,
 } from "../../shared/ui/PageState";
+import { TaskEditSheet } from "../tasks/TaskEditSheet";
 import { InboxBulkBar } from "./InboxBulkBar";
 import { InboxEmptyState } from "./InboxEmptyState";
 import { InboxInspector } from "./InboxInspector";
@@ -81,6 +82,7 @@ export function InboxPage() {
   const [promptClarification, setPromptClarification] = useState(false);
   const [pendingCommitDate, setPendingCommitDate] = useState<string | null>(null);
   const [ignoreStaleTriageIntent, setIgnoreStaleTriageIntent] = useState(false);
+  const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
 
   const activeKind = activeFilter === "all" ? undefined : activeFilter;
   const homeDestination = readHomeDestinationState(location.state);
@@ -111,6 +113,7 @@ export function InboxPage() {
 
   const filteredItems = loadedItems;
   const selectedItem = filteredItems.find((item) => item.id === selectedItemId) ?? null;
+  const editingTask = filteredItems.find((item) => item.id === editingTaskId) ?? null;
   const hasBulkSelection = checkedIds.size > 0;
   const isMutating = updateTaskMutation.isPending || bulkUpdateTasksMutation.isPending || commitTaskMutation.isPending;
 
@@ -146,11 +149,14 @@ export function InboxPage() {
       setPromptClarification(false);
       setPendingCommitDate(null);
     }
+    if (editingTaskId && !visibleIds.has(editingTaskId)) {
+      setEditingTaskId(null);
+    }
     setCheckedIds((current) => {
       const cleaned = new Set([...current].filter((id) => visibleIds.has(id)));
       return cleaned.size === current.size ? current : cleaned;
     });
-  }, [filteredItems, selectedItemId]);
+  }, [editingTaskId, filteredItems, selectedItemId]);
 
   // Close inspector when entering bulk mode
   useEffect(() => {
@@ -460,6 +466,10 @@ export function InboxPage() {
                     setSelectedItemId(item.id);
                     setCheckedIds(new Set());
                   }}
+                  onEdit={() => {
+                    setEditingTaskId(item.id);
+                    setCheckedIds(new Set());
+                  }}
                 />
               ))}
 
@@ -514,6 +524,7 @@ export function InboxPage() {
                   onConvertToNote={() => handleConvertToNote(selectedItem.id)}
                   onConvertToReminder={() => handleConvertToReminder(selectedItem.id)}
                   onArchive={() => handleArchive(selectedItem.id)}
+                  onEdit={() => setEditingTaskId(selectedItem.id)}
                   onUpdateTitle={(title) => handleUpdateTitle(selectedItem.id, title)}
                   onUpdateNotes={(notes) => handleUpdateNotes(selectedItem.id, notes)}
                   promptClarification={promptClarification}
@@ -543,6 +554,13 @@ export function InboxPage() {
       {isTemplatesOpen && (
         <InboxTemplatesModal onClose={() => setIsTemplatesOpen(false)} />
       )}
+
+      <TaskEditSheet
+        open={Boolean(editingTask)}
+        task={editingTask}
+        date={today}
+        onClose={() => setEditingTaskId(null)}
+      />
     </div>
   );
 }

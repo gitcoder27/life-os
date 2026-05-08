@@ -1548,6 +1548,20 @@
   padding-top: 0.3rem;
 }
 
+.today-desk .today-sidebar .today-day-note__field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.today-desk .today-sidebar .today-day-note__field > span {
+  color: var(--today-ink-faint);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
 .today-desk .today-sidebar .today-day-note__input {
   width: 100%;
   min-height: 3.5rem;
@@ -1560,6 +1574,11 @@
   font-family: inherit;
   line-height: 1.45;
   resize: vertical;
+}
+
+.today-desk .today-sidebar .today-day-note__input--title {
+  min-height: 2.3rem;
+  resize: none;
 }
 
 .today-desk .today-sidebar .today-day-note__schedule,
