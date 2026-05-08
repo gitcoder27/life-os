@@ -22,6 +22,7 @@ import { PlannerUpcoming } from "./components/PlannerUpcoming";
 import { TodayTaskCaptureSheet } from "./components/TodayTaskCaptureSheet";
 import { NextMoveStrip } from "./components/NextMoveStrip";
 import { ShapeDaySheet } from "./components/ShapeDaySheet";
+import { SizeTasksSheet } from "./components/SizeTasksSheet";
 import { PreLaunchModeNotice } from "./components/PreLaunchModeNotice";
 import { buildPlannerExecutionModel } from "./helpers/planner-execution";
 import { getDayPhase } from "./helpers/day-phase";
@@ -95,6 +96,7 @@ export function TodayPage({ routeMode }: { routeMode?: "execute" | "plan" }) {
   const [plannerNow, setPlannerNow] = useState(() => new Date());
   const [todayTaskCaptureOpen, setTodayTaskCaptureOpen] = useState(false);
   const [shapeDayOpen, setShapeDayOpen] = useState(false);
+  const [sizeTasksOpen, setSizeTasksOpen] = useState(false);
   const [driftRecoveryOpen, setDriftRecoveryOpen] = useState(false);
   const [topRailHeight, setTopRailHeight] = useState(0);
   const [stickyTop, setStickyTop] = useState(0);
@@ -233,6 +235,29 @@ export function TodayPage({ routeMode }: { routeMode?: "execute" | "plan" }) {
   const selectedTask = useMemo(
     () => selectableTasks.find((task) => task.id === selectedTaskId) ?? null,
     [selectableTasks, selectedTaskId],
+  );
+  const sizeableTasks = useMemo(
+    () => {
+      const tasksForPlannerDate = plannerDate === data.today
+        ? data.executionTasks
+        : plannerExecutionTasks;
+      const adaptiveTaskIds = plannerDate === data.today
+        ? new Set(adaptiveToday.capacity?.needsEstimateTaskIds ?? [])
+        : null;
+
+      return tasksForPlannerDate.filter((task) => {
+        if (task.kind !== "task" || task.status !== "pending") {
+          return false;
+        }
+
+        if (task.estimatedDurationMinutes != null || task.focusLengthMinutes != null) {
+          return false;
+        }
+
+        return !adaptiveTaskIds || adaptiveTaskIds.size === 0 || adaptiveTaskIds.has(task.id);
+      });
+    },
+    [adaptiveToday.capacity?.needsEstimateTaskIds, data.executionTasks, data.today, plannerDate, plannerExecutionTasks],
   );
   const defaultSelectedTaskId =
     activeFocusSession?.taskId ??
@@ -674,6 +699,11 @@ export function TodayPage({ routeMode }: { routeMode?: "execute" | "plan" }) {
   }
 
   function handleAdaptiveAction(action: AdaptiveNextMoveAction, move: AdaptiveNextMove) {
+    if (action.type === "size_tasks" || move.state === "size_tasks") {
+      setSizeTasksOpen(true);
+      return;
+    }
+
     if (action.type === "shape_day" || action.type === "reduce_day") {
       setShapeDayOpen(true);
       if (mode !== "plan" && action.type === "shape_day") {
@@ -805,6 +835,8 @@ export function TodayPage({ routeMode }: { routeMode?: "execute" | "plan" }) {
           onSwitchToPlanner={() => navigateToMode("plan")}
           capacity={adaptiveToday.capacity}
           onShapeDay={() => setShapeDayOpen(true)}
+          onSizeTasks={() => setSizeTasksOpen(true)}
+          onReduceDay={() => setShapeDayOpen(true)}
           scoreDate={plannerDate}
           plannerView={routeMode === "plan" ? plannerView : undefined}
           onPlannerViewChange={routeMode === "plan" ? setPlannerView : undefined}
@@ -996,6 +1028,19 @@ export function TodayPage({ routeMode }: { routeMode?: "execute" | "plan" }) {
         open={shapeDayOpen}
         date={plannerDate}
         onClose={() => setShapeDayOpen(false)}
+      />
+
+      <SizeTasksSheet
+        open={sizeTasksOpen}
+        date={plannerDate}
+        tasks={sizeableTasks}
+        onClose={() => setSizeTasksOpen(false)}
+        onShapeDay={() => {
+          setShapeDayOpen(true);
+          if (mode !== "plan") {
+            navigateToMode("plan");
+          }
+        }}
       />
 
       <DriftRecoverySheet

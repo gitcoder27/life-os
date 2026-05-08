@@ -105,6 +105,7 @@ export {
   useReorderTasksMutation,
   useReplacePlannerBlockTasksMutation,
   useShapeDayPreviewMutation,
+  useSizeTasksMutation,
   useTasksQuery,
   useUpsertDayLaunchMutation,
   useTaskStatusMutation,

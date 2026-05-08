@@ -31,7 +31,7 @@ export function ShapeDayPreview({ preview }: { preview: ShapeDayPreviewResponse 
             <div className="shape-preview-row" key={`${assignment.blockTempId}-${assignment.taskId}`}>
               <span className="shape-preview-row__title">{assignment.taskTitle}</span>
               <span className="shape-preview-row__meta">
-                {assignment.estimatedMinutes} min{assignment.assumedMinutes ? " assumed" : ""}
+                {assignment.estimatedMinutes} min{assignment.assumedMinutes ? " estimate needed" : ""}
               </span>
             </div>
           ))}
@@ -48,7 +48,7 @@ export function ShapeDayPreview({ preview }: { preview: ShapeDayPreviewResponse 
           {preview.needsEstimateTasks.slice(0, 4).map((task) => (
             <div className="shape-preview-row" key={task.taskId}>
               <span className="shape-preview-row__title">{task.title}</span>
-              <span className="shape-preview-row__meta">{task.estimatedMinutes} min assumed</span>
+              <span className="shape-preview-row__meta">{task.estimatedMinutes} min placeholder</span>
             </div>
           ))}
         </PreviewGroup>

@@ -175,6 +175,7 @@ export type AdaptiveNextMoveActionType =
   | "start_task"
   | "clarify_task"
   | "shape_day"
+  | "size_tasks"
   | "recover_drift"
   | "reduce_day"
   | "close_day"

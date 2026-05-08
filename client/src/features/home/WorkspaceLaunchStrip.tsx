@@ -130,7 +130,9 @@ function buildAdaptiveCard(adaptive: AdaptiveGuidance | undefined): GuidanceCard
     title: move.title,
     detail: move.reason,
     link: {
-      target: move.primaryAction.type === "shape_day" || move.primaryAction.type === "recover_drift"
+      target: move.primaryAction.type === "shape_day" ||
+        move.primaryAction.type === "size_tasks" ||
+        move.primaryAction.type === "recover_drift"
         ? { to: "/planner" }
         : { to: "/today", state: { homeDestination: { kind: "today_execute" } } },
       label: move.primaryAction.label,

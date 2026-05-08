@@ -128,7 +128,7 @@ export function buildAdaptiveNextMove(input: BuildAdaptiveNextMoveInput): Adapti
       state: "size_tasks",
       title: "Size tasks",
       reason: `${capacity.unsizedTaskCount} tasks need estimates before planning.`,
-      primaryAction: action("shape_day", "Size tasks"),
+      primaryAction: action("size_tasks", "Size tasks"),
       severity: "attention",
     });
   }

@@ -28,6 +28,8 @@ export function CommandBar({
   onSwitchToPlanner,
   capacity,
   onShapeDay,
+  onSizeTasks,
+  onReduceDay,
   scoreDate,
   plannerView,
   onPlannerViewChange,
@@ -49,6 +51,8 @@ export function CommandBar({
   onSwitchToPlanner: () => void;
   capacity?: DayCapacityAssessment | null;
   onShapeDay?: () => void;
+  onSizeTasks?: () => void;
+  onReduceDay?: () => void;
   scoreDate: string;
   plannerView?: PlannerView;
   onPlannerViewChange?: (view: PlannerView) => void;
@@ -106,8 +110,8 @@ export function CommandBar({
           <CapacityStatusChip
             capacity={capacity}
             onShapeDay={onShapeDay}
-            onSizeTasks={onShapeDay}
-            onReduceDay={onShapeDay}
+            onSizeTasks={onSizeTasks}
+            onReduceDay={onReduceDay ?? onShapeDay}
           />
         ) : null}
 

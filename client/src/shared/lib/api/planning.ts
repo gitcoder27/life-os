@@ -812,6 +812,36 @@ export const useUpdateTaskMutation = (date: string) => {
   });
 };
 
+export const useSizeTasksMutation = (date: string) => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (payload: Array<{
+      taskId: string;
+      estimatedDurationMinutes: number;
+    }>) =>
+      Promise.all(
+        payload.map(({ taskId, estimatedDurationMinutes }) =>
+          apiRequest<TaskMutationResponse>(`/api/tasks/${taskId}`, {
+            method: "PATCH",
+            body: {
+              estimatedDurationMinutes,
+            } satisfies UpdateTaskRequest,
+          }),
+        ),
+      ),
+    meta: {
+      successMessage: "Task sizes saved.",
+      errorMessage: "Task sizing failed.",
+    },
+    onSuccess: (responses) =>
+      invalidateCoreDataForDates(queryClient, [
+        date,
+        ...responses.map((response) => response.task.scheduledForDate),
+      ]),
+  });
+};
+
 export type CommitTaskInput = {
   taskId: string;
   scheduledForDate: string;

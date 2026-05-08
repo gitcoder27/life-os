@@ -120,6 +120,7 @@ describe("buildAdaptiveNextMove", () => {
     });
 
     expect(move.state).toBe("size_tasks");
+    expect(move.primaryAction.type).toBe("size_tasks");
   });
 
   it("falls back to add task for an empty day", () => {
