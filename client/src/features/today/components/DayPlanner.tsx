@@ -4,7 +4,6 @@ import {
   DragOverlay,
   PointerSensor,
   pointerWithin,
-  useDroppable,
   useSensor,
   useSensors,
   type DragEndEvent,
@@ -43,8 +42,6 @@ import type {
 } from "../helpers/daily-rhythm";
 import type { PlannerExecutionModel } from "../helpers/planner-execution";
 import {
-  DAILY_RHYTHM_DRAG_TYPE,
-  DAILY_RHYTHM_TIMELINE_DROP_TYPE,
   PLANNER_BLOCK_DROP_TYPE,
   UNPLANNED_TASK_DRAG_TYPE,
 } from "../helpers/planner-drag";
@@ -99,7 +96,6 @@ export function DayPlanner({
   actions,
   taskActions,
   isRhythmActionPending,
-  onReserveRhythmItem,
   onCompleteRhythmItem,
   onSkipRhythmItem,
   onSelectDate,
@@ -121,7 +117,6 @@ export function DayPlanner({
   actions: PlannerActions;
   taskActions: TaskActions;
   isRhythmActionPending?: boolean;
-  onReserveRhythmItem?: (item: DailyRhythmItem) => void | Promise<void>;
   onCompleteRhythmItem?: (item: DailyRhythmItem) => void | Promise<void>;
   onSkipRhythmItem?: (item: DailyRhythmItem) => void | Promise<void>;
   onSelectDate: (isoDate: string) => void;
@@ -136,7 +131,6 @@ export function DayPlanner({
   const [hoursDraft, setHoursDraft] = useState(visibleHours);
   const [now, setNow] = useState(() => new Date());
   const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null);
-  const [draggedRhythmItemId, setDraggedRhythmItemId] = useState<string | null>(null);
   const [suppressedTaskId, setSuppressedTaskId] = useState<string | null>(null);
   const [disableDropAnimation, setDisableDropAnimation] = useState(false);
   const [quickEditRequest, setQuickEditRequest] = useState<PlannerQuickEditRequest | null>(null);
@@ -177,22 +171,6 @@ export function DayPlanner({
     () => plannerAssignableTasks.find((task) => task.id === draggedTaskId) ?? null,
     [draggedTaskId, plannerAssignableTasks],
   );
-  const activeDraggedRhythmItem = useMemo(
-    () => dailyRhythmPlan?.items.find((item) => item.id === draggedRhythmItemId) ?? null,
-    [dailyRhythmPlan?.items, draggedRhythmItemId],
-  );
-  const { isOver: isRhythmTimelineOver, setNodeRef: setRhythmTimelineDropRef } = useDroppable({
-    id: "planner-daily-rhythm-timeline",
-    data: {
-      type: DAILY_RHYTHM_TIMELINE_DROP_TYPE,
-    },
-    disabled:
-      !isEditable ||
-      draggedRhythmItemId === null ||
-      Boolean(formDraft) ||
-      Boolean(isRhythmActionPending) ||
-      actions.isPending,
-  });
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
   );
@@ -221,12 +199,6 @@ export function DayPlanner({
       setDraggedTaskId(null);
     }
   }, [draggedTaskId, plannerAssignableTasks]);
-
-  useEffect(() => {
-    if (draggedRhythmItemId && !dailyRhythmPlan?.items.some((item) => item.id === draggedRhythmItemId)) {
-      setDraggedRhythmItemId(null);
-    }
-  }, [dailyRhythmPlan?.items, draggedRhythmItemId]);
 
   useEffect(() => {
     if (!suppressedTaskId) {
@@ -263,14 +235,6 @@ export function DayPlanner({
     await actions.assignTasksToBlock(block, assignableTaskIds);
   }
 
-  async function handleReserveRhythmItem(item: DailyRhythmItem) {
-    if (!isEditable) {
-      return;
-    }
-
-    await Promise.resolve(onReserveRhythmItem?.(item));
-  }
-
   async function handleCompleteRhythmItem(item: DailyRhythmItem) {
     if (!isEditable) {
       return;
@@ -289,12 +253,12 @@ export function DayPlanner({
 
   useEffect(() => {
     const className = "planner-dragging-cursor";
-    document.body.classList.toggle(className, draggedTaskId !== null || draggedRhythmItemId !== null);
+    document.body.classList.toggle(className, draggedTaskId !== null);
 
     return () => {
       document.body.classList.remove(className);
     };
-  }, [draggedRhythmItemId, draggedTaskId]);
+  }, [draggedTaskId]);
 
   useLayoutEffect(() => {
     if (!isLiveDate || timeline.nowLinePx === null || hasAutoCenteredNowRef.current) {
@@ -545,27 +509,17 @@ export function DayPlanner({
     if (event.active.data.current?.type === UNPLANNED_TASK_DRAG_TYPE) {
       const taskId = event.active.data.current?.taskId;
       setDraggedTaskId(typeof taskId === "string" ? taskId : null);
-      setDraggedRhythmItemId(null);
-      return;
-    }
-
-    if (event.active.data.current?.type === DAILY_RHYTHM_DRAG_TYPE) {
-      const itemId = event.active.data.current?.itemId;
-      setDraggedRhythmItemId(typeof itemId === "string" ? itemId : null);
-      setDraggedTaskId(null);
     }
   }
 
   function handleUnplannedTaskDragCancel() {
     setDraggedTaskId(null);
-    setDraggedRhythmItemId(null);
     setDisableDropAnimation(false);
   }
 
   function handleUnplannedTaskDragEnd(event: DragEndEvent) {
     if (!isEditable) {
       setDraggedTaskId(null);
-      setDraggedRhythmItemId(null);
       setDisableDropAnimation(false);
       return;
     }
@@ -586,26 +540,11 @@ export function DayPlanner({
         setSuppressedTaskId(activeTaskId);
         void assignPlannerTaskToBlock(targetBlock, activeTaskId);
       }
-    } else if (event.active.data.current?.type === DAILY_RHYTHM_DRAG_TYPE) {
-      const activeItemId = event.active.data.current?.itemId;
-      const isTimelineDrop = event.over?.data.current?.type === DAILY_RHYTHM_TIMELINE_DROP_TYPE;
-      const rhythmItem =
-        typeof activeItemId === "string"
-          ? dailyRhythmPlan?.items.find((item) => item.id === activeItemId) ?? null
-          : null;
-
-      if (rhythmItem && isTimelineDrop) {
-        setDisableDropAnimation(true);
-        void handleReserveRhythmItem(rhythmItem);
-      } else {
-        setDisableDropAnimation(false);
-      }
     } else {
       setDisableDropAnimation(false);
     }
 
     setDraggedTaskId(null);
-    setDraggedRhythmItemId(null);
   }
 
   return (
@@ -780,10 +719,7 @@ export function DayPlanner({
         onDragEnd={handleUnplannedTaskDragEnd}
       >
         <div className="planner__body">
-          <div
-            ref={setRhythmTimelineDropRef}
-            className={`planner__timeline-pane${draggedRhythmItemId ? " planner__timeline-pane--rhythm-drop-ready" : ""}${isRhythmTimelineOver ? " planner__timeline-pane--rhythm-drop-over" : ""}`}
-          >
+          <div className="planner__timeline-pane">
             {orderedBlocks.length === 0 && !formDraft ? (
               <div className="planner__empty">
                 <div className="planner__empty-icon">✦</div>
@@ -883,9 +819,6 @@ export function DayPlanner({
                         heightPx={segment.heightPx}
                         readOnly={!isEditable}
                         isPending={Boolean(isRhythmActionPending) || actions.isPending}
-                        onReserve={(item) => {
-                          void handleReserveRhythmItem(item);
-                        }}
                         onComplete={(item) => {
                           void handleCompleteRhythmItem(item);
                         }}
@@ -969,9 +902,6 @@ export function DayPlanner({
                   plan={dailyRhythmPlan}
                   readOnly={!isEditable}
                   isPending={Boolean(isRhythmActionPending) || actions.isPending}
-                  onReserve={(item) => {
-                    void handleReserveRhythmItem(item);
-                  }}
                   onComplete={(item) => {
                     void handleCompleteRhythmItem(item);
                   }}
@@ -1017,7 +947,6 @@ export function DayPlanner({
         {createPortal(
           <DragOverlay dropAnimation={disableDropAnimation ? null : undefined}>
             {activeDraggedTask ? <PlannerTaskDragPreview task={activeDraggedTask} /> : null}
-            {activeDraggedRhythmItem ? <PlannerRhythmDragPreview item={activeDraggedRhythmItem} /> : null}
           </DragOverlay>,
           document.body,
         )}
@@ -1132,18 +1061,6 @@ function PlannerTaskDragPreview({ task }: { task: TaskItem }) {
             {task.goal.title}
           </span>
         ) : null}
-      </div>
-    </div>
-  );
-}
-
-function PlannerRhythmDragPreview({ item }: { item: DailyRhythmItem }) {
-  return (
-    <div className={`daily-rhythm-item daily-rhythm-item--${item.state} daily-rhythm-item--dragging daily-rhythm-item--overlay`}>
-      <div className="daily-rhythm-item__mark" aria-hidden="true" />
-      <div className="daily-rhythm-item__body">
-        <span className="daily-rhythm-item__title">{item.title}</span>
-        <span className="daily-rhythm-item__meta">{item.detailLabel}</span>
       </div>
     </div>
   );

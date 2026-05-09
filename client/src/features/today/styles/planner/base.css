@@ -524,18 +524,6 @@ body.planner-dragging-cursor * {
     box-shadow var(--dur-fast) var(--ease);
 }
 
-.planner__timeline-pane--rhythm-drop-ready {
-  background: rgba(146, 176, 150, 0.025);
-  box-shadow: inset 0 0 0 1px rgba(146, 176, 150, 0.08);
-}
-
-.planner__timeline-pane--rhythm-drop-over {
-  background: rgba(146, 176, 150, 0.055);
-  box-shadow:
-    inset 0 0 0 1px rgba(146, 176, 150, 0.18),
-    0 0 0 1px rgba(217,153,58,0.08);
-}
-
 /* ── Time Gutter + Track ────────────────────────────── */
 
 .planner__timeline-area {

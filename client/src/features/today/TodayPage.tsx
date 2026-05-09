@@ -64,7 +64,6 @@ import {
 } from "./helpers/workbench-layout";
 import {
   buildDailyRhythmPlan,
-  findDailyRhythmSlot,
   type DailyRhythmItem,
 } from "./helpers/daily-rhythm";
 import type {
@@ -744,31 +743,6 @@ export function TodayPage({ routeMode }: { routeMode?: "execute" | "plan" }) {
     }
   }
 
-  async function handleReserveRhythmItem(item: DailyRhythmItem) {
-    if (!isLivePlannerDate) {
-      return;
-    }
-
-    const exactSlot = item.state === "reserved" && item.startsAt && item.endsAt
-      ? { startsAt: item.startsAt, endsAt: item.endsAt }
-      : null;
-    const slot = exactSlot ?? findDailyRhythmSlot({
-      item,
-      blocks: plannerBlocks,
-      date: plannerDate,
-    });
-
-    if (!slot) {
-      return;
-    }
-
-    await plannerActions.addBlock({
-      title: item.title,
-      startsAt: slot.startsAt,
-      endsAt: slot.endsAt,
-    });
-  }
-
   async function handleCompleteRhythmItem(item: DailyRhythmItem) {
     if (item.completed) {
       return;
@@ -1005,7 +979,6 @@ export function TodayPage({ routeMode }: { routeMode?: "execute" | "plan" }) {
                 plannerSkipHabitMutation.isPending ||
                 plannerRoutineCheckinMutation.isPending
               }
-              onReserveRhythmItem={handleReserveRhythmItem}
               onCompleteRhythmItem={handleCompleteRhythmItem}
               onSkipRhythmItem={handleSkipRhythmItem}
               onSelectDate={setPlannerDate}

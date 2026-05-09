@@ -1,29 +1,22 @@
 import { useState } from "react";
-import { useDraggable } from "@dnd-kit/core";
 import { formatTimeLabel } from "../../../shared/lib/api";
 import type {
   DailyRhythmItem,
   DailyRhythmPlan,
   DailyRhythmReservation,
 } from "../helpers/daily-rhythm";
-import {
-  DAILY_RHYTHM_DRAG_TYPE,
-  getDailyRhythmDragId,
-} from "../helpers/planner-drag";
 import { PlannerRailSection } from "./PlannerRailSection";
 
 export function DailyRhythmLane({
   plan,
   readOnly,
   isPending,
-  onReserve,
   onComplete,
   onSkip,
 }: {
   plan: DailyRhythmPlan;
   readOnly: boolean;
   isPending: boolean;
-  onReserve: (item: DailyRhythmItem) => void;
   onComplete: (item: DailyRhythmItem) => void;
   onSkip: (item: DailyRhythmItem) => void;
 }) {
@@ -65,7 +58,6 @@ export function DailyRhythmLane({
                   item={item}
                   readOnly={readOnly}
                   isPending={isPending}
-                  onReserve={onReserve}
                   onComplete={onComplete}
                   onSkip={onSkip}
                 />
@@ -94,7 +86,6 @@ export function DailyRhythmTimelineBlock({
   heightPx,
   readOnly,
   isPending,
-  onReserve,
   onComplete,
   onSkip,
 }: {
@@ -104,7 +95,6 @@ export function DailyRhythmTimelineBlock({
   heightPx: number;
   readOnly: boolean;
   isPending: boolean;
-  onReserve: (item: DailyRhythmItem) => void;
   onComplete: (item: DailyRhythmItem) => void;
   onSkip: (item: DailyRhythmItem) => void;
 }) {
@@ -128,16 +118,6 @@ export function DailyRhythmTimelineBlock({
       </div>
       {item && !readOnly ? (
         <div className="daily-rhythm-block__actions">
-          <button
-            className="daily-rhythm__icon-btn"
-            type="button"
-            onClick={() => onReserve(item)}
-            disabled={isPending}
-            title="Make time block"
-            aria-label={`Make ${item.title} a time block`}
-          >
-            <BlockIcon />
-          </button>
           <button
             className="daily-rhythm__icon-btn"
             type="button"
@@ -170,61 +150,29 @@ function DailyRhythmRow({
   item,
   readOnly,
   isPending,
-  onReserve,
   onComplete,
   onSkip,
 }: {
   item: DailyRhythmItem;
   readOnly: boolean;
   isPending: boolean;
-  onReserve: (item: DailyRhythmItem) => void;
   onComplete: (item: DailyRhythmItem) => void;
   onSkip: (item: DailyRhythmItem) => void;
 }) {
-  const canReserve = !readOnly && item.state !== "done" && item.state !== "skipped" && item.state !== "planned";
   const canComplete = !readOnly && !item.completed && !item.skipped;
   const canSkip = !readOnly && item.kind === "habit" && !item.completed && !item.skipped;
-  const canDrag = canReserve && !isPending;
-  const shouldShowState = item.state === "reserved" || item.state === "checklist";
-  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
-    id: getDailyRhythmDragId(item.id),
-    data: {
-      type: DAILY_RHYTHM_DRAG_TYPE,
-      itemId: item.id,
-    },
-    disabled: !canDrag,
-  });
 
   return (
     <div
-      ref={setNodeRef}
       className={[
         "daily-rhythm-item",
         ` daily-rhythm-item--${item.state}`,
-        canDrag ? " daily-rhythm-item--draggable" : "",
-        isDragging ? " daily-rhythm-item--dragging" : "",
       ].join("")}
-      aria-grabbed={isDragging}
     >
-      {canDrag ? (
-        <button
-          className="daily-rhythm-item__drag-handle"
-          type="button"
-          aria-label={`Drag ${item.title} to the timeline`}
-          {...attributes}
-          {...listeners}
-        >
-          <span className="daily-rhythm-item__mark" aria-hidden="true" />
-        </button>
-      ) : (
-        <div className="daily-rhythm-item__mark" aria-hidden="true" />
-      )}
+      <div className="daily-rhythm-item__mark" aria-hidden="true" />
       <div className="daily-rhythm-item__body">
         <div className="daily-rhythm-item__header">
           <span className="daily-rhythm-item__title">{item.title}</span>
-          {shouldShowState ? (
-            <span className="daily-rhythm-item__state">{getStateLabel(item)}</span>
-          ) : null}
         </div>
         <div className="daily-rhythm-item__meta">
           <span>{buildRhythmMeta(item)}</span>
@@ -232,21 +180,11 @@ function DailyRhythmRow({
         {item.conflictLabel ? (
           <div className="daily-rhythm-item__issue">Overlaps {item.conflictLabel}</div>
         ) : null}
-        {canReserve || canComplete || canSkip ? (
+        {canComplete || canSkip ? (
           <div
             className="daily-rhythm-item__actions"
             onPointerDown={(event) => event.stopPropagation()}
           >
-            {canReserve ? (
-              <button
-                className="daily-rhythm__text-btn daily-rhythm__text-btn--primary"
-                type="button"
-                onClick={() => onReserve(item)}
-                disabled={isPending}
-              >
-                {item.state === "reserved" ? "Make block" : item.state === "conflict" ? "Move" : "Reserve"}
-              </button>
-            ) : null}
             {canComplete ? (
               <button
                 className="daily-rhythm__icon-btn daily-rhythm__icon-btn--secondary"
@@ -281,12 +219,7 @@ function DailyRhythmRow({
 const RHYTHM_PREVIEW_LIMIT = 3;
 
 function isActionableRhythmItem(item: DailyRhythmItem) {
-  return (
-    item.state === "conflict" ||
-    item.state === "needs_slot" ||
-    item.state === "reserved" ||
-    item.state === "checklist"
-  );
+  return item.state === "conflict";
 }
 
 type RhythmItemGroup = {
@@ -300,9 +233,8 @@ const RHYTHM_STATE_RANK: Record<DailyRhythmItem["state"], number> = {
   needs_slot: 1,
   reserved: 2,
   checklist: 3,
-  planned: 4,
-  done: 5,
-  skipped: 6,
+  done: 4,
+  skipped: 5,
 };
 
 function orderRhythmItems(items: DailyRhythmItem[]) {
@@ -373,34 +305,6 @@ function getRhythmSortMinutes(item: DailyRhythmItem) {
   return item.startMinutes ?? item.windowStartMinutes ?? 24 * 60;
 }
 
-function getStateLabel(item: DailyRhythmItem) {
-  if (item.state === "reserved") {
-    return "Reserved";
-  }
-
-  if (item.state === "planned") {
-    return "Planned";
-  }
-
-  if (item.state === "conflict") {
-    return "Conflict";
-  }
-
-  if (item.state === "needs_slot") {
-    return "Needs time";
-  }
-
-  if (item.state === "done") {
-    return "Done";
-  }
-
-  if (item.state === "skipped") {
-    return "Skipped";
-  }
-
-  return "Anytime";
-}
-
 function buildRhythmMeta(item: DailyRhythmItem) {
   if (item.progressLabel) {
     return `${item.detailLabel} · ${item.progressLabel}`;
@@ -421,15 +325,6 @@ function CheckMiniIcon() {
   return (
     <svg width="13" height="13" viewBox="0 0 13 13" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
       <path d="M2.5 6.8l2.4 2.4 5.6-5.8" />
-    </svg>
-  );
-}
-
-function BlockIcon() {
-  return (
-    <svg width="13" height="13" viewBox="0 0 13 13" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <rect x="2" y="2.5" width="9" height="8" rx="1.5" />
-      <path d="M4 5h5M4 7.5h3" />
     </svg>
   );
 }

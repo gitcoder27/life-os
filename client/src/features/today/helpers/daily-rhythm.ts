@@ -23,7 +23,6 @@ export type DailyRhythmKind = "habit" | "routine";
 export type DailyRhythmPlacement = "fixed" | "flexible" | "anytime";
 export type DailyRhythmState =
   | "reserved"
-  | "planned"
   | "conflict"
   | "needs_slot"
   | "checklist"
@@ -71,7 +70,6 @@ export type DailyRhythmPlan = {
   counts: {
     total: number;
     reserved: number;
-    planned: number;
     conflicts: number;
     needsSlot: number;
     checklist: number;
@@ -125,16 +123,6 @@ export const buildDailyRhythmPlan = (input: {
   ].sort(compareCandidates);
 
   const items = candidates.map((candidate) => {
-    const representedByBlock = findRepresentingBlock(candidate, input.blocks);
-    if (representedByBlock) {
-      return candidateToItem(candidate, {
-        state: candidate.completed ? "done" : candidate.skipped ? "skipped" : "planned",
-        conflictLabel: null,
-        date: input.date,
-        timezoneOffset,
-      });
-    }
-
     if (candidate.completed) {
       return candidateToItem(candidate, {
         state: "done",
@@ -207,52 +195,12 @@ export const buildDailyRhythmPlan = (input: {
     counts: {
       total: items.length,
       reserved: items.filter((item) => item.state === "reserved").length,
-      planned: items.filter((item) => item.state === "planned").length,
       conflicts: items.filter((item) => item.state === "conflict").length,
       needsSlot: items.filter((item) => item.state === "needs_slot").length,
       checklist: items.filter((item) => item.state === "checklist").length,
       done: items.filter((item) => item.state === "done").length,
       skipped: items.filter((item) => item.state === "skipped").length,
     },
-  };
-};
-
-export const findDailyRhythmSlot = (input: {
-  item: DailyRhythmItem;
-  blocks: DayPlannerBlockItem[];
-  date: string;
-}): { startsAt: string; endsAt: string } | null => {
-  const timezoneOffset = getLocalTimezoneOffset();
-  const busyWindows = input.blocks.map(blockToBusyWindow).sort(compareBusyWindows);
-  const duration = Math.max(15, input.item.durationMinutes);
-  const searchStart = input.item.startMinutes
-    ?? getWindowStartMinutes(input.item)
-    ?? 8 * 60;
-  const searchEnd = getWindowEndMinutes(input.item) ?? 22 * 60;
-  const slot = findFirstOpenSlot({
-    busyWindows,
-    startMinutes: searchStart,
-    endMinutes: searchEnd,
-    durationMinutes: duration,
-  }) ?? findFirstOpenSlot({
-    busyWindows,
-    startMinutes: input.item.startMinutes ?? 6 * 60,
-    endMinutes: 23 * 60,
-    durationMinutes: duration,
-  }) ?? findFirstOpenSlot({
-    busyWindows,
-    startMinutes: 6 * 60,
-    endMinutes: 23 * 60,
-    durationMinutes: duration,
-  });
-
-  if (!slot) {
-    return null;
-  }
-
-  return {
-    startsAt: buildPlannerDateTime(input.date, minutesToTimeString(slot.startMinutes), timezoneOffset),
-    endsAt: buildPlannerDateTime(input.date, minutesToTimeString(slot.endMinutes), timezoneOffset),
   };
 };
 
@@ -403,23 +351,6 @@ const buildRoutineDetailLabel = (routine: RoutineItem, durationMinutes: number) 
   return duration;
 };
 
-const findRepresentingBlock = (
-  candidate: RhythmCandidate,
-  blocks: DayPlannerBlockItem[],
-) => blocks.find((block) => {
-  if (!block.title || !sameNormalizedTitle(block.title, candidate.title)) {
-    return false;
-  }
-
-  if (candidate.startMinutes === null || candidate.endMinutes === null) {
-    return true;
-  }
-
-  const blockStart = timeStringToMinutes(toTimeInputValue(block.startsAt));
-  const blockEnd = timeStringToMinutes(toTimeInputValue(block.endsAt));
-  return blockStart < candidate.endMinutes && blockEnd > candidate.startMinutes;
-});
-
 const findOverlap = (
   candidate: RhythmCandidate,
   busyWindows: BusyWindow[],
@@ -441,67 +372,6 @@ const blockToBusyWindow = (block: DayPlannerBlockItem): BusyWindow => ({
   endMinutes: timeStringToMinutes(toTimeInputValue(block.endsAt)),
 });
 
-const findFirstOpenSlot = (input: {
-  busyWindows: BusyWindow[];
-  startMinutes: number;
-  endMinutes: number;
-  durationMinutes: number;
-}) => {
-  let cursor = input.startMinutes;
-
-  for (const busyWindow of input.busyWindows.sort(compareBusyWindows)) {
-    if (busyWindow.endMinutes <= cursor) {
-      continue;
-    }
-
-    if (busyWindow.startMinutes >= input.endMinutes) {
-      break;
-    }
-
-    if (cursor + input.durationMinutes <= busyWindow.startMinutes) {
-      return {
-        startMinutes: cursor,
-        endMinutes: cursor + input.durationMinutes,
-      };
-    }
-
-    cursor = Math.max(cursor, busyWindow.endMinutes);
-  }
-
-  if (cursor + input.durationMinutes <= input.endMinutes) {
-    return {
-      startMinutes: cursor,
-      endMinutes: cursor + input.durationMinutes,
-    };
-  }
-
-  return null;
-};
-
-const getWindowStartMinutes = (item: DailyRhythmItem) => {
-  if (item.startMinutes !== null) {
-    return item.startMinutes;
-  }
-
-  if (item.windowStartMinutes !== null) {
-    return item.windowStartMinutes;
-  }
-
-  return null;
-};
-
-const getWindowEndMinutes = (item: DailyRhythmItem) => {
-  if (item.endMinutes !== null) {
-    return item.endMinutes;
-  }
-
-  if (item.windowEndMinutes !== null) {
-    return item.windowEndMinutes;
-  }
-
-  return null;
-};
-
 const compareCandidates = (left: RhythmCandidate, right: RhythmCandidate) => {
   const leftStart = left.startMinutes ?? left.windowStartMinutes ?? 24 * 60;
   const rightStart = right.startMinutes ?? right.windowStartMinutes ?? 24 * 60;
@@ -514,10 +384,3 @@ const compareCandidates = (left: RhythmCandidate, right: RhythmCandidate) => {
 
 const compareBusyWindows = (left: BusyWindow, right: BusyWindow) =>
   left.startMinutes - right.startMinutes || left.endMinutes - right.endMinutes;
-
-const sameNormalizedTitle = (left: string, right: string) => {
-  const normalize = (value: string) => value.trim().toLowerCase().replace(/\s+/g, " ");
-  const normalizedLeft = normalize(left);
-  const normalizedRight = normalize(right);
-  return normalizedLeft === normalizedRight || normalizedLeft.includes(normalizedRight);
-};
