@@ -312,7 +312,14 @@ function UnplannedTaskRow({
         </button>
       ) : null}
 
-      <div className="unplanned-task__info" title={task.title}>
+      <button
+        className="unplanned-task__info"
+        type="button"
+        title={task.title}
+        onClick={onEdit}
+        disabled={isPending || readOnly}
+        aria-label={`Open ${task.title}`}
+      >
         <div className="unplanned-task__title-row">
           <span className="unplanned-task__title">{task.title}</span>
           {compactMeta && tone !== "recovery" ? (
@@ -350,7 +357,7 @@ function UnplannedTaskRow({
         ) : meta ? (
           <span className="unplanned-task__meta">{meta}</span>
         ) : null}
-      </div>
+      </button>
 
       {!readOnly && !batchMode ? (
         tone === "recovery" ? (

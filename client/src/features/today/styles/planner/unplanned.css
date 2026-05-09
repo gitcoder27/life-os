@@ -298,6 +298,29 @@
   display: flex;
   flex-direction: column;
   gap: 0.34rem;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  border-radius: var(--r-xs);
+}
+
+.unplanned-task__info:hover .unplanned-task__title,
+.unplanned-task__info:focus-visible .unplanned-task__title {
+  color: var(--accent-bright);
+}
+
+.unplanned-task__info:focus-visible {
+  outline: 1px solid rgba(217,153,58,0.32);
+  outline-offset: 3px;
+}
+
+.unplanned-task__info:disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
 }
 
 .unplanned-task__title-row {
