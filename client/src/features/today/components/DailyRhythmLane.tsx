@@ -29,44 +29,26 @@ export function DailyRhythmLane({
 }) {
   const [expanded, setExpanded] = useState(true);
   const [showAllItems, setShowAllItems] = useState(false);
-  const focusItems = plan.items.filter(
-    (item) => item.state !== "done" && item.state !== "skipped" && item.state !== "planned",
-  );
-  const orderedFocusItems = orderRhythmItems(focusItems);
-  const previewItems = orderedFocusItems.length > 0
-    ? (showAllItems ? orderedFocusItems : orderedFocusItems.slice(0, RHYTHM_PREVIEW_LIMIT))
-    : plan.items.filter((item) => item.state === "done" || item.state === "planned").slice(0, 3);
+  const actionableItems = plan.items.filter(isActionableRhythmItem);
+  const orderedFocusItems = orderRhythmItems(actionableItems);
+  const previewItems = showAllItems ? orderedFocusItems : orderedFocusItems.slice(0, RHYTHM_PREVIEW_LIMIT);
   const groupedItems = groupRhythmItems(previewItems);
   const hiddenItemCount = Math.max(orderedFocusItems.length - previewItems.length, 0);
 
-  if (plan.items.length === 0) {
+  if (orderedFocusItems.length === 0) {
     return null;
   }
 
   return (
     <PlannerRailSection
       title="Rhythm"
-      count={focusItems.length}
+      count={orderedFocusItems.length}
       tone="rhythm"
       expanded={expanded}
       className="daily-rhythm"
       ariaLabel="Daily rhythm"
-      headerMeta={
-        <span className="planner-rail-section__meta">
-          {plan.counts.reserved + plan.counts.planned}/{plan.counts.total}
-        </span>
-      }
       onToggle={() => setExpanded((current) => !current)}
     >
-      <div className="daily-rhythm__rail" aria-hidden="true">
-        <span
-          className="daily-rhythm__rail-fill"
-          style={{
-            width: `${Math.round(((plan.counts.reserved + plan.counts.planned + plan.counts.done + plan.counts.skipped) / Math.max(plan.counts.total, 1)) * 100)}%`,
-          }}
-        />
-      </div>
-
       <div className="daily-rhythm__list">
         {groupedItems.map((group) => (
           <div className="daily-rhythm__group" key={group.key}>
@@ -297,6 +279,15 @@ function DailyRhythmRow({
 }
 
 const RHYTHM_PREVIEW_LIMIT = 3;
+
+function isActionableRhythmItem(item: DailyRhythmItem) {
+  return (
+    item.state === "conflict" ||
+    item.state === "needs_slot" ||
+    item.state === "reserved" ||
+    item.state === "checklist"
+  );
+}
 
 type RhythmItemGroup = {
   key: string;
