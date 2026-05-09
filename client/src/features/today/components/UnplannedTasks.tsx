@@ -105,13 +105,8 @@ export function UnplannedTasks({
       tone={tone}
       expanded={expanded}
       className={`unplanned-lane unplanned-lane--${tone}${expanded ? " unplanned-lane--expanded" : ""}`}
-      headerMeta={
-        tone === "recovery" ? (
-          <span className="planner-rail-section__meta">drag to plan</span>
-        ) : null
-      }
       actions={
-        !readOnly && blocks.length > 0 ? (
+        tone !== "recovery" && !readOnly && blocks.length > 0 ? (
           <button
             className="unplanned-lane__mode-btn"
             type="button"
@@ -127,7 +122,7 @@ export function UnplannedTasks({
       }
       onToggle={() => setExpanded((current) => !current)}
     >
-      {description ? (
+      {description && tone !== "recovery" ? (
         <p className="unplanned-lane__description">{description}</p>
       ) : null}
 
@@ -324,7 +319,21 @@ function UnplannedTaskRow({
             <span className="unplanned-task__status">{compactMeta.overdueLabel}</span>
           ) : null}
         </div>
-        {compactMeta || task.goal ? (
+        {tone === "recovery" && (compactMeta || task.goal) ? (
+          <div className="unplanned-task__recovery-line">
+            {compactMeta ? (
+              <>
+                <span className="unplanned-task__recovery-age">{compactMeta.overdueLabel}</span>
+                <span>{compactMeta.scheduledLabel}</span>
+              </>
+            ) : null}
+            {task.goal ? (
+              <span className={`unplanned-task__goal goal-chip__dot--${task.goal.domain}`}>
+                {task.goal.title}
+              </span>
+            ) : null}
+          </div>
+        ) : compactMeta || task.goal ? (
           <div className="unplanned-task__meta-row">
             {compactMeta ? (
               <span className="unplanned-task__meta-pill">{compactMeta.scheduledLabel}</span>
@@ -344,20 +353,12 @@ function UnplannedTaskRow({
       </div>
 
       {!readOnly && !batchMode ? (
-        <div className="unplanned-task__actions">
-          <button
-            className="unplanned-task__assign-btn"
-            type="button"
-            onClick={onEdit}
-            disabled={isPending}
-          >
-            Edit
-          </button>
-          {blocks.length > 0 ? (
-            <>
+        tone === "recovery" ? (
+          blocks.length > 0 ? (
+            <div className="unplanned-task__actions unplanned-task__actions--primary">
               {blocks.length === 1 ? (
                 <button
-                  className="unplanned-task__assign-btn"
+                  className="unplanned-task__assign-btn unplanned-task__assign-btn--primary"
                   type="button"
                   onClick={() => onQuickAssign(blocks[0])}
                   title={`Assign to ${blocks[0].title || "block"}`}
@@ -370,14 +371,49 @@ function UnplannedTaskRow({
                   label="Plan"
                   blocks={blocks}
                   disabled={isPending}
-                  triggerClassName="unplanned-task__assign-btn"
+                  triggerClassName="unplanned-task__assign-btn unplanned-task__assign-btn--primary"
                   menuClassName="unplanned-task__picker"
                   onSelect={onQuickAssign}
                 />
               )}
-            </>
-          ) : null}
-        </div>
+            </div>
+          ) : null
+        ) : (
+          <div className="unplanned-task__actions">
+            <button
+              className="unplanned-task__assign-btn"
+              type="button"
+              onClick={onEdit}
+              disabled={isPending}
+            >
+              Edit
+            </button>
+            {blocks.length > 0 ? (
+              <>
+                {blocks.length === 1 ? (
+                  <button
+                    className="unplanned-task__assign-btn"
+                    type="button"
+                    onClick={() => onQuickAssign(blocks[0])}
+                    title={`Assign to ${blocks[0].title || "block"}`}
+                    disabled={isPending}
+                  >
+                    Plan
+                  </button>
+                ) : (
+                  <BlockTargetPicker
+                    label="Plan"
+                    blocks={blocks}
+                    disabled={isPending}
+                    triggerClassName="unplanned-task__assign-btn"
+                    menuClassName="unplanned-task__picker"
+                    onSelect={onQuickAssign}
+                  />
+                )}
+              </>
+            ) : null}
+          </div>
+        )
       ) : null}
     </div>
   );

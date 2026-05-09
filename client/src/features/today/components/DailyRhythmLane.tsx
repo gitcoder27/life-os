@@ -28,12 +28,16 @@ export function DailyRhythmLane({
   onSkip: (item: DailyRhythmItem) => void;
 }) {
   const [expanded, setExpanded] = useState(true);
+  const [showAllItems, setShowAllItems] = useState(false);
   const focusItems = plan.items.filter(
     (item) => item.state !== "done" && item.state !== "skipped" && item.state !== "planned",
   );
-  const visibleItems = focusItems.length > 0
-    ? focusItems
+  const orderedFocusItems = orderRhythmItems(focusItems);
+  const previewItems = orderedFocusItems.length > 0
+    ? (showAllItems ? orderedFocusItems : orderedFocusItems.slice(0, RHYTHM_PREVIEW_LIMIT))
     : plan.items.filter((item) => item.state === "done" || item.state === "planned").slice(0, 3);
+  const groupedItems = groupRhythmItems(previewItems);
+  const hiddenItemCount = Math.max(orderedFocusItems.length - previewItems.length, 0);
 
   if (plan.items.length === 0) {
     return null;
@@ -64,18 +68,39 @@ export function DailyRhythmLane({
       </div>
 
       <div className="daily-rhythm__list">
-        {visibleItems.map((item) => (
-          <DailyRhythmRow
-            key={item.id}
-            item={item}
-            readOnly={readOnly}
-            isPending={isPending}
-            onReserve={onReserve}
-            onComplete={onComplete}
-            onSkip={onSkip}
-          />
+        {groupedItems.map((group) => (
+          <div className="daily-rhythm__group" key={group.key}>
+            {groupedItems.length > 1 ? (
+              <div className="daily-rhythm__group-label">
+                <span>{group.label}</span>
+                <span>{group.items.length}</span>
+              </div>
+            ) : null}
+            <div className="daily-rhythm__group-list">
+              {group.items.map((item) => (
+                <DailyRhythmRow
+                  key={item.id}
+                  item={item}
+                  readOnly={readOnly}
+                  isPending={isPending}
+                  onReserve={onReserve}
+                  onComplete={onComplete}
+                  onSkip={onSkip}
+                />
+              ))}
+            </div>
+          </div>
         ))}
       </div>
+      {orderedFocusItems.length > RHYTHM_PREVIEW_LIMIT ? (
+        <button
+          className="daily-rhythm__more-btn"
+          type="button"
+          onClick={() => setShowAllItems((current) => !current)}
+        >
+          {showAllItems ? "Show less" : `Show ${hiddenItemCount} more`}
+        </button>
+      ) : null}
     </PlannerRailSection>
   );
 }
@@ -178,6 +203,7 @@ function DailyRhythmRow({
   const canComplete = !readOnly && !item.completed && !item.skipped;
   const canSkip = !readOnly && item.kind === "habit" && !item.completed && !item.skipped;
   const canDrag = canReserve && !isPending;
+  const shouldShowState = item.state === "reserved" || item.state === "checklist";
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id: getDailyRhythmDragId(item.id),
     data: {
@@ -214,14 +240,16 @@ function DailyRhythmRow({
       <div className="daily-rhythm-item__body">
         <div className="daily-rhythm-item__header">
           <span className="daily-rhythm-item__title">{item.title}</span>
-          <span className="daily-rhythm-item__state">{getStateLabel(item)}</span>
+          {shouldShowState ? (
+            <span className="daily-rhythm-item__state">{getStateLabel(item)}</span>
+          ) : null}
         </div>
         <div className="daily-rhythm-item__meta">
           <span>{buildRhythmMeta(item)}</span>
-          {item.conflictLabel ? (
-            <span className="daily-rhythm-item__conflict">{item.conflictLabel}</span>
-          ) : null}
         </div>
+        {item.conflictLabel ? (
+          <div className="daily-rhythm-item__issue">Overlaps {item.conflictLabel}</div>
+        ) : null}
         {canReserve || canComplete || canSkip ? (
           <div
             className="daily-rhythm-item__actions"
@@ -239,7 +267,7 @@ function DailyRhythmRow({
             ) : null}
             {canComplete ? (
               <button
-                className="daily-rhythm__icon-btn"
+                className="daily-rhythm__icon-btn daily-rhythm__icon-btn--secondary"
                 type="button"
                 onClick={() => onComplete(item)}
                 disabled={isPending}
@@ -251,12 +279,14 @@ function DailyRhythmRow({
             ) : null}
             {canSkip ? (
               <button
-                className="daily-rhythm__text-btn daily-rhythm__text-btn--quiet"
+                className="daily-rhythm__icon-btn daily-rhythm__icon-btn--secondary"
                 type="button"
                 onClick={() => onSkip(item)}
                 disabled={isPending}
+                title="Skip today"
+                aria-label={`Skip ${item.title} today`}
               >
-                Skip
+                <SkipMiniIcon />
               </button>
             ) : null}
           </div>
@@ -264,6 +294,92 @@ function DailyRhythmRow({
       </div>
     </div>
   );
+}
+
+const RHYTHM_PREVIEW_LIMIT = 3;
+
+type RhythmItemGroup = {
+  key: string;
+  label: string;
+  items: DailyRhythmItem[];
+};
+
+const RHYTHM_STATE_RANK: Record<DailyRhythmItem["state"], number> = {
+  conflict: 0,
+  needs_slot: 1,
+  reserved: 2,
+  checklist: 3,
+  planned: 4,
+  done: 5,
+  skipped: 6,
+};
+
+function orderRhythmItems(items: DailyRhythmItem[]) {
+  return [...items].sort((a, b) => {
+    const rankDifference = RHYTHM_STATE_RANK[a.state] - RHYTHM_STATE_RANK[b.state];
+    if (rankDifference !== 0) {
+      return rankDifference;
+    }
+
+    return getRhythmSortMinutes(a) - getRhythmSortMinutes(b);
+  });
+}
+
+function groupRhythmItems(items: DailyRhythmItem[]): RhythmItemGroup[] {
+  const groups = new Map<string, RhythmItemGroup>();
+
+  for (const item of items) {
+    const key = getRhythmGroupKey(item);
+    const existing = groups.get(key);
+    if (existing) {
+      existing.items.push(item);
+      continue;
+    }
+
+    groups.set(key, {
+      key,
+      label: getRhythmGroupLabel(key),
+      items: [item],
+    });
+  }
+
+  return Array.from(groups.values());
+}
+
+function getRhythmGroupKey(item: DailyRhythmItem) {
+  if (item.state === "conflict" || item.state === "needs_slot") {
+    return "needs-placement";
+  }
+
+  if (item.state === "reserved") {
+    return "reserved";
+  }
+
+  if (item.state === "checklist") {
+    return "anytime";
+  }
+
+  return "handled";
+}
+
+function getRhythmGroupLabel(key: string) {
+  if (key === "needs-placement") {
+    return "Needs placement";
+  }
+
+  if (key === "reserved") {
+    return "Reserved";
+  }
+
+  if (key === "anytime") {
+    return "Anytime";
+  }
+
+  return "Handled";
+}
+
+function getRhythmSortMinutes(item: DailyRhythmItem) {
+  return item.startMinutes ?? item.windowStartMinutes ?? 24 * 60;
 }
 
 function getStateLabel(item: DailyRhythmItem) {

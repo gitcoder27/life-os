@@ -983,7 +983,6 @@ export function DayPlanner({
               {recoveryTasks.length > 0 ? (
                 <UnplannedTasks
                   title="Recover overdue"
-                  description="Pull the few worth saving into today."
                   emptyText="No overdue tasks to recover"
                   tone="recovery"
                   showRecoveryDetail

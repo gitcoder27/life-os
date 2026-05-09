@@ -515,3 +515,97 @@
 .unplanned-task__picker {
   border-color: rgba(217,153,58,0.35);
 }
+
+/* Compact recovery queue */
+
+.unplanned-lane--recovery {
+  gap: 0.38rem;
+  padding: 0.68rem 0.7rem;
+  border-color: rgba(221, 131, 122, 0.11);
+  background: rgba(18, 17, 14, 0.8);
+}
+
+.unplanned-lane--recovery .unplanned-lane__list {
+  border-top-color: rgba(255,255,255,0.038);
+}
+
+.unplanned-task--recovery {
+  grid-template-columns: 1.1rem minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.52rem;
+  padding: 0.64rem 0.04rem 0.64rem 0;
+}
+
+.unplanned-task--recovery .unplanned-task__drag-handle {
+  grid-column: 1;
+  grid-row: 1;
+  min-height: 1.9rem;
+  margin-top: 0;
+  color: rgba(239, 164, 154, 0.32);
+}
+
+.unplanned-task--recovery .unplanned-task__info {
+  grid-column: 2;
+  gap: 0.22rem;
+}
+
+.unplanned-task--recovery .unplanned-task__title {
+  font-size: 0.9rem;
+  line-height: 1.16;
+  -webkit-line-clamp: 1;
+}
+
+.unplanned-task__recovery-line {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.34rem;
+  color: rgba(190, 180, 160, 0.58);
+  font-size: 0.67rem;
+  line-height: 1.25;
+}
+
+.unplanned-task__recovery-age {
+  color: rgba(239, 164, 154, 0.82);
+  font-weight: 720;
+}
+
+.unplanned-task--recovery .unplanned-task__goal {
+  min-height: 1.05rem;
+  padding: 0;
+  background: transparent;
+  color: rgba(255,255,255,0.5);
+  font-size: 0.67rem;
+}
+
+.unplanned-task--recovery .unplanned-task__actions {
+  grid-column: 3;
+  grid-row: 1;
+  width: auto;
+  margin-top: 0;
+  opacity: 1;
+  pointer-events: auto;
+  transform: none;
+}
+
+.unplanned-task--recovery:hover .unplanned-task__actions,
+.unplanned-task--recovery:focus-within .unplanned-task__actions {
+  transform: none;
+}
+
+.unplanned-task__assign-btn--primary {
+  min-height: 1.56rem;
+  padding: 0.22rem 0.54rem;
+  border-color: rgba(217,153,58,0.22);
+  background: rgba(217,153,58,0.08);
+  color: rgba(240, 192, 96, 0.94);
+  font-weight: 760;
+}
+
+.unplanned-task__assign-btn--primary:hover:not(:disabled),
+.unplanned-task__assign-btn--primary:focus-visible:not(:disabled) {
+  border-color: rgba(217,153,58,0.34);
+  background: rgba(217,153,58,0.12);
+  color: var(--accent-bright);
+  outline: none;
+}
