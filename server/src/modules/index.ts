@@ -3,6 +3,7 @@ import type { FastifyPluginAsync } from "fastify";
 import type { AppEnv } from "../app/env.js";
 import { registerAdminRoutes } from "./admin/routes.js";
 import { registerAuthRoutes } from "./auth/routes.js";
+import { registerBehaviorRoutes } from "./behavior/routes.js";
 import { registerFinanceRoutes } from "./finance/routes.js";
 import { registerFocusRoutes } from "./focus/routes.js";
 import { registerHabitsRoutes } from "./habits/routes.js";
@@ -29,6 +30,7 @@ export const registerModules: FastifyPluginAsync<ModuleRegistrationOptions> = as
     env: options.env,
     prefix: "/auth",
   });
+  await app.register(registerBehaviorRoutes, { prefix: "/behavior" });
   await app.register(registerFinanceRoutes, { prefix: "/finance" });
   await app.register(registerFocusRoutes, { prefix: "/focus" });
   await app.register(registerHabitsRoutes);

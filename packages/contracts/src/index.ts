@@ -3,6 +3,7 @@ export * from "./system.js";
 export * from "./settings.js";
 export * from "./auth.js";
 export * from "./onboarding.js";
+export * from "./behavior.js";
 export * from "./home.js";
 export * from "./goals.js";
 export * from "./planning.js";

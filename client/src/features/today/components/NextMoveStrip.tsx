@@ -1,16 +1,19 @@
 import type {
   AdaptiveNextMove,
   AdaptiveNextMoveAction,
+  BehaviorStateSnapshot,
 } from "@life-os/contracts";
 
 type NextMoveStripProps = {
   nextMove: AdaptiveNextMove | null;
+  behaviorState?: BehaviorStateSnapshot | null;
   loading?: boolean;
   onAction: (action: AdaptiveNextMoveAction, move: AdaptiveNextMove) => void;
 };
 
 export function NextMoveStrip({
   nextMove,
+  behaviorState = null,
   loading = false,
   onAction,
 }: NextMoveStripProps) {
@@ -31,12 +34,18 @@ export function NextMoveStrip({
     return null;
   }
 
+  const severity = behaviorState?.severity ?? nextMove.severity;
+  const title = behaviorState?.title ?? nextMove.title;
+  const reason = behaviorState?.reason ?? nextMove.reason;
+  const label = behaviorState?.label ?? "Next";
+
   return (
-    <div className={`adaptive-strip adaptive-strip--${nextMove.severity}`} aria-live="polite">
+    <div className={`adaptive-strip adaptive-strip--${severity}`} aria-live="polite">
       <span className="adaptive-strip__dot" />
       <div className="adaptive-strip__copy">
-        <span className="adaptive-strip__title">{nextMove.title}</span>
-        <span className="adaptive-strip__reason">{nextMove.reason}</span>
+        <span className="adaptive-strip__state">{label}</span>
+        <span className="adaptive-strip__title">{title}</span>
+        <span className="adaptive-strip__reason">{reason}</span>
       </div>
       <div className="adaptive-strip__actions">
         {nextMove.secondaryAction ? (

@@ -30,6 +30,7 @@ export const CATEGORY_LABELS: Record<NotificationItem["notificationType"], strin
   health: "Health",
   habit: "Habit",
   routine: "Routine",
+  behavior: "Behavior",
 };
 
 const resolveLegacyEntityRoute = (
@@ -43,6 +44,7 @@ const resolveLegacyEntityRoute = (
   if (entityType === "admin_item") return "/finance";
   if (entityType === "inbox_zero") return "/inbox";
   if (entityType === "task") return "/today";
+  if (entityType === "behavior_state") return "/today";
   if (entityType === "health_day") return "/health";
   if (entityType === "workout_day") return "/health";
   if (entityType === "habit") return "/habits";

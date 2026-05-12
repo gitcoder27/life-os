@@ -16,6 +16,7 @@ import {
   getUserLocalHour,
   normalizeTimezone,
 } from "../../lib/time/user-time.js";
+import { getBehaviorStateForUserDate } from "../behavior/behavior-state-service.js";
 import {
   buildNotificationDeliveryKey,
   buildNotificationNaturalKey,
@@ -50,6 +51,21 @@ type NotificationGenerationTargetUser = {
   id: string;
   preferences: NotificationPreferenceSnapshot | null;
 };
+
+function canLoadBehaviorState(prisma: PrismaClient) {
+  const candidate = prisma as unknown as Record<string, Record<string, unknown> | undefined>;
+
+  return (
+    typeof candidate.task?.findMany === "function" &&
+    typeof candidate.task?.count === "function" &&
+    typeof candidate.planningCycle?.upsert === "function" &&
+    typeof candidate.planningCycle?.findMany === "function" &&
+    typeof candidate.dailyLaunch?.findUnique === "function" &&
+    typeof candidate.dayPlannerBlock?.findMany === "function" &&
+    typeof candidate.focusSession?.findFirst === "function" &&
+    typeof candidate.recurrenceRule?.findMany === "function"
+  );
+}
 
 function startOfDay(date: Date) {
   return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
@@ -170,6 +186,48 @@ export async function ensureGeneratedNotification(
   });
 
   return result.count === 1;
+}
+
+async function generateBehaviorStateNotification(input: {
+  prisma: PrismaClient;
+  userId: string;
+  todayIso: string;
+  now: Date;
+  timezone: string | null;
+  dayWindow: { end: Date };
+  notificationPreferences: ReturnType<typeof normalizeNotificationPreferences>;
+}) {
+  if (!canLoadBehaviorState(input.prisma)) {
+    return false;
+  }
+
+  const behaviorState = await getBehaviorStateForUserDate(
+    { prisma: input.prisma } as Parameters<typeof getBehaviorStateForUserDate>[0],
+    {
+      userId: input.userId,
+      date: input.todayIso,
+      now: input.now,
+    },
+  );
+
+  if (behaviorState.severity !== "attention" && behaviorState.severity !== "urgent") {
+    return false;
+  }
+
+  return ensureGeneratedNotification(input.prisma, {
+    userId: input.userId,
+    notificationType: "behavior",
+    severity: behaviorState.severity === "urgent" ? "CRITICAL" : "WARNING",
+    title: behaviorState.title,
+    body: behaviorState.reason,
+    entityType: "behavior_state",
+    entityId: `behavior:${behaviorState.state}:${input.todayIso}`,
+    ruleKey: `behavior_state_${behaviorState.state}`,
+    now: input.now,
+    timezone: input.timezone,
+    notificationPreferences: input.notificationPreferences,
+    expiresAt: input.dayWindow.end,
+  });
 }
 
 export async function generateRuleNotifications(
@@ -342,6 +400,19 @@ async function generateRuleNotificationsForTargetUser(
 
   let created = 0;
   let skippedExisting = 0;
+
+  const createdBehaviorNotification = await generateBehaviorStateNotification({
+    prisma,
+    userId: user.id,
+    todayIso,
+    now,
+    timezone,
+    dayWindow,
+    notificationPreferences,
+  });
+  if (createdBehaviorNotification) {
+    created += 1;
+  }
 
   for (const adminItem of dueAdminItems) {
     const daysUntilDue = Math.round(

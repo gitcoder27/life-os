@@ -1,4 +1,5 @@
 import type { ApiMeta, EntityId, IsoDateString } from "./common.js";
+import type { BehaviorStateSnapshot } from "./behavior.js";
 import type { GoalHealthState, GoalSummary } from "./goals.js";
 import type { RecurrenceDefinition, RecurrenceInput, RecurringTaskCarryPolicy } from "./recurrence.js";
 
@@ -242,6 +243,7 @@ export interface AdaptiveTodayGuidanceResponse extends ApiMeta {
   date: IsoDateString;
   nextMove: AdaptiveNextMove;
   capacity: DayCapacityAssessment;
+  behaviorState: BehaviorStateSnapshot;
 }
 
 export interface DayCapacityAssessmentResponse extends ApiMeta {

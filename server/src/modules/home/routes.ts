@@ -60,6 +60,8 @@ import { parseOrThrow } from "../../lib/validation/parse.js";
 import { buildFinanceAttentionItems } from "./finance-attention.js";
 import { buildHomeGuidance } from "./guidance.js";
 import { createHomeQuoteService } from "./quote-service.js";
+import { buildBehaviorState } from "../behavior/behavior-state-service.js";
+import { getActiveFocusSession } from "../focus/service.js";
 import {
   fromPrismaGoalDomainSystemKey,
   fromPrismaTaskProgressState,
@@ -67,8 +69,10 @@ import {
   serializeTask,
 } from "../planning/planning-mappers.js";
 import { goalSummaryInclude, planningTaskInclude } from "../planning/planning-record-shapes.js";
+import { loadPlannerBlocks } from "../planning/planning-repository.js";
 import { buildRescueSuggestion } from "../planning/day-mode.js";
 import { detectMissedDayPattern } from "../planning/day-mode.js";
+import { assessDayCapacity } from "../planning/day-capacity.js";
 import { buildFinanceRoute } from "../finance/finance-navigation.js";
 import { buildFinanceTimeline } from "../finance/finance-timeline-service.js";
 import { getOpenDailyReviewRoute } from "../reviews/submission-window.js";
@@ -264,11 +268,7 @@ async function buildHomeOverview(
           scheduledForDate: targetDate,
         },
         orderBy: [{ createdAt: "asc" }],
-        include: {
-          goal: {
-            include: goalSummaryInclude,
-          },
-        },
+        include: planningTaskInclude,
       }),
       app.prisma.task.findMany({
         where: {
@@ -422,11 +422,16 @@ async function buildHomeOverview(
     !isHabitPermanentlyInactive(habit) &&
     isHabitDueOnIsoDate(resolveHabitRecurrence(habit, targetIsoDate), targetIsoDate, habit.pauseWindows),
   );
-  const plannerBlockCount = await app.prisma.dayPlannerBlock.count({
-    where: {
-      planningCycleId: dayCycle.id,
-    },
-  });
+  const plannerBlocks = typeof app.prisma.dayPlannerBlock?.findMany === "function"
+    ? await loadPlannerBlocks(app.prisma, dayCycle.id)
+    : [];
+  const plannerBlockCount = typeof app.prisma.dayPlannerBlock?.count === "function"
+    ? await app.prisma.dayPlannerBlock.count({
+        where: {
+          planningCycleId: dayCycle.id,
+        },
+      })
+    : plannerBlocks.length;
   const dailyLaunch = await app.prisma.dailyLaunch.findUnique({
     where: {
       planningCycleId: dayCycle.id,
@@ -762,20 +767,68 @@ async function buildHomeOverview(
     targetDate,
     overdueTaskCount: overdueTasks.length,
   });
+  const serializedTasks = tasks.map(serializeTask);
+  const serializedLaunch = dailyLaunch ? serializeDailyLaunch(dailyLaunch) : null;
+  const serializedMustWinTask = dailyLaunch?.mustWinTask ? serializeTask(dailyLaunch.mustWinTask) : null;
+  const activeFocusSession =
+    targetIsoDate === currentIsoDate
+      ? await getActiveFocusSession(app.prisma, userId)
+      : null;
+  const behaviorCapacity = assessDayCapacity({
+    tasks: serializedTasks,
+    plannerBlocks,
+    launch: serializedLaunch,
+    mustWinTask: serializedMustWinTask,
+    now,
+    isLiveDate: targetIsoDate === currentIsoDate,
+  });
+  const behaviorState = buildBehaviorState({
+    context: {
+      userId,
+      date: targetIsoDate,
+      cycleId: dayCycle.id,
+      timezone: effectiveTimezone,
+      launch: serializedLaunch,
+      mustWinTask: serializedMustWinTask,
+      priorities: dayCycle.priorities.map((priority) => ({
+        id: priority.id,
+        title: priority.title,
+        slot: priority.slot as 1 | 2 | 3,
+        status:
+          priority.status === "COMPLETED"
+            ? "completed"
+            : priority.status === "DROPPED"
+              ? "dropped"
+              : "pending",
+        goalId: priority.goalId,
+        goal: priority.goal ? serializeGoalSummary(priority.goal) : null,
+        completedAt: priority.completedAt?.toISOString() ?? null,
+      })),
+      tasks: serializedTasks,
+      plannerBlocks,
+    },
+    capacity: behaviorCapacity,
+    activeFocusSession,
+    now,
+    isLiveDate: targetIsoDate === currentIsoDate,
+    overdueTaskCount: overdueTasks.length,
+    hasMissedDayPattern,
+  });
+  const rescueSuggestion = buildRescueSuggestion({
+    launch: dailyLaunch,
+    mustWinTask: dailyLaunch?.mustWinTask ?? null,
+    pendingTaskCount: tasks.filter((task) => task.status === "PENDING").length,
+    overdueTaskCount: overdueTasks.length,
+    hasMissedDayPattern,
+  });
 
   return withGeneratedAt({
     date: targetIsoDate,
     greeting: getLocalGreeting(now, effectiveTimezone),
     phase: currentHomePhase(now, effectiveTimezone),
-    launch: dailyLaunch ? serializeDailyLaunch(dailyLaunch) : null,
-    mustWinTask: dailyLaunch?.mustWinTask ? serializeTask(dailyLaunch.mustWinTask) : null,
-    rescueSuggestion: buildRescueSuggestion({
-      launch: dailyLaunch,
-      mustWinTask: dailyLaunch?.mustWinTask ?? null,
-      pendingTaskCount: tasks.filter((task) => task.status === "PENDING").length,
-      overdueTaskCount: overdueTasks.length,
-      hasMissedDayPattern,
-    }),
+    launch: serializedLaunch,
+    mustWinTask: serializedMustWinTask,
+    rescueSuggestion,
     dailyScore: {
       value: score.value,
       label: score.label,
@@ -833,6 +886,7 @@ async function buildHomeOverview(
     attentionItems: attentionItems.slice(0, 6),
     notifications: homeNotifications,
     guidance,
+    behaviorState,
   });
 }
 

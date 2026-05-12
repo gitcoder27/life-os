@@ -57,6 +57,7 @@ const NOTIF_CATEGORIES: {
   { key: "health", label: "Health", description: "Hydration, workout, and meal tracking nudges", hasRepeatCadence: false },
   { key: "habit", label: "Habit", description: "Habit streak and completion reminders", hasRepeatCadence: false },
   { key: "routine", label: "Routine", description: "Morning and evening routine prompts", hasRepeatCadence: false },
+  { key: "behavior", label: "Behavior", description: "State-based nudges for overload, drift, recovery, and stuck work", hasRepeatCadence: false },
 ];
 
 const SEVERITY_OPTIONS: { value: NotificationMinSeverity; label: string }[] = [
@@ -79,6 +80,7 @@ const DEFAULT_NOTIF_PREFS: NotificationCategoryPreferences = {
   health: { enabled: true, minSeverity: "warning", repeatCadence: "off" },
   habit: { enabled: true, minSeverity: "warning", repeatCadence: "off" },
   routine: { enabled: true, minSeverity: "warning", repeatCadence: "off" },
+  behavior: { enabled: true, minSeverity: "warning", repeatCadence: "off" },
 };
 
 export function SettingsPage() {

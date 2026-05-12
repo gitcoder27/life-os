@@ -119,6 +119,20 @@ function buildMealsState(weekStart: string, mealPlan: ReturnType<typeof useMealP
 }
 
 function buildAdaptiveCard(adaptive: AdaptiveGuidance | undefined): GuidanceCard | null {
+  const behaviorState = adaptive?.behaviorState;
+  if (behaviorState && behaviorState.state !== "maintenance" && behaviorState.state !== "clear") {
+    return {
+      tone: behaviorState.severity === "urgent" || behaviorState.severity === "attention" ? "attention" : "ready",
+      kicker: behaviorState.label,
+      title: behaviorState.title,
+      detail: behaviorState.reason,
+      link: {
+        target: resolveHomeActionTarget(behaviorState.homeAction),
+        label: behaviorState.nextMove.primaryAction.label,
+      },
+    };
+  }
+
   const move = adaptive?.nextMove;
   if (!move || move.state === "empty" || move.state === "review_ready") {
     return null;

@@ -34,6 +34,18 @@
   min-width: 0;
 }
 
+.adaptive-strip__state {
+  flex: 0 0 auto;
+  padding: 0.14rem 0.42rem;
+  border: 1px solid var(--border);
+  border-radius: var(--r-pill);
+  color: var(--text-secondary);
+  font-size: var(--fs-micro);
+  font-weight: 800;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
 .adaptive-strip__title {
   color: var(--text);
   font-size: var(--fs-small);
@@ -420,7 +432,7 @@
   .adaptive-strip__copy {
     flex-direction: column;
     align-items: flex-start;
-    gap: 0.12rem;
+    gap: 0.18rem;
   }
 
   .adaptive-strip__actions {

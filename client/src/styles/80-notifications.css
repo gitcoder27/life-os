@@ -565,6 +565,7 @@
 .notif-category-badge--health  { background: rgba(93, 184, 106, 0.12); color: var(--positive); }
 .notif-category-badge--habit   { background: rgba(217, 153, 58, 0.12); color: var(--accent); }
 .notif-category-badge--routine { background: rgba(160, 149, 126, 0.12); color: var(--text-secondary); }
+.notif-category-badge--behavior { background: rgba(240, 192, 96, 0.12); color: var(--accent-bright); }
 
 /* ── Snooze group ── */
 

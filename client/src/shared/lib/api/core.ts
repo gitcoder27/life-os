@@ -48,6 +48,7 @@ export type CoreInvalidationDomain =
   | "goals"
   | "review"
   | "reviewHistory"
+  | "behavior"
   | "notifications";
 
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? "").replace(/\/$/, "");
@@ -78,6 +79,7 @@ export const queryKeys = {
   scoreHistory: (date: string, days: number) => ["score", "history", date, days] as const,
   weeklyMomentum: (date: string) => ["score", "weekly-momentum", date] as const,
   dayPlan: (date: string) => ["planning", "day", date] as const,
+  behaviorState: (date: string) => ["behavior", "state", date] as const,
   adaptiveToday: (date: string) => ["planning", "day", date, "adaptive"] as const,
   dayCapacity: (date: string) => ["planning", "day", date, "capacity"] as const,
   weekPlan: (startDate: string) => ["planning", "week", startDate] as const,
@@ -353,6 +355,7 @@ export const invalidateCoreData = (
       "planning",
       "goals",
       "review",
+      "behavior",
       "notifications",
     ],
   );
@@ -387,6 +390,10 @@ export const invalidateCoreData = (
     void queryClient.invalidateQueries({ queryKey: queryKeys.adaptiveToday(date) });
     void queryClient.invalidateQueries({ queryKey: queryKeys.dayCapacity(date) });
     void queryClient.invalidateQueries({ queryKey: queryKeys.weekPlan(getWeekStartDate(date)) });
+  }
+
+  if (domains.has("behavior")) {
+    void queryClient.invalidateQueries({ queryKey: queryKeys.behaviorState(date) });
   }
 
   if (domains.has("habits")) {

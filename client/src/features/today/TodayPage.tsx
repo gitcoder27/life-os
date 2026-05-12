@@ -838,6 +838,7 @@ export function TodayPage({ routeMode }: { routeMode?: "execute" | "plan" }) {
 
                 <NextMoveStrip
                   nextMove={adaptiveToday.nextMove}
+                  behaviorState={adaptiveToday.behaviorState}
                   loading={adaptiveToday.isLoading}
                   onAction={handleAdaptiveAction}
                 />

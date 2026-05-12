@@ -1,4 +1,5 @@
 import type { ApiMeta, EntityId, IsoDateString } from "./common.js";
+import type { BehaviorStateSnapshot } from "./behavior.js";
 import type { GoalSummary } from "./goals.js";
 import type { WeeklyHabitChallenge } from "./habits.js";
 import type {
@@ -221,4 +222,5 @@ export interface HomeOverviewResponse extends ApiMeta {
   attentionItems: AttentionItem[];
   notifications: HomeNotificationItem[];
   guidance: HomeGuidance;
+  behaviorState: BehaviorStateSnapshot;
 }

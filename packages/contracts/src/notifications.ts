@@ -11,6 +11,7 @@ export const notificationCategorySchema = z.enum([
   "health",
   "habit",
   "routine",
+  "behavior",
 ]);
 export type NotificationCategory = z.infer<typeof notificationCategorySchema>;
 

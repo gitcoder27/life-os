@@ -59,6 +59,13 @@ export type {
   FocusTaskInsight,
 } from "./api/focus";
 export {
+  useBehaviorStateQuery,
+} from "./api/behavior";
+export type {
+  BehaviorState,
+  BehaviorStateSnapshot,
+} from "./api/behavior";
+export {
   useHomeOverviewQuery,
   useHomeQuoteQuery,
 } from "./api/home";

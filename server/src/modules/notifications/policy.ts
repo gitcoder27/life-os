@@ -59,6 +59,11 @@ const notificationCategoryDefaults: NotificationCategoryPreferences = {
     minSeverity: "warning",
     repeatCadence: "off",
   },
+  behavior: {
+    enabled: true,
+    minSeverity: "warning",
+    repeatCadence: "off",
+  },
 };
 
 const repeatEligibleCategories = new Set<NotificationCategory>([

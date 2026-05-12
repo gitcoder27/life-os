@@ -82,6 +82,13 @@ function resolveNotificationAction(notification: Notification): HomeAction | nul
     };
   }
 
+  if (notification.entityType === "behavior_state") {
+    return {
+      type: "open_route",
+      route: "/today",
+    };
+  }
+
   if (notification.entityType === "health_day" || notification.entityType === "workout_day") {
     return {
       type: "open_route",

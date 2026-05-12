@@ -288,6 +288,7 @@ describe("notifications service", () => {
         health: { enabled: true, minSeverity: "warning", repeatCadence: "off" },
         habit: { enabled: true, minSeverity: "warning", repeatCadence: "off" },
         routine: { enabled: true, minSeverity: "warning", repeatCadence: "off" },
+        behavior: { enabled: true, minSeverity: "warning", repeatCadence: "off" },
       },
     });
 

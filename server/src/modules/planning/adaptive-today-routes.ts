@@ -11,8 +11,12 @@ import type {
 import { getActiveFocusSession } from "../focus/service.js";
 import { requireAuthenticatedUser } from "../../lib/auth/require-auth.js";
 import { withGeneratedAt } from "../../lib/http/response.js";
+import { getUserLocalDate } from "../../lib/time/user-time.js";
 import { parseOrThrow } from "../../lib/validation/parse.js";
-import { buildAdaptiveNextMove } from "./adaptive-today-guidance.js";
+import {
+  buildBehaviorState,
+  countOverdueTasksForBehavior,
+} from "../behavior/behavior-state-service.js";
 import { loadAdaptiveTodayContext } from "./adaptive-today-context.js";
 import {
   applyShapeDaySchema,
@@ -20,6 +24,7 @@ import {
   shapeDayPreviewSchema,
 } from "./adaptive-today-schemas.js";
 import { assessDayCapacity } from "./day-capacity.js";
+import { detectMissedDayPattern } from "./day-mode.js";
 import {
   applyShapeDayPlan,
   buildShapeDayPreview,
@@ -40,27 +45,39 @@ export const registerAdaptiveTodayRoutes: FastifyPluginAsync = async (app) => {
       userId: user.id,
       date: parsedDate,
     });
-    const [activeFocusSession] = await Promise.all([
+    const [activeFocusSession, overdueTaskCount] = await Promise.all([
       getActiveFocusSession(app.prisma, user.id),
+      countOverdueTasksForBehavior(app, user.id, parsedDate),
     ]);
+    const isLiveDate = parsedDate === getUserLocalDate(now, context.timezone);
+    const hasMissedDayPattern = await detectMissedDayPattern(app.prisma, {
+      userId: user.id,
+      targetDate: new Date(`${parsedDate}T00:00:00.000Z`),
+      overdueTaskCount,
+    });
     const capacity = assessDayCapacity({
       tasks: context.tasks,
       plannerBlocks: context.plannerBlocks,
       launch: context.launch,
       mustWinTask: context.mustWinTask,
       now,
-      isLiveDate: true,
+      isLiveDate,
+    });
+    const behaviorState = buildBehaviorState({
+      context,
+      capacity,
+      activeFocusSession,
+      now,
+      isLiveDate,
+      overdueTaskCount,
+      hasMissedDayPattern,
     });
 
     const response: AdaptiveTodayGuidanceResponse = withGeneratedAt({
       date: parsedDate,
-      nextMove: buildAdaptiveNextMove({
-        context,
-        capacity,
-        activeFocusSession,
-        now,
-      }),
+      nextMove: behaviorState.nextMove,
       capacity,
+      behaviorState,
     });
 
     return reply.send(response);

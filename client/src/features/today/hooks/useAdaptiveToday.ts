@@ -12,6 +12,7 @@ export function useAdaptiveToday(date: string, options?: { enabled?: boolean }) 
   return {
     adaptiveQuery,
     nextMove: adaptiveQuery.data?.nextMove ?? null,
+    behaviorState: adaptiveQuery.data?.behaviorState ?? null,
     capacity: adaptiveQuery.data?.capacity ?? capacityQuery.data?.capacity ?? null,
     isLoading: adaptiveQuery.isLoading || capacityQuery.isLoading,
     error: adaptiveQuery.error ?? capacityQuery.error,

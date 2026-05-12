@@ -120,6 +120,7 @@ export function HomePage() {
               : null
           }
           executionTasks={executionTasks}
+          behaviorState={home.behaviorState}
         />
 
         <QuietRail

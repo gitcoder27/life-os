@@ -75,7 +75,7 @@ export async function detectMissedDayPattern(
     overdueTaskCount: number;
   },
 ) {
-  if (typeof prisma.planningCycle.findMany !== "function") {
+  if (typeof prisma.planningCycle?.findMany !== "function") {
     return false;
   }
 

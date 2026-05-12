@@ -4,10 +4,12 @@ import {
   useCreateTaskMutation,
   useUpdateTaskMutation,
   useUpsertDayLaunchMutation,
+  type BehaviorStateSnapshot,
   type DailyLaunchItem,
   type LinkedGoal,
   type TaskItem,
 } from "../../shared/lib/api";
+import { resolveHomeActionTarget } from "../../shared/lib/homeNavigation";
 import { FocusTaskPicker } from "../../shared/ui/FocusTaskPicker";
 import { taskTextAutocompleteProps } from "../../shared/ui/task-autocomplete";
 import { StartProtocolSheet } from "../today/components/StartProtocolSheet";
@@ -28,6 +30,7 @@ type FocusStageProps = {
   openTaskCount: number;
   nextTimedTask: { title: string; timeLabel: string } | null;
   executionTasks: Array<Pick<TaskItem, "id" | "title" | "status">>;
+  behaviorState: BehaviorStateSnapshot | null;
 };
 
 const ENERGY_LEVELS = [
@@ -71,6 +74,7 @@ export function FocusStage({
   openTaskCount,
   nextTimedTask,
   executionTasks,
+  behaviorState,
 }: FocusStageProps) {
   const setupDone = Boolean(launch?.completedAt);
   const rescueActive = launch?.dayMode === "rescue" || launch?.dayMode === "recovery";
@@ -85,6 +89,7 @@ export function FocusStage({
         launch={launch}
         mustWinTask={mustWinTask}
         executionTasks={executionTasks}
+        behaviorState={behaviorState}
       />
     );
   }
@@ -95,6 +100,7 @@ export function FocusStage({
         date={date}
         eyebrow={eyebrow}
         mustWinTask={mustWinTask}
+        behaviorState={behaviorState}
       />
     );
   }
@@ -106,7 +112,34 @@ export function FocusStage({
       topPriority={topPriority}
       openTaskCount={openTaskCount}
       nextTimedTask={nextTimedTask}
+      behaviorState={behaviorState}
     />
+  );
+}
+
+function BehaviorStageStrip({
+  behaviorState,
+}: {
+  behaviorState: BehaviorStateSnapshot | null;
+}) {
+  if (!behaviorState) {
+    return null;
+  }
+
+  const target = resolveHomeActionTarget(behaviorState.homeAction);
+
+  return (
+    <div className={`focus-stage__behavior focus-stage__behavior--${behaviorState.severity}`}>
+      <span className="focus-stage__behavior-label">{behaviorState.label}</span>
+      <span className="focus-stage__behavior-reason">{behaviorState.reason}</span>
+      <Link
+        to={target.to}
+        state={target.state}
+        className="focus-stage__behavior-action"
+      >
+        {behaviorState.nextMove.primaryAction.label}
+      </Link>
+    </div>
   );
 }
 
@@ -118,10 +151,12 @@ function FocusStageActive({
   date,
   eyebrow,
   mustWinTask,
+  behaviorState,
 }: {
   date: string;
   eyebrow: string;
   mustWinTask: TaskItem;
+  behaviorState: BehaviorStateSnapshot | null;
 }) {
   const updateTaskMutation = useUpdateTaskMutation(date);
   const [protocolOpen, setProtocolOpen] = useState(false);
@@ -145,6 +180,8 @@ function FocusStageActive({
   return (
     <>
       <div className="focus-stage focus-stage--active">
+        <BehaviorStageStrip behaviorState={behaviorState} />
+
         <div className="focus-stage__lede">
           <span className="focus-stage__eyebrow">{eyebrow}</span>
           <h2 className="focus-stage__headline">{mustWinTask.title}</h2>
@@ -266,6 +303,7 @@ function FocusStageSetup({
   launch,
   mustWinTask,
   executionTasks,
+  behaviorState,
 }: {
   date: string;
   phase: TimePhase;
@@ -273,6 +311,7 @@ function FocusStageSetup({
   launch: DailyLaunchItem | null;
   mustWinTask: TaskItem | null;
   executionTasks: Array<Pick<TaskItem, "id" | "title" | "status">>;
+  behaviorState: BehaviorStateSnapshot | null;
 }) {
   const [expanded, setExpanded] = useState(false);
 
@@ -365,6 +404,8 @@ function FocusStageSetup({
 
   return (
     <div className={`focus-stage focus-stage--setup${expanded ? " focus-stage--expanded" : ""}`}>
+      <BehaviorStageStrip behaviorState={behaviorState} />
+
       <div className="focus-stage__lede">
         <span className="focus-stage__eyebrow">{eyebrow}</span>
         <h2 className="focus-stage__headline">{headline}</h2>
@@ -491,12 +532,14 @@ function FocusStageEmpty({
   topPriority,
   openTaskCount,
   nextTimedTask,
+  behaviorState,
 }: {
   eyebrow: string;
   phase: TimePhase;
   topPriority: FocusStageProps["topPriority"];
   openTaskCount: number;
   nextTimedTask: FocusStageProps["nextTimedTask"];
+  behaviorState: BehaviorStateSnapshot | null;
 }) {
   const headline = topPriority
     ? topPriority.title
@@ -518,6 +561,8 @@ function FocusStageEmpty({
 
   return (
     <div className="focus-stage focus-stage--empty">
+      <BehaviorStageStrip behaviorState={behaviorState} />
+
       <div className="focus-stage__lede">
         <span className="focus-stage__eyebrow">{eyebrow}</span>
         <h2 className="focus-stage__headline">{headline}</h2>
