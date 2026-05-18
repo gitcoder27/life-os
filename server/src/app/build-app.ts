@@ -92,11 +92,6 @@ export async function buildApp(env: AppEnv) {
     }),
   );
 
-  await app.register(registerModules, {
-    env,
-    prefix: "/api",
-  });
-
   app.setNotFoundHandler(async (_request, reply) => {
     const response: ApiError = {
       success: false,
@@ -118,6 +113,11 @@ export async function buildApp(env: AppEnv) {
     const response = buildApiErrorResponse(error, statusCode);
 
     void reply.status(statusCode).send(response);
+  });
+
+  await app.register(registerModules, {
+    env,
+    prefix: "/api",
   });
 
   return app;

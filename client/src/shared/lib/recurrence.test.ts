@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 import type { RecurrenceInput } from "@life-os/contracts";
 
 import {
+  formatCarryPolicy,
   formatFullRecurrenceSummary,
+  getDefaultRecurrenceRule,
   listUpcomingRecurrenceDates,
 } from "./recurrence";
 
@@ -37,5 +39,36 @@ describe("recurrence helpers", () => {
         end: { type: "after_occurrences", occurrenceCount: 3 },
       }, 5),
     ).toEqual(["2026-05-01", "2026-05-03", "2026-05-05"]);
+  });
+
+  it("honors weekly day filters, date ends, and occurrence limits", () => {
+    expect(
+      listUpcomingRecurrenceDates({
+        frequency: "weekly",
+        startsOn: "2026-05-04",
+        daysOfWeek: [1, 3],
+        end: { type: "on_date", until: "2026-05-11" },
+      }, 3),
+    ).toEqual(["2026-05-04", "2026-05-06", "2026-05-11"]);
+
+    expect(
+      listUpcomingRecurrenceDates({
+        frequency: "daily",
+        startsOn: "2026-05-01",
+        end: { type: "after_occurrences", occurrenceCount: 2 },
+      }, 2),
+    ).toEqual(["2026-05-01", "2026-05-02"]);
+  });
+
+  it("builds finance defaults from the start date's nth weekday", () => {
+    expect(getDefaultRecurrenceRule("finance", "2026-05-29")).toEqual({
+      frequency: "monthly_nth_weekday",
+      startsOn: "2026-05-29",
+      nthWeekday: {
+        ordinal: 4,
+        dayOfWeek: 5,
+      },
+    });
+    expect(formatCarryPolicy("move_due_date")).toBe("Move due date");
   });
 });

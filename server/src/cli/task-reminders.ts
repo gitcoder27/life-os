@@ -6,18 +6,32 @@ import { getEnv } from "../app/env.js";
 import { prepareRuntimeDatabase } from "../app/runtime-database.js";
 import { backfillTaskReminders } from "../modules/planning/reminder-backfill.js";
 
-async function main() {
-  const env = getEnv();
-  await prepareRuntimeDatabase(env);
+type TaskReminderBackfillCliDependencies = {
+  getEnv?: typeof getEnv;
+  prepareRuntimeDatabase?: typeof prepareRuntimeDatabase;
+  createPrisma?: () => PrismaClient;
+  backfillTaskReminders?: typeof backfillTaskReminders;
+  logger?: Pick<Console, "info" | "error">;
+  exit?: (code: number) => never | void;
+};
 
-  const prisma = new PrismaClient();
+export async function runTaskReminderBackfillCli(
+  dependencies: TaskReminderBackfillCliDependencies = {},
+) {
+  const env = (dependencies.getEnv ?? getEnv)();
+  await (dependencies.prepareRuntimeDatabase ?? prepareRuntimeDatabase)(env);
+  const logger = dependencies.logger ?? console;
+
+  const prisma = dependencies.createPrisma
+    ? dependencies.createPrisma()
+    : new PrismaClient();
 
   try {
-    const result = await backfillTaskReminders(prisma);
-    console.info(`Backfilled ${result.updated} task reminder record(s); skipped ${result.skipped}.`);
+    const result = await (dependencies.backfillTaskReminders ?? backfillTaskReminders)(prisma);
+    logger.info(`Backfilled ${result.updated} task reminder record(s); skipped ${result.skipped}.`);
   } catch (error) {
-    console.error(error instanceof Error ? error.message : String(error));
-    process.exit(1);
+    logger.error(error instanceof Error ? error.message : String(error));
+    (dependencies.exit ?? process.exit)(1);
   } finally {
     await prisma.$disconnect();
   }
@@ -28,5 +42,5 @@ const currentEntryPoint = process.argv[1]
   : null;
 
 if (currentEntryPoint === import.meta.url) {
-  void main();
+  void runTaskReminderBackfillCli();
 }

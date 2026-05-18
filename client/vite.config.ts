@@ -1,5 +1,6 @@
 import { execFileSync } from "node:child_process";
-import { defineConfig, loadEnv, type Plugin } from "vite";
+import { loadEnv, type Plugin } from "vite";
+import { defineConfig } from "vitest/config";
 import react from "@vitejs/plugin-react";
 
 type ReleaseMetadata = {
@@ -57,6 +58,21 @@ export default defineConfig(({ mode }) => {
           target: env.VITE_API_PROXY_TARGET ?? "http://127.0.0.1:3004",
           changeOrigin: true,
         },
+      },
+    },
+    test: {
+      include: ["src/**/*.test.ts", "src/**/*.test.tsx"],
+      environment: "node",
+      coverage: {
+        provider: "v8",
+        include: ["src/**/*.{ts,tsx}"],
+        exclude: [
+          "src/**/*.test.ts",
+          "src/**/*.test.tsx",
+          "src/vite-env.d.ts",
+          "src/main.tsx",
+        ],
+        reporter: ["text", "html"],
       },
     },
   };

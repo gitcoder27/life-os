@@ -3,6 +3,7 @@ import type { QueryClient } from "@tanstack/react-query";
 
 import {
   invalidateCoreData,
+  invalidateCoreDataForDates,
   queryKeys,
   taskQueryTracksUnscheduledTasks,
   taskQueryTouchesDate,
@@ -98,5 +99,34 @@ describe("core query invalidation", () => {
     expect(predicates.some((predicate) => predicate({
       queryKey: queryKeys.scoreHistory("2026-05-12", 7),
     } as never))).toBe(false);
+  });
+
+  it("deduplicates multi-date invalidations and targets optional domains", () => {
+    const queryClient = createQueryClientStub();
+
+    invalidateCoreDataForDates(queryClient, [
+      "2026-05-03",
+      null,
+      "2026-05-03",
+      "2026-05-04",
+    ], {
+      domains: ["finance", "health", "reviewHistory"],
+    });
+
+    expect(queryClient.invalidateQueries).toHaveBeenCalledWith({
+      queryKey: queryKeys.finance("2026-05"),
+    });
+    expect(queryClient.invalidateQueries).toHaveBeenCalledWith({
+      queryKey: queryKeys.health("2026-05-03"),
+    });
+    expect(queryClient.invalidateQueries).toHaveBeenCalledWith({
+      queryKey: queryKeys.health("2026-05-04"),
+    });
+    expect(queryClient.invalidateQueries).toHaveBeenCalledWith({
+      queryKey: ["reviewHistory"],
+    });
+    expect(queryClient.invalidateQueries.mock.calls.filter(([call]) =>
+      JSON.stringify(call?.queryKey) === JSON.stringify(queryKeys.health("2026-05-03")),
+    )).toHaveLength(1);
   });
 });

@@ -8,6 +8,15 @@ import { getRegisteredJobs, type JobDefinition } from "./registry.js";
 
 type WorkerScheduleFilter = "all" | "every-15-minutes" | "daily" | "weekly";
 
+type WorkerRuntimeDependencies = {
+  getEnv?: typeof getEnv;
+  prepareRuntimeDatabase?: typeof prepareRuntimeDatabase;
+  createPrisma?: (databaseUrl: string) => PrismaClient;
+  getRegisteredJobs?: typeof getRegisteredJobs;
+  logger?: Console;
+  now?: () => Date;
+};
+
 export function parseWorkerScheduleFilter(args: string[]): WorkerScheduleFilter {
   const scheduleIndex = args.findIndex((arg) => arg === "--schedule");
   const inlineSchedule = args.find((arg) => arg.startsWith("--schedule="));
@@ -42,33 +51,42 @@ export function selectJobsForWorkerRun(
   return jobs.filter((job) => job.schedule === scheduleFilter);
 }
 
-export async function startWorker(args = process.argv.slice(2)) {
+export async function startWorker(
+  args = process.argv.slice(2),
+  dependencies: WorkerRuntimeDependencies = {},
+) {
   const scheduleFilter = parseWorkerScheduleFilter(args);
-  const env = getEnv();
-  await prepareRuntimeDatabase(env);
-  const prisma = new PrismaClient({
-    datasources: {
-      db: {
-        url: env.DATABASE_URL,
-      },
-    },
-  });
-  const jobs = selectJobsForWorkerRun(getRegisteredJobs(), scheduleFilter);
+  const env = (dependencies.getEnv ?? getEnv)();
+  await (dependencies.prepareRuntimeDatabase ?? prepareRuntimeDatabase)(env);
+  const prisma = dependencies.createPrisma
+    ? dependencies.createPrisma(env.DATABASE_URL)
+    : new PrismaClient({
+        datasources: {
+          db: {
+            url: env.DATABASE_URL,
+          },
+        },
+      });
+  const jobs = selectJobsForWorkerRun(
+    (dependencies.getRegisteredJobs ?? getRegisteredJobs)(),
+    scheduleFilter,
+  );
+  const logger = dependencies.logger ?? console;
 
-  console.info(
+  logger.info(
     `[life-os-worker] ready: ${jobs.length} registered job${jobs.length === 1 ? "" : "s"} for schedule ${scheduleFilter}`,
   );
 
   try {
     for (const job of jobs) {
-      console.info(`[life-os-worker] running: ${job.name} (${job.schedule})`);
+      logger.info(`[life-os-worker] running: ${job.name} (${job.schedule})`);
       const startedAt = Date.now();
       const result = await job.run({
         prisma,
-        now: new Date(),
-        logger: console,
+        now: dependencies.now ? dependencies.now() : new Date(),
+        logger,
       });
-      console.info(
+      logger.info(
         `[life-os-worker] completed: ${job.name} in ${Date.now() - startedAt}ms - ${result.summary}`,
       );
     }
