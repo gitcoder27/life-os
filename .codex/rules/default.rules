@@ -1,3 +1,0 @@
-prefix_rule(pattern=["rustc", "--version"], decision="allow")
-prefix_rule(pattern=["node", "-p"], decision="allow")
-prefix_rule(pattern=["omx", "doctor"], decision="allow")
