@@ -143,4 +143,27 @@ describe("home quote routes", () => {
       "Motivational quote is unavailable right now.",
     );
   });
+
+  it("times out slow ZenQuotes requests when no cache exists", async () => {
+    fetchMock.mockImplementationOnce((_url: string, init: RequestInit) =>
+      new Promise((_resolve, reject) => {
+        const signal = init.signal;
+
+        expect(signal).toBeTruthy();
+        signal?.addEventListener("abort", () => {
+          reject(new Error("request aborted"));
+        });
+      }),
+    );
+
+    const responsePromise = app!.inject({ method: "GET", url: "/api/home/quote" });
+    await vi.advanceTimersByTimeAsync(5_000);
+    const response = await responsePromise;
+
+    expect(response.statusCode).toBe(503);
+    expect((fetchMock.mock.calls[0]?.[1] as RequestInit | undefined)?.signal?.aborted).toBe(true);
+    expect(parseBody<{ message: string }>(response.body).message).toBe(
+      "Motivational quote is unavailable right now.",
+    );
+  });
 });

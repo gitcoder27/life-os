@@ -669,6 +669,7 @@ model Task {
   @@index([userId, status, originType, scheduledForDate, kind, createdAt, id])
   @@index([userId, kind, status, reminderAt, reminderTriggeredAt])
   @@index([userId, recurrenceRuleId, scheduledForDate])
+  @@unique([userId, recurrenceRuleId, scheduledForDate])
 }
 
 model FocusSession {
@@ -1323,4 +1324,5 @@ model Notification {
   @@index([userId, readAt, dismissedAt, visibleFrom])
   @@index([userId, ruleKey, entityType, entityId])
   @@index([userId, deliveryKey, dismissedAt])
+  @@unique([userId, deliveryKey])
 }

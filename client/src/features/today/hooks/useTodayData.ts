@@ -16,6 +16,10 @@ import { getOffsetDate } from "../helpers/date-helpers";
 
 const isPlannerAssignableTask = (task: TaskItem) => task.kind === "task";
 
+function getQueryErrorMessage(error: unknown, fallback: string) {
+  return error instanceof Error && error.message.trim() ? error.message : fallback;
+}
+
 export function useTodayData() {
   const today = getTodayDate();
   const weekStart = getWeekStartDate(today);
@@ -130,7 +134,29 @@ export function useTodayData() {
     void overdueTasksQuery.refetch();
     void completedTodayTasksQuery.refetch();
     void healthQuery.refetch();
+    void goalsListQuery.refetch();
     void scoreQuery.refetch();
+  };
+
+  const sectionErrors = {
+    overdueTasks: overdueTasksQuery.isError
+      ? getQueryErrorMessage(overdueTasksQuery.error, "Overdue tasks could not load.")
+      : null,
+    completedTodayTasks: completedTodayTasksQuery.isError
+      ? getQueryErrorMessage(completedTodayTasksQuery.error, "Completed tasks could not load.")
+      : null,
+    health: healthQuery.isError
+      ? getQueryErrorMessage(healthQuery.error, "Health context could not load.")
+      : null,
+    goals: goalsListQuery.isError
+      ? getQueryErrorMessage(goalsListQuery.error, "Goals could not load.")
+      : null,
+    score: scoreQuery.isError
+      ? getQueryErrorMessage(scoreQuery.error, "Score could not load.")
+      : null,
+    weekPlan: weekPlanQuery.isError
+      ? getQueryErrorMessage(weekPlanQuery.error, "Weekly capacity could not load.")
+      : null,
   };
 
   return {
@@ -167,6 +193,7 @@ export function useTodayData() {
     dayPlanQuery,
     weekPlan: weekPlanQuery.data ?? null,
     weekPlanQuery,
+    sectionErrors,
     refetchAll,
   };
 }

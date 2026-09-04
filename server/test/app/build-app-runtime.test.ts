@@ -39,9 +39,11 @@ const env: AppEnv = {
   DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/life_os_test",
   DEV_DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/life_os_dev",
   PROD_DATABASE_URL: undefined,
+  ENV_FILE_OVERRIDE: false,
   DATABASE_SEPARATION_STRICT: false,
   AUTO_CREATE_DATABASE: false,
   AUTO_APPLY_MIGRATIONS: false,
+  TRUST_PROXY: false,
   SESSION_COOKIE_NAME: "life_os_session",
   SESSION_SECRET: "dev-only-change-me",
   SESSION_TTL_DAYS: 14,
@@ -51,6 +53,7 @@ const env: AppEnv = {
   BOOTSTRAP_USER_EMAIL: undefined,
   BOOTSTRAP_USER_PASSWORD: undefined,
   BOOTSTRAP_USER_DISPLAY_NAME: undefined,
+  ALLOW_PRODUCTION_BOOTSTRAP: false,
   OWNER_EMAIL: undefined,
   OWNER_PASSWORD: undefined,
   OWNER_DISPLAY_NAME: "Owner",
@@ -70,6 +73,7 @@ beforeEach(() => {
   registerRequestContext.mockResolvedValue(undefined);
   registerModules.mockImplementation(async (app: any) => {
     app.get("/stub", async () => ({ ok: true }));
+    app.get("/request-ip", async (request: any) => ({ ip: request.ip }));
     app.get("/known-error", async () => {
       throw Object.assign(new Error("Known route error"), { statusCode: 418 });
     });
@@ -129,6 +133,37 @@ describe("buildApp runtime wiring", () => {
     expect(prismaDisconnect).toHaveBeenCalledTimes(1);
   });
 
+  it("uses forwarded IPs only when the trusted proxy hop is enabled", async () => {
+    const untrustedApp = await buildApp(env);
+    const trustedApp = await buildApp({
+      ...env,
+      TRUST_PROXY: true,
+    });
+
+    try {
+      const untrustedResponse = await untrustedApp.inject({
+        method: "GET",
+        url: "/api/request-ip",
+        headers: {
+          "x-forwarded-for": "198.51.100.7",
+        },
+      });
+      const trustedResponse = await trustedApp.inject({
+        method: "GET",
+        url: "/api/request-ip",
+        headers: {
+          "x-forwarded-for": "198.51.100.7",
+        },
+      });
+
+      expect(untrustedResponse.json()).not.toEqual({ ip: "198.51.100.7" });
+      expect(trustedResponse.json()).toEqual({ ip: "198.51.100.7" });
+    } finally {
+      await untrustedApp.close();
+      await trustedApp.close();
+    }
+  });
+
   it("returns safe error payloads for known and unexpected route errors", async () => {
     const app = await buildApp(env);
 
@@ -145,8 +180,8 @@ describe("buildApp runtime wiring", () => {
       expect(knownResponse.statusCode).toBe(418);
       expect(knownResponse.json()).toMatchObject({
         success: false,
-        code: "INTERNAL_ERROR",
-        message: "Known route error",
+        code: "BAD_REQUEST",
+        message: "Request could not be processed",
       });
       expect(internalResponse.statusCode).toBe(500);
       expect(internalResponse.json()).toMatchObject({

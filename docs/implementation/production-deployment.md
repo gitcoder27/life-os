@@ -4,6 +4,14 @@ Use this for updating `https://personal.daycommand.online` after each release.
 
 If a release includes Prisma migration files, production also needs the database migration applied. Use `npx prisma migrate deploy --schema server/prisma/schema.prisma` on the production server. That command only applies checked-in pending migrations, so it is the right production command and is safe to include in the normal deploy flow.
 
+Production runtime processes must not create databases or apply migrations on
+startup. Keep `AUTO_CREATE_DATABASE=false` and `AUTO_APPLY_MIGRATIONS=false` in
+`server/.env.production`; the deploy flow applies migrations before the API and
+worker processes start. Production also requires `DATABASE_SEPARATION_STRICT=true`.
+Set `TRUST_PROXY=true` for the nginx deployment so the API trusts only the local
+proxy hop for forwarded client IPs. Leave `ALLOW_PRODUCTION_BOOTSTRAP=false`
+after the first owner account has been created.
+
 ## Checked-in service templates
 
 - Production template: `deploy/systemd/life-os.service`

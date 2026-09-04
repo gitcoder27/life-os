@@ -1,6 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { applyRecurringTaskCarryForward } from "../../../src/lib/recurrence/tasks.js";
+import {
+  applyRecurringTaskCarryForward,
+  materializeRecurringTasksInRange,
+} from "../../../src/lib/recurrence/tasks.js";
 
 describe("applyRecurringTaskCarryForward", () => {
   it("preserves the source occurrence and creates a target occurrence for move_due_date", async () => {
@@ -93,5 +96,72 @@ describe("applyRecurringTaskCarryForward", () => {
       }),
     );
     expect(result).toEqual(createdTargetTask);
+  });
+});
+
+describe("materializeRecurringTasksInRange", () => {
+  it("treats unique occurrence races as an idempotent skip", async () => {
+    const prototypeTask = {
+      id: "task-1",
+      userId: "user-1",
+      title: "Recurring planning block",
+      notes: null,
+      kind: "TASK",
+      reminderAt: null,
+      reminderTriggeredAt: null,
+      status: "PENDING",
+      scheduledForDate: new Date("2026-03-14T00:00:00.000Z"),
+      dueAt: null,
+      goalId: null,
+      originType: "RECURRING",
+      carriedFromTaskId: null,
+      recurrenceRuleId: "rule-1",
+      completedAt: null,
+      createdAt: new Date("2026-03-14T08:00:00.000Z"),
+      updatedAt: new Date("2026-03-14T08:00:00.000Z"),
+    };
+    const existingTask = {
+      ...prototypeTask,
+      id: "task-2",
+      scheduledForDate: new Date("2026-03-15T00:00:00.000Z"),
+    };
+    const tx = {
+      recurrenceRule: {
+        findMany: vi.fn().mockResolvedValue([
+          {
+            id: "rule-1",
+            ownerId: "task-1",
+            ruleJson: { frequency: "daily", startsOn: "2026-03-15" },
+            exceptions: [],
+            tasks: [{ ...prototypeTask }],
+          },
+        ]),
+      },
+      userPreference: {
+        findUnique: vi.fn().mockResolvedValue({ timezone: "UTC" }),
+      },
+      task: {
+        create: vi.fn().mockRejectedValue({ code: "P2002" }),
+        findFirst: vi.fn().mockResolvedValue(existingTask),
+      },
+    } as any;
+
+    const created = await materializeRecurringTasksInRange(
+      tx,
+      "user-1",
+      new Date("2026-03-15T00:00:00.000Z"),
+      new Date("2026-03-15T00:00:00.000Z"),
+    );
+
+    expect(created).toBe(0);
+    expect(tx.task.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          userId: "user-1",
+          recurrenceRuleId: "rule-1",
+          scheduledForDate: new Date("2026-03-15T00:00:00.000Z"),
+        },
+      }),
+    );
   });
 });

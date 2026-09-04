@@ -6,24 +6,14 @@ import {
   useSearchParams,
 } from "react-router-dom";
 import {
-  InlineErrorState,
   PageErrorState,
   PageLoadingState,
 } from "../../shared/ui/PageState";
 import { readHomeDestinationState } from "../../shared/lib/homeNavigation";
-import { CommandBar } from "./components/CommandBar";
-import { DriftRecoveryBar } from "./components/DriftRecoveryBar";
 import { DriftRecoverySheet } from "./components/DriftRecoverySheet";
-import { ExecutionStream } from "./components/ExecutionStream";
-import { DailyEssentials } from "./components/DailyEssentials";
-import { DayPlanner } from "./components/DayPlanner";
-import { DayNotes } from "./components/DayNotes";
-import { PlannerUpcoming } from "./components/PlannerUpcoming";
 import { TodayTaskCaptureSheet } from "./components/TodayTaskCaptureSheet";
-import { NextMoveStrip } from "./components/NextMoveStrip";
 import { ShapeDaySheet } from "./components/ShapeDaySheet";
 import { SizeTasksSheet } from "./components/SizeTasksSheet";
-import { PreLaunchModeNotice } from "./components/PreLaunchModeNotice";
 import { buildPlannerExecutionModel } from "./helpers/planner-execution";
 import { getDayPhase } from "./helpers/day-phase";
 import { useTodayData } from "./hooks/useTodayData";
@@ -46,20 +36,29 @@ import {
 import { isQuickCaptureReferenceTask } from "../../shared/lib/quickCapture";
 import { getOffsetDate } from "./helpers/date-helpers";
 import { StartProtocolSheet } from "./components/StartProtocolSheet";
-import { WeekDeepWorkStrip } from "./components/WeekDeepWorkStrip";
-import { GoalNudges } from "./components/GoalNudges";
-import { TaskInspectorPanel } from "./components/TaskInspectorPanel";
+import { TodayExecuteWorkspace } from "./components/TodayExecuteWorkspace";
+import { TodayPlannerWorkspace } from "./components/TodayPlannerWorkspace";
+import { TodayTopRail } from "./components/TodayTopRail";
 import { TaskEditSheet } from "../tasks/TaskEditSheet";
 import {
   isUpcomingView,
   type UpcomingView,
 } from "./helpers/upcoming-calendar";
 import {
+  buildOpenPlannerDateParams,
+  buildPlannerDateParams,
+  buildPlannerViewParams,
+  buildUpcomingViewParams,
+  isIsoDateParam,
+  resolveTodayRouteState,
+  toSearchString,
+  type PlannerView,
+} from "./helpers/today-route-model";
+import {
   clearStoredWorkbenchRailWidth,
   clampWorkbenchRailWidth,
   DEFAULT_WORKBENCH_RAIL_WIDTH,
   readStoredWorkbenchRailWidth,
-  WORKBENCH_RAIL_WIDTH_STEP,
   writeStoredWorkbenchRailWidth,
 } from "./helpers/workbench-layout";
 import {
@@ -71,14 +70,7 @@ import type {
   AdaptiveNextMoveAction,
 } from "@life-os/contracts";
 
-const ISO_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
-type PlannerView = "today" | "upcoming";
 const isPlannerAssignableTask = (task: { kind: string }) => task.kind === "task";
-
-function toSearchString(params: URLSearchParams) {
-  const search = params.toString();
-  return search ? `?${search}` : "";
-}
 
 export function TodayPage({ routeMode }: { routeMode?: "execute" | "plan" }) {
   const location = useLocation();
@@ -110,18 +102,18 @@ export function TodayPage({ routeMode }: { routeMode?: "execute" | "plan" }) {
   const [workbenchResizing, setWorkbenchResizing] = useState(false);
   const [workbenchElement, setWorkbenchElement] = useState<HTMLElement | null>(null);
   const requestedMode = searchParams.get("mode");
-  const rawPlannerDate = searchParams.get("planDate");
-  const rawPlannerView = searchParams.get("view");
-  const rawUpcomingView = searchParams.get("upcomingView");
   const homeDestination = readHomeDestinationState(location.state);
-  const plannerDate = rawPlannerDate && ISO_DATE_PATTERN.test(rawPlannerDate)
-    ? rawPlannerDate
-    : data.today;
-  const plannerView: PlannerView = rawPlannerView === "upcoming" ? "upcoming" : "today";
-  const upcomingView: UpcomingView = isUpcomingView(rawUpcomingView) ? rawUpcomingView : "week";
-  const isPastPlannerDate = plannerDate < data.today;
-  const isLivePlannerDate = plannerDate === data.today;
-  const isEditablePlannerDate = plannerDate >= data.today;
+  const {
+    rawPlannerDate,
+    rawPlannerView,
+    rawUpcomingView,
+    plannerDate,
+    plannerView,
+    upcomingView,
+    isPastPlannerDate,
+    isLivePlannerDate,
+    isEditablePlannerDate,
+  } = resolveTodayRouteState(searchParams, data.today);
   const plannerDayPlanQuery = useDayPlanQuery(plannerDate);
   const adaptiveToday = useAdaptiveToday(data.today);
   const habitsQuery = useHabitsQuery();
@@ -468,7 +460,7 @@ export function TodayPage({ routeMode }: { routeMode?: "execute" | "plan" }) {
       return;
     }
 
-    if (ISO_DATE_PATTERN.test(rawPlannerDate)) {
+    if (isIsoDateParam(rawPlannerDate)) {
       return;
     }
 
@@ -521,57 +513,19 @@ export function TodayPage({ routeMode }: { routeMode?: "execute" | "plan" }) {
   }, [plannerView, rawUpcomingView, setSearchParams]);
 
   function setPlannerDate(nextDate: string) {
-    setSearchParams((current) => {
-      const next = new URLSearchParams(current);
-      if (nextDate === data.today) {
-        next.delete("planDate");
-      } else {
-        next.set("planDate", nextDate);
-      }
-      next.delete("upcomingView");
-      return next;
-    });
+    setSearchParams((current) => buildPlannerDateParams(current, data.today, nextDate));
   }
 
   function openPlannerDate(nextDate: string) {
-    setSearchParams((current) => {
-      const next = new URLSearchParams(current);
-      next.delete("view");
-      next.delete("upcomingView");
-      if (nextDate === data.today) {
-        next.delete("planDate");
-      } else {
-        next.set("planDate", nextDate);
-      }
-      return next;
-    });
+    setSearchParams((current) => buildOpenPlannerDateParams(current, data.today, nextDate));
   }
 
   function setPlannerView(nextView: PlannerView) {
-    if (nextView === "today") {
-      openPlannerDate(data.today);
-      return;
-    }
-
-    setSearchParams((current) => {
-      const next = new URLSearchParams(current);
-      next.set("view", "upcoming");
-      next.delete("planDate");
-      if (!isUpcomingView(next.get("upcomingView"))) {
-        next.set("upcomingView", "week");
-      }
-      return next;
-    });
+    setSearchParams((current) => buildPlannerViewParams(current, data.today, nextView));
   }
 
   function setUpcomingView(nextView: UpcomingView) {
-    setSearchParams((current) => {
-      const next = new URLSearchParams(current);
-      next.set("view", "upcoming");
-      next.delete("planDate");
-      next.set("upcomingView", nextView);
-      return next;
-    });
+    setSearchParams((current) => buildUpcomingViewParams(current, nextView));
   }
 
   function stepPlannerDate(direction: -1 | 1) {
@@ -790,206 +744,177 @@ export function TodayPage({ routeMode }: { routeMode?: "execute" | "plan" }) {
 
   return (
     <div className={`${deskClass}today-layout today-layout--v2${focusActiveClass}`} style={todayLayoutStyle}>
-      <div className="today-top-rail" ref={topRailRef}>
-        <CommandBar
-          mode={mode}
-          onModeChange={navigateToMode}
-          plannerBlockCount={data.plannerBlocks.length}
-          now={plannerNow}
-          pendingPriorityCount={pendingPriorityCount}
-          totalPriorityCount={priorityDraft.draft.filter((p) => p.title.trim()).length}
-          pendingTaskCount={pendingTaskCount}
-          completedTaskCount={data.completedTaskCount}
-          totalTaskCount={data.totalTaskCount}
-          overdueCount={data.overdueTasks.length}
-          hasDrift={todayPlannerExecution.slippedBlocks.length > 0}
-          onAddTask={() => setTodayTaskCaptureOpen(true)}
-          execution={todayPlannerExecution}
-          topPriorityTitle={data.mustWinTask?.title ?? priorityDraft.draft.find((p) => p.status === "pending")?.title}
-          onSwitchToPlanner={() => navigateToMode("plan")}
-          capacity={adaptiveToday.capacity}
-          onShapeDay={() => setShapeDayOpen(true)}
-          onSizeTasks={() => setSizeTasksOpen(true)}
-          onReduceDay={() => setShapeDayOpen(true)}
-          scoreDate={plannerDate}
-          plannerView={routeMode === "plan" ? plannerView : undefined}
-          onPlannerViewChange={routeMode === "plan" ? setPlannerView : undefined}
-        />
-
-        {allErrors ? (
-          <InlineErrorState message={allErrors} onRetry={refetchEverything} />
-        ) : null}
-      </div>
+      <TodayTopRail
+        allErrors={allErrors}
+        commandBarProps={{
+          mode,
+          onModeChange: navigateToMode,
+          plannerBlockCount: data.plannerBlocks.length,
+          now: plannerNow,
+          pendingPriorityCount,
+          totalPriorityCount: priorityDraft.draft.filter((p) => p.title.trim()).length,
+          pendingTaskCount,
+          completedTaskCount: data.completedTaskCount,
+          totalTaskCount: data.totalTaskCount,
+          overdueCount: data.overdueTasks.length,
+          hasDrift: todayPlannerExecution.slippedBlocks.length > 0,
+          onAddTask: () => setTodayTaskCaptureOpen(true),
+          execution: todayPlannerExecution,
+          topPriorityTitle: data.mustWinTask?.title ?? priorityDraft.draft.find((p) => p.status === "pending")?.title,
+          onSwitchToPlanner: () => navigateToMode("plan"),
+          capacity: adaptiveToday.capacity,
+          onShapeDay: () => setShapeDayOpen(true),
+          onSizeTasks: () => setSizeTasksOpen(true),
+          onReduceDay: () => setShapeDayOpen(true),
+          scoreDate: plannerDate,
+          plannerView: routeMode === "plan" ? plannerView : undefined,
+          onPlannerViewChange: routeMode === "plan" ? setPlannerView : undefined,
+        }}
+        onRetryAll={refetchEverything}
+        onRetryScore={() => {
+          void data.scoreQuery.refetch();
+        }}
+        scoreError={data.sectionErrors.score}
+        topRailRef={topRailRef}
+      />
 
       {mode === "execute" ? (
-        <div className="today-execute-v2">
-          <div className="today-main-v2">
-            <section
-              className={`today-workbench${workbenchResizing ? " today-workbench--resizing" : ""}${activeFocusSession ? " today-workbench--focus-active" : ""}`}
-              aria-label="Today workbench"
-              ref={workbenchRef}
-            >
-              <div className="today-workbench__queue">
-                <PreLaunchModeNotice
-                  date={data.today}
-                  launch={data.launch}
-                  suggestion={data.rescueSuggestion}
-                />
-
-                <NextMoveStrip
-                  nextMove={adaptiveToday.nextMove}
-                  behaviorState={adaptiveToday.behaviorState}
-                  loading={adaptiveToday.isLoading}
-                  onAction={handleAdaptiveAction}
-                />
-
-                {!driftRecoveryIsPrimaryMove ? (
-                  <DriftRecoveryBar
-                    execution={todayPlannerExecution}
-                    onOpen={() => setDriftRecoveryOpen(true)}
-                  />
-                ) : null}
-
-                <ExecutionStream
-                  date={data.today}
-                  executionTasks={data.executionTasks}
-                  overdueTasks={data.overdueTasks}
-                  completedTasks={data.completedTasks}
-                  execution={todayPlannerExecution}
-                  taskActions={taskActions}
-                  plannerBlocks={data.plannerBlocks}
-                  onSwitchToPlanner={() => navigateToMode("plan")}
-                  activeFocusSession={activeFocusSession}
-                  mustWinTaskId={data.mustWinTask?.id ?? null}
-                  onSetMustWin={handleSetMustWin}
-                  isSettingMustWin={upsertDayLaunchMutation.isPending || taskActions.isPending}
-                  selectedTaskId={selectedTaskId}
-                  onSelectTask={(task) => setSelectedTaskId(task.id)}
-                  onEditTask={(task) => openTaskEditor(task, data.today)}
-                />
-              </div>
-
-              <div
-                className="today-workbench__resize"
-                role="separator"
-                tabIndex={0}
-                aria-label="Resize today context column"
-                aria-orientation="vertical"
-                aria-valuemin={320}
-                aria-valuemax={544}
-                aria-valuenow={workbenchRailWidth}
-                title="Drag to resize. Double-click to reset."
-                onPointerDown={(event) => {
-                  event.preventDefault();
-                  event.currentTarget.setPointerCapture(event.pointerId);
-                  setWorkbenchResizing(true);
-                  resizeWorkbenchRailFromPointer(event.clientX);
-                }}
-                onPointerMove={(event) => {
-                  if (!workbenchResizing) {
-                    return;
-                  }
-                  resizeWorkbenchRailFromPointer(event.clientX);
-                }}
-                onPointerUp={(event) => {
-                  if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-                    event.currentTarget.releasePointerCapture(event.pointerId);
-                  }
-                  setWorkbenchResizing(false);
-                }}
-                onDoubleClick={resetWorkbenchRailWidth}
-                onKeyDown={(event) => {
-                  if (event.key === "ArrowLeft") {
-                    event.preventDefault();
-                    updateWorkbenchRailWidth(workbenchRailWidth + WORKBENCH_RAIL_WIDTH_STEP);
-                    return;
-                  }
-                  if (event.key === "ArrowRight") {
-                    event.preventDefault();
-                    updateWorkbenchRailWidth(workbenchRailWidth - WORKBENCH_RAIL_WIDTH_STEP);
-                    return;
-                  }
-                  if (event.key === "Home") {
-                    event.preventDefault();
-                    resetWorkbenchRailWidth();
-                  }
-                }}
-              />
-
-              <aside className="today-workbench__side" aria-label="Today context">
-                <TaskInspectorPanel
-                  date={data.today}
-                  task={selectedTask}
-                  taskActions={taskActions}
-                  activeFocusSession={activeFocusSession}
-                  mustWinTaskId={data.mustWinTask?.id ?? null}
-                  onSetMustWin={handleSetMustWin}
-                  isSettingMustWin={upsertDayLaunchMutation.isPending || taskActions.isPending}
-                  onAddTask={() => setTodayTaskCaptureOpen(true)}
-                  onPlanDay={() => navigateToMode("plan")}
-                  onClarifyTask={(taskId) => setClarifyTaskId(taskId)}
-                  onEditTask={(task) => openTaskEditor(task, data.today)}
-                />
-
-                <div className="today-workbench__support">
-                  <GoalNudges
-                    date={data.today}
-                    nudges={data.goalNudges}
-                    onAdd={handleAddGoalNudge}
-                    isAdding={createGoalTaskMutation.isPending}
-                    compact
-                  />
-
-                  <DailyEssentials
-                    currentDay={data.currentDay}
-                    phase={phase}
-                  />
-                  <WeekDeepWorkStrip weekPlan={data.weekPlan} />
-                  <DayNotes tasks={data.quickCaptureTasks} today={data.today} />
-                </div>
-              </aside>
-            </section>
-          </div>
-        </div>
+        <TodayExecuteWorkspace
+          activeFocusSession={Boolean(activeFocusSession)}
+          dayNotesProps={{
+            tasks: data.quickCaptureTasks,
+            today: data.today,
+          }}
+          dailyEssentialsProps={{
+            currentDay: data.currentDay,
+            phase,
+          }}
+          driftRecoveryBarProps={{
+            execution: todayPlannerExecution,
+            onOpen: () => setDriftRecoveryOpen(true),
+          }}
+          executionStreamProps={{
+            date: data.today,
+            executionTasks: data.executionTasks,
+            overdueTasks: data.overdueTasks,
+            completedTasks: data.completedTasks,
+            execution: todayPlannerExecution,
+            taskActions,
+            plannerBlocks: data.plannerBlocks,
+            onSwitchToPlanner: () => navigateToMode("plan"),
+            activeFocusSession,
+            mustWinTaskId: data.mustWinTask?.id ?? null,
+            onSetMustWin: handleSetMustWin,
+            isSettingMustWin: upsertDayLaunchMutation.isPending || taskActions.isPending,
+            selectedTaskId,
+            onSelectTask: (task) => setSelectedTaskId(task.id),
+            onEditTask: (task) => openTaskEditor(task, data.today),
+          }}
+          goalNudgesProps={{
+            date: data.today,
+            nudges: data.goalNudges,
+            onAdd: handleAddGoalNudge,
+            isAdding: createGoalTaskMutation.isPending,
+            compact: true,
+          }}
+          goalsError={{
+            message: data.sectionErrors.goals,
+            onRetry: () => {
+              void data.goalsListQuery.refetch();
+            },
+          }}
+          healthError={{
+            message: data.sectionErrors.health,
+            onRetry: () => {
+              void data.healthQuery.refetch();
+            },
+          }}
+          nextMoveProps={{
+            nextMove: adaptiveToday.nextMove,
+            behaviorState: adaptiveToday.behaviorState,
+            loading: adaptiveToday.isLoading,
+            onAction: handleAdaptiveAction,
+          }}
+          overdueTasksError={{
+            message: data.sectionErrors.overdueTasks,
+            onRetry: () => {
+              void data.overdueTasksQuery.refetch();
+            },
+          }}
+          preLaunchProps={{
+            date: data.today,
+            launch: data.launch,
+            suggestion: data.rescueSuggestion,
+          }}
+          resizeHandleProps={{
+            width: workbenchRailWidth,
+            resizing: workbenchResizing,
+            onResizeStart: () => setWorkbenchResizing(true),
+            onResizeEnd: () => setWorkbenchResizing(false),
+            onResizeFromPointer: resizeWorkbenchRailFromPointer,
+            onReset: resetWorkbenchRailWidth,
+            onStep: (delta) => updateWorkbenchRailWidth(workbenchRailWidth + delta),
+          }}
+          showDriftRecoveryBar={!driftRecoveryIsPrimaryMove}
+          taskInspectorProps={{
+            date: data.today,
+            task: selectedTask,
+            taskActions,
+            activeFocusSession,
+            mustWinTaskId: data.mustWinTask?.id ?? null,
+            onSetMustWin: handleSetMustWin,
+            isSettingMustWin: upsertDayLaunchMutation.isPending || taskActions.isPending,
+            onAddTask: () => setTodayTaskCaptureOpen(true),
+            onPlanDay: () => navigateToMode("plan"),
+            onClarifyTask: (taskId) => setClarifyTaskId(taskId),
+            onEditTask: (task) => openTaskEditor(task, data.today),
+          }}
+          weekDeepWorkProps={{ weekPlan: data.weekPlan }}
+          weekPlanError={{
+            message: data.sectionErrors.weekPlan,
+            onRetry: () => {
+              void data.weekPlanQuery.refetch();
+            },
+          }}
+          workbenchRef={workbenchRef}
+          workbenchResizing={workbenchResizing}
+        />
       ) : (
-        <div className="planner-shell">
-          {plannerView === "upcoming" ? (
-            <PlannerUpcoming
-              todayDate={data.today}
-              view={upcomingView}
-              onViewChange={setUpcomingView}
-              onOpenDate={openPlannerDate}
-              onEditTask={(task) => openTaskEditor(task, task.scheduledForDate ?? data.today)}
-            />
-          ) : (
-            <DayPlanner
-              date={plannerDate}
-              todayDate={data.today}
-              isEditable={isEditablePlannerDate}
-              isLiveDate={isLivePlannerDate}
-              isHistoryDate={isPastPlannerDate}
-              blocks={plannerBlocks}
-              unplannedTasks={plannerUnplannedTasks}
-              recoveryTasks={plannerRecoveryTasks}
-              execution={plannerExecution}
-              dailyRhythmPlan={dailyRhythmPlan}
-              actions={plannerActions}
-              taskActions={plannerTaskActions}
-              isRhythmActionPending={
+        <TodayPlannerWorkspace
+          plannerView={plannerView}
+          plannerUpcomingProps={{
+            todayDate: data.today,
+            view: upcomingView,
+            onViewChange: setUpcomingView,
+            onOpenDate: openPlannerDate,
+            onEditTask: (task) => openTaskEditor(task, task.scheduledForDate ?? data.today),
+          }}
+          dayPlannerProps={{
+            date: plannerDate,
+            todayDate: data.today,
+            isEditable: isEditablePlannerDate,
+            isLiveDate: isLivePlannerDate,
+            isHistoryDate: isPastPlannerDate,
+            blocks: plannerBlocks,
+            unplannedTasks: plannerUnplannedTasks,
+            recoveryTasks: plannerRecoveryTasks,
+            execution: plannerExecution,
+            dailyRhythmPlan,
+            actions: plannerActions,
+            taskActions: plannerTaskActions,
+            isRhythmActionPending:
                 plannerHabitCheckinMutation.isPending ||
                 plannerSkipHabitMutation.isPending ||
-                plannerRoutineCheckinMutation.isPending
-              }
-              onCompleteRhythmItem={handleCompleteRhythmItem}
-              onSkipRhythmItem={handleSkipRhythmItem}
-              onSelectDate={setPlannerDate}
-              onStepDate={stepPlannerDate}
-              onShapeDay={() => setShapeDayOpen(true)}
-              onEditTask={(task) => openTaskEditor(task, plannerDate)}
-              sidebarStyle={plannerSidebarStyle}
-            />
-          )}
-        </div>
+                plannerRoutineCheckinMutation.isPending,
+            onCompleteRhythmItem: handleCompleteRhythmItem,
+            onSkipRhythmItem: handleSkipRhythmItem,
+            onSelectDate: setPlannerDate,
+            onStepDate: stepPlannerDate,
+            onShapeDay: () => setShapeDayOpen(true),
+            onEditTask: (task) => openTaskEditor(task, plannerDate),
+            sidebarStyle: plannerSidebarStyle,
+          }}
+        />
       )}
 
       <TodayTaskCaptureSheet

@@ -45,7 +45,7 @@ function RouteLoading() {
   );
 }
 
-function GuestRoute({ children }: { children: JSX.Element }) {
+export function GuestRoute({ children }: { children: JSX.Element }) {
   const sessionQuery = useSessionQuery();
 
   if (sessionQuery.isLoading) {
@@ -59,7 +59,7 @@ function GuestRoute({ children }: { children: JSX.Element }) {
   return <Navigate to="/" replace />;
 }
 
-function ProtectedRoute({
+export function ProtectedRoute({
   children,
   allowIncompleteOnboarding = false,
 }: {
@@ -183,6 +183,10 @@ export const router = createBrowserRouter([
       {
         path: "goals",
         element: lazyRoute(<GoalsPage />),
+      },
+      {
+        path: "reviews",
+        element: <Navigate to="/reviews/daily" replace />,
       },
       {
         path: "reviews/history",

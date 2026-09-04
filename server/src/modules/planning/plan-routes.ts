@@ -61,6 +61,7 @@ import {
   normalizePlannerBlockTaskSortOrders,
   replaceCyclePriorities,
   replacePlannerBlockTasks,
+  rethrowPlannerBlockOverlapConstraint,
   seedPlannerBlocksFromMostRecentDay,
 } from "./planning-repository.js";
 import {
@@ -401,34 +402,36 @@ export const registerPlanningPlanRoutes: FastifyPluginAsync = async (app) => {
     const { startsAt, endsAt } = validatePlannerBlockWindow(parsedDate, timezone, payload.startsAt, payload.endsAt);
     await assertNoPlannerBlockOverlap(app.prisma, cycle.id, startsAt, endsAt);
 
-    const plannerBlock = await app.prisma.$transaction(async (tx) => {
-      const nextSortOrder =
-        (await tx.dayPlannerBlock.count({
-          where: {
+    const plannerBlock = await app.prisma
+      .$transaction(async (tx) => {
+        const nextSortOrder =
+          (await tx.dayPlannerBlock.count({
+            where: {
+              planningCycleId: cycle.id,
+            },
+          })) + 1;
+
+        const createdBlock = await tx.dayPlannerBlock.create({
+          data: {
             planningCycleId: cycle.id,
+            title: normalizePlannerBlockTitle(payload.title),
+            startsAt,
+            endsAt,
+            sortOrder: nextSortOrder,
           },
-        })) + 1;
+        });
 
-      const createdBlock = await tx.dayPlannerBlock.create({
-        data: {
-          planningCycleId: cycle.id,
-          title: normalizePlannerBlockTitle(payload.title),
-          startsAt,
-          endsAt,
-          sortOrder: nextSortOrder,
-        },
-      });
+        await replacePlannerBlockTasks(tx, {
+          userId: user.id,
+          date: parsedDate,
+          blockId: createdBlock.id,
+          blockStartsAt: startsAt,
+          taskIds: payload.taskIds ?? [],
+        });
 
-      await replacePlannerBlockTasks(tx, {
-        userId: user.id,
-        date: parsedDate,
-        blockId: createdBlock.id,
-        blockStartsAt: startsAt,
-        taskIds: payload.taskIds ?? [],
-      });
-
-      return loadPlannerBlockWithTasks(tx, createdBlock.id);
-    });
+        return loadPlannerBlockWithTasks(tx, createdBlock.id);
+      })
+      .catch(rethrowPlannerBlockOverlapConstraint);
 
     const response: DayPlannerBlockMutationResponse = withGeneratedAt({
       plannerBlock: serializeDayPlannerBlock(plannerBlock),
@@ -455,36 +458,38 @@ export const registerPlanningPlanRoutes: FastifyPluginAsync = async (app) => {
       ignoreBlockId: block.id,
     });
 
-    const plannerBlock = await app.prisma.$transaction(async (tx) => {
-      await tx.dayPlannerBlock.update({
-        where: {
-          id: block.id,
-        },
-        data: {
-          title: nextTitle,
-          startsAt,
-          endsAt,
-        },
-      });
+    const plannerBlock = await app.prisma
+      .$transaction(async (tx) => {
+        await tx.dayPlannerBlock.update({
+          where: {
+            id: block.id,
+          },
+          data: {
+            title: nextTitle,
+            startsAt,
+            endsAt,
+          },
+        });
 
-      if (startsAt.getTime() !== block.startsAt.getTime()) {
-        const taskIds = block.taskLinks.map((link) => link.taskId);
-        if (taskIds.length > 0) {
-          await tx.task.updateMany({
-            where: {
-              id: {
-                in: taskIds,
+        if (startsAt.getTime() !== block.startsAt.getTime()) {
+          const taskIds = block.taskLinks.map((link) => link.taskId);
+          if (taskIds.length > 0) {
+            await tx.task.updateMany({
+              where: {
+                id: {
+                  in: taskIds,
+                },
               },
-            },
-            data: {
-              dueAt: startsAt,
-            },
-          });
+              data: {
+                dueAt: startsAt,
+              },
+            });
+          }
         }
-      }
 
-      return loadPlannerBlockWithTasks(tx, block.id);
-    });
+        return loadPlannerBlockWithTasks(tx, block.id);
+      })
+      .catch(rethrowPlannerBlockOverlapConstraint);
 
     const response: DayPlannerBlockMutationResponse = withGeneratedAt({
       plannerBlock: serializeDayPlannerBlock(plannerBlock),

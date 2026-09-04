@@ -491,6 +491,7 @@ export function AppShell() {
           className="mobile-capture"
           onClick={() => setCaptureOpen(true)}
           type="button"
+          aria-label="Open quick capture"
         >
           +
         </button>

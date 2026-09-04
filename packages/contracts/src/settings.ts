@@ -2,7 +2,9 @@ import { z } from "zod";
 
 import type { ApiMeta, ApiSuccess } from "./common.js";
 import {
+  notificationCategories,
   notificationCategoryPreferenceSchema,
+  type NotificationCategory,
   type NotificationCategoryPreferences,
 } from "./notifications.js";
 
@@ -21,16 +23,15 @@ const notificationPreferenceUpdateSchema = notificationCategoryPreferenceSchema
     "At least one notification preference field must be updated",
   );
 
+const notificationPreferencesUpdateShape = Object.fromEntries(
+  notificationCategories.map((category) => [
+    category,
+    notificationPreferenceUpdateSchema.optional(),
+  ]),
+) as Record<NotificationCategory, z.ZodOptional<typeof notificationPreferenceUpdateSchema>>;
+
 const notificationPreferencesUpdateSchema = z
-  .object({
-    task: notificationPreferenceUpdateSchema.optional(),
-    inbox: notificationPreferenceUpdateSchema.optional(),
-    review: notificationPreferenceUpdateSchema.optional(),
-    finance: notificationPreferenceUpdateSchema.optional(),
-    health: notificationPreferenceUpdateSchema.optional(),
-    habit: notificationPreferenceUpdateSchema.optional(),
-    routine: notificationPreferenceUpdateSchema.optional(),
-  })
+  .object(notificationPreferencesUpdateShape)
   .refine(
     (value) => Object.values(value).some(Boolean),
     "At least one notification category must be updated",

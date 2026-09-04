@@ -646,6 +646,13 @@ button.fc-lane-clear:active {
   gap: 0.5rem;
 }
 
+.field__split-label > span,
+.field__split-label > label {
+  font-size: var(--fs-small);
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
 .field__split-label button {
   border: 0;
   background: transparent;

@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { PrismaClient } from "@prisma/client";
 import type { AppEnv } from "../../src/app/env.js";
@@ -22,8 +22,10 @@ import {
 } from "../../../src/modules/auth/service.js";
 import {
   clearLoginFailures,
+  getLoginRateLimitBucketCountForTests,
   recordLoginFailure,
   assertLoginRateLimit,
+  resetLoginRateLimitForTests,
 } from "../../../src/modules/auth/rate-limit.js";
 
 vi.mock("argon2", () => ({
@@ -39,6 +41,11 @@ const env: AppEnv = {
   PORT: 3001,
   APP_ORIGIN: "http://localhost:5173",
   DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/life_os",
+  ENV_FILE_OVERRIDE: false,
+  DATABASE_SEPARATION_STRICT: false,
+  AUTO_CREATE_DATABASE: false,
+  AUTO_APPLY_MIGRATIONS: false,
+  TRUST_PROXY: false,
   SESSION_COOKIE_NAME: "life_os_session",
   SESSION_SECRET: "dev-only-change-me",
   SESSION_TTL_DAYS: 14,
@@ -48,6 +55,7 @@ const env: AppEnv = {
   BOOTSTRAP_USER_EMAIL: undefined,
   BOOTSTRAP_USER_PASSWORD: undefined,
   BOOTSTRAP_USER_DISPLAY_NAME: undefined,
+  ALLOW_PRODUCTION_BOOTSTRAP: false,
   OWNER_EMAIL: "owner@example.com",
   OWNER_PASSWORD: "password123",
   OWNER_DISPLAY_NAME: "Owner",
@@ -56,6 +64,12 @@ const env: AppEnv = {
 describe("auth service", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    resetLoginRateLimitForTests();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    resetLoginRateLimitForTests();
   });
 
   it("hashes session tokens deterministically", () => {
@@ -127,6 +141,50 @@ describe("auth service", () => {
         }),
       }),
     );
+  });
+
+  it("rejects production bootstrap unless explicitly allowed", async () => {
+    const findUnique = vi.fn();
+    const prisma = {
+      user: { findUnique, count: vi.fn(), create: vi.fn() },
+    } as unknown as PrismaClient;
+    const logger = { warn: vi.fn(), info: vi.fn() } as unknown as Console;
+
+    await expect(
+      ensureBootstrapUserAccount(
+        prisma,
+        {
+          ...env,
+          NODE_ENV: "production",
+          DATABASE_SEPARATION_STRICT: true,
+          OWNER_PASSWORD: "StrongProd#123456",
+        },
+        logger,
+      ),
+    ).rejects.toThrow(/ALLOW_PRODUCTION_BOOTSTRAP/);
+
+    expect(findUnique).not.toHaveBeenCalled();
+  });
+
+  it("rejects weak production bootstrap passwords even when bootstrap is allowed", async () => {
+    const prisma = {
+      user: { findUnique: vi.fn(), count: vi.fn(), create: vi.fn() },
+    } as unknown as PrismaClient;
+    const logger = { warn: vi.fn(), info: vi.fn() } as unknown as Console;
+
+    await expect(
+      ensureBootstrapUserAccount(
+        prisma,
+        {
+          ...env,
+          NODE_ENV: "production",
+          DATABASE_SEPARATION_STRICT: true,
+          ALLOW_PRODUCTION_BOOTSTRAP: true,
+          OWNER_PASSWORD: "change-me-please",
+        },
+        logger,
+      ),
+    ).rejects.toThrow(/Production bootstrap passwords/);
   });
 
   it("skips bootstrap when records already exist", async () => {
@@ -418,5 +476,44 @@ describe("auth service", () => {
     expect(() => assertLoginRateLimit(env, base)).toThrow();
     clearLoginFailures(base);
     expect(() => assertLoginRateLimit(env, base)).not.toThrow();
+  });
+
+  it("rate-limits repeated failures across accounts from the same IP", () => {
+    const ipAddress = "203.0.113.10";
+
+    for (let index = 0; index < env.AUTH_RATE_LIMIT_MAX_ATTEMPTS * 5; index += 1) {
+      recordLoginFailure(env, {
+        ipAddress,
+        email: `user-${index}@example.com`,
+      });
+    }
+
+    expect(() =>
+      assertLoginRateLimit(env, {
+        ipAddress,
+        email: "new-account@example.com",
+      }),
+    ).toThrow();
+  });
+
+  it("cleans up expired login rate-limit buckets", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-05-19T00:00:00.000Z"));
+
+    recordLoginFailure(env, {
+      ipAddress: "198.51.100.5",
+      email: "x@example.com",
+    });
+    expect(getLoginRateLimitBucketCountForTests()).toBe(2);
+
+    vi.setSystemTime(new Date("2026-05-19T00:16:00.000Z"));
+
+    expect(() =>
+      assertLoginRateLimit(env, {
+        ipAddress: "198.51.100.5",
+        email: "x@example.com",
+      }),
+    ).not.toThrow();
+    expect(getLoginRateLimitBucketCountForTests()).toBe(0);
   });
 });

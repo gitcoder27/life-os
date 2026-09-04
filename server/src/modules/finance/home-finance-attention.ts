@@ -4,7 +4,7 @@ import type {
   FinanceTimelineStatus,
 } from "@life-os/contracts";
 
-import { buildFinanceRoute } from "../finance/finance-navigation.js";
+import { buildFinanceRoute } from "./finance-navigation.js";
 
 const actionableSourceTypes = new Set<FinanceTimelineItem["sourceType"]>([
   "income_plan",

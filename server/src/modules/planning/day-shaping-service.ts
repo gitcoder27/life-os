@@ -17,6 +17,7 @@ import {
   assertNoPlannerBlockOverlap,
   loadPlannerBlocks,
   replacePlannerBlockTasks,
+  rethrowPlannerBlockOverlapConstraint,
 } from "./planning-repository.js";
 import type { PlanningApp } from "./planning-types.js";
 import type { AdaptiveTodayContext } from "./adaptive-today-context.js";
@@ -164,43 +165,45 @@ export async function applyShapeDayPlan(
     taskIds,
   });
 
-  const plannerBlocks = await app.prisma.$transaction(async (tx) => {
-    const existingBlockCount = await tx.dayPlannerBlock.count({
-      where: {
-        planningCycleId: input.context.cycleId,
-      },
-    });
-
-    for (const [index, block] of proposedBlocks.entries()) {
-      const { startsAt, endsAt } = validatePlannerBlockWindow(
-        input.context.date,
-        input.context.timezone,
-        block.startsAt,
-        block.endsAt,
-      );
-      await assertNoPlannerBlockOverlap(tx, input.context.cycleId, startsAt, endsAt);
-
-      const createdBlock = await tx.dayPlannerBlock.create({
-        data: {
+  const plannerBlocks = await app.prisma
+    .$transaction(async (tx) => {
+      const existingBlockCount = await tx.dayPlannerBlock.count({
+        where: {
           planningCycleId: input.context.cycleId,
-          title: block.title?.trim() || null,
-          startsAt,
-          endsAt,
-          sortOrder: existingBlockCount + index + 1,
         },
       });
 
-      await replacePlannerBlockTasks(tx, {
-        userId: input.context.userId,
-        date: input.context.date,
-        blockId: createdBlock.id,
-        blockStartsAt: startsAt,
-        taskIds: block.taskIds,
-      });
-    }
+      for (const [index, block] of proposedBlocks.entries()) {
+        const { startsAt, endsAt } = validatePlannerBlockWindow(
+          input.context.date,
+          input.context.timezone,
+          block.startsAt,
+          block.endsAt,
+        );
+        await assertNoPlannerBlockOverlap(tx, input.context.cycleId, startsAt, endsAt);
 
-    return loadPlannerBlocks(tx, input.context.cycleId);
-  });
+        const createdBlock = await tx.dayPlannerBlock.create({
+          data: {
+            planningCycleId: input.context.cycleId,
+            title: block.title?.trim() || null,
+            startsAt,
+            endsAt,
+            sortOrder: existingBlockCount + index + 1,
+          },
+        });
+
+        await replacePlannerBlockTasks(tx, {
+          userId: input.context.userId,
+          date: input.context.date,
+          blockId: createdBlock.id,
+          blockStartsAt: startsAt,
+          taskIds: block.taskIds,
+        });
+      }
+
+      return loadPlannerBlocks(tx, input.context.cycleId);
+    })
+    .catch(rethrowPlannerBlockOverlapConstraint);
 
   const capacity = assessDayCapacity({
     tasks: input.context.tasks,

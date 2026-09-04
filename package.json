@@ -10,7 +10,7 @@
   "scripts": {
     "postinstall": "npm run prisma:generate -w server",
     "audit:prod": "npm audit --omit=dev",
-    "test": "npm run test -w server && npm run test -w client",
+    "test": "npm run test -w packages/contracts && npm run test -w server && npm run test -w client",
     "test:coverage": "npm run test:coverage -w server && npm run test:coverage -w client",
     "ci": "npm ci && npm run audit:prod && npm run typecheck && npm run build && npm run test",
     "dev": "concurrently --kill-others-on-fail --names server,client --prefix-colors green,blue \"npm run dev:server\" \"npm run dev:client\"",

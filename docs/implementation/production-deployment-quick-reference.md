@@ -16,6 +16,11 @@ If the only local change is `package-lock.json`, the deploy script restores it a
 
 `client/.env.production` is now the source of truth for the frontend CSRF cookie name during production builds. It must match `server/.env.production`.
 `npx prisma migrate deploy --schema server/prisma/schema.prisma` is included in `npm run deploy:prod` and is safe to run on every deploy because it only applies pending migrations.
+Keep production runtime mutation disabled in `server/.env.production`:
+`AUTO_CREATE_DATABASE=false`, `AUTO_APPLY_MIGRATIONS=false`,
+`DATABASE_SEPARATION_STRICT=true`, and `TRUST_PROXY=true` for the nginx proxy.
+Use `ALLOW_PRODUCTION_BOOTSTRAP=true` only during first-owner creation, with a
+strong non-example password, then turn it off.
 
 Manual fallback:
 

@@ -65,6 +65,7 @@ import {
   apiRequest,
   invalidateCoreData,
   invalidateCoreDataForDates,
+  invalidateGoalData,
   queryKeys,
   toSectionError,
   unwrapRequiredResult,
@@ -1065,7 +1066,7 @@ export const useUpdateFinanceGoalMutation = (month: string) => {
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.finance(month) });
-      void queryClient.invalidateQueries({ queryKey: queryKeys.goalsAll });
+      invalidateGoalData(queryClient);
     },
   });
 };

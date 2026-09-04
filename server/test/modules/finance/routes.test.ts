@@ -11,7 +11,10 @@ function parseBody<T>(body: string) {
 const USER_ID = "00000000-0000-4000-8000-000000000001";
 const BILL_ID = "00000000-0000-4000-8000-000000000010";
 const EXPENSE_ID = "00000000-0000-4000-8000-000000000020";
+const CATEGORY_ID = "00000000-0000-4000-8000-000000000030";
 const ACCOUNT_ID = "00000000-0000-4000-8000-000000000040";
+const CREDIT_CARD_ID = "00000000-0000-4000-8000-000000000050";
+const LOAN_ID = "00000000-0000-4000-8000-000000000060";
 const RECURRING_INCOME_ID = "00000000-0000-4000-8000-000000000070";
 
 describe("finance bill reconciliation routes", () => {
@@ -52,6 +55,318 @@ describe("finance bill reconciliation routes", () => {
     }
 
     vi.clearAllMocks();
+  });
+
+  it("applies credit card payments against the in-transaction balance", async () => {
+    const executeRaw = vi.fn().mockResolvedValue(1);
+    (prisma as any).$executeRaw = executeRaw;
+    prisma.financeAccount.findFirst.mockResolvedValueOnce({
+      id: ACCOUNT_ID,
+      userId: USER_ID,
+      name: "Checking",
+      accountType: "CHECKING",
+      currencyCode: "USD",
+      openingBalanceMinor: 0,
+      archivedAt: null,
+      createdAt: new Date("2026-04-01T00:00:00.000Z"),
+      updatedAt: new Date("2026-04-01T00:00:00.000Z"),
+    });
+    prisma.creditCard.findFirst.mockResolvedValueOnce({
+      id: CREDIT_CARD_ID,
+      userId: USER_ID,
+      paymentAccountId: ACCOUNT_ID,
+      name: "Fresh card name",
+      issuer: "Bank",
+      currencyCode: "USD",
+      creditLimitMinor: 100000,
+      outstandingBalanceMinor: 9000,
+      statementDay: 1,
+      paymentDueDay: 15,
+      minimumDueMinor: 4000,
+      status: "ACTIVE",
+      createdAt: new Date("2026-04-01T00:00:00.000Z"),
+      updatedAt: new Date("2026-04-02T00:00:00.000Z"),
+    });
+    prisma.creditCard.findFirstOrThrow.mockResolvedValueOnce({
+      id: CREDIT_CARD_ID,
+      userId: USER_ID,
+      paymentAccountId: ACCOUNT_ID,
+      name: "Fresh card name",
+      issuer: "Bank",
+      currencyCode: "USD",
+      creditLimitMinor: 100000,
+      outstandingBalanceMinor: 7000,
+      statementDay: 1,
+      paymentDueDay: 15,
+      minimumDueMinor: 2000,
+      status: "ACTIVE",
+      createdAt: new Date("2026-04-01T00:00:00.000Z"),
+      updatedAt: new Date("2026-04-02T00:00:00.000Z"),
+    });
+    prisma.financeTransaction.create.mockResolvedValueOnce({});
+
+    const response = await app!.inject({
+      method: "POST",
+      url: `/api/finance/credit-cards/${CREDIT_CARD_ID}/pay`,
+      payload: {
+        amountMinor: 2000,
+        paidOn: "2026-04-10",
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(prisma.financeTransaction.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          accountId: ACCOUNT_ID,
+          amountMinor: 2000,
+          description: "Fresh card name payment",
+        }),
+      }),
+    );
+    expect(executeRaw).toHaveBeenCalledTimes(1);
+    expect(parseBody<{ creditCard: { outstandingBalanceMinor: number; minimumDueMinor: number | null } }>(response.body).creditCard).toMatchObject({
+      outstandingBalanceMinor: 7000,
+      minimumDueMinor: 2000,
+    });
+  });
+
+  it("keeps expense category routes registered from the split route module", async () => {
+    const createdAt = new Date("2026-04-01T00:00:00.000Z");
+    prisma.expenseCategory.create.mockResolvedValueOnce({
+      id: CATEGORY_ID,
+      userId: USER_ID,
+      name: "Utilities",
+      color: "#3b82f6",
+      sortOrder: 10,
+      archivedAt: null,
+      createdAt,
+      updatedAt: createdAt,
+    });
+    prisma.expenseCategory.findFirst.mockResolvedValueOnce({
+      id: CATEGORY_ID,
+      userId: USER_ID,
+      name: "Utilities",
+      color: "#3b82f6",
+      sortOrder: 10,
+      archivedAt: null,
+      createdAt,
+      updatedAt: createdAt,
+    });
+    prisma.expenseCategory.update.mockResolvedValueOnce({
+      id: CATEGORY_ID,
+      userId: USER_ID,
+      name: "Utilities",
+      color: "#3b82f6",
+      sortOrder: 10,
+      archivedAt: new Date("2026-04-02T00:00:00.000Z"),
+      createdAt,
+      updatedAt: new Date("2026-04-02T00:00:00.000Z"),
+    });
+
+    const createResponse = await app!.inject({
+      method: "POST",
+      url: "/api/finance/categories",
+      payload: {
+        name: "Utilities",
+        color: "#3b82f6",
+        sortOrder: 10,
+      },
+    });
+    const archiveResponse = await app!.inject({
+      method: "PATCH",
+      url: `/api/finance/categories/${CATEGORY_ID}`,
+      payload: {
+        archived: true,
+      },
+    });
+
+    expect(createResponse.statusCode).toBe(201);
+    expect(parseBody<{ category: { id: string; name: string } }>(createResponse.body).category).toMatchObject({
+      id: CATEGORY_ID,
+      name: "Utilities",
+    });
+    expect(archiveResponse.statusCode).toBe(200);
+    expect(parseBody<{ category: { archivedAt: string | null } }>(archiveResponse.body).category.archivedAt).toBe("2026-04-02T00:00:00.000Z");
+  });
+
+  it("keeps account routes registered from the split route module", async () => {
+    const createdAt = new Date("2026-04-01T00:00:00.000Z");
+    const archivedAt = new Date("2026-04-02T00:00:00.000Z");
+    const createdAccount = {
+      id: ACCOUNT_ID,
+      userId: USER_ID,
+      name: "Checking",
+      accountType: "BANK",
+      currencyCode: "USD",
+      openingBalanceMinor: 5000,
+      archivedAt: null,
+      createdAt,
+      updatedAt: createdAt,
+    };
+    const archivedAccount = {
+      ...createdAccount,
+      archivedAt,
+      updatedAt: archivedAt,
+    };
+    prisma.financeAccount.create.mockResolvedValueOnce(createdAccount);
+    prisma.financeAccount.findFirst.mockResolvedValueOnce(createdAccount);
+    prisma.financeAccount.update.mockResolvedValueOnce(archivedAccount);
+    prisma.financeAccount.findMany.mockResolvedValueOnce([archivedAccount]);
+    prisma.financeTransaction.findMany.mockResolvedValueOnce([]);
+
+    const createResponse = await app!.inject({
+      method: "POST",
+      url: "/api/finance/accounts",
+      payload: {
+        name: "Checking",
+        accountType: "bank",
+        openingBalanceMinor: 5000,
+      },
+    });
+    const archiveResponse = await app!.inject({
+      method: "PATCH",
+      url: `/api/finance/accounts/${ACCOUNT_ID}`,
+      payload: {
+        archived: true,
+      },
+    });
+
+    expect(createResponse.statusCode).toBe(201);
+    expect(parseBody<{ account: { id: string; accountType: string; currentBalanceMinor: number } }>(createResponse.body).account).toMatchObject({
+      id: ACCOUNT_ID,
+      accountType: "bank",
+      currentBalanceMinor: 5000,
+    });
+    expect(archiveResponse.statusCode).toBe(200);
+    expect(parseBody<{ account: { archivedAt: string | null } }>(archiveResponse.body).account.archivedAt).toBe("2026-04-02T00:00:00.000Z");
+  });
+
+  it("keeps transaction routes registered from the split route module", async () => {
+    const occurredOn = new Date("2026-04-03T00:00:00.000Z");
+    prisma.financeAccount.findFirst.mockResolvedValueOnce({
+      id: ACCOUNT_ID,
+      userId: USER_ID,
+      name: "Checking",
+      accountType: "BANK",
+      currencyCode: "USD",
+      openingBalanceMinor: 0,
+      archivedAt: null,
+      createdAt: occurredOn,
+      updatedAt: occurredOn,
+    });
+    prisma.financeTransaction.create.mockResolvedValueOnce({
+      id: "00000000-0000-4000-8000-000000000080",
+      userId: USER_ID,
+      accountId: ACCOUNT_ID,
+      transferAccountId: null,
+      transactionType: "EXPENSE",
+      amountMinor: 4200,
+      currencyCode: "USD",
+      occurredOn,
+      description: "Groceries",
+      expenseCategoryId: null,
+      billId: null,
+      recurringIncomeTemplateId: null,
+      createdAt: occurredOn,
+      updatedAt: occurredOn,
+    });
+
+    const response = await app!.inject({
+      method: "POST",
+      url: "/api/finance/transactions",
+      payload: {
+        accountId: ACCOUNT_ID,
+        transactionType: "expense",
+        amountMinor: 4200,
+        occurredOn: "2026-04-03",
+        description: "Groceries",
+      },
+    });
+
+    expect(response.statusCode).toBe(201);
+    expect(parseBody<{ transaction: { accountId: string; transactionType: string; amountMinor: number } }>(response.body).transaction).toMatchObject({
+      accountId: ACCOUNT_ID,
+      transactionType: "expense",
+      amountMinor: 4200,
+    });
+  });
+
+  it("applies loan payments against the in-transaction balance", async () => {
+    const executeRaw = vi.fn().mockResolvedValue(1);
+    (prisma as any).$executeRaw = executeRaw;
+    prisma.financeAccount.findFirst.mockResolvedValueOnce({
+      id: ACCOUNT_ID,
+      userId: USER_ID,
+      name: "Checking",
+      accountType: "CHECKING",
+      currencyCode: "USD",
+      openingBalanceMinor: 0,
+      archivedAt: null,
+      createdAt: new Date("2026-04-01T00:00:00.000Z"),
+      updatedAt: new Date("2026-04-01T00:00:00.000Z"),
+    });
+    prisma.loan.findFirst.mockResolvedValueOnce({
+      id: LOAN_ID,
+      userId: USER_ID,
+      paymentAccountId: ACCOUNT_ID,
+      name: "Fresh loan name",
+      lender: "Bank",
+      currencyCode: "USD",
+      principalAmountMinor: 500000,
+      outstandingBalanceMinor: 8000,
+      emiAmountMinor: 3000,
+      interestRateBps: 700,
+      dueDay: 10,
+      startOn: null,
+      endOn: null,
+      status: "ACTIVE",
+      createdAt: new Date("2026-04-01T00:00:00.000Z"),
+      updatedAt: new Date("2026-04-02T00:00:00.000Z"),
+    });
+    prisma.loan.findFirstOrThrow.mockResolvedValueOnce({
+      id: LOAN_ID,
+      userId: USER_ID,
+      paymentAccountId: ACCOUNT_ID,
+      name: "Fresh loan name",
+      lender: "Bank",
+      currencyCode: "USD",
+      principalAmountMinor: 500000,
+      outstandingBalanceMinor: 5000,
+      emiAmountMinor: 3000,
+      interestRateBps: 700,
+      dueDay: 10,
+      startOn: null,
+      endOn: null,
+      status: "ACTIVE",
+      createdAt: new Date("2026-04-01T00:00:00.000Z"),
+      updatedAt: new Date("2026-04-02T00:00:00.000Z"),
+    });
+    prisma.financeTransaction.create.mockResolvedValueOnce({});
+
+    const response = await app!.inject({
+      method: "POST",
+      url: `/api/finance/loans/${LOAN_ID}/pay`,
+      payload: {
+        amountMinor: 3000,
+        paidOn: "2026-04-10",
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(prisma.financeTransaction.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          accountId: ACCOUNT_ID,
+          amountMinor: 3000,
+          description: "Fresh loan name EMI",
+        }),
+      }),
+    );
+    expect(executeRaw).toHaveBeenCalledTimes(1);
+    expect(parseBody<{ loan: { outstandingBalanceMinor: number } }>(response.body).loan).toMatchObject({
+      outstandingBalanceMinor: 5000,
+    });
   });
 
   it("links an existing standalone expense to a paid bill", async () => {

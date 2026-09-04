@@ -17,6 +17,23 @@ type WorkerRuntimeDependencies = {
   now?: () => Date;
 };
 
+type FailedWorkerJob = {
+  name: string;
+  error: unknown;
+};
+
+function getErrorMessage(error: unknown) {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function buildWorkerFailureMessage(failures: FailedWorkerJob[], selectedJobCount: number) {
+  const summaries = failures
+    .map((failure) => `${failure.name}: ${getErrorMessage(failure.error)}`)
+    .join("; ");
+
+  return `[life-os-worker] ${failures.length} of ${selectedJobCount} selected job(s) failed: ${summaries}`;
+}
+
 export function parseWorkerScheduleFilter(args: string[]): WorkerScheduleFilter {
   const scheduleIndex = args.findIndex((arg) => arg === "--schedule");
   const inlineSchedule = args.find((arg) => arg.startsWith("--schedule="));
@@ -77,21 +94,36 @@ export async function startWorker(
     `[life-os-worker] ready: ${jobs.length} registered job${jobs.length === 1 ? "" : "s"} for schedule ${scheduleFilter}`,
   );
 
+  const failures: FailedWorkerJob[] = [];
   try {
     for (const job of jobs) {
       logger.info(`[life-os-worker] running: ${job.name} (${job.schedule})`);
       const startedAt = Date.now();
-      const result = await job.run({
-        prisma,
-        now: dependencies.now ? dependencies.now() : new Date(),
-        logger,
-      });
-      logger.info(
-        `[life-os-worker] completed: ${job.name} in ${Date.now() - startedAt}ms - ${result.summary}`,
-      );
+      try {
+        const result = await job.run({
+          prisma,
+          now: dependencies.now ? dependencies.now() : new Date(),
+          logger,
+        });
+        logger.info(
+          `[life-os-worker] completed: ${job.name} in ${Date.now() - startedAt}ms - ${result.summary}`,
+        );
+      } catch (error) {
+        failures.push({
+          name: job.name,
+          error,
+        });
+        logger.error(
+          `[life-os-worker] failed: ${job.name} in ${Date.now() - startedAt}ms - ${getErrorMessage(error)}`,
+        );
+      }
     }
   } finally {
     await prisma.$disconnect();
+  }
+
+  if (failures.length > 0) {
+    throw new Error(buildWorkerFailureMessage(failures, jobs.length));
   }
 }
 

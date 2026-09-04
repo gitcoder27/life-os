@@ -4,7 +4,7 @@ import argon2 from "argon2";
 import type { Prisma, PrismaClient, User, UserStatus } from "@prisma/client";
 import type { SessionUser } from "@life-os/contracts";
 
-import type { AppEnv } from "../../app/env.js";
+import { getProductionBootstrapPasswordIssue, type AppEnv } from "../../app/env.js";
 
 const SESSION_BYTES = 32;
 
@@ -22,6 +22,34 @@ function getBootstrapAccountConfig(env: AppEnv) {
     password,
     displayName,
   };
+}
+
+function assertBootstrapAccountAllowed(env: AppEnv, bootstrapAccount: {
+  email?: string;
+  password?: string;
+}) {
+  if (!bootstrapAccount.email && !bootstrapAccount.password) {
+    return;
+  }
+
+  if (env.NODE_ENV !== "production") {
+    return;
+  }
+
+  if (!env.ALLOW_PRODUCTION_BOOTSTRAP) {
+    throw new Error(
+      "[auth] ALLOW_PRODUCTION_BOOTSTRAP=true is required to bootstrap a production user",
+    );
+  }
+
+  if (!bootstrapAccount.email || !bootstrapAccount.password) {
+    throw new Error("[auth] production bootstrap requires both email and password");
+  }
+
+  const passwordIssue = getProductionBootstrapPasswordIssue(bootstrapAccount.password);
+  if (passwordIssue) {
+    throw new Error(`[auth] ${passwordIssue}`);
+  }
 }
 
 export function hashSessionToken(sessionToken: string) {
@@ -48,6 +76,7 @@ export async function ensureBootstrapUserAccount(
   logger: Pick<Console, "info" | "warn">,
 ) {
   const bootstrapAccount = getBootstrapAccountConfig(env);
+  assertBootstrapAccountAllowed(env, bootstrapAccount);
 
   if (!bootstrapAccount.email || !bootstrapAccount.password) {
     logger.warn(

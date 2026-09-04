@@ -106,6 +106,7 @@ export const queryKeys = {
   financeRecurring: ["finance", "recurring"] as const,
   goals: (weekStart: string, monthStart: string) => ["goals", weekStart, monthStart] as const,
   goalsAll: ["goals", "all"] as const,
+  goalsWorkspace: (date: string) => ["goals", "workspace", date] as const,
   goalsFiltered: (domain?: string, status?: string) =>
     ["goals", "filtered", domain ?? "all", status ?? "all"] as const,
   goalDetail: (goalId: string) => ["goals", "detail", goalId] as const,
@@ -339,6 +340,22 @@ export const taskQueryTracksUnscheduledTasks = (queryKey: readonly unknown[]) =>
 const taskQueryShouldRefreshForCoreMutation = (queryKey: readonly unknown[], date: string) =>
   taskQueryTouchesDate(queryKey, date) || taskQueryTracksUnscheduledTasks(queryKey);
 
+export const invalidateGoalData = (queryClient: QueryClient, date?: string) => {
+  void queryClient.invalidateQueries({ queryKey: queryKeys.goalsAll });
+  void queryClient.invalidateQueries({ queryKey: ["goals", "filtered"] });
+
+  if (!date) {
+    void queryClient.invalidateQueries({ queryKey: ["goals", "workspace"] });
+    void queryClient.invalidateQueries({ queryKey: ["goals"] });
+    return;
+  }
+
+  void queryClient.invalidateQueries({
+    queryKey: queryKeys.goals(getWeekStartDate(date), `${getMonthString(date)}-01`),
+  });
+  void queryClient.invalidateQueries({ queryKey: queryKeys.goalsWorkspace(date) });
+};
+
 export const invalidateCoreData = (
   queryClient: QueryClient,
   date: string,
@@ -411,9 +428,7 @@ export const invalidateCoreData = (
   }
 
   if (domains.has("goals")) {
-    void queryClient.invalidateQueries({
-      queryKey: queryKeys.goals(getWeekStartDate(date), `${getMonthString(date)}-01`),
-    });
+    invalidateGoalData(queryClient, date);
   }
 
   if (domains.has("review")) {

@@ -14,21 +14,20 @@ import {
 } from "../../lib/habits/timing.js";
 import {
   addDays,
-  getMonthEndDate,
-  getMonthStartIsoDate,
-  getWeekEndDate,
-  getWeekStartIsoDate,
   parseIsoDate,
 } from "../../lib/time/cycle.js";
 import { toIsoDateString } from "../../lib/time/date.js";
 import {
-  getDayWindowUtc,
   getTimeWindowUtc,
   getUserLocalDate,
   getUserLocalHour,
   normalizeTimezone,
 } from "../../lib/time/user-time.js";
-import { goalSummaryInclude } from "../planning/planning-record-shapes.js";
+import { getDayContext, type ScoringDayContext } from "./scoring-day-context.js";
+import { SCORING_RULES, STRONG_DAY_STREAK_THRESHOLD } from "./scoring-rules.js";
+import { ensureCycle } from "./planning-cycle-service.js";
+
+export { ensureCycle } from "./planning-cycle-service.js";
 
 type ScoreLabel = "Strong Day" | "Solid Day" | "Recovering Day" | "Off-Track Day";
 type ScoreBucketKey =
@@ -105,39 +104,6 @@ export interface ScoreHistoryResponse {
   generatedAt: string;
 }
 
-const SUPPORT_PRIORITY_POINTS: Record<number, number> = {
-  1: 8,
-  2: 6,
-};
-
-const STRONG_DAY_STREAK_THRESHOLD = 70;
-
-const planningCycleInclude = {
-  priorities: {
-    orderBy: {
-      slot: "asc",
-    },
-    include: {
-      goal: {
-        include: goalSummaryInclude,
-      },
-    },
-  },
-  dailyReview: true,
-  dailyScore: true,
-  weeklyReview: true,
-  monthlyReview: true,
-} satisfies Prisma.PlanningCycleInclude;
-
-function isPrismaErrorCode(error: unknown, code: string) {
-  return (
-    typeof error === "object" &&
-    error !== null &&
-    "code" in error &&
-    (error as { code?: unknown }).code === code
-  );
-}
-
 function roundToOneDecimal(value: number) {
   return Math.round(value * 10) / 10;
 }
@@ -206,60 +172,6 @@ function buildScoreHistorySummary(entries: ScoreHistoryDayResponse[]) {
     current7DayAverage: averageFinalizedScores(entries.slice(-7)),
     previous7DayAverage: entries.length >= 14 ? averageFinalizedScores(entries.slice(-14, -7)) : null,
   };
-}
-
-export async function ensureCycle(
-  prisma: PrismaClient | Prisma.TransactionClient,
-  input: {
-    userId: string;
-    cycleType: "DAY" | "WEEK" | "MONTH";
-    cycleStartDate: Date;
-    cycleEndDate: Date;
-  },
-) {
-  const where = {
-    userId_cycleType_cycleStartDate: {
-      userId: input.userId,
-      cycleType: input.cycleType,
-      cycleStartDate: input.cycleStartDate,
-    },
-  } satisfies Prisma.PlanningCycleWhereUniqueInput;
-
-  try {
-    return await prisma.planningCycle.upsert({
-      where,
-      update: {
-        cycleEndDate: input.cycleEndDate,
-      },
-      create: input,
-      include: planningCycleInclude,
-    });
-  } catch (error) {
-    if (!isPrismaErrorCode(error, "P2002")) {
-      throw error;
-    }
-
-    const existingCycle = await prisma.planningCycle.findUnique({
-      where,
-      include: planningCycleInclude,
-    });
-
-    if (!existingCycle) {
-      throw error;
-    }
-
-    if (existingCycle.cycleEndDate.getTime() === input.cycleEndDate.getTime()) {
-      return existingCycle;
-    }
-
-    return prisma.planningCycle.update({
-      where,
-      data: {
-        cycleEndDate: input.cycleEndDate,
-      },
-      include: planningCycleInclude,
-    });
-  }
 }
 
 function buildBucket(
@@ -383,225 +295,9 @@ function countLoggedExpenseEntries(input: {
   return input.ledgerExpenses.length + legacyOnlyExpenses.length;
 }
 
-async function getDayContext(prisma: PrismaClient, userId: string, date: Date) {
-  const targetIsoDate = toIsoDateString(date);
-  const targetDate = parseIsoDate(targetIsoDate);
-  const preferences = await prisma.userPreference.findUnique({
-    where: {
-      userId,
-    },
-  });
-  const timezone = normalizeTimezone(preferences?.timezone);
-  const weekStartsOn = preferences?.weekStartsOn ?? 1;
-  const { start: dayWindowStart, end: dayWindowEnd } = getDayWindowUtc(targetIsoDate, timezone);
-  const tomorrowDate = addDays(targetDate, 1);
-  const tomorrowIsoDate = toIsoDateString(tomorrowDate);
-  const weekStartDate = parseIsoDate(getWeekStartIsoDate(targetIsoDate, weekStartsOn));
-  const monthStartDate = parseIsoDate(getMonthStartIsoDate(targetIsoDate));
-  const nextMonthStart = new Date(
-    Date.UTC(monthStartDate.getUTCFullYear(), monthStartDate.getUTCMonth() + 1, 1),
-  );
-
-  const dayCycle = await ensureCycle(prisma, {
-    userId,
-    cycleType: "DAY",
-    cycleStartDate: targetDate,
-    cycleEndDate: targetDate,
-  });
-
-  const tomorrowCycle = await ensureCycle(prisma, {
-    userId,
-    cycleType: "DAY",
-    cycleStartDate: tomorrowDate,
-    cycleEndDate: tomorrowDate,
-  });
-
-  const weekCycle = await ensureCycle(prisma, {
-    userId,
-    cycleType: "WEEK",
-    cycleStartDate: weekStartDate,
-    cycleEndDate: getWeekEndDate(weekStartDate),
-  });
-
-  await ensureCycle(prisma, {
-    userId,
-    cycleType: "MONTH",
-    cycleStartDate: monthStartDate,
-    cycleEndDate: getMonthEndDate(monthStartDate),
-  });
-  await ensureCycle(prisma, {
-    userId,
-    cycleType: "MONTH",
-    cycleStartDate: nextMonthStart,
-    cycleEndDate: getMonthEndDate(nextMonthStart),
-  });
-
-  const [
-    tasks,
-    dailyLaunch,
-    activeHabits,
-    habitCheckins,
-    activeRoutines,
-    routineCheckins,
-    waterLogs,
-    mealLogs,
-    workoutDay,
-    financeTransactions,
-    expenses,
-    dueAdminItems,
-  ] = await Promise.all([
-    prisma.task.findMany({
-      where: {
-        userId,
-        scheduledForDate: targetDate,
-      },
-      include: {
-        plannerBlockTask: {
-          include: {
-            block: true,
-          },
-        },
-      },
-      orderBy: [{ dueAt: "asc" }, { createdAt: "asc" }],
-    }),
-    prisma.dailyLaunch?.findUnique?.({
-      where: {
-        planningCycleId: dayCycle.id,
-      },
-    }) ?? Promise.resolve(null),
-    prisma.habit.findMany({
-      where: {
-        userId,
-        status: "ACTIVE",
-        archivedAt: null,
-      },
-      include: {
-        recurrenceRule: {
-          include: {
-            exceptions: {
-              orderBy: {
-                occurrenceDate: "asc",
-              },
-            },
-          },
-        },
-        pauseWindows: {
-          orderBy: {
-            startsOn: "asc",
-          },
-        },
-      },
-    }),
-    prisma.habitCheckin.findMany({
-      where: {
-        habit: {
-          userId,
-        },
-        occurredOn: targetDate,
-      },
-    }),
-    prisma.routine.findMany({
-      where: {
-        userId,
-        status: "ACTIVE",
-      },
-      include: {
-        items: {
-          orderBy: {
-            sortOrder: "asc",
-          },
-        },
-      },
-    }),
-    prisma.routineItemCheckin.findMany({
-      where: {
-        occurredOn: targetDate,
-        routineItem: {
-          routine: {
-            userId,
-          },
-        },
-      },
-    }),
-    prisma.waterLog.findMany({
-      where: {
-        userId,
-        occurredAt: {
-          gte: dayWindowStart,
-          lt: dayWindowEnd,
-        },
-      },
-    }),
-    prisma.mealLog.findMany({
-      where: {
-        userId,
-        occurredAt: {
-          gte: dayWindowStart,
-          lt: dayWindowEnd,
-        },
-      },
-    }),
-    prisma.workoutDay.findUnique({
-      where: {
-        userId_date: {
-          userId,
-          date: targetDate,
-        },
-      },
-    }),
-    prisma.financeTransaction?.findMany?.({
-      where: {
-        userId,
-        transactionType: "EXPENSE",
-        occurredOn: {
-          gte: targetDate,
-          lt: tomorrowDate,
-        },
-      },
-    }) ?? Promise.resolve([]),
-    prisma.expense.findMany({
-      where: {
-        userId,
-        spentOn: {
-          gte: targetDate,
-          lt: tomorrowDate,
-        },
-      },
-    }),
-    prisma.adminItem.findMany({
-      where: {
-        userId,
-        dueOn: targetDate,
-      },
-    }),
-  ]);
-
-  return {
-    date: targetDate,
-    targetIsoDate,
-    dayCycle,
-    tomorrowCycle,
-    weekCycle,
-    tasks,
-    dailyLaunch,
-    activeHabits,
-    habitCheckins,
-    activeRoutines,
-    routineCheckins,
-    waterLogs,
-    mealLogs,
-    workoutDay,
-    financeTransactions,
-    expenses,
-    dueAdminItems,
-    preferences,
-    timezone,
-  };
-}
-
 function getRoutineCompletion(
-  routines: Awaited<ReturnType<typeof getDayContext>>["activeRoutines"],
-  routineCheckins: Awaited<ReturnType<typeof getDayContext>>["routineCheckins"],
+  routines: ScoringDayContext["activeRoutines"],
+  routineCheckins: ScoringDayContext["routineCheckins"],
   input: {
     targetIsoDate: IsoDateString;
     now: Date;
@@ -708,7 +404,7 @@ function getRoutineCompletion(
 }
 
 function sortTasksForScore(
-  tasks: Awaited<ReturnType<typeof getDayContext>>["tasks"],
+  tasks: ScoringDayContext["tasks"],
 ) {
   return tasks
     .slice()
@@ -767,29 +463,34 @@ export async function calculateDailyScore(
     context.tasks.filter((task) => task.id !== mustWinTask?.id),
   ).slice(0, 5);
 
-  const launchEarned = context.dailyLaunch?.completedAt ? 4 : 0;
-  const launchApplicable = 4;
-  const mustWinApplicable = mustWinTask ? 10 : 0;
+  const launchEarned = context.dailyLaunch?.completedAt
+    ? SCORING_RULES.planAndPriorities.launchCompletion
+    : 0;
+  const launchApplicable = SCORING_RULES.planAndPriorities.launchCompletion;
+  const mustWinApplicable = mustWinTask ? SCORING_RULES.planAndPriorities.mustWinComplete : 0;
   const mustWinEarned =
     mustWinTask?.status === "COMPLETED"
-      ? 10
+      ? SCORING_RULES.planAndPriorities.mustWinComplete
       : mustWinTask?.progressState === "ADVANCED"
-        ? 7
+        ? SCORING_RULES.planAndPriorities.mustWinAdvanced
         : mustWinTask?.progressState === "STARTED"
-          ? 4
+          ? SCORING_RULES.planAndPriorities.mustWinStarted
           : 0;
   const priorityEarned = supportPriorities.reduce(
     (sum, priority) =>
-      sum + (priority.status === "COMPLETED" ? SUPPORT_PRIORITY_POINTS[priority.slot] ?? 0 : 0),
+      sum + (priority.status === "COMPLETED" ? SCORING_RULES.planAndPriorities.supportPriorityPoints[priority.slot] ?? 0 : 0),
     0,
   );
   const priorityApplicable = supportPriorities.reduce(
-    (sum, priority) => sum + (SUPPORT_PRIORITY_POINTS[priority.slot] ?? 0),
+    (sum, priority) => sum + (SCORING_RULES.planAndPriorities.supportPriorityPoints[priority.slot] ?? 0),
     0,
   );
   const completedTaskCount = tasksForScore.filter((task) => task.status === "COMPLETED").length;
-  const taskApplicable = tasksForScore.length > 0 ? 2 : 0;
-  const taskEarned = taskApplicable > 0 ? 2 * (completedTaskCount / tasksForScore.length) : 0;
+  const taskApplicable = tasksForScore.length > 0 ? SCORING_RULES.planAndPriorities.supportTaskCompletion : 0;
+  const taskEarned =
+    taskApplicable > 0
+      ? SCORING_RULES.planAndPriorities.supportTaskCompletion * (completedTaskCount / tasksForScore.length)
+      : 0;
   const planBucket = buildBucket(
     "plan_and_priorities",
     "Plan and Priorities",
@@ -818,8 +519,11 @@ export async function calculateDailyScore(
     0,
   );
   const habitTargetUnits = dueHabits.reduce((sum, habit) => sum + habit.targetPerDay, 0);
-  const habitApplicable = dueHabits.length > 0 ? 12 : 0;
-  const habitEarned = habitTargetUnits > 0 ? 12 * (habitCompletedUnits / habitTargetUnits) : 0;
+  const habitApplicable = dueHabits.length > 0 ? SCORING_RULES.routinesAndHabits.habitCompletion : 0;
+  const habitEarned =
+    habitTargetUnits > 0
+      ? SCORING_RULES.routinesAndHabits.habitCompletion * (habitCompletedUnits / habitTargetUnits)
+      : 0;
   const timedDueHabits = dueHabits.filter((habit) =>
     isScoredHabitTimingMode(
       habit.timingMode === "EXACT_TIME"
@@ -832,7 +536,10 @@ export async function calculateDailyScore(
       habit.targetPerDay,
     ),
   );
-  const habitPunctualityShare = timedDueHabits.length > 0 ? 3 / timedDueHabits.length : 0;
+  const habitPunctualityShare =
+    timedDueHabits.length > 0
+      ? SCORING_RULES.routinesAndHabits.habitPunctuality / timedDueHabits.length
+      : 0;
   const rescueActive = context.dailyLaunch?.dayMode === "RESCUE" || context.dailyLaunch?.dayMode === "RECOVERY";
   const habitPunctualityEarned = timedDueHabits.reduce((sum, habit) => {
     const completedAt =
@@ -867,34 +574,35 @@ export async function calculateDailyScore(
     "routines_and_habits",
     "Routines and Habits",
     routines.earned + routines.punctualityEarned + habitEarned + habitPunctualityEarned,
-    routines.applicable + habitApplicable + (timedDueHabits.length > 0 ? 3 : 0),
+    routines.applicable + habitApplicable + (timedDueHabits.length > 0 ? SCORING_RULES.routinesAndHabits.habitPunctuality : 0),
     "Required routine items, due habit repetitions, and on-time completion for timed consistency work.",
   );
 
-  const waterTarget = context.preferences?.dailyWaterTargetMl ?? 2500;
+  const waterTarget = context.preferences?.dailyWaterTargetMl ?? SCORING_RULES.healthBasics.defaultWaterTargetMl;
   const waterMl = context.waterLogs.reduce((sum, log) => sum + log.amountMl, 0);
-  const waterEarned = 8 * Math.min(1, waterTarget > 0 ? waterMl / waterTarget : 0);
+  const waterEarned = SCORING_RULES.healthBasics.water * Math.min(1, waterTarget > 0 ? waterMl / waterTarget : 0);
   const todayIsoDate = getUserLocalDate(new Date(), context.preferences?.timezone);
   const mealTargetCount =
     context.targetIsoDate === todayIsoDate
       ? getMealTargetCountForHour(getUserLocalHour(new Date(), context.preferences?.timezone))
-      : 3;
+      : SCORING_RULES.healthBasics.defaultMealTargetCount;
   const mealScore = scoreMealConsistency(context.mealLogs, mealTargetCount);
-  const workoutApplicable = context.workoutDay && context.workoutDay.planType !== "NONE" ? 10 : 0;
+  const workoutApplicable =
+    context.workoutDay && context.workoutDay.planType !== "NONE" ? SCORING_RULES.healthBasics.workout : 0;
   const workoutEarned =
     workoutApplicable === 0
       ? 0
       : context.workoutDay?.actualStatus === "COMPLETED" ||
           context.workoutDay?.actualStatus === "RECOVERY_RESPECTED"
-        ? 10
+        ? SCORING_RULES.healthBasics.workout
         : context.workoutDay?.actualStatus === "FALLBACK"
-          ? 5
+          ? SCORING_RULES.healthBasics.workoutFallback
           : 0;
   const healthBucket = buildBucket(
     "health_basics",
     "Health Basics",
     waterEarned + mealScore.earnedPoints + workoutEarned,
-    8 + mealScore.applicablePoints + workoutApplicable,
+    SCORING_RULES.healthBasics.water + mealScore.applicablePoints + workoutApplicable,
     "Water target, meal logging quality, and workout or recovery adherence.",
   );
 
@@ -902,12 +610,16 @@ export async function calculateDailyScore(
     ledgerExpenses: context.financeTransactions,
     legacyExpenses: context.expenses,
   });
-  const expenseApplicable = loggedExpenseCount > 0 ? 5 : 0;
-  const expenseEarned = loggedExpenseCount > 0 ? 5 * Math.min(1, loggedExpenseCount / 2) : 0;
-  const dueAdminApplicable = context.dueAdminItems.length > 0 ? 5 : 0;
+  const expenseApplicable = loggedExpenseCount > 0 ? SCORING_RULES.financeAndAdmin.expenseLogging : 0;
+  const expenseEarned =
+    loggedExpenseCount > 0
+      ? SCORING_RULES.financeAndAdmin.expenseLogging *
+        Math.min(1, loggedExpenseCount / SCORING_RULES.financeAndAdmin.expenseTargetCount)
+      : 0;
+  const dueAdminApplicable = context.dueAdminItems.length > 0 ? SCORING_RULES.financeAndAdmin.dueAdmin : 0;
   const dueAdminEarned =
     context.dueAdminItems.length > 0
-      ? 5 *
+      ? SCORING_RULES.financeAndAdmin.dueAdmin *
         (context.dueAdminItems.filter((item) => item.status === "DONE" || item.status === "RESCHEDULED").length /
           context.dueAdminItems.length)
       : 0;
@@ -920,13 +632,16 @@ export async function calculateDailyScore(
   );
 
   const tomorrowPriorityCount = getRequiredTomorrowPriorityCount(context.dayCycle.dailyReview?.tomorrowAdjustment);
-  const tomorrowPrepared = context.tomorrowCycle.priorities.length >= tomorrowPriorityCount ? 4 : 0;
-  const reviewCompleted = context.dayCycle.dailyReview ? 6 : 0;
+  const tomorrowPrepared =
+    context.tomorrowCycle.priorities.length >= tomorrowPriorityCount
+      ? SCORING_RULES.reviewAndReset.tomorrowPrepared
+      : 0;
+  const reviewCompleted = context.dayCycle.dailyReview ? SCORING_RULES.reviewAndReset.reviewCompletion : 0;
   const reviewBucket = buildBucket(
     "review_and_reset",
     "Review and Reset",
     reviewCompleted + tomorrowPrepared,
-    10,
+    SCORING_RULES.reviewAndReset.reviewCompletion + SCORING_RULES.reviewAndReset.tomorrowPrepared,
     "Daily review completion plus tomorrow preparation.",
   );
 

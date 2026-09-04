@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { FinanceTimelineItem } from "@life-os/contracts";
 
-import { buildFinanceAttentionItems } from "../../src/modules/home/finance-attention.js";
+import { buildFinanceAttentionItems } from "../../src/modules/finance/home-finance-attention.js";
 
 const timelineItem = (
   overrides: Partial<FinanceTimelineItem>,

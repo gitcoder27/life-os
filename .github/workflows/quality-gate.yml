@@ -31,5 +31,11 @@ jobs:
       - name: Build
         run: npm run build
 
+      - name: Contracts tests
+        run: npm run test -w packages/contracts
+
       - name: Server tests
         run: npm run test -w server
+
+      - name: Client tests
+        run: npm run test -w client

@@ -37,9 +37,11 @@ const env: AppEnv = {
   DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/life_os",
   DEV_DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/life_os_dev",
   PROD_DATABASE_URL: undefined,
+  ENV_FILE_OVERRIDE: false,
   DATABASE_SEPARATION_STRICT: true,
   AUTO_CREATE_DATABASE: true,
   AUTO_APPLY_MIGRATIONS: true,
+  TRUST_PROXY: false,
   SESSION_COOKIE_NAME: "life_os_session",
   SESSION_SECRET: "prod-secret-with-at-least-thirty-two-chars",
   SESSION_TTL_DAYS: 14,
@@ -49,6 +51,7 @@ const env: AppEnv = {
   BOOTSTRAP_USER_EMAIL: undefined,
   BOOTSTRAP_USER_PASSWORD: undefined,
   BOOTSTRAP_USER_DISPLAY_NAME: undefined,
+  ALLOW_PRODUCTION_BOOTSTRAP: false,
   OWNER_EMAIL: undefined,
   OWNER_PASSWORD: undefined,
   OWNER_DISPLAY_NAME: "Owner",
@@ -132,9 +135,13 @@ describe("worker scheduling", () => {
     );
   });
 
-  it("disconnects Prisma when a selected job fails", async () => {
+  it("disconnects Prisma and reports an aggregate error when selected jobs fail", async () => {
     const disconnect = vi.fn(async () => undefined);
     const failure = new Error("job failed");
+    const logger = {
+      info: vi.fn(),
+      error: vi.fn(),
+    } as unknown as Console;
 
     await expect(
       startWorker(["--schedule=weekly"], {
@@ -151,13 +158,55 @@ describe("worker scheduling", () => {
             }),
           },
         ],
-        logger: {
-          info: vi.fn(),
-          error: vi.fn(),
-        } as unknown as Console,
+        logger,
       }),
-    ).rejects.toThrow("job failed");
+    ).rejects.toThrow("[life-os-worker] 1 of 1 selected job(s) failed: weekly-job: job failed");
 
     expect(disconnect).toHaveBeenCalledTimes(1);
+    expect(logger.error).toHaveBeenCalledWith(
+      expect.stringContaining("[life-os-worker] failed: weekly-job"),
+    );
+  });
+
+  it("continues running later selected jobs after one job fails", async () => {
+    const disconnect = vi.fn(async () => undefined);
+    const firstRun = vi.fn(async () => {
+      throw new Error("first failed");
+    });
+    const secondRun = vi.fn(async () => ({ summary: "second complete" }));
+    const logger = {
+      info: vi.fn(),
+      error: vi.fn(),
+    } as unknown as Console;
+
+    await expect(
+      startWorker(["--schedule=daily"], {
+        getEnv: () => env,
+        prepareRuntimeDatabase: vi.fn(async () => undefined),
+        createPrisma: () => ({ $disconnect: disconnect }) as never,
+        getRegisteredJobs: () => [
+          {
+            name: "first-daily-job",
+            schedule: "daily",
+            description: "Fails",
+            run: firstRun,
+          },
+          {
+            name: "second-daily-job",
+            schedule: "daily",
+            description: "Still runs",
+            run: secondRun,
+          },
+        ],
+        logger,
+      }),
+    ).rejects.toThrow("first-daily-job: first failed");
+
+    expect(firstRun).toHaveBeenCalledTimes(1);
+    expect(secondRun).toHaveBeenCalledTimes(1);
+    expect(disconnect).toHaveBeenCalledTimes(1);
+    expect(logger.info).toHaveBeenCalledWith(
+      expect.stringContaining("[life-os-worker] completed: second-daily-job"),
+    );
   });
 });

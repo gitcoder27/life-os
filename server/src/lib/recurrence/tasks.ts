@@ -14,6 +14,30 @@ type TaskRecurrenceRule = RecurrenceRule & {
   tasks: Task[];
 };
 
+const taskOccurrenceInclude = {
+  goal: {
+    include: goalSummaryInclude,
+  },
+  recurrenceRule: {
+    include: {
+      exceptions: {
+        orderBy: {
+          occurrenceDate: "asc",
+        },
+      },
+    },
+  },
+} satisfies Prisma.TaskInclude;
+
+function isPrismaUniqueConstraintError(error: unknown) {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    (error as { code?: unknown }).code === "P2002"
+  );
+}
+
 function getPrototypeTask(record: TaskRecurrenceRule) {
   return record.tasks.find((task) => task.id === record.ownerId) ?? record.tasks[0] ?? null;
 }
@@ -40,39 +64,57 @@ async function createTaskOccurrence(
     },
   });
 
-  return tx.task.create({
-    data: {
-      userId: prototype.userId,
-      title: prototype.title,
-      notes: prototype.notes,
-      kind: prototype.kind,
-      reminderAt:
-        prototype.kind === "REMINDER"
-          ? getUtcDateForLocalTime(scheduledForDate, "00:00", preferences?.timezone)
-          : prototype.reminderAt,
-      reminderTriggeredAt: null,
-      scheduledForDate: new Date(`${scheduledForDate}T00:00:00.000Z`),
-      dueAt: prototype.dueAt,
-      goalId: prototype.goalId,
-      originType: "RECURRING",
-      carriedFromTaskId,
-      recurrenceRuleId,
-    },
-    include: {
-      goal: {
-        include: goalSummaryInclude,
+  const scheduledForDateTime = new Date(`${scheduledForDate}T00:00:00.000Z`);
+
+  try {
+    const task = await tx.task.create({
+      data: {
+        userId: prototype.userId,
+        title: prototype.title,
+        notes: prototype.notes,
+        kind: prototype.kind,
+        reminderAt:
+          prototype.kind === "REMINDER"
+            ? getUtcDateForLocalTime(scheduledForDate, "00:00", preferences?.timezone)
+            : prototype.reminderAt,
+        reminderTriggeredAt: null,
+        scheduledForDate: scheduledForDateTime,
+        dueAt: prototype.dueAt,
+        goalId: prototype.goalId,
+        originType: "RECURRING",
+        carriedFromTaskId,
+        recurrenceRuleId,
       },
-      recurrenceRule: {
-        include: {
-          exceptions: {
-            orderBy: {
-              occurrenceDate: "asc",
-            },
-          },
-        },
+      include: taskOccurrenceInclude,
+    });
+
+    return {
+      task,
+      created: true,
+    };
+  } catch (error) {
+    if (!isPrismaUniqueConstraintError(error)) {
+      throw error;
+    }
+
+    const existingTask = await tx.task.findFirst({
+      where: {
+        userId: prototype.userId,
+        recurrenceRuleId,
+        scheduledForDate: scheduledForDateTime,
       },
-    },
-  });
+      include: taskOccurrenceInclude,
+    });
+
+    if (!existingTask) {
+      throw error;
+    }
+
+    return {
+      task: existingTask,
+      created: false,
+    };
+  }
 }
 
 async function loadTaskRecurrenceRule(tx: Tx, userId: string, recurrenceRuleId: string) {
@@ -158,9 +200,11 @@ export async function materializeRecurringTasksInRange(
       if (hasTaskOnIsoDate(ruleRecord, dueDate)) {
         continue;
       }
-      const createdTask = await createTaskOccurrence(tx, prototype, ruleRecord.id, dueDate, null);
-      ruleRecord.tasks.push(createdTask as unknown as Task);
-      created += 1;
+      const occurrence = await createTaskOccurrence(tx, prototype, ruleRecord.id, dueDate, null);
+      ruleRecord.tasks.push(occurrence.task as unknown as Task);
+      if (occurrence.created) {
+        created += 1;
+      }
     }
   }
 
@@ -189,7 +233,8 @@ export async function materializeNextRecurringTaskOccurrence(
     return null;
   }
 
-  return createTaskOccurrence(tx, prototype, recurrenceRuleId, nextDueDate, null);
+  const occurrence = await createTaskOccurrence(tx, prototype, recurrenceRuleId, nextDueDate, null);
+  return occurrence.task;
 }
 
 export async function applyRecurringTaskCarryForward(
@@ -249,7 +294,8 @@ export async function applyRecurringTaskCarryForward(
       });
     }
 
-    return createTaskOccurrence(tx, task, ruleRecord.id, targetDate, task.id);
+    const occurrence = await createTaskOccurrence(tx, task, ruleRecord.id, targetDate, task.id);
+    return occurrence.task;
   }
 
   await tx.task.update({
@@ -311,7 +357,8 @@ export async function applyRecurringTaskCarryForward(
     });
   }
 
-  return createTaskOccurrence(tx, task, ruleRecord.id, targetDate, task.id);
+  const occurrence = await createTaskOccurrence(tx, task, ruleRecord.id, targetDate, task.id);
+  return occurrence.task;
 }
 
 export async function applyRecurringTaskSkip(

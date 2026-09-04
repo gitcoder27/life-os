@@ -53,10 +53,11 @@ export async function executeDueReminders(
       task.user.preferences?.notificationPreferences,
     );
 
-    const createdNotification = await prisma.$transaction(async (tx) => {
-      await tx.task.update({
+    const reminderResult = await prisma.$transaction(async (tx) => {
+      const taskUpdate = await tx.task.updateMany({
         where: {
           id: task.id,
+          reminderTriggeredAt: null,
         },
         data: {
           scheduledForDate: task.scheduledForDate ?? parseIsoDate(todayIsoDate),
@@ -64,7 +65,14 @@ export async function executeDueReminders(
         },
       });
 
-      return ensureGeneratedNotification(tx, {
+      if (taskUpdate.count === 0) {
+        return {
+          claimed: false,
+          createdNotification: false,
+        };
+      }
+
+      const createdNotification = await ensureGeneratedNotification(tx, {
         userId: task.userId,
         notificationType: "task",
         severity: "WARNING",
@@ -77,13 +85,23 @@ export async function executeDueReminders(
         now,
         notificationPreferences,
       });
+
+      return {
+        claimed: true,
+        createdNotification,
+      };
     });
+
+    if (!reminderResult.claimed) {
+      skippedNotifications += 1;
+      continue;
+    }
 
     if (!task.scheduledForDate) {
       promoted += 1;
     }
 
-    if (createdNotification) {
+    if (reminderResult.createdNotification) {
       notified += 1;
     } else {
       skippedNotifications += 1;

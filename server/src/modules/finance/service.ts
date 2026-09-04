@@ -3,9 +3,11 @@ import type {
   AdminItem,
   BillCompletionMode as PrismaBillCompletionMode,
   Expense,
+  Prisma,
   PrismaClient,
 } from "@prisma/client";
 
+import { AppError } from "../../lib/errors/app-error.js";
 import { addDays } from "../../lib/time/cycle.js";
 import { toIsoDateString } from "../../lib/time/date.js";
 import {
@@ -116,6 +118,39 @@ export function serializeFinanceBill(bill: FinanceBillRecord): FinanceBillItem {
     createdAt: bill.createdAt.toISOString(),
     updatedAt: bill.updatedAt.toISOString(),
   };
+}
+
+type FinanceBillClient = Pick<Prisma.TransactionClient, "adminItem">;
+
+export async function findOwnedFinanceBill(
+  prisma: FinanceBillClient,
+  userId: string,
+  billId: string,
+) {
+  const bill = await prisma.adminItem.findFirst({
+    where: {
+      id: billId,
+      userId,
+      itemType: "BILL",
+    },
+    include: {
+      linkedExpense: {
+        select: {
+          id: true,
+        },
+      },
+    },
+  });
+
+  if (!bill) {
+    throw new AppError({
+      statusCode: 404,
+      code: "NOT_FOUND",
+      message: "Bill not found",
+    });
+  }
+
+  return bill;
 }
 
 function resolveTemplateRecurrence(template: {

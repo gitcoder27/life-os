@@ -82,6 +82,15 @@ const NEXT_DAY_START = new Date("2026-03-15T00:00:00.000Z");
 const TASK_ONE_ID = "11111111-1111-4111-8111-111111111111";
 const TASK_TWO_ID = "22222222-2222-4222-8222-222222222222";
 
+function buildPlannerBlockOverlapConstraintError() {
+  return Object.assign(new Error("constraint failed: DayPlannerBlock_no_overlap_per_cycle"), {
+    code: "P2004",
+    meta: {
+      database_error: "conflicting key value violates exclusion constraint \"DayPlannerBlock_no_overlap_per_cycle\"",
+    },
+  });
+}
+
 function buildTask(id: string, title: string): TaskRecord {
   return {
     id,
@@ -804,6 +813,54 @@ describe("day planner planning routes", () => {
         tasks: [],
       }),
     ]);
+  });
+
+  it("maps concurrent planner block overlap conflicts to a 400 on create", async () => {
+    (prisma.dayPlannerBlock as { create: ReturnType<typeof vi.fn> }).create.mockRejectedValueOnce(
+      buildPlannerBlockOverlapConstraintError(),
+    );
+
+    const response = await app!.inject({
+      method: "POST",
+      url: `/api/planning/days/${DAY_ISO}/planner-blocks`,
+      payload: {
+        title: "Race-prone block",
+        startsAt: "2026-03-14T09:00:00.000Z",
+        endsAt: "2026-03-14T10:00:00.000Z",
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(JSON.parse(response.body).message).toBe("Planner blocks cannot overlap");
+  });
+
+  it("maps concurrent planner block overlap conflicts to a 400 on update", async () => {
+    const cycle = ensurePlanningCycleRecord(DAY_START);
+    plannerBlocks.push({
+      id: "block-1",
+      planningCycleId: cycle.id,
+      title: "Existing block",
+      startsAt: new Date("2026-03-14T09:00:00.000Z"),
+      endsAt: new Date("2026-03-14T10:00:00.000Z"),
+      sortOrder: 1,
+      createdAt: new Date("2026-03-14T08:30:00.000Z"),
+      updatedAt: new Date("2026-03-14T08:30:00.000Z"),
+    });
+    (prisma.dayPlannerBlock as { update: ReturnType<typeof vi.fn> }).update.mockRejectedValueOnce(
+      buildPlannerBlockOverlapConstraintError(),
+    );
+
+    const response = await app!.inject({
+      method: "PATCH",
+      url: `/api/planning/days/${DAY_ISO}/planner-blocks/block-1`,
+      payload: {
+        startsAt: "2026-03-14T10:00:00.000Z",
+        endsAt: "2026-03-14T11:00:00.000Z",
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(JSON.parse(response.body).message).toBe("Planner blocks cannot overlap");
   });
 
   it("clears every planner block without completing or deleting assigned tasks", async () => {

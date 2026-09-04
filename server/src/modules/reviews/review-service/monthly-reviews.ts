@@ -325,38 +325,40 @@ export async function submitMonthlyReview(
   await assertOwnedPriorityGoalReferences(prisma, userId, payload.nextMonthOutcomes);
   const completedAt = new Date();
 
-  await prisma.monthlyReview.create({
-    data: {
-      userId,
-      planningCycleId: cycle.id,
-      monthVerdict: payload.monthVerdict,
-      biggestWin: payload.biggestWin,
-      biggestLeak: payload.biggestLeak,
-      ratingsJson: toJson(payload.ratings),
-      nextMonthTheme: payload.nextMonthTheme,
-      threeOutcomesJson: toJson(payload.nextMonthOutcomes),
-      habitChangesJson: toJson(payload.habitChanges),
-      simplifyText: payload.simplifyText,
-      notes: payload.notes ?? null,
-      completedAt,
-    },
-  });
+  const nextMonthOutcomes = await prisma.$transaction(async (tx) => {
+    await tx.monthlyReview.create({
+      data: {
+        userId,
+        planningCycleId: cycle.id,
+        monthVerdict: payload.monthVerdict,
+        biggestWin: payload.biggestWin,
+        biggestLeak: payload.biggestLeak,
+        ratingsJson: toJson(payload.ratings),
+        nextMonthTheme: payload.nextMonthTheme,
+        threeOutcomesJson: toJson(payload.nextMonthOutcomes),
+        habitChangesJson: toJson(payload.habitChanges),
+        simplifyText: payload.simplifyText,
+        notes: payload.notes ?? null,
+        completedAt,
+      },
+    });
 
-  await prisma.planningCycle.update({
-    where: {
-      id: nextMonthCycle.id,
-    },
-    data: {
-      theme: payload.nextMonthTheme,
-    },
-  });
+    await tx.planningCycle.update({
+      where: {
+        id: nextMonthCycle.id,
+      },
+      data: {
+        theme: payload.nextMonthTheme,
+      },
+    });
 
-  const nextMonthOutcomes = await replacePriorities(
-    prisma,
-    nextMonthCycle.id,
-    payload.nextMonthOutcomes,
-    "MONTHLY",
-  );
+    return replacePriorities(
+      tx,
+      nextMonthCycle.id,
+      payload.nextMonthOutcomes,
+      "MONTHLY",
+    );
+  });
 
   return {
     reviewCompletedAt: completedAt.toISOString(),

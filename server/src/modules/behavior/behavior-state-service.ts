@@ -14,19 +14,17 @@ import type {
 } from "@life-os/contracts";
 
 import { parseIsoDate } from "../../lib/time/cycle.js";
-import { getUserLocalDate, getUserLocalHour } from "../../lib/time/user-time.js";
+import { getUserLocalHour } from "../../lib/time/user-time.js";
 import { getActiveFocusSession } from "../focus/service.js";
-import { buildAdaptiveNextMove } from "../planning/adaptive-today-guidance.js";
 import {
-  loadAdaptiveTodayContext,
-  type AdaptiveTodayContext,
-} from "../planning/adaptive-today-context.js";
-import { assessDayCapacity } from "../planning/day-capacity.js";
-import { detectMissedDayPattern } from "../planning/day-mode.js";
-import type { PlanningApp } from "../planning/planning-types.js";
+  buildBehaviorPlanningNextMove,
+  loadBehaviorPlanningState,
+  type BehaviorPlanningApp,
+  type BehaviorPlanningContext,
+} from "../planning/behavior-planning-service.js";
 
 type BuildBehaviorStateInput = {
-  context: AdaptiveTodayContext;
+  context: BehaviorPlanningContext;
   capacity: DayCapacityAssessment;
   activeFocusSession?: FocusSessionItem | null;
   now?: Date;
@@ -67,7 +65,7 @@ const signalLabels: Record<BehaviorStateSignalKey, string> = {
 };
 
 export async function getBehaviorStateForUserDate(
-  app: PlanningApp,
+  app: BehaviorPlanningApp,
   input: {
     userId: string;
     date: IsoDateString;
@@ -75,44 +73,32 @@ export async function getBehaviorStateForUserDate(
   },
 ) {
   const now = input.now ?? new Date();
-  const context = await loadAdaptiveTodayContext(app, {
-    userId: input.userId,
-    date: input.date,
-  });
   const [activeFocusSession, overdueTaskCount] = await Promise.all([
     getActiveFocusSession(app.prisma, input.userId),
     countOverdueTasksForBehavior(app, input.userId, input.date),
   ]);
-  const isLiveDate = input.date === getUserLocalDate(now, context.timezone);
-  const hasMissedDayPattern = await detectMissedDayPattern(app.prisma, {
+  const planningState = await loadBehaviorPlanningState(app, {
     userId: input.userId,
-    targetDate: parseIsoDate(input.date),
-    overdueTaskCount,
-  });
-  const capacity = assessDayCapacity({
-    tasks: context.tasks,
-    plannerBlocks: context.plannerBlocks,
-    launch: context.launch,
-    mustWinTask: context.mustWinTask,
+    date: input.date,
     now,
-    isLiveDate,
+    overdueTaskCount,
   });
 
   return buildBehaviorState({
-    context,
-    capacity,
+    context: planningState.context,
+    capacity: planningState.capacity,
     activeFocusSession,
     now,
-    isLiveDate,
+    isLiveDate: planningState.isLiveDate,
     overdueTaskCount,
-    hasMissedDayPattern,
+    hasMissedDayPattern: planningState.hasMissedDayPattern,
   });
 }
 
 export function buildBehaviorState(input: BuildBehaviorStateInput): BehaviorStateSnapshot {
   const now = input.now ?? new Date();
   const localHour = input.isLiveDate ? getUserLocalHour(now, input.context.timezone) : 9;
-  const baseNextMove = buildAdaptiveNextMove({
+  const baseNextMove = buildBehaviorPlanningNextMove({
     context: input.context,
     capacity: input.capacity,
     activeFocusSession: input.activeFocusSession,
@@ -417,7 +403,7 @@ function resolveHomeAction(move: AdaptiveNextMove): HomeAction {
 }
 
 export async function countOverdueTasksForBehavior(
-  app: PlanningApp,
+  app: BehaviorPlanningApp,
   userId: string,
   date: IsoDateString,
 ) {

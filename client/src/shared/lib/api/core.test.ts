@@ -101,6 +101,27 @@ describe("core query invalidation", () => {
     } as never))).toBe(false);
   });
 
+  it("invalidates dated and shared goal query caches", () => {
+    const queryClient = createQueryClientStub();
+
+    invalidateCoreData(queryClient, "2026-05-03", {
+      domains: ["goals"],
+    });
+
+    expect(queryClient.invalidateQueries).toHaveBeenCalledWith({
+      queryKey: queryKeys.goalsAll,
+    });
+    expect(queryClient.invalidateQueries).toHaveBeenCalledWith({
+      queryKey: ["goals", "filtered"],
+    });
+    expect(queryClient.invalidateQueries).toHaveBeenCalledWith({
+      queryKey: queryKeys.goals("2026-04-27", "2026-05-01"),
+    });
+    expect(queryClient.invalidateQueries).toHaveBeenCalledWith({
+      queryKey: queryKeys.goalsWorkspace("2026-05-03"),
+    });
+  });
+
   it("deduplicates multi-date invalidations and targets optional domains", () => {
     const queryClient = createQueryClientStub();
 

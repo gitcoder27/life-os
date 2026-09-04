@@ -35,6 +35,7 @@ import {
 } from "../date";
 import {
   apiRequest,
+  invalidateGoalData,
   queryKeys,
   toSectionError,
   unwrapRequiredResult,
@@ -75,15 +76,14 @@ type GoalsWorkspaceFullResponse = GoalsWorkspaceResponse;
 /* ── Invalidation helper ── */
 
 const invalidateGoals = (queryClient: ReturnType<typeof useQueryClient>) => {
-  void queryClient.invalidateQueries({ queryKey: queryKeys.goalsAll });
-  void queryClient.invalidateQueries({ queryKey: ["goals"] });
+  invalidateGoalData(queryClient);
 };
 
 /* ── Queries ── */
 
 export const useGoalsWorkspaceQuery = (date: string) =>
   useQuery({
-    queryKey: ["goals", "workspace", date],
+    queryKey: queryKeys.goalsWorkspace(date),
     queryFn: () =>
       apiRequest<GoalsWorkspaceFullResponse>("/api/goals/workspace", {
         query: { date },
@@ -246,7 +246,7 @@ export const useUpdateWeekCapacityMutation = (weekStartDate: string) => {
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.weekPlan(weekStartDate) });
-      void queryClient.invalidateQueries({ queryKey: ["goals"] });
+      invalidateGoals(queryClient);
     },
   });
 };
@@ -265,7 +265,8 @@ export const useUpdateWeekPrioritiesMutation = (weekStartDate: string) => {
       errorMessage: "Weekly priorities update failed.",
     },
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ["goals"] });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.weekPlan(weekStartDate) });
+      invalidateGoals(queryClient);
     },
   });
 };
@@ -284,7 +285,7 @@ export const useUpdateMonthFocusMutation = (monthStartDate: string) => {
       errorMessage: "Monthly focus update failed.",
     },
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ["goals"] });
+      invalidateGoals(queryClient);
     },
   });
 };

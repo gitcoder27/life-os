@@ -7,7 +7,7 @@ import type {
   RecurrenceInput,
   RecurringTaskCarryPolicy,
 } from "@life-os/contracts";
-import type { PlanningCycle, PlanningCycleType } from "@prisma/client";
+import type { PlanningCycle, PlanningCycleType, Prisma, PrismaClient } from "@prisma/client";
 
 import { AppError } from "../../lib/errors/app-error.js";
 import { upsertRecurrenceRuleRecord } from "../../lib/recurrence/store.js";
@@ -41,6 +41,61 @@ const dayPlannerBlockWithPlanningCycleInclude = {
     },
   },
 } as const;
+
+const plannerBlockOverlapConstraintName = "DayPlannerBlock_no_overlap_per_cycle";
+type PlanningDb = PrismaClient | Prisma.TransactionClient;
+
+function buildPlannerBlockOverlapError() {
+  return new AppError({
+    statusCode: 400,
+    code: "BAD_REQUEST",
+    message: "Planner blocks cannot overlap",
+  });
+}
+
+function getPrismaDatabaseErrorText(error: unknown) {
+  if (typeof error !== "object" || error === null) {
+    return "";
+  }
+
+  const meta = "meta" in error ? (error as { meta?: unknown }).meta : null;
+  const databaseError =
+    typeof meta === "object" && meta !== null && "database_error" in meta
+      ? (meta as { database_error?: unknown }).database_error
+      : null;
+  const message = "message" in error ? (error as { message?: unknown }).message : null;
+
+  return `${typeof databaseError === "string" ? databaseError : ""} ${
+    typeof message === "string" ? message : ""
+  }`;
+}
+
+export function isPlannerBlockOverlapConstraintError(error: unknown) {
+  if (typeof error !== "object" || error === null) {
+    return false;
+  }
+
+  const errorText = getPrismaDatabaseErrorText(error);
+  if (!errorText.includes(plannerBlockOverlapConstraintName)) {
+    return false;
+  }
+
+  const code = "code" in error ? (error as { code?: unknown }).code : null;
+  const name = "name" in error ? (error as { name?: unknown }).name : null;
+
+  return code === "P2004" ||
+    name === "PrismaClientUnknownRequestError" ||
+    errorText.includes("23P01") ||
+    errorText.includes("exclusion constraint");
+}
+
+export function rethrowPlannerBlockOverlapConstraint(error: unknown): never {
+  if (isPlannerBlockOverlapConstraintError(error)) {
+    throw buildPlannerBlockOverlapError();
+  }
+
+  throw error;
+}
 
 export async function replaceGoalMilestones(
   app: PlanningApp,
@@ -191,7 +246,7 @@ export async function ensurePlanningCycle(
   });
 }
 
-export async function loadPlannerBlockWithTasks(prisma: any, blockId: string) {
+export async function loadPlannerBlockWithTasks(prisma: PlanningDb, blockId: string) {
   return prisma.dayPlannerBlock.findUniqueOrThrow({
     where: {
       id: blockId,
@@ -200,7 +255,7 @@ export async function loadPlannerBlockWithTasks(prisma: any, blockId: string) {
   });
 }
 
-export async function loadPlannerBlocks(prisma: any, planningCycleId: string) {
+export async function loadPlannerBlocks(prisma: PlanningDb, planningCycleId: string) {
   const blocks = await prisma.dayPlannerBlock.findMany({
     where: {
       planningCycleId,
@@ -215,7 +270,7 @@ export async function loadPlannerBlocks(prisma: any, planningCycleId: string) {
 }
 
 export async function seedPlannerBlocksFromMostRecentDay(
-  prisma: any,
+  prisma: PrismaClient,
   input: {
     userId: string;
     date: IsoDateString;
@@ -275,7 +330,7 @@ export async function seedPlannerBlocksFromMostRecentDay(
     return false;
   }
 
-  await prisma.$transaction(async (tx: any) => {
+  await prisma.$transaction(async (tx) => {
     const targetBlockCount = await tx.dayPlannerBlock.count({
       where: {
         planningCycleId: input.planningCycleId,
@@ -341,7 +396,7 @@ export async function findOwnedDayPlannerBlock(
 }
 
 export async function assertNoPlannerBlockOverlap(
-  prisma: any,
+  prisma: PlanningDb,
   planningCycleId: string,
   startsAt: Date,
   endsAt: Date,
@@ -368,15 +423,11 @@ export async function assertNoPlannerBlockOverlap(
   });
 
   if (overlappingBlock) {
-    throw new AppError({
-      statusCode: 400,
-      code: "BAD_REQUEST",
-      message: "Planner blocks cannot overlap",
-    });
+    throw buildPlannerBlockOverlapError();
   }
 }
 
-export async function normalizePlannerBlockSortOrders(tx: any, planningCycleId: string) {
+export async function normalizePlannerBlockSortOrders(tx: PlanningDb, planningCycleId: string) {
   const blocks = await tx.dayPlannerBlock.findMany({
     where: {
       planningCycleId,
@@ -391,7 +442,7 @@ export async function normalizePlannerBlockSortOrders(tx: any, planningCycleId: 
   });
 
   await Promise.all(
-    blocks.map((block: { id: string; sortOrder: number }, index: number) =>
+    blocks.map((block, index) =>
       block.sortOrder === index + 1
         ? Promise.resolve()
         : tx.dayPlannerBlock.update({
@@ -406,7 +457,7 @@ export async function normalizePlannerBlockSortOrders(tx: any, planningCycleId: 
   );
 }
 
-export async function normalizePlannerBlockTaskSortOrders(tx: any, blockId: string) {
+export async function normalizePlannerBlockTaskSortOrders(tx: PlanningDb, blockId: string) {
   const taskLinks = await tx.dayPlannerBlockTask.findMany({
     where: {
       blockId,
@@ -421,7 +472,7 @@ export async function normalizePlannerBlockTaskSortOrders(tx: any, blockId: stri
   });
 
   await Promise.all(
-    taskLinks.map((taskLink: { id: string; sortOrder: number }, index: number) =>
+    taskLinks.map((taskLink, index) =>
       taskLink.sortOrder === index + 1
         ? Promise.resolve()
         : tx.dayPlannerBlockTask.update({
@@ -436,7 +487,7 @@ export async function normalizePlannerBlockTaskSortOrders(tx: any, blockId: stri
   );
 }
 
-export async function removePlannerAssignmentForTask(tx: any, taskId: string) {
+export async function removePlannerAssignmentForTask(tx: PlanningDb, taskId: string) {
   const plannerAssignment = await tx.dayPlannerBlockTask.findUnique({
     where: {
       taskId,
@@ -462,7 +513,7 @@ export async function removePlannerAssignmentForTask(tx: any, taskId: string) {
 }
 
 export async function replacePlannerBlockTasks(
-  tx: any,
+  tx: PlanningDb,
   input: {
     userId: string;
     date: IsoDateString;
@@ -497,7 +548,7 @@ export async function replacePlannerBlockTasks(
   }
 
   const invalidTask = requestedTasks.find(
-    (task: { kind: string; scheduledForDate: Date | null }) =>
+    (task) =>
       task.kind !== "TASK" ||
       !task.scheduledForDate ||
       toIsoDateString(task.scheduledForDate) !== input.date,
@@ -521,8 +572,8 @@ export async function replacePlannerBlockTasks(
       taskId: true,
     },
   });
-  const currentTaskIds = currentBlockLinks.map((link: { taskId: string }) => link.taskId);
-  const removedTaskIds = currentTaskIds.filter((taskId: string) => !requestedTaskIds.includes(taskId));
+  const currentTaskIds = currentBlockLinks.map((link) => link.taskId);
+  const removedTaskIds = currentTaskIds.filter((taskId) => !requestedTaskIds.includes(taskId));
 
   const reassignedLinks = requestedTaskIds.length
     ? await tx.dayPlannerBlockTask.findMany({
@@ -540,8 +591,8 @@ export async function replacePlannerBlockTasks(
   const affectedOtherBlockIds = [
     ...new Set<string>(
       reassignedLinks
-        .filter((link: { blockId: string }) => link.blockId !== input.blockId)
-        .map((link: { blockId: string }) => link.blockId),
+        .filter((link) => link.blockId !== input.blockId)
+        .map((link) => link.blockId),
     ),
   ];
 
@@ -602,7 +653,7 @@ export async function replacePlannerBlockTasks(
 }
 
 export async function syncTaskRecurrence(
-  tx: any,
+  tx: PlanningDb,
   taskId: string,
   recurrence: RecurrenceInput | undefined,
   carryPolicy: RecurringTaskCarryPolicy | null | undefined,

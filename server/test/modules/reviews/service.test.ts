@@ -640,6 +640,7 @@ describe("reviews service", () => {
         ]),
       },
     } as any;
+    prisma.$transaction = vi.fn(async (callback: any) => callback(prisma));
 
     await submitWeeklyReview(prisma, "user-1", new Date("2026-03-09T00:00:00.000Z"), {
       biggestWin: "X",
@@ -676,6 +677,7 @@ describe("reviews service", () => {
 
     expect(prisma.weeklyReview.create).toHaveBeenCalledTimes(1);
     expect(prisma.monthlyReview.create).toHaveBeenCalledTimes(1);
+    expect(prisma.$transaction).toHaveBeenCalledTimes(2);
   });
 
   it("rejects weekly review focus habits owned by another user", async () => {

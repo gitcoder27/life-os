@@ -383,24 +383,26 @@ export async function submitWeeklyReview(
   });
   const completedAt = new Date();
 
-  await prisma.weeklyReview.create({
-    data: {
-      userId,
-      planningCycleId: cycle.id,
-      biggestWin: payload.biggestWin,
-      biggestMiss: payload.biggestMiss,
-      mainLesson: payload.mainLesson,
-      keepText: payload.keepText,
-      improveText: payload.improveText,
-      focusHabitId: payload.focusHabitId ?? null,
-      healthTargetText: payload.healthTargetText ?? null,
-      spendingWatchCategoryId: payload.spendingWatchCategoryId ?? null,
-      notes: payload.notes ?? null,
-      completedAt,
-    },
-  });
+  const nextWeekPriorities = await prisma.$transaction(async (tx) => {
+    await tx.weeklyReview.create({
+      data: {
+        userId,
+        planningCycleId: cycle.id,
+        biggestWin: payload.biggestWin,
+        biggestMiss: payload.biggestMiss,
+        mainLesson: payload.mainLesson,
+        keepText: payload.keepText,
+        improveText: payload.improveText,
+        focusHabitId: payload.focusHabitId ?? null,
+        healthTargetText: payload.healthTargetText ?? null,
+        spendingWatchCategoryId: payload.spendingWatchCategoryId ?? null,
+        notes: payload.notes ?? null,
+        completedAt,
+      },
+    });
 
-  const nextWeekPriorities = await replacePriorities(prisma, nextWeekCycle.id, payload.nextWeekPriorities, "WEEKLY");
+    return replacePriorities(tx, nextWeekCycle.id, payload.nextWeekPriorities, "WEEKLY");
+  });
 
   return {
     reviewCompletedAt: completedAt.toISOString(),

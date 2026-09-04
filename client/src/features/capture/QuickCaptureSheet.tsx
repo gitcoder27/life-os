@@ -258,16 +258,24 @@ export function QuickCaptureSheet({
     Reminder: "Captured into Inbox with a reminder date preserved for triage.",
   };
 
+  if (!open) {
+    return null;
+  }
+
   return (
-    <div
-      aria-hidden={!open}
-      className={`capture-sheet${open ? " capture-sheet--open" : ""}`}
-    >
+    <div className="capture-sheet capture-sheet--open">
       <div
         className="capture-sheet__backdrop"
         onClick={onClose}
       />
-      <section className="capture-sheet__panel" ref={panelRef} onKeyDown={handleFormKeyDown}>
+      <section
+        aria-label="Quick capture"
+        aria-modal="true"
+        className="capture-sheet__panel"
+        ref={panelRef}
+        role="dialog"
+        onKeyDown={handleFormKeyDown}
+      >
         <div className="capture-sheet__header">
           <div>
             <p className="page-eyebrow">Quick entry</p>

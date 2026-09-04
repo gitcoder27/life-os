@@ -3,7 +3,7 @@ import { z } from "zod";
 import type { ApiMeta, EntityId } from "./common.js";
 import type { HomeAction } from "./home.js";
 
-export const notificationCategorySchema = z.enum([
+export const notificationCategories = [
   "task",
   "inbox",
   "review",
@@ -12,7 +12,8 @@ export const notificationCategorySchema = z.enum([
   "habit",
   "routine",
   "behavior",
-]);
+] as const;
+export const notificationCategorySchema = z.enum(notificationCategories);
 export type NotificationCategory = z.infer<typeof notificationCategorySchema>;
 
 export const notificationSeveritySchema = z.enum(["info", "warning", "critical"]);

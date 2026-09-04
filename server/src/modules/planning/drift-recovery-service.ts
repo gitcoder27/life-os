@@ -7,6 +7,7 @@ import type {
   IsoDateString,
   PlanningTaskItem,
 } from "@life-os/contracts";
+import type { Prisma, PrismaClient } from "@prisma/client";
 
 import { AppError } from "../../lib/errors/app-error.js";
 import { withGeneratedAt } from "../../lib/http/response.js";
@@ -28,6 +29,8 @@ type ExecutionState = {
   slippedBlocks: DayPlannerBlockItem[];
   taskBlockMap: Map<string, DayPlannerBlockItem>;
 };
+
+type PlanningDb = PrismaClient | Prisma.TransactionClient;
 
 export function previewDriftRecovery(input: {
   context: AdaptiveTodayContext;
@@ -349,7 +352,7 @@ async function assertRecoveryTasksBelongToUser(app: PlanningApp, userId: string,
   }
 }
 
-async function deletePlannerAssignments(tx: any, taskIds: string[]) {
+async function deletePlannerAssignments(tx: PlanningDb, taskIds: string[]) {
   if (taskIds.length === 0) {
     return;
   }
@@ -363,7 +366,7 @@ async function deletePlannerAssignments(tx: any, taskIds: string[]) {
   });
 }
 
-async function normalizeAffectedBlocks(tx: any, state: ExecutionState, taskIds: string[]) {
+async function normalizeAffectedBlocks(tx: PlanningDb, state: ExecutionState, taskIds: string[]) {
   const blockIds = [
     ...new Set(
       taskIds.flatMap((taskId) => {

@@ -3,26 +3,31 @@ import type {
   FocusSessionExitReason,
   FocusSessionItem,
   FocusSessionTaskOutcome,
+  GoalDomainSystemKey,
+  GoalEngagementState,
+  GoalStatus,
+  TaskProgressState,
+  TaskStatus,
 } from "@life-os/contracts";
 import type { Prisma } from "@prisma/client";
 
 import { AppError } from "../../lib/errors/app-error.js";
 import {
-  fromPrismaGoalDomainSystemKey,
-  fromPrismaGoalEngagementState,
-  fromPrismaGoalStatus,
-  fromPrismaTaskProgressState,
-  fromPrismaTaskStatus,
-} from "../planning/planning-mappers.js";
-import { planningTaskInclude } from "../planning/planning-record-shapes.js";
-import {
   buildFocusTaskInsight,
   getFocusSessionActualMinutes,
 } from "./focus-insights.js";
 
+const focusTaskInclude = {
+  goal: {
+    include: {
+      domain: true,
+    },
+  },
+} as const;
+
 const focusSessionInclude = {
   task: {
-    include: planningTaskInclude,
+    include: focusTaskInclude,
   },
 } as const;
 
@@ -79,6 +84,81 @@ function fromPrismaFocusSessionExitReason(
       return "done_enough";
     default:
       return null;
+  }
+}
+
+function fromPrismaGoalDomainSystemKey(
+  systemKey: "UNASSIGNED" | "HEALTH" | "MONEY" | "WORK_GROWTH" | "HOME_ADMIN" | "DISCIPLINE" | "OTHER" | null,
+): GoalDomainSystemKey | null {
+  switch (systemKey) {
+    case "UNASSIGNED":
+      return "unassigned";
+    case "HEALTH":
+      return "health";
+    case "MONEY":
+      return "money";
+    case "WORK_GROWTH":
+      return "work_growth";
+    case "HOME_ADMIN":
+      return "home_admin";
+    case "DISCIPLINE":
+      return "discipline";
+    case "OTHER":
+      return "other";
+    default:
+      return null;
+  }
+}
+
+function fromPrismaGoalStatus(status: "ACTIVE" | "PAUSED" | "COMPLETED" | "ARCHIVED"): GoalStatus {
+  switch (status) {
+    case "ACTIVE":
+      return "active";
+    case "PAUSED":
+      return "paused";
+    case "COMPLETED":
+      return "completed";
+    case "ARCHIVED":
+      return "archived";
+  }
+}
+
+function fromPrismaGoalEngagementState(
+  engagementState: "PRIMARY" | "SECONDARY" | "PARKED" | "MAINTENANCE" | null | undefined,
+): GoalEngagementState | null {
+  switch (engagementState) {
+    case "PRIMARY":
+      return "primary";
+    case "SECONDARY":
+      return "secondary";
+    case "PARKED":
+      return "parked";
+    case "MAINTENANCE":
+      return "maintenance";
+    default:
+      return null;
+  }
+}
+
+function fromPrismaTaskStatus(status: "PENDING" | "COMPLETED" | "DROPPED"): TaskStatus {
+  switch (status) {
+    case "PENDING":
+      return "pending";
+    case "COMPLETED":
+      return "completed";
+    case "DROPPED":
+      return "dropped";
+  }
+}
+
+function fromPrismaTaskProgressState(progressState: "NOT_STARTED" | "STARTED" | "ADVANCED"): TaskProgressState {
+  switch (progressState) {
+    case "NOT_STARTED":
+      return "not_started";
+    case "STARTED":
+      return "started";
+    case "ADVANCED":
+      return "advanced";
   }
 }
 
@@ -344,7 +424,7 @@ export async function createFocusSession(
       id: input.taskId,
       userId: input.userId,
     },
-    include: planningTaskInclude,
+    include: focusTaskInclude,
   }));
 
   const now = new Date();

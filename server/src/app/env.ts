@@ -13,6 +13,7 @@ type ResolveEnvPathOptions = {
 
 type LoadSelectedEnvOptions = ResolveEnvPathOptions & {
   targetEnv?: NodeJS.ProcessEnv;
+  overrideExisting?: boolean;
 };
 
 export function getServerRootDir(moduleUrl = import.meta.url) {
@@ -80,9 +81,12 @@ export function loadSelectedEnv(options: LoadSelectedEnvOptions = {}) {
 
   const parsedEnv = parseEnv(readFileSync(envPath));
   const targetEnv = options.targetEnv ?? process.env;
+  const overrideExisting = options.overrideExisting ?? targetEnv.ENV_FILE_OVERRIDE === "true";
 
   for (const [key, value] of Object.entries(parsedEnv)) {
-    targetEnv[key] = value;
+    if (overrideExisting || targetEnv[key] === undefined) {
+      targetEnv[key] = value;
+    }
   }
 
   targetEnv.ENV_FILE = envPath;
@@ -94,6 +98,7 @@ const envPath = loadSelectedEnv();
 
 const defaultSessionSecret = "dev-only-change-me";
 const minimumProductionSessionSecretLength = 32;
+const minimumProductionBootstrapPasswordLength = 16;
 const weakProductionSessionSecrets = new Set([
   defaultSessionSecret,
   "change-me",
@@ -104,6 +109,63 @@ const weakProductionSessionSecrets = new Set([
   "session-secret",
   "life-os-session-secret",
 ]);
+const weakProductionBootstrapPasswords = new Set([
+  "change-me",
+  "changeme",
+  "change-me-please",
+  "change-me-before-production",
+  "password",
+  "password123",
+  "owner-password",
+  "bootstrap-password",
+  "admin-password",
+  "life-os-password",
+]);
+
+const envBooleanSchema = z.preprocess((value) => {
+  if (typeof value !== "string") {
+    return value;
+  }
+
+  const normalized = value.trim().toLowerCase();
+  if (["true", "1", "yes", "y", "on"].includes(normalized)) {
+    return true;
+  }
+  if (["false", "0", "no", "n", "off"].includes(normalized)) {
+    return false;
+  }
+
+  return value;
+}, z.boolean());
+
+function isRepeatedCharacter(value: string) {
+  return /^(.)(\1)+$/.test(value);
+}
+
+export function getProductionBootstrapPasswordIssue(password: string) {
+  const trimmedPassword = password.trim();
+  const normalizedPassword = trimmedPassword.toLowerCase();
+  const hasUppercase = /[A-Z]/.test(trimmedPassword);
+  const hasLowercase = /[a-z]/.test(trimmedPassword);
+  const hasDigit = /\d/.test(trimmedPassword);
+  const hasSymbol = /[^A-Za-z0-9]/.test(trimmedPassword);
+
+  if (
+    trimmedPassword.length < minimumProductionBootstrapPasswordLength ||
+    weakProductionBootstrapPasswords.has(normalizedPassword) ||
+    normalizedPassword.includes("password") ||
+    normalizedPassword.includes("change-me") ||
+    isRepeatedCharacter(trimmedPassword) ||
+    !hasUppercase ||
+    !hasLowercase ||
+    !hasDigit ||
+    !hasSymbol
+  ) {
+    return "Production bootstrap passwords must be non-example values with at least 16 characters, mixed case, a number, and a symbol";
+  }
+
+  return null;
+}
 
 const envSchema = z
   .object({
@@ -116,9 +178,11 @@ const envSchema = z
       .default("postgresql://postgres:postgres@localhost:5432/life_os"),
     DEV_DATABASE_URL: z.string().optional(),
     PROD_DATABASE_URL: z.string().optional(),
-    DATABASE_SEPARATION_STRICT: z.coerce.boolean().default(false),
-    AUTO_CREATE_DATABASE: z.coerce.boolean().default(false),
-    AUTO_APPLY_MIGRATIONS: z.coerce.boolean().default(false),
+    ENV_FILE_OVERRIDE: envBooleanSchema.default(false),
+    DATABASE_SEPARATION_STRICT: envBooleanSchema.default(false),
+    AUTO_CREATE_DATABASE: envBooleanSchema.default(false),
+    AUTO_APPLY_MIGRATIONS: envBooleanSchema.default(false),
+    TRUST_PROXY: envBooleanSchema.default(false),
     SESSION_COOKIE_NAME: z.string().default("life_os_session"),
     SESSION_SECRET: z.string().min(16).default(defaultSessionSecret),
     SESSION_TTL_DAYS: z.coerce.number().int().positive().default(14),
@@ -128,6 +192,7 @@ const envSchema = z
     BOOTSTRAP_USER_EMAIL: z.string().email().optional(),
     BOOTSTRAP_USER_PASSWORD: z.string().min(8).optional(),
     BOOTSTRAP_USER_DISPLAY_NAME: z.string().optional(),
+    ALLOW_PRODUCTION_BOOTSTRAP: envBooleanSchema.default(false),
     OWNER_EMAIL: z.string().email().optional(),
     OWNER_PASSWORD: z.string().min(8).optional(),
     OWNER_DISPLAY_NAME: z.string().default("Owner"),
@@ -139,18 +204,59 @@ const envSchema = z
 
     const trimmedSecret = value.SESSION_SECRET.trim();
     const normalizedSecret = trimmedSecret.toLowerCase();
-    const isRepeatedCharacter = /^(.)(\1)+$/.test(trimmedSecret);
 
     if (
       trimmedSecret.length < minimumProductionSessionSecretLength ||
       weakProductionSessionSecrets.has(normalizedSecret) ||
-      isRepeatedCharacter
+      isRepeatedCharacter(trimmedSecret)
     ) {
       context.addIssue({
         code: z.ZodIssueCode.custom,
         path: ["SESSION_SECRET"],
         message:
           "SESSION_SECRET must be explicitly set to a strong production-only value of at least 32 characters",
+      });
+    }
+
+    if (!value.DATABASE_SEPARATION_STRICT) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["DATABASE_SEPARATION_STRICT"],
+        message: "DATABASE_SEPARATION_STRICT=true is required in production",
+      });
+    }
+
+    const bootstrapEmail = value.BOOTSTRAP_USER_EMAIL ?? value.OWNER_EMAIL;
+    const bootstrapPassword = value.BOOTSTRAP_USER_PASSWORD ?? value.OWNER_PASSWORD;
+    const hasBootstrapCredential = Boolean(bootstrapEmail || bootstrapPassword);
+
+    if (!hasBootstrapCredential) {
+      return;
+    }
+
+    if (!value.ALLOW_PRODUCTION_BOOTSTRAP) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["ALLOW_PRODUCTION_BOOTSTRAP"],
+        message: "ALLOW_PRODUCTION_BOOTSTRAP=true is required to create a bootstrap user in production",
+      });
+    }
+
+    if (!bootstrapEmail || !bootstrapPassword) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["BOOTSTRAP_USER_EMAIL"],
+        message: "Production bootstrap requires both an email and password, or neither",
+      });
+      return;
+    }
+
+    const passwordIssue = getProductionBootstrapPasswordIssue(bootstrapPassword);
+    if (passwordIssue) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: value.BOOTSTRAP_USER_PASSWORD ? ["BOOTSTRAP_USER_PASSWORD"] : ["OWNER_PASSWORD"],
+        message: passwordIssue,
       });
     }
   });

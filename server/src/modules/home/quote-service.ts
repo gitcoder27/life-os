@@ -4,6 +4,7 @@ import type { HomeQuote } from "@life-os/contracts";
 const ZEN_QUOTES_BATCH_URL = "https://zenquotes.io/api/quotes";
 const ZEN_QUOTES_ATTRIBUTION_URL = "https://zenquotes.io";
 const CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+const FETCH_TIMEOUT_MS = 5_000;
 
 type FetchLike = typeof fetch;
 
@@ -70,11 +71,20 @@ function normalizeZenQuotesPayload(payload: unknown) {
 }
 
 async function fetchBatchQuotes(fetchImpl: FetchLike) {
-  const response = await fetchImpl(ZEN_QUOTES_BATCH_URL, {
-    headers: {
-      accept: "application/json",
-    },
-  });
+  const abortController = new AbortController();
+  const timeout = setTimeout(() => abortController.abort(), FETCH_TIMEOUT_MS);
+
+  let response: Response;
+  try {
+    response = await fetchImpl(ZEN_QUOTES_BATCH_URL, {
+      headers: {
+        accept: "application/json",
+      },
+      signal: abortController.signal,
+    });
+  } finally {
+    clearTimeout(timeout);
+  }
 
   if (!response.ok) {
     throw new Error(`ZenQuotes request failed with status ${response.status}.`);

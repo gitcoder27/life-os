@@ -18,8 +18,7 @@ import { getMonthEndDate, getWeekEndDate, parseIsoDate } from "../../lib/time/cy
 import { isoDateStringSchema } from "../../lib/validation/date-range.js";
 import { parseOrThrow } from "../../lib/validation/parse.js";
 import { timezoneSchema } from "../../lib/validation/timezone.js";
-import { ensureGoalConfigSeeded } from "../planning/goal-config.js";
-import { toPrismaGoalDomainSystemKey } from "../planning/planning-mappers.js";
+import { ensureOnboardingGoalConfigSeeded } from "../planning/onboarding-planning-service.js";
 
 const goalDomainSchema = z.enum([
   "unassigned",
@@ -32,6 +31,26 @@ const goalDomainSchema = z.enum([
 ]);
 const mealSlotSchema = z.enum(["breakfast", "lunch", "dinner", "snack"]);
 const routinePeriodSchema = z.enum(["morning", "evening"]);
+type OnboardingGoalDomain = z.infer<typeof goalDomainSchema>;
+
+function toPrismaGoalDomainSystemKey(domain: OnboardingGoalDomain) {
+  switch (domain) {
+    case "unassigned":
+      return "UNASSIGNED";
+    case "health":
+      return "HEALTH";
+    case "money":
+      return "MONEY";
+    case "work_growth":
+      return "WORK_GROWTH";
+    case "home_admin":
+      return "HOME_ADMIN";
+    case "discipline":
+      return "DISCIPLINE";
+    case "other":
+      return "OTHER";
+  }
+}
 
 const onboardingGoalSchema = z.object({
   title: z.string().min(1).max(200),
@@ -298,7 +317,7 @@ export const registerOnboardingRoutes: FastifyPluginAsync = async (app) => {
         },
       });
       if (payload.goals.length > 0) {
-        await ensureGoalConfigSeeded(tx, user.id);
+        await ensureOnboardingGoalConfigSeeded(tx, user.id);
         const goalDomains = await tx.goalDomainConfig.findMany({
           where: {
             userId: user.id,

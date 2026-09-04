@@ -11,9 +11,11 @@ const env: AppEnv = {
   DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/life_os",
   DEV_DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/life_os_dev",
   PROD_DATABASE_URL: undefined,
+  ENV_FILE_OVERRIDE: false,
   DATABASE_SEPARATION_STRICT: true,
-  AUTO_CREATE_DATABASE: true,
-  AUTO_APPLY_MIGRATIONS: true,
+  AUTO_CREATE_DATABASE: false,
+  AUTO_APPLY_MIGRATIONS: false,
+  TRUST_PROXY: false,
   SESSION_COOKIE_NAME: "life_os_session",
   SESSION_SECRET: "prod-secret-with-at-least-thirty-two-chars",
   SESSION_TTL_DAYS: 14,
@@ -23,6 +25,7 @@ const env: AppEnv = {
   BOOTSTRAP_USER_EMAIL: undefined,
   BOOTSTRAP_USER_PASSWORD: undefined,
   BOOTSTRAP_USER_DISPLAY_NAME: undefined,
+  ALLOW_PRODUCTION_BOOTSTRAP: false,
   OWNER_EMAIL: undefined,
   OWNER_PASSWORD: undefined,
   OWNER_DISPLAY_NAME: "Owner",
@@ -61,5 +64,53 @@ describe("prepareRuntimeDatabase", () => {
 
     expect(ensureExists).not.toHaveBeenCalled();
     expect(ensureMigrations).not.toHaveBeenCalled();
+  });
+
+  it("rejects production runtime database creation and migrations", async () => {
+    const ensureExists = vi.fn(async () => undefined);
+    const ensureMigrations = vi.fn(async () => undefined);
+
+    await expect(
+      prepareRuntimeDatabase(
+        {
+          ...env,
+          AUTO_CREATE_DATABASE: true,
+          AUTO_APPLY_MIGRATIONS: true,
+        },
+        {
+          assertSeparation: vi.fn(),
+          ensureExists,
+          ensureMigrations,
+        },
+      ),
+    ).rejects.toThrow(/cannot be enabled for production app or worker startup/);
+
+    expect(ensureExists).not.toHaveBeenCalled();
+    expect(ensureMigrations).not.toHaveBeenCalled();
+  });
+
+  it("keeps local runtime database preparation available", async () => {
+    const calls: string[] = [];
+
+    await prepareRuntimeDatabase(
+      {
+        ...env,
+        NODE_ENV: "development",
+        DATABASE_SEPARATION_STRICT: false,
+        AUTO_CREATE_DATABASE: true,
+        AUTO_APPLY_MIGRATIONS: true,
+      },
+      {
+        assertSeparation: vi.fn(() => calls.push("assert")),
+        ensureExists: vi.fn(async () => {
+          calls.push("exists");
+        }),
+        ensureMigrations: vi.fn(async () => {
+          calls.push("migrations");
+        }),
+      },
+    );
+
+    expect(calls).toEqual(["assert", "exists", "migrations"]);
   });
 });
