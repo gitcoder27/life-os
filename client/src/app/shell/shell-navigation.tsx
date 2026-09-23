@@ -117,6 +117,14 @@ export const ExpandIcon = (props: ShellIconProps) => (
   </ShellIcon>
 );
 
+export const MoreIcon = (props: ShellIconProps) => (
+  <ShellIcon {...props}>
+    <circle cx="4.4" cy="10" r="1.45" fill="currentColor" stroke="none" />
+    <circle cx="10" cy="10" r="1.45" fill="currentColor" stroke="none" />
+    <circle cx="15.6" cy="10" r="1.45" fill="currentColor" stroke="none" />
+  </ShellIcon>
+);
+
 export type ShellNavItem = {
   to: string;
   label: string;
@@ -136,3 +144,8 @@ export const shellNavItems: readonly ShellNavItem[] = [
   { to: "/goals", label: "Goals", hint: "weekly and monthly direction", icon: GoalsIcon },
   { to: "/reviews/daily", label: "Reviews", hint: "reflection loop", icon: ReviewsIcon },
 ] as const;
+
+/* Mobile tab bar fits five slots: the four highest-traffic destinations plus
+   a "More" sheet that lists everything else (including Settings). */
+export const mobilePrimaryNavItems: readonly ShellNavItem[] = shellNavItems.slice(0, 4);
+export const mobileMoreNavItems: readonly ShellNavItem[] = shellNavItems.slice(4);

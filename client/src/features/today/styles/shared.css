@@ -1754,3 +1754,11 @@
 .recovery-lane__body {
   animation: slideUp 0.3s var(--ease) both;
 }
+
+/* Touch devices: reveal row actions without hover */
+@media (hover: none) {
+  .today-priority-card__actions,
+  .today-task-card__actions {
+    opacity: 1;
+  }
+}

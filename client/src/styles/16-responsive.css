@@ -10,7 +10,7 @@
   }
 
   .shell-content {
-    padding: 1rem 1rem 6rem;
+    padding: 1rem 1rem calc(6rem + env(safe-area-inset-bottom));
   }
 
   .shell-header {
@@ -73,7 +73,7 @@
     display: grid;
     grid-template-columns: repeat(5, 1fr);
     gap: 0;
-    padding: 0.4rem 0.5rem 0.6rem;
+    padding: 0.4rem 0.5rem calc(0.6rem + env(safe-area-inset-bottom));
     border-top: 1px solid var(--border);
     background: rgba(12, 10, 7, 0.92);
     backdrop-filter: blur(16px);
@@ -84,10 +84,10 @@
     align-items: center;
     justify-content: center;
     padding: 0.5rem 0.35rem;
+    min-height: 2.75rem;
     text-align: center;
     border: 0;
     border-radius: var(--r-xs);
-    min-height: auto;
   }
 
   .mobile-nav .shell-nav__link--active {
@@ -122,7 +122,7 @@
   .mobile-capture {
     position: fixed;
     right: 1rem;
-    bottom: 5rem;
+    bottom: calc(5rem + env(safe-area-inset-bottom));
     z-index: 41;
     display: inline-flex;
     width: 3rem;
@@ -156,6 +156,7 @@
     border-radius: var(--r-lg) var(--r-lg) 0 0;
     max-height: 85vh;
     overflow-y: auto;
+    padding-bottom: calc(1.25rem + env(safe-area-inset-bottom));
   }
 
   .task-edit-sheet__grid,
@@ -174,5 +175,129 @@
 
   .task-reschedule-row {
     align-items: stretch;
+  }
+}
+
+/* ── Mobile "More" sheet ──
+   Opens from the 5th tab of the mobile nav; lists the destinations that
+   don't fit the tab bar. Markup follows the capture-sheet pattern. */
+
+.more-sheet {
+  pointer-events: none;
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+}
+
+.more-sheet--open {
+  pointer-events: auto;
+}
+
+.more-sheet__backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  opacity: 0;
+  transition: opacity var(--dur-slow) var(--ease);
+  backdrop-filter: blur(4px);
+}
+
+.more-sheet--open .more-sheet__backdrop {
+  opacity: 1;
+}
+
+.more-sheet__panel {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  max-height: 80vh;
+  overflow-y: auto;
+  border: 1px solid var(--border-active);
+  border-bottom: 0;
+  border-radius: var(--r-lg) var(--r-lg) 0 0;
+  background: linear-gradient(180deg, var(--panel-elevated), var(--panel));
+  padding: 1.25rem 1.25rem calc(1.25rem + env(safe-area-inset-bottom));
+  box-shadow: var(--shadow-lg);
+  transform: translateY(1.5rem);
+  opacity: 0;
+  transition: all 0.3s var(--ease);
+}
+
+.more-sheet--open .more-sheet__panel {
+  transform: translateY(0);
+  opacity: 1;
+}
+
+.more-sheet__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.85rem;
+}
+
+.more-sheet__title {
+  font-family: var(--font-display);
+  font-size: var(--fs-h2);
+  font-weight: 600;
+}
+
+.more-sheet__list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.5rem;
+}
+
+.more-sheet__link {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  min-height: 2.75rem;
+  padding: 0.6rem 0.7rem;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--text);
+  transition:
+    background var(--dur) var(--ease),
+    border-color var(--dur) var(--ease);
+}
+
+.more-sheet__link:active,
+.more-sheet__link--active {
+  border-color: var(--border-active);
+  background: var(--accent-soft);
+}
+
+.more-sheet__link .shell-nav__icon {
+  width: 1.85rem;
+  height: 1.85rem;
+}
+
+.more-sheet__text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.more-sheet__label {
+  font-size: var(--fs-body);
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.more-sheet__hint {
+  font-size: var(--fs-micro);
+  color: var(--text-tertiary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+@media (max-width: 400px) {
+  .more-sheet__list {
+    grid-template-columns: 1fr;
   }
 }

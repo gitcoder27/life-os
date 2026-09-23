@@ -29,10 +29,14 @@ import {
   CaptureIcon,
   CollapseIcon,
   ExpandIcon,
+  MoreIcon,
   SettingsIcon,
+  mobilePrimaryNavItems,
+  mobileMoreNavItems,
   shellNavItems,
 } from "./shell-navigation";
 import { BrandMark } from "../../shared/ui/BrandMark";
+import { MobileMoreSheet } from "./MobileMoreSheet";
 
 const SHELL_SIDEBAR_STORAGE_KEY = "lifeos:shell-sidebar";
 const SHELL_SIDEBAR_STORAGE_VERSION = 1;
@@ -122,6 +126,7 @@ export function AppShell() {
   const navigationType = useNavigationType();
   const [captureOpen, setCaptureOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => readStoredShellSidebarPreference());
   const [collapsedTooltip, setCollapsedTooltip] = useState<CollapsedTooltipState | null>(null);
   const [headerHeight, setHeaderHeight] = useState(0);
@@ -305,6 +310,10 @@ export function AppShell() {
 
   const sidebarClassName = `shell${sidebarCollapsed ? " shell--sidebar-collapsed" : ""}`;
   const sidebarToggleLabel = sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar";
+  const isMobileMoreActive = mobileMoreNavItems.some((item) => {
+    const segment = `/${item.to.split("/")[1]}`;
+    return location.pathname.startsWith(segment);
+  });
   const shellMainStyle = {
     "--shell-header-height": `${headerHeight}px`,
   } as CSSProperties;
@@ -461,7 +470,7 @@ export function AppShell() {
         </main>
 
         <nav className="mobile-nav">
-          {shellNavItems.slice(0, 5).map((item) => {
+          {mobilePrimaryNavItems.map((item) => {
             const isInboxItem = item.to === "/inbox";
 
             return (
@@ -485,6 +494,16 @@ export function AppShell() {
               </NavLink>
             );
           })}
+          <button
+            className={navClass(isMobileMoreActive)}
+            type="button"
+            onClick={() => setMoreOpen(true)}
+            aria-label="More pages"
+            aria-haspopup="dialog"
+            aria-expanded={moreOpen}
+          >
+            <span className="shell-nav__label">More</span>
+          </button>
         </nav>
 
         <button
@@ -500,6 +519,10 @@ export function AppShell() {
       <QuickCaptureSheet
         onClose={() => setCaptureOpen(false)}
         open={captureOpen}
+      />
+      <MobileMoreSheet
+        onClose={() => setMoreOpen(false)}
+        open={moreOpen}
       />
       <NotificationCenter
         anchorRef={notificationButtonRef}

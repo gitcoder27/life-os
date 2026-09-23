@@ -1363,6 +1363,19 @@
   opacity: 1;
 }
 
+/* Touch devices: reveal card, row, and graph-node actions without hover */
+@media (hover: none) {
+  .ap-goal-card__actions,
+  .inactive-goal-row__actions {
+    opacity: 1;
+  }
+
+  .graph-goal-node__quick-add,
+  .graph-goal-node__menu-trigger {
+    opacity: 1;
+  }
+}
+
 /* ── Detail Backdrop (overview mobile) ── */
 
 .detail-backdrop {
