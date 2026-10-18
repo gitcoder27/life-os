@@ -485,11 +485,18 @@ Check at **~1440px** and **~390px**, then once with OS "reduce motion" on.
 - [ ] At 390px the graph, toolbar and dock stack. Viewport buttons, subview toggle and capacity steppers are at least 44px.
 
 ### Left undone / follow-ups (Goals)
+
+**Dead code removed** (`refactor(goals): remove dead Goals components and CSS`, after the refresh commits; the counts table above predates it). Behavior is unchanged.
+- Components nothing imported: `GoalDomainSections`, `GoalFilters`, `GoalDetailPanel` and `SortablePlanningEditor`.
+- CSS with no matching `className` once those were gone: 70 classes in 60 and 23 in 50.
+  - In 60: the inline graph planner (`graph-planner*`, `graph-slot*`, `graph-column-*`, `graph-ghost*`, `graph-lane-label*`) with its 1180px media block, `ghq-plan__floating-inspector`/`-close`, `ghq-plan__inspector-close`, `ghq-plan-dock__header`, `ghq-today-alignment`, `ghq-inspector__empty*`, `ghq-inspector__eyebrow`, `goals-planning-editor__*`, and `linked-item__title--done`/`__cycle-badge` (used only by `GoalDetailPanel`).
+  - In 50: the `ap-page*`, `ap-workspace*`, `ap-filter-*`, `ap-domain-section*` and `ap-planning-panel*` shells, `ap-goal-form` and `ap-add-goal-row`. The file header now describes only the inspector.
+  - Kept: React Flow's own `.react-flow*` overrides, the `settings-config-*` block, and every live `.graph-goal-node` rule, so node dimensions are unchanged.
+  - Dynamic `className` templates (`foo--${x}`) were checked first, so modifier classes built at runtime were kept.
+
 - **Milestone editor controls** (check, icon and drag buttons) stay 22–24px on touch. Raising them to 44px overflows the editor's 22px grid tracks at 390px and enlarges the bordered check box. Fixing that needs a layout change to the editor row.
 - **Graph node controls** (branch toggle, menu button) keep their size on touch, because node outer dimensions feed `LEVEL_GAP`/`SIBLING_GAP`/`CONTENT_*`.
 - **Dimmed nodes** stay at 0.28 opacity, unchanged, while filtering. Like Today's focus-mode dimming (§5), they fall below AA on purpose.
 - **`--cat-*` adoption elsewhere.** Home's goal dots and Habits' health teal still use their literals. Repointing them to `--cat-*` is a one-line change per rule.
-- **Dead code**, restyled but not deleted:
-  - Components not imported anywhere: `GoalDomainSections`, `GoalFilters`, `GoalDetailPanel`, `SortablePlanningEditor`.
-  - CSS with no matching `className`: the inline graph planner (`graph-planner*`, `graph-slot*`, `graph-column-*`, `graph-ghost*`, `graph-lane-label*`), `ghq-plan__floating-inspector`, `ghq-today-alignment`, and the old `ap-page*`, `ap-workspace*` and `ap-planning-panel*` shells in 50. A heuristic scan finds 68 such classes in 60 (not counting React Flow's own) and 13 in 50, including small leftovers such as `ghq-inspector__empty*` and `ghq-plan__floating-close`.
+- **`priority-card*` / `priority-stack*` in `40-today-workspace.css`** are now unreferenced. Only `SortablePlanningEditor` rendered them. They sit in Today's stylesheet, so they were left for a Today cleanup.
 - **Not verified visually.** No browser was opened. Everything above was validated by typecheck, production build, both test suites and code review. The checklist above covers what still needs eyes.
