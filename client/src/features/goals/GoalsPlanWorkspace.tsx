@@ -50,19 +50,6 @@ import {
 
 /* ── Helpers ── */
 
-const domainEmojis: Record<string, string> = {
-  unassigned: "◌",
-  health: "♥",
-  money: "💼",
-  work_growth: "🧠",
-  home_admin: "🏡",
-  discipline: "🎯",
-};
-
-function getDomainEmoji(systemKey: string | null): string {
-  if (!systemKey) return "✦";
-  return domainEmojis[systemKey] ?? "✦";
-}
 
 const healthLabels: Record<string, string> = {
   on_track: "On Track",
@@ -247,7 +234,8 @@ function PlanInspector({
         <div className="ghq-inspector__meta">
           {domain && (
             <span className="ghq-inspector__domain">
-              {getDomainEmoji(domain.systemKey)} {domain.name}
+              <span className={`ghq-domain-dot ghq-domain-dot--${domain.systemKey ?? "other"}`} aria-hidden="true" />
+              {domain.name}
             </span>
           )}
           {goal.horizonName && (
@@ -261,10 +249,10 @@ function PlanInspector({
 
         {/* Progress */}
         {goal.milestoneCounts.total > 0 && (
-          <div className="goal-progress" style={{ marginTop: "0.75rem" }}>
+          <div className="goal-progress ghq-inspector__progress">
             <div className="goal-progress__bar">
               <div
-                className={`goal-progress__fill${healthState === "achieved" ? " goal-progress__fill--achieved" : ""}`}
+                className={`goal-progress__fill goal-progress__fill--${healthState}`}
                 style={{ width: `${Math.min(goal.progressPercent, 100)}%` }}
               />
             </div>

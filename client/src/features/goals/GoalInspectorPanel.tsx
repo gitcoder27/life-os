@@ -10,18 +10,6 @@ import { InlineErrorState } from "../../shared/ui/PageState";
 import { GoalInspectorMilestones } from "./GoalInspectorMilestones";
 import { useGoalTodayAction } from "./useGoalTodayAction";
 
-/* ── Helpers ── */
-
-const domainIcons: Record<string, string> = {
-  unassigned: "◌",
-  health: "💪",
-  money: "💰",
-  work_growth: "🚀",
-  home_admin: "🏠",
-  discipline: "🎯",
-  other: "✦",
-};
-
 /* ── Collapsible Section ── */
 
 function CollapsibleSection({
@@ -216,14 +204,10 @@ export function GoalInspectorPanel({
 
         {/* Primary Domain */}
         <div className="ap-inspector__domain">
-          <span className="ap-inspector__domain-icon">
-            {domainIcons[goal.domainSystemKey ?? "other"] ?? "✦"}
-          </span>
-          <div>
-            <div className="ap-inspector__domain-label">Primary Domain</div>
-            <div className="ap-inspector__domain-value">
-              {goal.domain}
-            </div>
+          <div className="ap-inspector__domain-label">Primary Domain</div>
+          <div className="ap-inspector__domain-value">
+            <span className={`ghq-domain-dot ghq-domain-dot--${goal.domainSystemKey ?? "other"}`} aria-hidden="true" />
+            {goal.domain}
           </div>
         </div>
       </div>

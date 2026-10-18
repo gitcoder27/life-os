@@ -1,5 +1,7 @@
 /* ═══════════════════════════════════════════════════════
-   GOALS HQ — FLAGSHIP PLANNING WORKSPACE
+   GOALS — hold direction without a project-management weight.
+   Flat panels with a 1px border. Accent marks only the primary
+   action, the selected goal or node, and the active mode.
    ═══════════════════════════════════════════════════════ */
 
 /* ── Page Layout ── */
@@ -7,15 +9,15 @@
 .ghq-page {
   display: flex;
   flex-direction: column;
-  gap: 1.5rem;
-  animation: fadeIn 0.3s var(--ease) both;
+  gap: var(--space-6);
+  animation: fadeIn var(--dur) var(--ease) both;
 }
 
 .ghq-page-header {
   display: flex;
-  align-items: flex-start;
+  align-items: flex-end;
   justify-content: space-between;
-  gap: 1rem;
+  gap: var(--space-4);
   flex-wrap: wrap;
 }
 
@@ -24,19 +26,21 @@
   min-width: 0;
 }
 
+/* The only Fraunces on the Goals screen. */
 .ghq-page-header__title {
   font-family: var(--font-display);
-  font-size: clamp(1.6rem, 3.5vw, 2.2rem);
+  font-size: var(--fs-h1);
   font-weight: 500;
-  line-height: 1.2;
-  letter-spacing: -0.01em;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
 }
 
 .ghq-page-header__subtitle {
-  margin: 0.25rem 0 0;
-  font-size: var(--fs-small);
+  margin: var(--space-1-5) 0 0;
+  max-width: 42rem;
+  font-size: var(--fs-body);
   color: var(--text-secondary);
-  line-height: 1.5;
+  line-height: 1.55;
 }
 
 /* ── Mode Toggle ── */
@@ -45,10 +49,10 @@
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 2px;
-  padding: 3px;
+  padding: 2px;
   border-radius: var(--r-sm);
-  background: rgba(255, 255, 255, 0.04);
   border: 1px solid var(--border);
+  background: var(--wash-1);
   flex-shrink: 0;
   min-width: min(16rem, 100%);
 }
@@ -57,34 +61,65 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 0.4rem;
-  padding: 0.4rem 0.85rem;
-  border-radius: calc(var(--r-sm) - 3px);
+  gap: var(--space-1-5);
+  min-height: 2.25rem;
+  padding: var(--space-1-5) var(--space-4);
+  border-radius: var(--r-xs);
   border: none;
   background: transparent;
-  color: var(--text-tertiary);
+  color: var(--text-secondary);
   font-size: var(--fs-small);
   font-weight: 600;
   cursor: pointer;
-  transition: all var(--dur-fast) var(--ease);
+  transition:
+    color var(--dur-fast) var(--ease),
+    background-color var(--dur-fast) var(--ease),
+    transform var(--dur-fast) var(--ease);
   white-space: nowrap;
   width: 100%;
 }
 
 .goals-mode-toggle__btn:hover {
-  color: var(--text-secondary);
-  background: rgba(255, 255, 255, 0.04);
+  color: var(--text);
+  background: var(--wash-3);
 }
 
-.goals-mode-toggle__btn--active {
-  color: var(--accent);
+.goals-mode-toggle__btn:active {
+  transform: scale(0.98);
+}
+
+.goals-mode-toggle__btn--active,
+.goals-mode-toggle__btn--active:hover {
+  color: var(--accent-bright);
   background: var(--accent-soft);
-  box-shadow: 0 1px 4px rgba(217, 153, 58, 0.12);
 }
 
 .goals-mode-toggle__icon {
-  font-size: 0.9em;
+  font-size: var(--fs-micro);
   line-height: 1;
+}
+
+/* ── Domain Marker ── */
+
+/* A small category dot keyed by the domain's systemKey. */
+.ghq-domain-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--cat-neutral);
+  flex-shrink: 0;
+}
+
+.ghq-domain-dot--health { background: var(--cat-health); }
+.ghq-domain-dot--money { background: var(--cat-money); }
+.ghq-domain-dot--work_growth { background: var(--cat-work); }
+.ghq-domain-dot--home_admin { background: var(--cat-home); }
+.ghq-domain-dot--discipline { background: var(--cat-discipline); }
+
+.ghq-domain-dot--unassigned {
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--cat-neutral);
 }
 
 /* ── Filters ── */
@@ -286,14 +321,6 @@
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
   gap: 0.75rem;
-}
-
-.ghq-domain-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--accent);
-  flex-shrink: 0;
 }
 
 /* ── Goal Card (shared between overview and AP) ── */
@@ -574,10 +601,10 @@
 .ghq-form {
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
-  padding: 1.25rem;
+  gap: var(--space-4);
+  padding: var(--space-5);
   border-radius: var(--r);
-  border: 1px solid var(--border-active);
+  border: 1px solid var(--border);
   background: var(--panel-elevated);
 }
 
@@ -588,38 +615,44 @@
 .ghq-form__advanced {
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
-  padding-top: 0.15rem;
+  gap: var(--space-4);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--border-subtle);
 }
 
 .ghq-form__parent-context {
   display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.5rem 0.65rem;
+  align-items: baseline;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
   border-radius: var(--r-xs);
-  background: var(--accent-wash);
-  border: 1px solid rgba(217, 153, 58, 0.08);
+  border: 1px solid var(--border-subtle);
+  border-left: 2px solid var(--accent);
+  background: var(--wash-1);
   font-size: var(--fs-small);
 }
 
 .ghq-form__parent-label {
   font-size: var(--fs-micro);
   text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--accent);
-  font-weight: 700;
+  letter-spacing: var(--tracking-label);
+  color: var(--text-tertiary);
+  font-weight: 600;
 }
 
 .ghq-form__parent-title {
-  color: var(--text-secondary);
-  font-weight: 500;
+  color: var(--text);
+  font-weight: 600;
 }
 
 .ghq-form__row {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 0.75rem;
+  gap: var(--space-3);
+}
+
+.ghq-form .button-row {
+  padding-top: var(--space-1);
 }
 
 /* ── Form Overlay ── */
@@ -633,18 +666,17 @@
   justify-content: center;
   overflow-y: auto;
   padding:
-    calc(var(--shell-header-height, 0px) + 1rem)
-    1rem
-    1rem;
+    calc(var(--shell-header-height, 0px) + var(--space-4))
+    var(--space-4)
+    var(--space-4);
   -webkit-overflow-scrolling: touch;
 }
 
 .ghq-form-overlay__backdrop {
   position: absolute;
   inset: 0;
-  background: rgba(0, 0, 0, 0.55);
-  backdrop-filter: blur(4px);
-  animation: fadeIn 0.2s var(--ease) both;
+  background: var(--scrim);
+  animation: fadeIn var(--dur) var(--ease) both;
 }
 
 .ghq-form-overlay__panel {
@@ -656,7 +688,7 @@
   overflow-y: auto;
   border-radius: var(--r);
   box-shadow: var(--shadow-lg);
-  animation: slideUp 0.3s var(--ease) both;
+  animation: scaleIn var(--dur) var(--ease) both;
 }
 
 .ghq-form-overlay__panel .ghq-form {
@@ -876,21 +908,22 @@
   position: relative;
   overflow-y: auto;
   max-height: calc(100vh - 12rem);
+  background: var(--panel);
 }
 
 .ghq-plan__inspector-close {
   position: absolute;
-  top: 0.9rem;
-  right: 0.9rem;
+  top: var(--space-3);
+  right: var(--space-3);
   z-index: 5;
   width: 2rem;
   min-width: 2rem;
   height: 2rem;
   padding: 0;
-  font-size: 1.15rem;
+  font-size: var(--fs-h2);
   line-height: 1;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.04);
+  border-radius: var(--r-sm);
+  background: var(--wash-2);
 }
 
 .ghq-inspector {
@@ -902,38 +935,38 @@
 .ghq-inspector--empty {
   justify-content: center;
   align-items: center;
+  padding: var(--space-6);
 }
 
 .ghq-inspector__empty-state {
   text-align: center;
-  padding: 3rem 2rem;
+  padding: var(--space-12) var(--space-8);
   color: var(--text-tertiary);
   max-width: 320px;
 }
 
 .ghq-inspector__empty-icon {
-  font-size: 2.5rem;
   display: block;
-  margin-bottom: 1rem;
-  opacity: 0.3;
+  margin-bottom: var(--space-3);
+  font-size: var(--fs-h1);
+  color: var(--text-disabled);
 }
 
 .ghq-inspector__empty-state h3 {
-  font-family: var(--font-display);
-  font-size: 1.1rem;
-  font-weight: 500;
-  margin-bottom: 0.5rem;
+  font-size: var(--fs-h3);
+  font-weight: 600;
+  margin-bottom: var(--space-2);
   color: var(--text-secondary);
 }
 
 .ghq-inspector__empty-state p {
   margin: 0;
   font-size: var(--fs-small);
-  line-height: 1.6;
+  line-height: 1.55;
 }
 
 .ghq-inspector__header {
-  padding: 1.25rem 1.25rem 1rem;
+  padding: var(--space-5) var(--space-5) var(--space-4);
   border-bottom: 1px solid var(--border);
   position: sticky;
   top: 0;
@@ -943,109 +976,120 @@
 
 .ghq-inspector__eyebrow {
   font-size: var(--fs-micro);
-  font-weight: 700;
-  letter-spacing: 0.08em;
+  font-weight: 600;
+  letter-spacing: var(--tracking-label);
   text-transform: uppercase;
-  color: var(--accent);
-  margin-bottom: 0.45rem;
+  color: var(--text-tertiary);
+  margin-bottom: var(--space-2);
 }
 
 .ghq-inspector__breadcrumb {
   display: flex;
   align-items: center;
-  gap: 0.15rem;
+  gap: var(--space-1);
   flex-wrap: wrap;
-  margin-bottom: 0.5rem;
+  margin-bottom: var(--space-2);
   font-size: var(--fs-micro);
 }
 
 .ghq-inspector__breadcrumb-link {
-  color: var(--accent);
+  color: var(--text-secondary);
   background: none;
   border: none;
+  border-radius: var(--r-xs);
   cursor: pointer;
   font-size: inherit;
   font-weight: 500;
   padding: 0;
-  text-decoration: none;
+  text-decoration: underline;
+  text-decoration-color: transparent;
+  text-underline-offset: 2px;
+  transition:
+    color var(--dur-fast) var(--ease),
+    text-decoration-color var(--dur-fast) var(--ease);
 }
 
 .ghq-inspector__breadcrumb-link:hover {
-  text-decoration: underline;
+  color: var(--text);
+  text-decoration-color: currentColor;
 }
 
 .ghq-inspector__breadcrumb-sep {
   color: var(--text-tertiary);
-  padding: 0 0.15rem;
+  padding: 0 var(--space-1);
 }
 
 .ghq-inspector__title {
-  font-family: var(--font-display);
-  font-size: 1.3rem;
-  font-weight: 500;
-  line-height: 1.3;
+  font-size: var(--fs-h1);
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
 }
 
 .ghq-inspector__header-actions {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
-  margin-top: 0.75rem;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
 }
 
 .ghq-inspector__meta {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: var(--space-2);
   flex-wrap: wrap;
-  margin-top: 0.5rem;
+  margin-top: var(--space-3);
 }
 
 .ghq-inspector__domain {
   font-size: var(--fs-small);
   color: var(--text-secondary);
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: 0.25rem;
+  gap: var(--space-1-5);
 }
 
 .ghq-inspector__horizon-badge {
   font-size: var(--fs-micro);
   font-weight: 600;
-  padding: 0.1rem 0.4rem;
+  padding: 0.125rem var(--space-2);
   border-radius: var(--r-xs);
-  background: rgba(217, 153, 58, 0.1);
-  color: var(--accent);
+  background: var(--wash-3);
+  color: var(--text-secondary);
   letter-spacing: 0.02em;
 }
 
+.ghq-inspector__progress {
+  margin-top: var(--space-3);
+}
+
 .ghq-inspector__body {
-  padding: 1rem 1.25rem 1.5rem;
+  padding: var(--space-4) var(--space-5) var(--space-6);
   display: flex;
   flex-direction: column;
-  gap: 1.25rem;
+  gap: var(--space-5);
 }
 
 .ghq-inspector__section {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: var(--space-2);
 }
 
 .ghq-inspector__section-title {
-  font-size: var(--fs-small);
-  font-weight: 700;
+  font-size: var(--fs-micro);
+  font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.06em;
+  letter-spacing: var(--tracking-label);
   color: var(--text-tertiary);
 }
 
 .ghq-inspector__why {
   margin: 0;
-  font-size: var(--fs-small);
+  font-size: var(--fs-body);
   color: var(--text-secondary);
   line-height: 1.6;
-  font-style: italic;
 }
 
 .ghq-inspector__notes {
@@ -1075,15 +1119,14 @@
 .ghq-inspector__child-row {
   display: flex;
   align-items: center;
-  gap: 0.45rem;
-  padding: 0.45rem 0;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+  gap: var(--space-2);
+  min-height: 2.25rem;
+  padding: var(--space-2) 0;
+  border: none;
+  border-bottom: 1px solid var(--border-subtle);
   background: none;
-  border-left: none;
-  border-right: none;
-  border-top: none;
   cursor: pointer;
-  color: var(--text);
+  color: var(--text-secondary);
   font-size: var(--fs-small);
   text-align: left;
   width: 100%;
@@ -1095,7 +1138,7 @@
 }
 
 .ghq-inspector__child-row:hover {
-  color: var(--accent);
+  color: var(--text);
 }
 
 .ghq-inspector__breakdown-btn {
@@ -1103,7 +1146,7 @@
 }
 
 .ghq-inspector__loading {
-  padding: 2rem 1.25rem;
+  padding: var(--space-8) var(--space-5);
   text-align: center;
   color: var(--text-tertiary);
   font-size: var(--fs-small);
@@ -1112,54 +1155,79 @@
 .ghq-today-alignment {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: var(--space-2);
   align-items: flex-start;
 }
 
+/* Planning editor fields (focus board) follow the shared .field input style. */
 .ghq-planning-form__field {
   display: flex;
   flex-direction: column;
-  gap: 0.35rem;
+  gap: var(--space-1-5);
 }
 
 .ghq-planning-form__field span {
-  font-size: var(--fs-micro);
-  font-weight: 700;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  color: var(--text-tertiary);
+  font-size: var(--fs-small);
+  font-weight: 600;
+  color: var(--text-label);
 }
 
 .ghq-planning-form__input,
 .ghq-planning-form__select {
   width: 100%;
+  min-height: 2.4rem;
   border: 1px solid var(--border);
-  border-radius: var(--r-xs);
-  background: rgba(255, 255, 255, 0.03);
+  border-radius: var(--r-sm);
+  background: var(--wash-1);
   color: var(--text);
   font-size: var(--fs-small);
-  padding: 0.65rem 0.75rem;
+  padding: var(--space-2) var(--space-3);
+  transition:
+    border-color var(--dur-fast) var(--ease),
+    box-shadow var(--dur-fast) var(--ease),
+    background-color var(--dur-fast) var(--ease);
+}
+
+.ghq-planning-form__input:hover:not(:disabled):not(:focus),
+.ghq-planning-form__select:hover:not(:disabled):not(:focus) {
+  border-color: var(--border-active);
+}
+
+.ghq-planning-form__input:focus,
+.ghq-planning-form__select:focus {
+  outline: none;
+  border-color: var(--border-focus);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+  background: var(--wash-2);
+}
+
+.ghq-planning-form__input:disabled,
+.ghq-planning-form__select:disabled {
+  border-color: var(--border-subtle);
+  background: transparent;
 }
 
 .ghq-planning-form__warning {
   margin: 0;
-  color: #e8b038;
+  color: var(--accent);
   font-size: var(--fs-small);
 }
 
 .ghq-planning-form__actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.5rem;
+  gap: var(--space-2);
 }
 
 /* ── Health Badge ── */
 
+/* Goal health, shared by badges, dots and progress fills:
+   on track → info, drifting → accent, stalled → negative, achieved → positive. */
 .health-badge {
   display: inline-flex;
   align-items: center;
-  gap: 0.3rem;
-  padding: 0.2rem 0.55rem;
+  gap: var(--space-1-5);
+  padding: 0.125rem var(--space-2);
   border-radius: var(--r-pill);
   font-size: var(--fs-micro);
   font-weight: 600;
@@ -1169,27 +1237,23 @@
 }
 
 .health-badge--on_track {
-  background: var(--positive-soft);
-  color: var(--positive);
-  border: 1px solid rgba(93, 184, 106, 0.2);
+  background: var(--info-soft);
+  color: var(--info);
 }
 
 .health-badge--drifting {
-  background: rgba(232, 176, 56, 0.1);
-  color: #e8b038;
-  border: 1px solid rgba(232, 176, 56, 0.2);
+  background: var(--accent-wash);
+  color: var(--accent);
 }
 
 .health-badge--stalled {
   background: var(--negative-soft);
-  color: var(--negative);
-  border: 1px solid rgba(201, 85, 76, 0.2);
+  color: var(--negative-text);
 }
 
 .health-badge--achieved {
   background: var(--positive-soft);
   color: var(--positive);
-  border: 1px solid rgba(93, 184, 106, 0.25);
 }
 
 .health-badge__dot {
@@ -1204,28 +1268,28 @@
 .goal-progress {
   display: flex;
   align-items: center;
-  gap: 0.6rem;
+  gap: var(--space-3);
 }
 
 .goal-progress__bar {
   flex: 1;
-  height: 5px;
-  border-radius: 3px;
-  background: rgba(255, 255, 255, 0.06);
+  height: 4px;
+  border-radius: var(--r-pill);
+  background: var(--wash-4);
   overflow: hidden;
 }
 
 .goal-progress__fill {
   height: 100%;
-  border-radius: 3px;
-  background: linear-gradient(90deg, var(--accent), var(--accent-bright));
-  transition: width 0.6s var(--ease);
+  border-radius: var(--r-pill);
+  background: var(--info);
+  transition: width var(--dur-slow) var(--ease);
   min-width: 0;
 }
 
-.goal-progress__fill--achieved {
-  background: linear-gradient(90deg, var(--positive), #7fd98a);
-}
+.goal-progress__fill--drifting { background: var(--accent); }
+.goal-progress__fill--stalled { background: var(--negative); }
+.goal-progress__fill--achieved { background: var(--positive); }
 
 .goal-progress__label {
   font-size: var(--fs-micro);
@@ -1233,6 +1297,7 @@
   color: var(--text-secondary);
   min-width: 2.5rem;
   text-align: right;
+  font-variant-numeric: tabular-nums;
 }
 
 /* ── Next Best Action ── */
@@ -1240,19 +1305,19 @@
 .goal-nba {
   display: flex;
   align-items: flex-start;
-  gap: 0.4rem;
-  padding: 0.5rem 0.65rem;
-  border-radius: var(--r-xs);
-  background: var(--accent-wash);
-  border: 1px solid rgba(217, 153, 58, 0.08);
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--r-sm);
+  border: 1px solid var(--border);
+  background: var(--wash-1);
   font-size: var(--fs-small);
-  color: var(--text-secondary);
+  color: var(--text);
   line-height: 1.45;
 }
 
 .goal-nba__icon {
-  color: var(--accent);
-  font-weight: 700;
+  color: var(--text-tertiary);
+  font-weight: 600;
   font-size: var(--fs-small);
   line-height: 1.45;
   flex-shrink: 0;
@@ -1269,9 +1334,9 @@
 .linked-item {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
-  padding: 0.45rem 0;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+  gap: var(--space-2);
+  padding: var(--space-2) 0;
+  border-bottom: 1px solid var(--border-subtle);
   font-size: var(--fs-small);
 }
 
@@ -1280,8 +1345,8 @@
 }
 
 .linked-item__status {
-  width: 8px;
-  height: 8px;
+  width: 7px;
+  height: 7px;
   border-radius: 50%;
   flex-shrink: 0;
 }
@@ -1308,10 +1373,10 @@
 .linked-item__cycle-badge {
   font-size: var(--fs-micro);
   font-weight: 600;
-  padding: 0.1rem 0.35rem;
+  padding: 0.125rem var(--space-1-5);
   border-radius: var(--r-xs);
-  background: rgba(255, 255, 255, 0.04);
-  color: var(--text-tertiary);
+  background: var(--wash-3);
+  color: var(--text-secondary);
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
@@ -1319,7 +1384,8 @@
 .linked-habit__streak {
   font-size: var(--fs-micro);
   font-weight: 600;
-  color: var(--accent);
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
 }
 
 /* ── Inactive Goals ── */
@@ -1431,6 +1497,7 @@
 }
 
 /* ── Settings Config Editor (domains + horizons) ── */
+/* Serves Settings (GoalDomainManager, GoalHorizonManager), not the Goals page. */
 
 .settings-config-editor {
   display: flex;
@@ -1461,9 +1528,11 @@
   color: var(--text-tertiary);
   background: none;
   border: none;
-  border-radius: 3px;
+  border-radius: var(--r-xs);
   cursor: pointer;
-  transition: all var(--dur-fast) var(--ease);
+  transition:
+    color var(--dur-fast) var(--ease),
+    background-color var(--dur-fast) var(--ease);
 }
 
 .settings-config-row__move:hover:not(:disabled) {
@@ -1473,7 +1542,7 @@
 
 .settings-config-row__move:disabled {
   opacity: 0.3;
-  cursor: default;
+  cursor: not-allowed;
 }
 
 .settings-config-row__input {
@@ -1481,10 +1550,12 @@
   padding: 0.4rem 0.55rem;
   border-radius: var(--r-xs);
   border: 1px solid var(--border);
-  background: rgba(255, 255, 255, 0.03);
+  background: var(--wash-1);
   color: var(--text);
   font-size: var(--fs-small);
-  transition: all var(--dur) var(--ease);
+  transition:
+    border-color var(--dur-fast) var(--ease),
+    box-shadow var(--dur-fast) var(--ease);
 }
 
 .settings-config-row__input:focus {
@@ -1498,10 +1569,12 @@
   padding: 0.4rem 0.55rem;
   border-radius: var(--r-xs);
   border: 1px solid var(--border);
-  background: rgba(255, 255, 255, 0.03);
+  background: var(--wash-1);
   color: var(--text);
   font-size: var(--fs-small);
-  transition: all var(--dur) var(--ease);
+  transition:
+    border-color var(--dur-fast) var(--ease),
+    box-shadow var(--dur-fast) var(--ease);
 }
 
 .settings-config-row__span:focus {
@@ -1532,11 +1605,13 @@
   border: none;
   border-radius: var(--r-xs);
   cursor: pointer;
-  transition: all var(--dur-fast) var(--ease);
+  transition:
+    color var(--dur-fast) var(--ease),
+    background-color var(--dur-fast) var(--ease);
 }
 
 .settings-config-row__remove:hover {
-  color: var(--negative);
+  color: var(--negative-text);
   background: var(--negative-soft);
 }
 
@@ -2899,22 +2974,21 @@
 .ghq-inspector__focus-status {
   display: flex;
   flex-direction: column;
-  gap: 0.45rem;
+  gap: 0;
 }
 
 .ghq-inspector__focus-row {
   display: flex;
-  align-items: center;
+  align-items: baseline;
   justify-content: space-between;
-  gap: 0.75rem;
-  padding-bottom: 0.45rem;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  gap: var(--space-3);
+  padding: var(--space-2) 0;
+  border-bottom: 1px solid var(--border-subtle);
   font-size: var(--fs-small);
 }
 
 .ghq-inspector__focus-row:last-child {
   border-bottom: none;
-  padding-bottom: 0;
 }
 
 .ghq-inspector__focus-row span {
@@ -2930,14 +3004,15 @@
 .ghq-inspector__focus-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.5rem;
+  gap: var(--space-2);
+  margin-top: var(--space-1);
 }
 
 .ghq-inspector__helper-copy {
-  margin: 0.55rem 0 0;
+  margin: var(--space-2) 0 0;
   color: var(--text-tertiary);
   font-size: var(--fs-small);
-  line-height: 1.5;
+  line-height: 1.55;
 }
 
 /* ── Planning Dock ── */
@@ -3619,18 +3694,23 @@
 @media (max-width: 640px) {
   .ghq-form-overlay {
     padding:
-      calc(var(--shell-header-height, 0px) + 0.75rem)
-      0.75rem
-      0.75rem;
+      calc(var(--shell-header-height, 0px) + var(--space-3))
+      var(--space-3)
+      var(--space-3);
   }
 
   .ghq-form-overlay__panel {
     max-height: calc(100vh - var(--shell-header-height, 0px) - 1.5rem);
   }
 
+  .ghq-form {
+    padding: var(--space-4);
+  }
+
   .ghq-page-header {
     flex-direction: column;
-    gap: 0.75rem;
+    align-items: stretch;
+    gap: var(--space-3);
   }
 
   .goals-mode-toggle {
@@ -3704,5 +3784,20 @@
 
   .ghq-plan__rail {
     max-height: 35vh;
+  }
+}
+
+/* ── Touch targets ── */
+
+@media (pointer: coarse) {
+  .goals-mode-toggle__btn,
+  .ap-inspector__action-btn,
+  .ap-inspector__close {
+    min-height: 44px;
+  }
+
+  .ap-inspector__action-btn,
+  .ap-inspector__close {
+    width: 44px;
   }
 }
