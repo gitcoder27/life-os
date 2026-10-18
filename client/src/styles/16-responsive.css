@@ -75,9 +75,9 @@
     gap: 0;
     padding: 0.4rem 0.5rem calc(0.6rem + env(safe-area-inset-bottom));
     border-top: 1px solid var(--border);
-    background: rgba(12, 10, 7, 0.92);
-    backdrop-filter: blur(16px);
-    -webkit-backdrop-filter: blur(16px);
+    background: color-mix(in srgb, var(--bg-deep) 92%, transparent);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
   }
 
   .mobile-nav .shell-nav__link {
@@ -91,7 +91,7 @@
   }
 
   .mobile-nav .shell-nav__link--active {
-    background: var(--accent-soft);
+    background: var(--wash-4);
   }
 
   .mobile-nav .shell-nav__link::before {
@@ -111,7 +111,7 @@
     height: 1rem;
     margin-left: 0;
     padding: 0 0.25rem;
-    font-size: 0.52rem;
+    font-size: 0.6rem;
     box-shadow: 0 0 0 2px var(--bg-deep);
   }
 
@@ -130,18 +130,21 @@
     align-items: center;
     justify-content: center;
     border-radius: 50%;
-    background: linear-gradient(135deg, var(--accent), #c4842f);
-    color: #0f0d08;
+    background: var(--accent);
+    color: var(--on-accent);
     font-size: 1.5rem;
     font-weight: 700;
-    box-shadow: 0 4px 24px rgba(217,153,58,0.3);
+    box-shadow: var(--shadow-md);
     border: 0;
     cursor: pointer;
-    transition: all var(--dur) var(--ease);
+    transition:
+      background-color var(--dur-fast) var(--ease),
+      transform var(--dur-fast) var(--ease);
   }
 
   .mobile-capture:active {
-    transform: scale(0.9);
+    background: var(--accent-hover);
+    transform: scale(0.96);
   }
 
   .shell-header__capture {
@@ -196,10 +199,9 @@
 .more-sheet__backdrop {
   position: absolute;
   inset: 0;
-  background: rgba(0, 0, 0, 0.55);
+  background: var(--scrim);
   opacity: 0;
   transition: opacity var(--dur-slow) var(--ease);
-  backdrop-filter: blur(4px);
 }
 
 .more-sheet--open .more-sheet__backdrop {
@@ -217,12 +219,14 @@
   border: 1px solid var(--border-active);
   border-bottom: 0;
   border-radius: var(--r-lg) var(--r-lg) 0 0;
-  background: linear-gradient(180deg, var(--panel-elevated), var(--panel));
-  padding: 1.25rem 1.25rem calc(1.25rem + env(safe-area-inset-bottom));
+  background: var(--panel-elevated);
+  padding: var(--space-5) var(--space-5) calc(var(--space-5) + env(safe-area-inset-bottom));
   box-shadow: var(--shadow-lg);
-  transform: translateY(1.5rem);
+  transform: translateY(1rem);
   opacity: 0;
-  transition: all 0.3s var(--ease);
+  transition:
+    transform var(--dur-slow) var(--ease),
+    opacity var(--dur) var(--ease);
 }
 
 .more-sheet--open .more-sheet__panel {
@@ -234,12 +238,11 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 1rem;
-  margin-bottom: 0.85rem;
+  gap: var(--space-4);
+  margin-bottom: var(--space-3);
 }
 
 .more-sheet__title {
-  font-family: var(--font-display);
   font-size: var(--fs-h2);
   font-weight: 600;
 }
@@ -247,28 +250,39 @@
 .more-sheet__list {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.5rem;
+  gap: var(--space-2);
 }
 
 .more-sheet__link {
   display: flex;
   align-items: center;
-  gap: 0.65rem;
+  gap: var(--space-3);
   min-height: 2.75rem;
-  padding: 0.6rem 0.7rem;
+  padding: var(--space-2) var(--space-3);
   border-radius: var(--r-sm);
   border: 1px solid var(--border);
-  background: rgba(255, 255, 255, 0.03);
+  background: var(--wash-2);
   color: var(--text);
   transition:
     background var(--dur) var(--ease),
     border-color var(--dur) var(--ease);
 }
 
-.more-sheet__link:active,
-.more-sheet__link--active {
+.more-sheet__link:hover {
   border-color: var(--border-active);
+}
+
+.more-sheet__link:active {
+  background: var(--wash-4);
+}
+
+.more-sheet__link--active {
+  border-color: var(--accent-line);
   background: var(--accent-soft);
+}
+
+.more-sheet__link--active .shell-nav__icon {
+  color: var(--accent);
 }
 
 .more-sheet__link .shell-nav__icon {

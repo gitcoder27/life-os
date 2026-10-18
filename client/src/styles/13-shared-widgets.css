@@ -3,24 +3,24 @@
 .radar-summary {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.65rem;
-  margin-bottom: 0.85rem;
+  gap: var(--space-3);
+  margin-bottom: var(--space-3);
 }
 
 .radar-summary__metric {
-  padding: 0.7rem 0.8rem;
+  padding: var(--space-3);
   border-radius: var(--r-sm);
-  border: 1px solid rgba(217,153,58,0.12);
-  background: linear-gradient(180deg, rgba(217,153,58,0.08), rgba(217,153,58,0.03));
+  border: 1px solid var(--border);
+  background: var(--wash-1);
 }
 
 .radar-summary__label {
   display: block;
   font-size: var(--fs-micro);
   text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--text-secondary);
-  margin-bottom: 0.35rem;
+  letter-spacing: var(--tracking-label);
+  color: var(--text-tertiary);
+  margin-bottom: var(--space-1-5);
 }
 
 .radar-summary__value {
@@ -31,27 +31,27 @@
 .radar-list {
   display: flex;
   flex-direction: column;
-  gap: 0.55rem;
+  gap: var(--space-2);
 }
 
 .radar-item {
   display: flex;
-  gap: 0.75rem;
+  gap: var(--space-3);
   align-items: center;
-  padding: 0.75rem 0.8rem;
+  padding: var(--space-3) var(--space-3);
   border-radius: var(--r-sm);
-  border: 1px solid rgba(217,153,58,0.1);
-  background: rgba(255,255,255,0.02);
+  border: 1px solid var(--border);
+  background: var(--wash-1);
 }
 
 .radar-item--overdue_task {
-  border-color: rgba(217,153,58,0.18);
-  background: rgba(217,153,58,0.05);
+  border-color: var(--border-active);
+  background: var(--accent-wash);
 }
 
 .radar-item--stale_inbox {
-  border-color: rgba(196, 164, 132, 0.16);
-  background: rgba(196, 164, 132, 0.05);
+  border-color: var(--border);
+  background: var(--wash-2);
 }
 
 .radar-item__content {
@@ -72,17 +72,16 @@
 
 .attention-item {
   display: flex;
-  gap: 0.65rem;
-  padding: 0.65rem;
+  gap: var(--space-3);
+  padding: var(--space-3);
   border-radius: var(--r-sm);
-  border: 1px solid rgba(217,153,58,0.08);
-  background: rgba(217,153,58,0.03);
-  transition: all var(--dur) var(--ease);
+  border: 1px solid var(--border);
+  background: transparent;
+  transition: border-color var(--dur-fast) var(--ease);
 }
 
 .attention-item:hover {
-  border-color: rgba(217,153,58,0.15);
-  background: rgba(217,153,58,0.06);
+  border-color: var(--border-active);
 }
 
 .attention-item__icon {
@@ -91,7 +90,7 @@
   height: 6px;
   border-radius: 50%;
   background: var(--accent);
-  margin-top: 0.5rem;
+  margin-top: var(--space-2);
 }
 
 .attention-item__title {
@@ -115,9 +114,9 @@
 .habit-item {
   display: flex;
   align-items: center;
-  gap: 0.75rem;
-  padding: 0.65rem 0;
-  border-bottom: 1px solid rgba(255,255,255,0.04);
+  gap: var(--space-3);
+  padding: var(--space-3) 0;
+  border-bottom: 1px solid var(--border-subtle);
 }
 
 .habit-item:last-child {
@@ -134,22 +133,29 @@
   align-items: center;
   justify-content: center;
   color: transparent;
-  font-size: 0.75rem;
-  transition: all var(--dur) var(--ease-bounce);
+  font-size: var(--fs-micro);
+  transition:
+    border-color var(--dur-fast) var(--ease),
+    background-color var(--dur-fast) var(--ease),
+    transform var(--dur-fast) var(--ease-bounce);
   flex-shrink: 0;
   cursor: pointer;
   padding: 0;
 }
 
 .habit-item__check:hover {
-  border-color: var(--accent);
-  background: var(--accent-soft);
+  border-color: var(--text-tertiary);
+  background: var(--wash-3);
+}
+
+.habit-item__check:active {
+  transform: scale(0.94);
 }
 
 .habit-item__check--done {
   border-color: var(--positive);
   background: var(--positive);
-  color: #0f0d08;
+  color: var(--on-accent);
 }
 
 .habit-item__info {
@@ -172,14 +178,13 @@
 .streak-badge {
   display: inline-flex;
   align-items: center;
-  gap: 0.3rem;
-  padding: 0.2rem 0.55rem;
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-2);
   border-radius: var(--r-pill);
   font-size: var(--fs-micro);
-  font-weight: 700;
+  font-weight: 600;
   background: var(--accent-soft);
   color: var(--accent-bright);
-  border: 1px solid rgba(217,153,58,0.15);
 }
 
 /* ── Tags ── */
@@ -187,7 +192,7 @@
 .tag {
   display: inline-flex;
   align-items: center;
-  padding: 0.25rem 0.55rem;
+  padding: var(--space-1) var(--space-2);
   border-radius: var(--r-xs);
   font-size: var(--fs-micro);
   font-weight: 600;
@@ -196,15 +201,15 @@
 
 .tag--positive { background: var(--positive-soft); color: var(--positive); }
 .tag--warning  { background: var(--accent-soft); color: var(--accent); }
-.tag--negative { background: var(--negative-soft); color: var(--negative); }
-.tag--neutral  { background: rgba(255,255,255,0.05); color: var(--text-secondary); }
+.tag--negative { background: var(--negative-soft); color: var(--negative-text); }
+.tag--neutral  { background: var(--wash-3); color: var(--text-secondary); }
 
 /* ── Water Tracker ── */
 
 .water-tracker {
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
+  gap: var(--space-3);
 }
 
 .water-tracker__header {
@@ -214,7 +219,6 @@
 }
 
 .water-tracker__current {
-  font-family: var(--font-display);
   font-size: 1.8rem;
   font-weight: 400;
 }

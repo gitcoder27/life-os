@@ -372,7 +372,7 @@
 
 .recovery-task {
   padding: 0.85rem 0.9rem;
-  border-radius: var(--r-md);
+  border-radius: var(--r);
   border: 1px solid rgba(217,153,58,0.12);
   background: linear-gradient(180deg, rgba(217,153,58,0.05), rgba(255,255,255,0.02));
 }

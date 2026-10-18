@@ -55,7 +55,7 @@
     radial-gradient(ellipse at 20% 40%, rgba(217, 153, 58, 0.05), transparent 55%),
     radial-gradient(ellipse at 80% 60%, rgba(93, 184, 106, 0.03), transparent 50%),
     linear-gradient(180deg, var(--panel-elevated), var(--panel));
-  box-shadow: var(--shadow-md), var(--shadow-glow);
+  box-shadow: var(--shadow-md);
   position: relative;
   overflow: hidden;
   animation: scaleIn 0.45s var(--ease) 0.05s both;
@@ -626,7 +626,7 @@
 
 .mp-day--today {
   border-color: var(--border-active);
-  box-shadow: 0 0 0 1px var(--accent-soft), var(--shadow-glow);
+  box-shadow: 0 0 0 1px var(--accent-soft);
 }
 
 .mp-day__header {
@@ -731,7 +731,7 @@
 
 .mp-slot--empty:hover {
   border-color: var(--border-active);
-  background: var(--accent-glow);
+  background: var(--accent-wash);
 }
 
 .mp-slot--empty:hover .mp-slot__add {
@@ -1259,7 +1259,7 @@ body.mp-dragging-cursor * {
 
 .mp-grocery-item__check:hover {
   border-color: var(--accent);
-  background: var(--accent-glow);
+  background: var(--accent-wash);
 }
 
 .mp-grocery-item__name {
@@ -1913,7 +1913,7 @@ body.mp-dragging-cursor * {
 }
 
 .rc-editable-list__add-btn:hover {
-  background: var(--accent-glow);
+  background: var(--accent-wash);
 }
 
 /* Touch devices: always show remove buttons */

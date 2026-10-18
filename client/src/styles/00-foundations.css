@@ -1,22 +1,34 @@
 /* ═══════════════════════════════════════════════════════
    LIFE OS — Observatory Design System
-   Warm analog dashboard · personal command center
+   Warm monochrome dashboard · personal command center
+   Flat surfaces, 1px borders, accent reserved for the
+   primary action and the current state.
    ═══════════════════════════════════════════════════════ */
 
 :root {
   color-scheme: dark;
 
-  /* Surface */
+  /* Surface — warm near-black ladder */
   --bg-deep: #0c0a07;
   --bg: #11100d;
   --panel: #191714;
   --panel-elevated: #211e19;
   --panel-hover: #2a261f;
 
+  /* Wash — translucent warm fills layered on any surface */
+  --wash-1: rgba(237, 228, 209, 0.02);
+  --wash-2: rgba(237, 228, 209, 0.035);
+  --wash-3: rgba(237, 228, 209, 0.05);
+  --wash-4: rgba(237, 228, 209, 0.07);
+  --wash-5: rgba(237, 228, 209, 0.1);
+  --sunken: rgba(0, 0, 0, 0.18);
+  --scrim: rgba(8, 7, 5, 0.62);
+
   /* Border */
-  --border: rgba(216, 166, 95, 0.09);
-  --border-active: rgba(216, 166, 95, 0.22);
-  --border-focus: rgba(216, 166, 95, 0.38);
+  --border-subtle: rgba(237, 228, 209, 0.05);
+  --border: rgba(237, 228, 209, 0.085);
+  --border-active: rgba(237, 228, 209, 0.16);
+  --border-focus: rgba(217, 153, 58, 0.55);
 
   /* Text */
   --text: #ede4d1;
@@ -28,60 +40,81 @@
   --text-placeholder: #988d79;
   --text-disabled: #756c5d;
 
-  /* Accent — warm amber */
+  /* Accent — warm amber: primary action and current state only */
   --accent: #d9993a;
   --accent-bright: #f0c060;
+  --accent-hover: #e3a64c;
+  --accent-wash: rgba(217, 153, 58, 0.06);
   --accent-soft: rgba(217, 153, 58, 0.12);
-  --accent-glow: rgba(217, 153, 58, 0.05);
+  --accent-line: rgba(217, 153, 58, 0.34);
+  --on-accent: #0f0d08;
+  --focus-ring: rgba(240, 192, 96, 0.8);
 
   /* Semantic */
   --positive: #5db86a;
-  --positive-soft: rgba(93, 184, 106, 0.10);
+  --positive-soft: rgba(93, 184, 106, 0.1);
+  --positive-line: rgba(93, 184, 106, 0.28);
   --negative: #c9554c;
-  --negative-soft: rgba(201, 85, 76, 0.10);
+  --negative-text: #dd837a;
+  --negative-soft: rgba(201, 85, 76, 0.1);
+  --negative-line: rgba(201, 85, 76, 0.3);
+  --info: #9cafcf;
+  --info-soft: rgba(125, 145, 184, 0.12);
+  --info-line: rgba(125, 145, 184, 0.3);
 
-  /* Elevation */
-  --shadow-sm: 0 1px 4px rgba(0, 0, 0, 0.18);
-  --shadow-md: 0 6px 24px rgba(0, 0, 0, 0.22);
-  --shadow-lg: 0 16px 56px rgba(0, 0, 0, 0.30);
-  --shadow-glow: 0 0 48px rgba(217, 153, 58, 0.06);
+  /* Elevation — in-flow panels stay flat; shadows are for floating layers */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.2);
+  --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.32);
+  --shadow-lg: 0 20px 48px rgba(0, 0, 0, 0.42);
 
   /* Radius */
-  --r-xs: 6px;
-  --r-sm: 10px;
-  --r: 16px;
-  --r-lg: 22px;
+  --r-xs: 4px;
+  --r-sm: 6px;
+  --r: 10px;
+  --r-lg: 12px;
   --r-pill: 999px;
 
-  /* Type */
+  /* Spacing — rem steps on the 15px root */
+  --space-1: 0.25rem;
+  --space-1-5: 0.375rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.25rem;
+  --space-6: 1.5rem;
+  --space-8: 2rem;
+  --space-10: 2.5rem;
+  --space-12: 3rem;
+
+  /* Type — Fraunces for page titles and score numerals only */
   --font-display: 'Fraunces', Georgia, serif;
   --font-body: 'Plus Jakarta Sans', system-ui, sans-serif;
-  --fs-mega: clamp(2.8rem, 5vw, 4rem);
-  --fs-display: clamp(1.75rem, 3vw, 2.4rem);
-  --fs-h1: clamp(1.7rem, 2.4vw, 2.2rem);
-  --fs-h2: 1.1rem;
-  --fs-h3: 0.95rem;
-  --fs-body: 0.94rem;
+  --font-mono: ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, Consolas, monospace;
+  --fs-mega: clamp(2.25rem, 3.6vw, 3rem);
+  --fs-display: clamp(1.5rem, 2.4vw, 1.875rem);
+  --fs-h1: clamp(1.45rem, 2vw, 1.75rem);
+  --fs-h2: 1rem;
+  --fs-h3: 0.9375rem;
+  --fs-body: 0.9375rem;
   --fs-small: 0.84rem;
   --fs-micro: 0.75rem;
+  --tracking-label: 0.08em;
 
-  /* Motion */
+  /* Motion — short and quiet */
   --ease: cubic-bezier(0.16, 1, 0.3, 1);
-  --ease-bounce: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --ease-bounce: cubic-bezier(0.3, 1.12, 0.6, 1);
   --dur-fast: 120ms;
-  --dur: 200ms;
-  --dur-slow: 400ms;
+  --dur: 180ms;
+  --dur-slow: 260ms;
 
   font-family: var(--font-body);
   font-size: 15px;
-  line-height: 1.58;
+  line-height: 1.55;
   font-weight: 400;
   color: var(--text);
-  background:
-    radial-gradient(ellipse at 10% 0%, rgba(217, 153, 58, 0.07) 0%, transparent 50%),
-    radial-gradient(ellipse at 90% 100%, rgba(93, 184, 106, 0.03) 0%, transparent 40%),
-    var(--bg);
+  background: var(--bg);
   min-height: 100vh;
+  scrollbar-color: var(--border-active) transparent;
 }
 
 /* ── Reset ──────────────────────────────────── */
@@ -92,7 +125,7 @@
 
 html, body, #root { min-height: 100vh; }
 
-body { margin: 0; -webkit-font-smoothing: antialiased; }
+body { margin: 0; background: var(--bg); -webkit-font-smoothing: antialiased; }
 
 a { color: inherit; text-decoration: none; }
 
@@ -103,6 +136,11 @@ button { cursor: pointer; border: 0; background: none; }
 ul, ol { list-style: none; padding: 0; margin: 0; }
 
 img { max-width: 100%; display: block; }
+
+::selection {
+  background: rgba(217, 153, 58, 0.3);
+  color: var(--text);
+}
 
 /* Touch/mobile: hold form controls at >= 16px so iOS Safari does not zoom
    the viewport when an input is focused. em keeps any intentionally larger
@@ -115,6 +153,69 @@ img { max-width: 100%; display: block; }
   }
 }
 
+/* ── Interaction baseline ───────────────────── */
+
+/* Zero-specificity keyboard focus ring for every control. Component rules
+   may restyle focus, but must keep a visible indicator. */
+:where(
+  a[href],
+  button,
+  input,
+  select,
+  textarea,
+  summary,
+  [role="button"],
+  [role="tab"],
+  [role="menuitem"],
+  [role="option"],
+  [role="checkbox"],
+  [role="radio"],
+  [role="switch"],
+  [tabindex]:not([tabindex="-1"])
+):focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+:where(button, [role="button"], input, select, textarea):disabled,
+:where(button, [role="button"])[aria-disabled="true"] {
+  cursor: not-allowed;
+}
+
+/* Scores, money and times line up in columns. */
+:where(
+  time,
+  .tabular-nums,
+  [class*="score"],
+  [class*="value"],
+  [class*="amount"],
+  [class*="time"],
+  [class*="count"],
+  [class*="clock"],
+  [class*="duration"],
+  [class*="balance"],
+  [class*="total"],
+  [class*="money"],
+  [class*="budget"],
+  [class*="streak"],
+  [class*="percent"],
+  [class*="metric"]
+) {
+  font-variant-numeric: tabular-nums;
+}
+
+kbd {
+  display: inline-block;
+  padding: 0.05em 0.4em;
+  border: 1px solid var(--border-active);
+  border-radius: var(--r-xs);
+  background: var(--wash-2);
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: 0.8em;
+  line-height: 1.4;
+}
+
 /* ── Animations ─────────────────────────────── */
 
 @keyframes fadeIn {
@@ -123,12 +224,12 @@ img { max-width: 100%; display: block; }
 }
 
 @keyframes slideUp {
-  from { opacity: 0; transform: translateY(16px); }
+  from { opacity: 0; transform: translateY(6px); }
   to   { opacity: 1; transform: translateY(0); }
 }
 
 @keyframes scaleIn {
-  from { opacity: 0; transform: scale(0.95); }
+  from { opacity: 0; transform: scale(0.98); }
   to   { opacity: 1; transform: scale(1); }
 }
 
@@ -138,23 +239,28 @@ img { max-width: 100%; display: block; }
 }
 
 @keyframes numberCount {
-  from { opacity: 0; transform: translateY(8px); }
+  from { opacity: 0; transform: translateY(4px); }
   to   { opacity: 1; transform: translateY(0); }
 }
 
-@keyframes glowPulse {
-  0%, 100% { filter: drop-shadow(0 0 6px rgba(217,153,58,0.25)); }
-  50%      { filter: drop-shadow(0 0 12px rgba(217,153,58,0.4)); }
+@media (prefers-reduced-motion: no-preference) {
+  .stagger > * { animation: slideUp 0.28s var(--ease) both; }
+  .stagger > *:nth-child(2) { animation-delay: 0.03s; }
+  .stagger > *:nth-child(3) { animation-delay: 0.06s; }
+  .stagger > *:nth-child(4) { animation-delay: 0.09s; }
+  .stagger > *:nth-child(n + 5) { animation-delay: 0.12s; }
 }
 
-.stagger > * { animation: slideUp 0.5s var(--ease) both; }
-.stagger > *:nth-child(1) { animation-delay: 0.04s; }
-.stagger > *:nth-child(2) { animation-delay: 0.08s; }
-.stagger > *:nth-child(3) { animation-delay: 0.12s; }
-.stagger > *:nth-child(4) { animation-delay: 0.16s; }
-.stagger > *:nth-child(5) { animation-delay: 0.20s; }
-.stagger > *:nth-child(6) { animation-delay: 0.24s; }
-.stagger > *:nth-child(7) { animation-delay: 0.28s; }
-.stagger > *:nth-child(8) { animation-delay: 0.32s; }
-.stagger > *:nth-child(9) { animation-delay: 0.36s; }
-.stagger > *:nth-child(10) { animation-delay: 0.40s; }
+/* Reduced motion: everything settles at rest immediately. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-delay: 0ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    transition-delay: 0ms !important;
+    scroll-behavior: auto !important;
+  }
+}

@@ -31,9 +31,6 @@ export function LoadingIndicator({
     <div className="state-loader" aria-hidden="true">
       <span className="state-loader__ring state-loader__ring--outer" />
       <span className="state-loader__ring state-loader__ring--inner" />
-      <span className="state-loader__core" />
-      <span className="state-loader__dot state-loader__dot--amber" />
-      <span className="state-loader__dot state-loader__dot--green" />
       <span className="sr-only">{label}</span>
     </div>
   );

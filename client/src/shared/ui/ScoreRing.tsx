@@ -17,18 +17,6 @@ export function ScoreRing({ value, label, size = 140 }: ScoreRingProps) {
         width={size}
         height={size}
       >
-        <defs>
-          <linearGradient
-            id="scoreGradient"
-            x1="0%"
-            y1="0%"
-            x2="100%"
-            y2="100%"
-          >
-            <stop offset="0%" stopColor="#d9993a" />
-            <stop offset="100%" stopColor="#f0c060" />
-          </linearGradient>
-        </defs>
         <circle
           className="score-ring__track"
           cx={size / 2}

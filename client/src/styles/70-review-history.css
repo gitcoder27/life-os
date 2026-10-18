@@ -611,7 +611,7 @@
 
 .rh-compare-period--current {
   border-left-color: var(--accent);
-  background: var(--accent-glow);
+  background: var(--accent-wash);
 }
 
 .rh-compare-period--previous {

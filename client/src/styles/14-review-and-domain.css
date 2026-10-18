@@ -338,7 +338,7 @@
 .onboarding-note {
   margin-bottom: 1rem;
   padding: 0.95rem 1rem;
-  border-radius: var(--r-md);
+  border-radius: var(--r);
   border: 1px solid rgba(255,255,255,0.08);
   background: rgba(255,255,255,0.03);
   color: var(--text-secondary);
@@ -397,7 +397,7 @@
   flex-direction: column;
   gap: 0.25rem;
   padding: 0.9rem 1rem;
-  border-radius: var(--r-md);
+  border-radius: var(--r);
   border: 1px solid rgba(255,255,255,0.08);
   background: rgba(255,255,255,0.03);
 }
@@ -567,7 +567,7 @@
   flex-direction: column;
   gap: 0.25rem;
   padding: 0.9rem 1rem;
-  border-radius: var(--r-md);
+  border-radius: var(--r);
   border: 1px solid rgba(255,255,255,0.08);
   background: rgba(255,255,255,0.03);
 }
@@ -645,7 +645,7 @@
 .onboarding-error {
   margin-top: 0.75rem;
   padding: 0.9rem 1rem;
-  border-radius: var(--r-md);
+  border-radius: var(--r);
   border: 1px solid rgba(232,143,143,0.35);
   background: rgba(128,32,32,0.12);
 }

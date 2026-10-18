@@ -576,7 +576,7 @@
 
 .inbox-inspector__readiness--needs-clarification {
   background: rgba(255, 193, 94, 0.08);
-  color: var(--warning, #d4a24e);
+  color: var(--accent);
 }
 
 .inbox-inspector__readiness-icon {
@@ -611,7 +611,7 @@
 }
 
 .inbox-inspector__field-required {
-  color: var(--warning, #d4a24e);
+  color: var(--accent);
   margin-left: 0.2rem;
 }
 

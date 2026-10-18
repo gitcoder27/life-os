@@ -270,7 +270,7 @@
   background:
     radial-gradient(ellipse at 15% 50%, rgba(217,153,58,0.08), transparent 60%),
     linear-gradient(180deg, var(--panel-elevated), var(--panel));
-  box-shadow: var(--shadow-sm), var(--shadow-glow);
+  box-shadow: var(--shadow-sm);
   overflow: hidden;
 }
 
@@ -304,7 +304,7 @@
     radial-gradient(ellipse at 20% 30%, rgba(217,153,58,0.07), transparent 55%),
     linear-gradient(180deg, var(--panel-elevated) 0%, var(--panel) 100%);
   padding: 1.15rem 1.25rem;
-  box-shadow: var(--shadow-md), var(--shadow-glow);
+  box-shadow: var(--shadow-md);
   position: relative;
   overflow: hidden;
   border-left: 3px solid var(--accent);
@@ -1381,7 +1381,7 @@
 
 .today-goal-nudge__health--stalled,
 .today-goal-nudge__health--drifting {
-  color: var(--warning);
+  color: var(--accent);
 }
 
 .today-goal-nudge__health--on_track,
