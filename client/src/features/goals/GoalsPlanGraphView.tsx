@@ -811,8 +811,8 @@ const buildLayout = (props: LayoutProps) => {
           style: {
             stroke:
               branchIds.has(goal.id) && branchIds.has(item.goal.id)
-                ? "#d9993a"
-                : "rgba(216, 166, 95, 0.16)",
+                ? "var(--accent)"
+                : "var(--border-active)",
             strokeWidth: branchIds.has(goal.id) && branchIds.has(item.goal.id) ? 2 : 1,
             opacity: props.isFocusMode && !branchIds.has(item.goal.id) ? 0.2 : 1,
           },
@@ -840,7 +840,7 @@ const buildLayout = (props: LayoutProps) => {
           type: "smoothstep",
           animated: true,
           style: {
-            stroke: "#d9993a",
+            stroke: "var(--accent)",
             strokeWidth: 1.5,
             strokeDasharray: "6 4",
           },
@@ -1149,7 +1149,7 @@ const GraphInner = (props: GraphInnerProps) => {
         maxZoom={1.35}
         proOptions={{ hideAttribution: true }}
       >
-        <Background color="rgba(216, 166, 95, 0.03)" gap={40} size={1} />
+        <Background color="var(--wash-2)" gap={40} size={1} />
         <div className="ghq-graph__viewport-controls nopan" aria-label="Canvas view controls">
           <button type="button" onClick={() => void zoomIn({ duration: 180 })} aria-label="Zoom in">
             +
