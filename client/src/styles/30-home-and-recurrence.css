@@ -182,7 +182,7 @@
 }
 
 .rec-item__kind--habit { background: var(--positive); }
-.rec-item__kind--health { background: #5db8b0; }
+.rec-item__kind--health { background: var(--cat-health); }
 .rec-item__kind--review { background: var(--accent-bright); }
 
 .rec-item__body {

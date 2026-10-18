@@ -408,7 +408,7 @@
 .goal-chip__dot--money        { background: var(--accent-bright); }
 .goal-chip__dot--work_growth  { background: var(--info); }
 .goal-chip__dot--home_admin   { background: var(--accent); }
-.goal-chip__dot--discipline   { background: #b48ead; }
+.goal-chip__dot--discipline   { background: var(--cat-discipline); }
 .goal-chip__dot--other        { background: var(--text-secondary); }
 
 /* ── Filter Bar ── */
