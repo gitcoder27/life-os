@@ -13,12 +13,10 @@ import { useGoalTodayAction } from "./useGoalTodayAction";
 /* ── Collapsible Section ── */
 
 function CollapsibleSection({
-  icon,
   title,
   children,
   defaultOpen = true,
 }: {
-  icon: string;
   title: string;
   children: React.ReactNode;
   defaultOpen?: boolean;
@@ -33,9 +31,11 @@ function CollapsibleSection({
         onClick={() => setOpen(!open)}
         aria-expanded={open}
       >
-        <span className="ap-inspector-section__icon">{icon}</span>
         <span className="ap-inspector-section__title">{title}</span>
-        <span className={`ap-inspector-section__chevron${open ? " ap-inspector-section__chevron--open" : ""}`}>
+        <span
+          className={`ap-inspector-section__chevron${open ? " ap-inspector-section__chevron--open" : ""}`}
+          aria-hidden="true"
+        >
           ›
         </span>
       </button>
@@ -114,12 +114,11 @@ function InspectorExecutionBridge({
   return (
     <div className="ap-inspector-cta">
       <button
-        className="ap-inspector-cta__btn"
+        className="button button--primary ap-inspector-cta__btn"
         type="button"
         onClick={() => void addToToday()}
         disabled={updateDayPrioritiesMutation.isPending || !canAddToToday}
       >
-        <span className="ap-inspector-cta__icon">✍</span>
         {buttonLabel}
       </button>
     </div>
@@ -215,7 +214,7 @@ export function GoalInspectorPanel({
       {/* Body sections */}
       <div className="ap-inspector__body">
         {/* Milestones */}
-        <CollapsibleSection icon="⚡" title="Milestones" defaultOpen>
+        <CollapsibleSection title="Milestones" defaultOpen>
           <GoalInspectorMilestones
             milestones={goal.milestones}
             goalId={goal.id}
@@ -224,12 +223,12 @@ export function GoalInspectorPanel({
         </CollapsibleSection>
 
         {/* Support Habits */}
-        <CollapsibleSection icon="🔄" title="Support Habits">
+        <CollapsibleSection title="Support Habits">
           <InspectorHabits habits={goal.linkedHabits} />
         </CollapsibleSection>
 
         {/* Linked Priorities — Reflection */}
-        <CollapsibleSection icon="📊" title="Reflection" defaultOpen={false}>
+        <CollapsibleSection title="Reflection" defaultOpen={false}>
           {goal.linkedPriorities.length > 0 ? (
             <div className="ap-inspector-linked">
               {goal.linkedPriorities.map((p) => (

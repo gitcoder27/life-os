@@ -90,13 +90,13 @@ export function GoalCard({
       <div className="ap-goal-card__meta-row">
         {goal.targetDate && (
           <span className="ap-goal-card__meta-item">
-            <span className="ap-goal-card__meta-icon">📅</span>
+            <span className="ap-goal-card__meta-icon ap-goal-card__meta-icon--date" aria-hidden="true" />
             {formatDate(goal.targetDate)}
           </span>
         )}
         {habitCount > 0 && (
           <span className="ap-goal-card__meta-item">
-            <span className="ap-goal-card__meta-icon">●</span>
+            <span className="ap-goal-card__meta-icon" aria-hidden="true">●</span>
             {goal.linkedSummary.dueHabitsToday}/{habitCount} Habits
           </span>
         )}

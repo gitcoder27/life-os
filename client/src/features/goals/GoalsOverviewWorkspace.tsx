@@ -69,20 +69,6 @@ function groupGoalsByDomain(
   return groups;
 }
 
-const domainEmojis: Record<string, string> = {
-  unassigned: "◌",
-  health: "♥",
-  money: "💼",
-  work_growth: "🧠",
-  home_admin: "🏡",
-  discipline: "🎯",
-};
-
-function getDomainEmoji(systemKey: string | null): string {
-  if (!systemKey) return "✦";
-  return domainEmojis[systemKey] ?? "✦";
-}
-
 function getFirstLinkedGoalId(items: Array<{ goalId: string | null; goal?: { id: string } | null }>): string | undefined {
   for (const item of items) {
     if (item.goalId) return item.goalId;
@@ -227,7 +213,7 @@ function OverviewFilters({
             type="button"
             onClick={() => onChangeDomain(activeDomainId === d.id ? undefined : d.id)}
           >
-            <span className="ghq-filter-pill__icon">{getDomainEmoji(d.systemKey)}</span>
+            <span className={`ghq-domain-dot ghq-domain-dot--${d.systemKey ?? "other"}`} aria-hidden="true" />
             {d.name}
           </button>
         ))}
@@ -430,9 +416,10 @@ export function GoalsOverviewWorkspace({
                 <section key={group.domain.id} className="ghq-domain-section">
                   <div className="ghq-domain-section__header">
                     <h2 className="ghq-domain-section__title">
-                      <span className="ghq-domain-section__emoji">
-                        {getDomainEmoji(group.domain.systemKey)}
-                      </span>
+                      <span
+                        className={`ghq-domain-dot ghq-domain-dot--${group.domain.systemKey ?? "other"}`}
+                        aria-hidden="true"
+                      />
                       {group.domain.name}
                     </h2>
                     <span className="ghq-domain-section__count">
@@ -530,9 +517,9 @@ export function GoalsOverviewWorkspace({
                     <ol className="priority-list">
                       {weeklyPriorities.map((item, index) => (
                         <li key={item.id} className="priority-list__item">
-                          <span style={{ display: "flex", flexDirection: "column", gap: "0.2rem" }}>
+                          <span className="ghq-priority-copy">
                             <span>
-                              <span className="tag tag--neutral" style={{ marginRight: "0.5rem" }}>W{index + 1}</span>
+                              <span className="tag tag--neutral ghq-priority-slot">W{index + 1}</span>
                               {item.title}
                             </span>
                             {item.goal ? (
@@ -574,15 +561,15 @@ export function GoalsOverviewWorkspace({
               {sectionErrors.monthPlan ? (
                 <InlineErrorState message={sectionErrors.monthPlan.message} onRetry={onRefetch} />
               ) : (
-                <div style={{ display: "flex", flexDirection: "column", gap: "0.6rem" }}>
-                  <div style={{ fontFamily: "var(--font-display)", fontSize: "1.25rem", fontWeight: 500 }}>
+                <div className="ghq-month-focus">
+                  <div className="ghq-month-theme">
                     {monthPlan?.theme ?? "No theme set"}
                   </div>
                   {monthPlan?.topOutcomes.length ? (
                     <ol className="priority-list">
                       {monthPlan.topOutcomes.map((outcome) => (
                         <li key={outcome.id} className="priority-list__item">
-                          <span style={{ display: "flex", flexDirection: "column", gap: "0.2rem" }}>
+                          <span className="ghq-priority-copy">
                             <span>{outcome.title}</span>
                             {outcome.goal ? (
                               <button
@@ -595,7 +582,7 @@ export function GoalsOverviewWorkspace({
                               </button>
                             ) : null}
                           </span>
-                          <span className={outcome.status === "completed" ? "tag tag--positive" : "tag tag--warning"}>
+                          <span className={outcome.status === "completed" ? "tag tag--positive" : "tag tag--neutral"}>
                             {outcome.status === "completed" ? "achieved" : "tracking"}
                           </span>
                         </li>
@@ -610,7 +597,6 @@ export function GoalsOverviewWorkspace({
                       className="button button--ghost button--small"
                       type="button"
                       onClick={() => onSwitchToPlan(monthlyPlanGoalId ?? selectedGoalId ?? undefined)}
-                      style={{ alignSelf: "flex-start" }}
                     >
                       Plan this month in Plan
                     </button>

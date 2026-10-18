@@ -127,54 +127,61 @@
 .ghq-filters {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: var(--space-3);
 }
 
 .ghq-filters__row {
   display: flex;
-  gap: 0.4rem;
+  gap: var(--space-1-5);
   flex-wrap: wrap;
   align-items: center;
 }
 
 .ghq-filters__row--secondary {
-  gap: 0.5rem;
+  gap: var(--space-2);
   align-items: stretch;
 }
 
 .ghq-filters__row--summary {
-  gap: 0.5rem;
+  gap: var(--space-2);
 }
 
+/* Domain filter chips: a selected chip is a lighter neutral segment, not accent. */
 .ghq-filter-pill {
   display: inline-flex;
   align-items: center;
-  gap: 0.3rem;
-  padding: 0.3rem 0.7rem;
+  gap: var(--space-1-5);
+  min-height: 2rem;
+  padding: var(--space-1) var(--space-3);
   border-radius: var(--r-pill);
   border: 1px solid var(--border);
   background: transparent;
-  color: var(--text-tertiary);
+  color: var(--text-secondary);
   font-size: var(--fs-small);
   font-weight: 500;
   cursor: pointer;
-  transition: all var(--dur-fast) var(--ease);
+  transition:
+    color var(--dur-fast) var(--ease),
+    background-color var(--dur-fast) var(--ease),
+    border-color var(--dur-fast) var(--ease),
+    transform var(--dur-fast) var(--ease);
   white-space: nowrap;
 }
 
 .ghq-filter-pill:hover {
   border-color: var(--border-active);
-  color: var(--text-secondary);
+  color: var(--text);
 }
 
-.ghq-filter-pill--active {
-  border-color: var(--accent);
-  background: var(--accent-soft);
-  color: var(--accent);
+.ghq-filter-pill:active {
+  transform: scale(0.98);
 }
 
-.ghq-filter-pill__icon {
-  font-size: 0.85em;
+.ghq-filter-pill--active,
+.ghq-filter-pill--active:hover {
+  border-color: var(--border-active);
+  background: var(--wash-4);
+  color: var(--text);
 }
 
 .ghq-filter-search {
@@ -183,25 +190,34 @@
   align-items: center;
   min-width: min(32rem, 100%);
   flex: 1 1 22rem;
-  min-height: 2.7rem;
-  border-radius: var(--r-xs);
+  min-height: 2.4rem;
+  border-radius: var(--r-sm);
   border: 1px solid var(--border);
-  background: var(--panel);
-  transition: border-color var(--dur-fast) var(--ease), box-shadow var(--dur-fast) var(--ease);
+  background: var(--wash-1);
+  transition:
+    border-color var(--dur-fast) var(--ease),
+    box-shadow var(--dur-fast) var(--ease),
+    background-color var(--dur-fast) var(--ease);
 }
 
+.ghq-filter-search:hover:not(:focus-within) {
+  border-color: var(--border-active);
+}
+
+/* The wrapper carries the shared input focus treatment (border + soft ring). */
 .ghq-filter-search:focus-within {
   border-color: var(--border-focus);
   box-shadow: 0 0 0 3px var(--accent-soft);
+  background: var(--wash-2);
 }
 
 .ghq-filter-search__input {
   width: 100%;
   border: none;
   background: transparent;
-  color: var(--text-secondary);
+  color: var(--text);
   font-size: var(--fs-small);
-  padding: 0.7rem 0.85rem;
+  padding: var(--space-2) var(--space-3);
 }
 
 .ghq-filter-search__input:focus {
@@ -209,55 +225,77 @@
 }
 
 .ghq-filter-search__input::placeholder {
-  color: var(--text-tertiary);
+  color: var(--text-placeholder);
 }
 
 .ghq-filter-search__clear {
+  align-self: center;
+  margin-right: var(--space-1);
+  padding: var(--space-1) var(--space-2);
   border: none;
+  border-radius: var(--r-xs);
   background: none;
-  color: var(--accent);
+  color: var(--text-secondary);
   font-size: var(--fs-micro);
-  font-weight: 700;
-  padding: 0 0.75rem 0 0.2rem;
+  font-weight: 600;
   cursor: pointer;
+  transition:
+    color var(--dur-fast) var(--ease),
+    background-color var(--dur-fast) var(--ease);
+}
+
+.ghq-filter-search__clear:hover {
+  color: var(--text);
+  background: var(--wash-3);
 }
 
 .ghq-filter-select {
-  min-height: 2.7rem;
-  padding: 0.7rem 2.15rem 0.7rem 0.85rem;
-  border-radius: var(--r-xs);
+  min-height: 2.4rem;
+  padding: var(--space-2) var(--space-8) var(--space-2) var(--space-3);
+  border-radius: var(--r-sm);
   border: 1px solid var(--border);
-  background: var(--panel);
+  background: var(--wash-1);
   color: var(--text-secondary);
   font-size: var(--fs-small);
   line-height: 1.2;
   cursor: pointer;
-  transition: border-color var(--dur-fast) var(--ease);
+  transition:
+    border-color var(--dur-fast) var(--ease),
+    box-shadow var(--dur-fast) var(--ease),
+    color var(--dur-fast) var(--ease);
+}
+
+.ghq-filter-select:hover:not(:focus) {
+  border-color: var(--border-active);
+  color: var(--text);
 }
 
 .ghq-filter-select:focus {
   outline: none;
   border-color: var(--border-focus);
   box-shadow: 0 0 0 3px var(--accent-soft);
+  color: var(--text);
 }
 
 .ghq-results-pill {
   display: inline-flex;
   align-items: center;
-  gap: 0.35rem;
-  padding: 0.28rem 0.6rem;
+  gap: var(--space-1);
+  padding: 0.125rem var(--space-2);
   border-radius: var(--r-pill);
-  background: rgba(217, 153, 58, 0.08);
-  color: var(--accent);
+  background: var(--wash-3);
+  color: var(--text-secondary);
   font-size: var(--fs-micro);
-  font-weight: 700;
-  letter-spacing: 0.03em;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  font-variant-numeric: tabular-nums;
 }
 
 .ghq-results-pill--subtle {
-  background: rgba(255, 255, 255, 0.04);
-  color: var(--text-secondary);
-  font-weight: 600;
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--border-subtle);
+  color: var(--text-tertiary);
+  font-weight: 500;
 }
 
 /* ── Overview Workspace ── */
@@ -265,12 +303,12 @@
 .ghq-overview {
   display: flex;
   flex-direction: column;
-  gap: 1.5rem;
+  gap: var(--space-6);
 }
 
 .ghq-overview__body {
   display: flex;
-  gap: 1rem;
+  gap: var(--space-5);
   min-height: 0;
   align-items: flex-start;
 }
@@ -280,7 +318,7 @@
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 1.5rem;
+  gap: var(--space-8);
 }
 
 /* ── Domain Sections (Overview) ── */
@@ -288,111 +326,115 @@
 .ghq-domain-sections {
   display: flex;
   flex-direction: column;
-  gap: 1.5rem;
+  gap: var(--space-8);
 }
 
 .ghq-domain-section__header {
   display: flex;
-  align-items: center;
+  align-items: baseline;
   justify-content: space-between;
-  gap: 0.75rem;
-  margin-bottom: 0.75rem;
+  gap: var(--space-3);
+  margin-bottom: var(--space-3);
+  padding-bottom: var(--space-2);
+  border-bottom: 1px solid var(--border-subtle);
 }
 
 .ghq-domain-section__title {
-  font-size: var(--fs-body);
+  font-size: var(--fs-h2);
   font-weight: 600;
   display: flex;
   align-items: center;
-  gap: 0.4rem;
-}
-
-.ghq-domain-section__emoji {
-  font-size: 1.05em;
+  gap: var(--space-2);
+  letter-spacing: -0.005em;
 }
 
 .ghq-domain-section__count {
   font-size: var(--fs-micro);
   color: var(--text-tertiary);
   font-weight: 500;
+  font-variant-numeric: tabular-nums;
 }
 
 .ghq-domain-section__cards {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-  gap: 0.75rem;
+  gap: var(--space-3);
 }
 
-/* ── Goal Card (shared between overview and AP) ── */
+/* ── Goal Card ── */
 
 .ap-goal-card {
-  padding: 1rem 1.15rem;
-  border-radius: var(--r-sm);
-  border: 1px solid var(--border);
-  background: linear-gradient(135deg, var(--panel-elevated) 0%, var(--panel) 100%);
-  cursor: pointer;
-  transition: all var(--dur) var(--ease);
   display: flex;
   flex-direction: column;
-  gap: 0.6rem;
+  gap: var(--space-2);
+  padding: var(--space-4) var(--space-5);
+  border-radius: var(--r);
+  border: 1px solid var(--border);
+  background: var(--panel);
+  cursor: pointer;
+  transition:
+    border-color var(--dur-fast) var(--ease),
+    background-color var(--dur-fast) var(--ease);
 }
 
 .ap-goal-card:hover {
   border-color: var(--border-active);
-  transform: translateY(-1px);
-  box-shadow: var(--shadow-md);
 }
 
-.ap-goal-card--selected {
-  border-color: var(--accent);
-  background: linear-gradient(135deg, rgba(217, 153, 58, 0.06) 0%, var(--panel) 100%);
-  box-shadow: 0 0 0 1px rgba(217, 153, 58, 0.15);
+.ap-goal-card--selected,
+.ap-goal-card--selected:hover {
+  border-color: var(--accent-line);
+  background: color-mix(in srgb, var(--accent) 5%, var(--panel));
 }
 
 .ap-goal-card__top-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 0.5rem;
+  gap: var(--space-2);
 }
 
 .ap-goal-card__badges {
   display: flex;
-  gap: 0.35rem;
+  gap: var(--space-1-5);
   align-items: center;
+  min-width: 0;
 }
 
 .ap-goal-card__horizon-badge {
   font-size: var(--fs-micro);
-  font-weight: 600;
-  padding: 0.1rem 0.4rem;
+  font-weight: 500;
+  padding: 0.0625rem var(--space-1-5);
   border-radius: var(--r-xs);
-  background: rgba(255, 255, 255, 0.06);
-  color: var(--text-tertiary);
-  letter-spacing: 0.02em;
+  box-shadow: inset 0 0 0 1px var(--border);
+  color: var(--text-secondary);
+  white-space: nowrap;
 }
 
 .ap-goal-card__status-badge {
+  display: inline-flex;
+  align-items: center;
   font-size: var(--fs-micro);
-  font-weight: 700;
-  letter-spacing: 0.06em;
+  font-weight: 600;
+  letter-spacing: var(--tracking-label);
   text-transform: uppercase;
-  padding: 0.15rem 0.5rem;
+  padding: 0.0625rem var(--space-1-5);
   border-radius: var(--r-xs);
+  white-space: nowrap;
 }
 
 .ap-goal-card__status-badge--on_track {
-  color: var(--positive);
-  background: var(--positive-soft);
+  color: var(--info);
+  background: var(--info-soft);
 }
 
 .ap-goal-card__status-badge--drifting {
-  color: #e8b038;
-  background: rgba(232, 176, 56, 0.1);
+  color: var(--accent);
+  background: var(--accent-wash);
 }
 
 .ap-goal-card__status-badge--stalled {
-  color: var(--negative);
+  color: var(--negative-text);
   background: var(--negative-soft);
 }
 
@@ -402,64 +444,77 @@
 }
 
 .ap-goal-card__title {
+  margin-top: var(--space-1);
   font-weight: 600;
-  font-size: var(--fs-body);
-  line-height: 1.4;
+  font-size: var(--fs-h2);
+  line-height: 1.35;
+  letter-spacing: -0.01em;
+  color: var(--text);
 }
 
 .ap-goal-card__description {
   margin: 0;
   font-size: var(--fs-small);
   color: var(--text-secondary);
-  line-height: 1.5;
+  line-height: 1.55;
   display: -webkit-box;
   -webkit-line-clamp: 2;
+  line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
 
 .ap-goal-card__meta-row {
   display: flex;
-  gap: 0.75rem;
+  gap: var(--space-3);
   flex-wrap: wrap;
   align-items: center;
+}
+
+.ap-goal-card__meta-row:empty {
+  display: none;
 }
 
 .ap-goal-card__meta-item {
   display: inline-flex;
   align-items: center;
-  gap: 0.25rem;
+  gap: var(--space-1-5);
   font-size: var(--fs-micro);
   color: var(--text-tertiary);
-}
-
-.ap-goal-card__meta-item--subtle {
-  font-style: italic;
-  opacity: 0.7;
+  font-variant-numeric: tabular-nums;
 }
 
 .ap-goal-card__meta-icon {
-  font-size: 0.85em;
+  font-size: 0.5rem;
+  line-height: 1;
+}
+
+/* A drawn calendar mark: outlined square with a heavier top edge. */
+.ap-goal-card__meta-icon--date {
+  width: 9px;
+  height: 9px;
+  border: 1px solid currentColor;
+  border-top-width: 2px;
+  border-radius: 2px;
 }
 
 .ap-goal-card__milestone {
   display: flex;
   flex-direction: column;
-  gap: 0.3rem;
+  gap: var(--space-1-5);
+  margin-top: var(--space-1);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--border-subtle);
 }
 
 .ap-goal-card__milestone--empty {
-  gap: 0.12rem;
-  padding: 0.55rem 0.65rem;
-  border: 1px dashed rgba(255, 255, 255, 0.08);
-  border-radius: var(--r-xs);
-  background: rgba(255, 255, 255, 0.018);
+  gap: 0.125rem;
 }
 
 .ap-goal-card__milestone-empty-title {
   color: var(--text-secondary);
   font-size: var(--fs-micro);
-  font-weight: 700;
+  font-weight: 600;
 }
 
 .ap-goal-card__milestone-empty-copy {
@@ -470,19 +525,23 @@
 
 .ap-goal-card__milestone-header {
   display: flex;
+  align-items: baseline;
   justify-content: space-between;
-  gap: 0.5rem;
+  gap: var(--space-2);
 }
 
 .ap-goal-card__milestone-label {
+  flex: 1;
+  min-width: 0;
   font-size: var(--fs-micro);
-  color: var(--text-tertiary);
+  color: var(--text-secondary);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .ap-goal-card__milestone-pct {
+  flex-shrink: 0;
   font-size: var(--fs-micro);
   font-weight: 600;
   color: var(--text-secondary);
@@ -490,55 +549,58 @@
 
 .ap-goal-card__progress-track {
   height: 4px;
-  border-radius: 2px;
-  background: rgba(255, 255, 255, 0.06);
+  border-radius: var(--r-pill);
+  background: var(--wash-4);
   overflow: hidden;
 }
 
 .ap-goal-card__progress-fill {
   height: 100%;
-  border-radius: 2px;
-  transition: width 0.6s var(--ease);
+  min-width: 0;
+  border-radius: var(--r-pill);
+  background: var(--info);
+  transition: width var(--dur-slow) var(--ease);
 }
 
-.ap-goal-card__progress-fill--on_track {
-  background: linear-gradient(90deg, var(--accent), var(--accent-bright));
-}
+.ap-goal-card__progress-fill--drifting { background: var(--accent); }
+.ap-goal-card__progress-fill--stalled { background: var(--negative); }
+.ap-goal-card__progress-fill--achieved { background: var(--positive); }
 
-.ap-goal-card__progress-fill--drifting {
-  background: linear-gradient(90deg, #e8b038, #c4942f);
-}
-
-.ap-goal-card__progress-fill--stalled {
-  background: linear-gradient(90deg, var(--negative), #d47068);
-}
-
-.ap-goal-card__progress-fill--achieved {
-  background: linear-gradient(90deg, var(--positive), #7fd98a);
-}
-
+/* Quiet text actions, revealed on hover or keyboard focus (always on touch). */
 .ap-goal-card__actions {
   display: flex;
   align-items: center;
-  gap: 0.75rem;
-  margin-top: 0.1rem;
+  gap: var(--space-4);
+  margin-top: var(--space-1);
   opacity: 0;
   transition: opacity var(--dur-fast) var(--ease);
 }
 
 .ap-goal-card__action {
-  font-size: var(--fs-micro);
-  color: var(--accent);
-  font-weight: 600;
-  background: none;
-  border: none;
   padding: 0;
-  cursor: pointer;
+  border: none;
+  border-radius: var(--r-xs);
+  background: none;
+  color: var(--text-secondary);
+  font-size: var(--fs-micro);
+  font-weight: 600;
   text-align: left;
+  text-decoration: underline;
+  text-decoration-color: transparent;
+  text-underline-offset: 2px;
+  cursor: pointer;
+  transition:
+    color var(--dur-fast) var(--ease),
+    text-decoration-color var(--dur-fast) var(--ease);
+}
+
+.ap-goal-card__action:hover {
+  color: var(--text);
+  text-decoration-color: currentColor;
 }
 
 .ap-goal-card__action--primary {
-  color: var(--accent-bright);
+  color: var(--text);
 }
 
 .ap-goal-card:hover .ap-goal-card__actions,
@@ -551,25 +613,38 @@
 .ghq-goal-chip {
   display: inline-flex;
   align-items: center;
-  gap: 0.3rem;
+  gap: var(--space-1-5);
   font-size: var(--fs-micro);
-  color: var(--accent);
+  color: var(--text-secondary);
   font-weight: 500;
 }
 
 .ghq-goal-chip--button {
-  background: none;
-  border: none;
+  align-self: flex-start;
   padding: 0;
+  border: none;
+  border-radius: var(--r-xs);
+  background: none;
   cursor: pointer;
   text-align: left;
+  text-decoration: underline;
+  text-decoration-color: transparent;
+  text-underline-offset: 2px;
+  transition:
+    color var(--dur-fast) var(--ease),
+    text-decoration-color var(--dur-fast) var(--ease);
+}
+
+.ghq-goal-chip--button:hover {
+  color: var(--text);
+  text-decoration-color: currentColor;
 }
 
 .ghq-goal-chip__dot {
-  width: 6px;
-  height: 6px;
+  width: 5px;
+  height: 5px;
   border-radius: 50%;
-  background: var(--accent);
+  background: var(--text-tertiary);
   flex-shrink: 0;
 }
 
@@ -577,7 +652,7 @@
 
 .ghq-actions-row {
   display: flex;
-  gap: 0.5rem;
+  gap: var(--space-2);
   align-items: center;
   flex-wrap: wrap;
 }
@@ -587,13 +662,50 @@
 .ghq-planning-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-  gap: 1rem;
+  gap: var(--space-4);
+}
+
+.ghq-priority-copy {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.ghq-priority-slot {
+  margin-right: var(--space-2);
+}
+
+.ghq-month-focus {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.ghq-month-theme {
+  font-size: var(--fs-h2);
+  font-weight: 600;
+  line-height: 1.35;
+  color: var(--text);
 }
 
 .ghq-planning-actions {
   display: flex;
-  gap: 0.5rem;
-  align-items: center;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--border-subtle);
+}
+
+.ghq-planning-actions .support-copy {
+  font-size: var(--fs-small);
+  color: var(--text-tertiary);
+}
+
+.ghq-month-focus > .ghq-planning-actions {
+  margin-top: 0;
 }
 
 /* ── Goal Form ── */
@@ -1393,18 +1505,19 @@
 .inactive-goals {
   display: flex;
   flex-direction: column;
-  gap: 0.35rem;
+  gap: var(--space-1-5);
 }
 
 .inactive-goal-row {
   display: flex;
   align-items: center;
-  gap: 0.75rem;
-  padding: 0.55rem 0.75rem;
-  border-radius: var(--r-xs);
+  gap: var(--space-3);
+  min-height: 2.75rem;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--r-sm);
   border: 1px solid var(--border);
-  background: rgba(255, 255, 255, 0.015);
-  transition: all var(--dur) var(--ease);
+  background: var(--wash-1);
+  transition: border-color var(--dur-fast) var(--ease);
 }
 
 .inactive-goal-row:hover {
@@ -1420,12 +1533,13 @@
 
 .inactive-goal-row__actions {
   display: flex;
-  gap: 0.3rem;
+  gap: var(--space-1);
   opacity: 0;
   transition: opacity var(--dur-fast) var(--ease);
 }
 
-.inactive-goal-row:hover .inactive-goal-row__actions {
+.inactive-goal-row:hover .inactive-goal-row__actions,
+.inactive-goal-row:focus-within .inactive-goal-row__actions {
   opacity: 1;
 }
 
@@ -1448,24 +1562,23 @@
   display: none;
 }
 
+/* In-flow side panel: flat, bordered, no shadow. */
 .goals-workspace__detail {
   width: min(440px, 100%);
   flex-shrink: 0;
   align-self: flex-start;
   position: sticky;
-  top: calc(var(--shell-header-height, 0px) + 1rem);
+  top: calc(var(--shell-header-height, 0px) + var(--space-4));
   max-height: calc(100vh - var(--shell-header-height, 0px) - 2rem);
   overflow-y: auto;
   border: 1px solid var(--border);
   border-radius: var(--r);
-  border-left: 1px solid var(--border);
   background: var(--panel);
-  box-shadow: var(--shadow-md);
-  animation: slideInRight 0.3s var(--ease) both;
+  animation: fadeIn var(--dur) var(--ease) both;
 }
 
 @keyframes slideInRight {
-  from { opacity: 0; transform: translateX(20px); }
+  from { opacity: 0; transform: translateX(8px); }
   to   { opacity: 1; transform: translateX(0); }
 }
 
@@ -1474,10 +1587,9 @@
     display: block;
     position: fixed;
     inset: var(--shell-header-height, 0px) 0 0 0;
-    background: rgba(0, 0, 0, 0.55);
-    backdrop-filter: blur(4px);
+    background: var(--scrim);
     z-index: 39;
-    animation: fadeIn 0.25s var(--ease) both;
+    animation: fadeIn var(--dur) var(--ease) both;
   }
 
   .goals-workspace__detail {
@@ -1488,11 +1600,9 @@
     width: 100%;
     max-height: calc(100vh - var(--shell-header-height, 0px));
     z-index: 41;
-    box-shadow: none;
     border: none;
-    border-left: none;
     border-radius: 0;
-    animation: slideUp 0.35s var(--ease) both;
+    animation: slideUp var(--dur-slow) var(--ease) both;
   }
 }
 
@@ -3719,11 +3829,7 @@
   }
 
   .ap-goal-card {
-    padding: 0.85rem;
-  }
-
-  .ap-goal-card__plan-link {
-    opacity: 1;
+    padding: var(--space-4);
   }
 
   .ghq-graph__workbar {
@@ -3792,8 +3898,19 @@
 @media (pointer: coarse) {
   .goals-mode-toggle__btn,
   .ap-inspector__action-btn,
-  .ap-inspector__close {
+  .ap-inspector__close,
+  .ghq-filter-pill,
+  .ghq-filter-search,
+  .ghq-filter-select,
+  .ap-inspector-section__header {
     min-height: 44px;
+  }
+
+  .ap-goal-card__action,
+  .ghq-goal-chip--button,
+  .ap-inspector-milestones__text-btn {
+    min-height: 44px;
+    padding-inline: var(--space-1);
   }
 
   .ap-inspector__action-btn,
