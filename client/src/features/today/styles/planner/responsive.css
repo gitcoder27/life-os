@@ -12,7 +12,7 @@
   .today-hero {
     flex-direction: column;
     align-items: stretch;
-    gap: 0.85rem;
+    gap: var(--space-3);
     text-align: center;
   }
 
@@ -57,7 +57,7 @@
 
   .planner__gutter-hour {
     right: 8px;
-    font-size: 0.58rem;
+    font-size: var(--fs-micro);
   }
 
   .planner__now-line {
@@ -89,7 +89,7 @@
   .planner-upcoming__group,
   .planner-upcoming__skeleton-group {
     grid-template-columns: 1fr;
-    gap: 0.65rem;
+    gap: var(--space-3);
   }
 
   .planner-upcoming__date {
@@ -102,8 +102,8 @@
     flex-direction: column;
     align-items: flex-start;
     border-radius: var(--r);
-    padding: 0.6rem 0.75rem;
-    gap: 0.5rem;
+    padding: var(--space-2) var(--space-3);
+    gap: var(--space-2);
   }
 
   .planner-date-nav__copy {
@@ -131,9 +131,9 @@
     width: 100%;
     justify-content: space-between;
     padding-left: 0;
-    padding-top: 0.65rem;
+    padding-top: var(--space-3);
     border-left: 0;
-    border-top: 1px solid rgba(201,85,76,0.16);
+    border-top: 1px solid var(--negative-line);
   }
 
   .planner__sidebar-pane {
@@ -160,11 +160,11 @@
   .unplanned-lane {
     position: static;
     max-height: none;
-    padding: 0.72rem;
+    padding: var(--space-3);
     border-radius: var(--r);
-    border: 1px solid rgba(255,255,255,0.07);
-    background: rgba(18,18,15,0.74);
-    box-shadow: inset 0 1px 0 rgba(255,255,255,0.03);
+    border: 1px solid var(--border);
+    background: var(--panel);
+    box-shadow: none;
     overflow: visible;
   }
 
@@ -195,7 +195,7 @@
 
   .planner-rail-section--expanded .planner-rail-section__header {
     border-bottom: 1px solid var(--border);
-    padding-bottom: 0.35rem;
+    padding-bottom: var(--space-1-5);
   }
 
   .planner__timeline-pane {
@@ -219,7 +219,7 @@
 @media (max-width: 640px) {
   .today-health-stats {
     grid-template-columns: 1fr 1fr 1fr;
-    gap: 0.35rem;
+    gap: var(--space-1-5);
   }
 
   .today-hero__buckets {
@@ -242,13 +242,13 @@
   .planner-upcoming__task {
     grid-template-columns: 1fr;
     gap: 0;
-    padding-block: 0.15rem 0.55rem;
+    padding-block: 0.15rem var(--space-2);
   }
 
   .planner-upcoming__task-main {
     grid-template-columns: 1fr;
-    gap: 0.45rem;
-    padding: 0.7rem 0;
+    gap: var(--space-2);
+    padding: var(--space-3) 0;
   }
 
   .planner-upcoming__task-action {
@@ -268,7 +268,7 @@
 
   .planner__gutter-hour {
     right: 6px;
-    font-size: 0.55rem;
+    font-size: var(--fs-micro);
   }
 
   .planner__now-line {
@@ -315,7 +315,7 @@
   .planner-block__header {
     flex-direction: column;
     align-items: flex-start;
-    gap: 0.3rem;
+    gap: var(--space-1);
   }
 
   .planner-block__actions {
@@ -340,7 +340,7 @@
   }
 
   .planner-gap__slot {
-    padding: 0 0.2rem;
+    padding: 0 var(--space-1);
   }
 
   .planner-gap__slot-pill {
@@ -377,7 +377,7 @@
   .execute-focus__picker-menu {
     position: static;
     width: 100%;
-    margin-top: 0.35rem;
+    margin-top: var(--space-1-5);
     min-width: 0;
   }
 
@@ -387,7 +387,7 @@
   }
 
   .planner-block__task-picker {
-    padding-left: 1rem;
+    padding-left: var(--space-4);
   }
 
   .daily-rhythm-item {

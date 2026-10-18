@@ -3,12 +3,12 @@
 .daily-rhythm {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
-  padding: 0.7rem 0.72rem;
-  border-radius: 1rem;
-  border: 1px solid rgba(255,255,255,0.07);
-  background: rgba(18,18,15,0.86);
-  box-shadow: inset 0 1px 0 rgba(255,255,255,0.035);
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-3);
+  border-radius: var(--r-lg);
+  border: 1px solid var(--border);
+  background: var(--panel);
+  box-shadow: none;
   flex-shrink: 0;
 }
 
@@ -16,16 +16,16 @@
   display: flex;
   flex-direction: column;
   gap: 0;
-  border-top: 1px solid rgba(255,255,255,0.045);
+  border-top: 1px solid var(--border-subtle);
 }
 
 .daily-rhythm-item {
   display: grid;
   grid-template-columns: 0.56rem minmax(0, 1fr);
   align-items: flex-start;
-  gap: 0.64rem;
-  padding: 0.72rem 0.06rem 0.7rem 0;
-  border-bottom: 1px solid rgba(255,255,255,0.048);
+  gap: var(--space-3);
+  padding: var(--space-3) 0.06rem var(--space-3) 0;
+  border-bottom: 1px solid var(--border-subtle);
   border-radius: 0;
   background: transparent;
   transition:
@@ -36,26 +36,25 @@
 }
 
 .daily-rhythm-item:hover {
-  transform: translateX(1px);
-  background: rgba(255,255,255,0.014);
+  background: var(--wash-1);
 }
 
 .daily-rhythm-item__mark {
   width: 0.18rem;
   height: 2.25rem;
-  border-radius: 999px;
-  background: rgba(146, 176, 150, 0.55);
+  border-radius: var(--r-pill);
+  background: color-mix(in srgb, var(--positive) 55%, transparent);
   margin-top: 0.08rem;
 }
 
 .daily-rhythm-item--conflict .daily-rhythm-item__mark {
-  background: rgba(221, 131, 122, 0.76);
+  background: color-mix(in srgb, var(--negative-text) 76%, transparent);
 }
 
 .daily-rhythm-item__body {
   display: flex;
   flex-direction: column;
-  gap: 0.34rem;
+  gap: var(--space-1-5);
   min-width: 0;
 }
 
@@ -63,7 +62,7 @@
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 0.6rem;
+  gap: var(--space-2);
   min-width: 0;
 }
 
@@ -71,9 +70,9 @@
   flex: 1;
   min-width: 0;
   color: var(--text);
-  font-size: 0.92rem;
+  font-size: var(--fs-h3);
   line-height: 1.18;
-  font-weight: 720;
+  font-weight: 600;
   overflow: hidden;
   display: -webkit-box;
   -webkit-box-orient: vertical;
@@ -83,9 +82,9 @@
 .daily-rhythm-item__meta {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.16rem 0.42rem;
-  color: rgba(190, 180, 160, 0.62);
-  font-size: 0.7rem;
+  gap: 0.16rem var(--space-1-5);
+  color: var(--text-tertiary);
+  font-size: var(--fs-micro);
   line-height: 1.3;
 }
 
@@ -93,7 +92,7 @@
 .daily-rhythm-block__actions {
   display: flex;
   align-items: center;
-  gap: 0.32rem;
+  gap: var(--space-1-5);
 }
 
 .daily-rhythm-item__actions {
@@ -107,9 +106,9 @@
 }
 
 .daily-rhythm__icon-btn {
-  border: 1px solid rgba(146, 176, 150, 0.14);
-  background: rgba(146, 176, 150, 0.075);
-  color: rgba(207, 225, 199, 0.92);
+  border: 1px solid var(--positive-line);
+  background: var(--positive-soft);
+  color: var(--text);
   cursor: pointer;
   transition:
     border-color var(--dur-fast) var(--ease),
@@ -129,13 +128,13 @@
 }
 
 .daily-rhythm__icon-btn:hover:not(:disabled) {
-  border-color: rgba(217,153,58,0.26);
-  background: rgba(217,153,58,0.09);
-  color: var(--accent-bright);
+  border-color: var(--border-active);
+  background: var(--wash-4);
+  color: var(--text);
 }
 
 .daily-rhythm__icon-btn:active:not(:disabled) {
-  transform: translateY(1px);
+  transform: scale(0.98);
 }
 
 .daily-rhythm__icon-btn:disabled {
@@ -148,49 +147,43 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 0.72rem;
-  padding: 0.62rem 0.72rem;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
   border-radius: var(--r-sm);
-  border: 1px solid rgba(146, 176, 150, 0.18);
-  border-left: 3px solid rgba(146, 176, 150, 0.72);
-  background:
-    linear-gradient(135deg, rgba(146, 176, 150, 0.08), rgba(255,255,255,0.018)),
-    rgba(17,20,16,0.54);
-  box-shadow:
-    inset 0 1px 0 rgba(255,255,255,0.04),
-    0 10px 28px rgba(0,0,0,0.12);
+  border: 1px solid var(--positive-line);
+  border-left: 3px solid var(--positive-line);
+  background: var(--panel);
+  box-shadow: none;
   overflow: hidden;
 }
 
 .daily-rhythm-block--routine {
-  border-color: rgba(135, 165, 178, 0.18);
-  border-left-color: rgba(135, 165, 178, 0.72);
-  background:
-    linear-gradient(135deg, rgba(135, 165, 178, 0.08), rgba(255,255,255,0.018)),
-    rgba(17,19,20,0.54);
+  border-color: var(--info-line);
+  border-left-color: var(--info-line);
+  background: var(--panel);
 }
 
 .daily-rhythm-block__copy {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
-  gap: 0.42rem;
+  gap: var(--space-1-5);
   min-width: 0;
 }
 
 .daily-rhythm-block__time,
 .daily-rhythm-block__detail {
-  color: rgba(190, 180, 160, 0.75);
-  font-size: 0.68rem;
-  font-weight: 650;
+  color: var(--text-tertiary);
+  font-size: var(--fs-micro);
+  font-weight: 600;
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
 }
 
 .daily-rhythm-block__title {
-  color: rgba(236, 232, 222, 0.94);
-  font-size: 0.98rem;
-  font-weight: 700;
+  color: var(--text);
+  font-size: var(--fs-h2);
+  font-weight: 600;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -200,21 +193,21 @@
 /* Compact right-rail rhythm preview */
 
 .daily-rhythm {
-  gap: 0.56rem;
-  padding: 0.68rem 0.7rem;
-  border-radius: 0.88rem;
-  background: rgba(17, 17, 14, 0.78);
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-3);
+  border-radius: var(--r-lg);
+  background: var(--panel);
 }
 
 .daily-rhythm__list {
-  gap: 0.38rem;
-  border-top-color: rgba(255,255,255,0.038);
+  gap: var(--space-1-5);
+  border-top-color: var(--border-subtle);
 }
 
 .daily-rhythm__group {
   display: flex;
   flex-direction: column;
-  gap: 0.28rem;
+  gap: var(--space-1);
 }
 
 .daily-rhythm__group + .daily-rhythm__group {
@@ -225,17 +218,17 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 0.6rem;
+  gap: var(--space-2);
   padding: 0.1rem 0.04rem 0;
-  color: rgba(190, 180, 160, 0.54);
-  font-size: 0.58rem;
-  font-weight: 800;
+  color: var(--text-tertiary);
+  font-size: var(--fs-micro);
+  font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
 
 .daily-rhythm__group-label span:last-child {
-  color: rgba(190, 180, 160, 0.38);
+  color: var(--text-tertiary);
   font-variant-numeric: tabular-nums;
 }
 
@@ -246,8 +239,8 @@
 
 .daily-rhythm-item {
   grid-template-columns: 0.42rem minmax(0, 1fr);
-  gap: 0.58rem;
-  padding: 0.62rem 0.04rem 0.62rem 0;
+  gap: var(--space-2);
+  padding: var(--space-2) 0.04rem var(--space-2) 0;
 }
 
 .daily-rhythm-item:last-child {
@@ -261,7 +254,7 @@
 }
 
 .daily-rhythm-item__body {
-  gap: 0.26rem;
+  gap: var(--space-1);
 }
 
 .daily-rhythm-item__header {
@@ -269,24 +262,24 @@
 }
 
 .daily-rhythm-item__title {
-  font-size: 0.9rem;
+  font-size: var(--fs-h3);
   line-height: 1.16;
-  font-weight: 720;
+  font-weight: 600;
   -webkit-line-clamp: 1;
 }
 
 .daily-rhythm-item__meta {
-  gap: 0.24rem;
-  color: rgba(190, 180, 160, 0.58);
-  font-size: 0.68rem;
+  gap: var(--space-1);
+  color: var(--text-tertiary);
+  font-size: var(--fs-micro);
   line-height: 1.25;
 }
 
 .daily-rhythm-item__issue {
   width: fit-content;
   max-width: 100%;
-  color: rgba(239, 164, 154, 0.82);
-  font-size: 0.66rem;
+  color: var(--negative-text);
+  font-size: var(--fs-micro);
   line-height: 1.25;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -304,14 +297,14 @@
 }
 
 .daily-rhythm__icon-btn--secondary {
-  border-color: rgba(255,255,255,0.055);
-  background: rgba(255,255,255,0.015);
-  color: rgba(190, 180, 160, 0.55);
+  border-color: var(--border-subtle);
+  background: var(--wash-1);
+  color: var(--text-tertiary);
 }
 
 .daily-rhythm-item:hover .daily-rhythm__icon-btn--secondary,
 .daily-rhythm-item:focus-within .daily-rhythm__icon-btn--secondary {
-  color: rgba(207, 225, 199, 0.86);
+  color: var(--text);
 }
 
 .daily-rhythm__more-btn {
@@ -320,10 +313,10 @@
   padding: 0.18rem 0.04rem;
   border: 0;
   background: transparent;
-  color: rgba(217,153,58,0.82);
+  color: var(--accent);
   font-family: var(--font-body);
-  font-size: 0.66rem;
-  font-weight: 760;
+  font-size: var(--fs-micro);
+  font-weight: 600;
   cursor: pointer;
   transition:
     color var(--dur-fast) var(--ease),
@@ -332,10 +325,9 @@
 
 .daily-rhythm__more-btn:hover,
 .daily-rhythm__more-btn:focus-visible {
-  color: var(--accent-bright);
-  outline: none;
+  color: var(--text);
 }
 
 .daily-rhythm__more-btn:active {
-  transform: translateY(1px);
+  transform: scale(0.98);
 }
