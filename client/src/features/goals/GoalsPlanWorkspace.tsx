@@ -19,7 +19,7 @@ import {
   useUpdateMonthFocusMutation,
   useUpdateWeekPrioritiesMutation,
 } from "../../shared/lib/api";
-import { InlineErrorState } from "../../shared/ui/PageState";
+import { EmptyState, InlineErrorState } from "../../shared/ui/PageState";
 import { GoalInspectorMilestones } from "./GoalInspectorMilestones";
 import {
   GoalFormDialog,
@@ -1381,13 +1381,10 @@ export function GoalsPlanWorkspace({
     />
   ) : planView === "outline" ? (
     <div className="ghq-inspector ghq-inspector--empty">
-      <div className="ghq-inspector__empty-state">
-        <span className="ghq-inspector__empty-icon">◫</span>
-        <h3>Select a goal</h3>
-        <p>
-          Choose a goal from the hierarchy to inspect its context, edit milestones, and decide whether it belongs in your month or week focus.
-        </p>
-      </div>
+      <EmptyState
+        title="Select a goal"
+        description="Choose a goal from the hierarchy to inspect its context, edit milestones, and decide whether it belongs in your month or week focus."
+      />
     </div>
   ) : null;
 

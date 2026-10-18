@@ -15,6 +15,7 @@ import type {
   GoalHorizonItem,
   GoalOverviewItem,
 } from "../../shared/lib/api";
+import { EmptyState } from "../../shared/ui/PageState";
 
 const NODE_W = 244;
 const CONTENT_X = 80;
@@ -23,20 +24,6 @@ const LEVEL_GAP = 168;
 const SIBLING_GAP = 36;
 const ROOT_GAP = 64;
 const GOAL_DRAG_MIME = "application/x-life-os-goal-id";
-
-const domainEmojis: Record<string, string> = {
-  unassigned: "◌",
-  health: "♥",
-  money: "💼",
-  work_growth: "🧠",
-  home_admin: "🏡",
-  discipline: "🎯",
-};
-
-const domainEmoji = (key: string | null) => {
-  if (!key) return "✦";
-  return domainEmojis[key] ?? "✦";
-};
 
 type GoalNodeData = {
   goal: GoalOverviewItem;
@@ -326,7 +313,11 @@ const GoalGraphNode = memo(function GoalGraphNode({ data }: NodeProps) {
       </div>
       <div className="graph-goal-node__meta">
         <span className="graph-goal-node__domain">
-          {domainEmoji(d.goal.domainSystemKey)} {d.goal.domain}
+          <span
+            className={`ghq-domain-dot ghq-domain-dot--${d.goal.domainSystemKey ?? "other"}`}
+            aria-hidden="true"
+          />
+          {d.goal.domain}
         </span>
         {d.goal.horizonName ? (
           <span className="graph-goal-node__badge">{d.goal.horizonName}</span>
@@ -811,8 +802,8 @@ const buildLayout = (props: LayoutProps) => {
           style: {
             stroke:
               branchIds.has(goal.id) && branchIds.has(item.goal.id)
-                ? "#d9993a"
-                : "rgba(216, 166, 95, 0.16)",
+                ? "var(--accent)"
+                : "var(--border-active)",
             strokeWidth: branchIds.has(goal.id) && branchIds.has(item.goal.id) ? 2 : 1,
             opacity: props.isFocusMode && !branchIds.has(item.goal.id) ? 0.2 : 1,
           },
@@ -840,7 +831,7 @@ const buildLayout = (props: LayoutProps) => {
           type: "smoothstep",
           animated: true,
           style: {
-            stroke: "#d9993a",
+            stroke: "var(--accent-line)",
             strokeWidth: 1.5,
             strokeDasharray: "6 4",
           },
@@ -1149,7 +1140,7 @@ const GraphInner = (props: GraphInnerProps) => {
         maxZoom={1.35}
         proOptions={{ hideAttribution: true }}
       >
-        <Background color="rgba(216, 166, 95, 0.03)" gap={40} size={1} />
+        <Background color="var(--wash-3)" gap={40} size={1} />
         <div className="ghq-graph__viewport-controls nopan" aria-label="Canvas view controls">
           <button type="button" onClick={() => void zoomIn({ duration: 180 })} aria-label="Zoom in">
             +
@@ -1315,14 +1306,12 @@ export const GoalsPlanGraphView = ({
   if (!hasGoals) {
     return (
       <div className="ghq-graph-empty">
-        <div className="ghq-graph-empty__content">
-          <span className="ghq-graph-empty__icon">◎</span>
-          <h3>No active goals yet</h3>
-          <p>Create your first goal to see your planning map come to life.</p>
-          <button className="button button--primary button--small" type="button" onClick={onOpenCreateGoal}>
-            + New Goal
-          </button>
-        </div>
+        <EmptyState
+          title="No active goals yet"
+          description="Create your first goal to see your planning map come to life."
+          actionLabel="+ New Goal"
+          onAction={onOpenCreateGoal}
+        />
       </div>
     );
   }
