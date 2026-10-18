@@ -91,7 +91,13 @@
   font-size: var(--fs-small);
   text-align: center;
   cursor: pointer;
-  transition: all var(--dur-fast) var(--ease);
+  transition:
+    color var(--dur-fast) var(--ease),
+    background-color var(--dur-fast) var(--ease),
+    border-color var(--dur-fast) var(--ease),
+    box-shadow var(--dur-fast) var(--ease),
+    opacity var(--dur-fast) var(--ease),
+    transform var(--dur-fast) var(--ease);
 }
 
 .smart-date-picker__shortcut:hover:not(:disabled) {
@@ -142,7 +148,13 @@
   color: var(--text-secondary);
   font-size: 1.15rem;
   cursor: pointer;
-  transition: all var(--dur-fast) var(--ease);
+  transition:
+    color var(--dur-fast) var(--ease),
+    background-color var(--dur-fast) var(--ease),
+    border-color var(--dur-fast) var(--ease),
+    box-shadow var(--dur-fast) var(--ease),
+    opacity var(--dur-fast) var(--ease),
+    transform var(--dur-fast) var(--ease);
 }
 
 .smart-date-picker__cal-nav:hover {
@@ -179,7 +191,13 @@
   color: var(--text);
   font-size: var(--fs-small);
   cursor: pointer;
-  transition: all var(--dur-fast) var(--ease);
+  transition:
+    color var(--dur-fast) var(--ease),
+    background-color var(--dur-fast) var(--ease),
+    border-color var(--dur-fast) var(--ease),
+    box-shadow var(--dur-fast) var(--ease),
+    opacity var(--dur-fast) var(--ease),
+    transform var(--dur-fast) var(--ease);
 }
 
 .smart-date-picker__cal-day:hover:not(:disabled) {
@@ -462,7 +480,13 @@
   font-size: var(--fs-small);
   min-width: 8rem;
   max-width: 12rem;
-  transition: all var(--dur) var(--ease);
+  transition:
+    color var(--dur) var(--ease),
+    background-color var(--dur) var(--ease),
+    border-color var(--dur) var(--ease),
+    box-shadow var(--dur) var(--ease),
+    opacity var(--dur) var(--ease),
+    transform var(--dur) var(--ease);
 }
 
 .goal-select:focus {
@@ -1076,7 +1100,13 @@
   border: 0;
   background: transparent;
   cursor: pointer;
-  transition: all var(--dur-fast) var(--ease);
+  transition:
+    color var(--dur-fast) var(--ease),
+    background-color var(--dur-fast) var(--ease),
+    border-color var(--dur-fast) var(--ease),
+    box-shadow var(--dur-fast) var(--ease),
+    opacity var(--dur-fast) var(--ease),
+    transform var(--dur-fast) var(--ease);
   border-right: 1px solid var(--border);
   white-space: nowrap;
 }
@@ -1174,7 +1204,13 @@
   font-size: var(--fs-small);
   font-weight: 500;
   cursor: pointer;
-  transition: all var(--dur-fast) var(--ease);
+  transition:
+    color var(--dur-fast) var(--ease),
+    background-color var(--dur-fast) var(--ease),
+    border-color var(--dur-fast) var(--ease),
+    box-shadow var(--dur-fast) var(--ease),
+    opacity var(--dur-fast) var(--ease),
+    transform var(--dur-fast) var(--ease);
   text-align: center;
 }
 

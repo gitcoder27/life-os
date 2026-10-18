@@ -37,7 +37,13 @@
   background: transparent;
   border: none;
   cursor: pointer;
-  transition: all var(--dur-fast) var(--ease);
+  transition:
+    color var(--dur-fast) var(--ease),
+    background-color var(--dur-fast) var(--ease),
+    border-color var(--dur-fast) var(--ease),
+    box-shadow var(--dur-fast) var(--ease),
+    opacity var(--dur-fast) var(--ease),
+    transform var(--dur-fast) var(--ease);
   white-space: nowrap;
 }
 
@@ -132,7 +138,13 @@ body.planner-dragging-cursor * {
   background: transparent;
   color: var(--text-secondary);
   cursor: pointer;
-  transition: all var(--dur-fast) var(--ease);
+  transition:
+    color var(--dur-fast) var(--ease),
+    background-color var(--dur-fast) var(--ease),
+    border-color var(--dur-fast) var(--ease),
+    box-shadow var(--dur-fast) var(--ease),
+    opacity var(--dur-fast) var(--ease),
+    transform var(--dur-fast) var(--ease);
   flex-shrink: 0;
 }
 

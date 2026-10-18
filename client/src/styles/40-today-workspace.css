@@ -114,7 +114,13 @@
   flex-shrink: 0;
   cursor: pointer;
   padding: 0;
-  transition: all var(--dur) var(--ease-bounce);
+  transition:
+    color var(--dur) var(--ease),
+    background-color var(--dur) var(--ease),
+    border-color var(--dur) var(--ease),
+    box-shadow var(--dur) var(--ease),
+    opacity var(--dur) var(--ease),
+    transform var(--dur) var(--ease);
 }
 
 .priority-card__check:hover {
@@ -159,7 +165,13 @@
   background: transparent;
   color: var(--text);
   font-size: var(--fs-body);
-  transition: all var(--dur) var(--ease);
+  transition:
+    color var(--dur) var(--ease),
+    background-color var(--dur) var(--ease),
+    border-color var(--dur) var(--ease),
+    box-shadow var(--dur) var(--ease),
+    opacity var(--dur) var(--ease),
+    transform var(--dur) var(--ease);
 }
 
 .priority-card__input:hover {
@@ -187,7 +199,13 @@
   font-size: var(--fs-micro);
   max-width: 7.5rem;
   flex-shrink: 0;
-  transition: all var(--dur) var(--ease);
+  transition:
+    color var(--dur) var(--ease),
+    background-color var(--dur) var(--ease),
+    border-color var(--dur) var(--ease),
+    box-shadow var(--dur) var(--ease),
+    opacity var(--dur) var(--ease),
+    transform var(--dur) var(--ease);
   cursor: pointer;
 }
 
@@ -229,7 +247,13 @@
   height: 1.5rem;
   border-radius: var(--r-xs);
   color: var(--text-tertiary);
-  transition: all var(--dur-fast) var(--ease);
+  transition:
+    color var(--dur-fast) var(--ease),
+    background-color var(--dur-fast) var(--ease),
+    border-color var(--dur-fast) var(--ease),
+    box-shadow var(--dur-fast) var(--ease),
+    opacity var(--dur-fast) var(--ease),
+    transform var(--dur-fast) var(--ease);
 }
 
 .priority-card__more:hover {
@@ -270,7 +294,13 @@
   font-size: var(--fs-small);
   color: var(--text-secondary);
   text-align: left;
-  transition: all var(--dur-fast) var(--ease);
+  transition:
+    color var(--dur-fast) var(--ease),
+    background-color var(--dur-fast) var(--ease),
+    border-color var(--dur-fast) var(--ease),
+    box-shadow var(--dur-fast) var(--ease),
+    opacity var(--dur-fast) var(--ease),
+    transform var(--dur-fast) var(--ease);
 }
 
 .action-menu__item:hover {
@@ -304,7 +334,13 @@
   color: var(--text-tertiary);
   font-size: var(--fs-small);
   font-weight: 500;
-  transition: all var(--dur) var(--ease);
+  transition:
+    color var(--dur) var(--ease),
+    background-color var(--dur) var(--ease),
+    border-color var(--dur) var(--ease),
+    box-shadow var(--dur) var(--ease),
+    opacity var(--dur) var(--ease),
+    transform var(--dur) var(--ease);
   width: 100%;
 }
 
@@ -498,7 +534,13 @@
   cursor: pointer;
   padding: 0;
   margin-top: 0.1rem;
-  transition: all var(--dur) var(--ease-bounce);
+  transition:
+    color var(--dur) var(--ease),
+    background-color var(--dur) var(--ease),
+    border-color var(--dur) var(--ease),
+    box-shadow var(--dur) var(--ease),
+    opacity var(--dur) var(--ease),
+    transform var(--dur) var(--ease);
 }
 
 .task-card__check:hover {
@@ -572,7 +614,13 @@
   border-radius: var(--r-xs);
   color: var(--text-tertiary);
   margin-top: 0.1rem;
-  transition: all var(--dur-fast) var(--ease);
+  transition:
+    color var(--dur-fast) var(--ease),
+    background-color var(--dur-fast) var(--ease),
+    border-color var(--dur-fast) var(--ease),
+    box-shadow var(--dur-fast) var(--ease),
+    opacity var(--dur-fast) var(--ease),
+    transform var(--dur-fast) var(--ease);
 }
 
 .task-card__more:hover {

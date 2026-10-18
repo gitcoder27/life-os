@@ -206,7 +206,13 @@
   color: var(--text-tertiary);
   font-size: var(--fs-micro);
   cursor: pointer;
-  transition: all var(--dur-fast) var(--ease);
+  transition:
+    color var(--dur-fast) var(--ease),
+    background-color var(--dur-fast) var(--ease),
+    border-color var(--dur-fast) var(--ease),
+    box-shadow var(--dur-fast) var(--ease),
+    opacity var(--dur-fast) var(--ease),
+    transform var(--dur-fast) var(--ease);
   padding: 0;
 }
 
@@ -263,7 +269,13 @@
   font-family: var(--font-body);
   cursor: pointer;
   text-align: left;
-  transition: all var(--dur-fast) var(--ease);
+  transition:
+    color var(--dur-fast) var(--ease),
+    background-color var(--dur-fast) var(--ease),
+    border-color var(--dur-fast) var(--ease),
+    box-shadow var(--dur-fast) var(--ease),
+    opacity var(--dur-fast) var(--ease),
+    transform var(--dur-fast) var(--ease);
 }
 
 .planner-block__overflow-item:hover {
@@ -320,7 +332,13 @@
   height: 2px;
   border-radius: 2px;
   background: var(--wash-4);
-  transition: all var(--dur) var(--ease);
+  transition:
+    color var(--dur) var(--ease),
+    background-color var(--dur) var(--ease),
+    border-color var(--dur) var(--ease),
+    box-shadow var(--dur) var(--ease),
+    opacity var(--dur) var(--ease),
+    transform var(--dur) var(--ease);
 }
 
 .planner-block__resize-handle:hover::after {
@@ -623,7 +641,13 @@
   color: transparent;
   cursor: pointer;
   font-size: var(--fs-micro);
-  transition: all var(--dur) var(--ease-bounce);
+  transition:
+    color var(--dur) var(--ease),
+    background-color var(--dur) var(--ease),
+    border-color var(--dur) var(--ease),
+    box-shadow var(--dur) var(--ease),
+    opacity var(--dur) var(--ease),
+    transform var(--dur) var(--ease);
 }
 
 .planner-block__task-check:hover {
@@ -681,7 +705,13 @@
   color: var(--text-tertiary);
   font-size: var(--fs-micro);
   cursor: pointer;
-  transition: all var(--dur-fast) var(--ease);
+  transition:
+    color var(--dur-fast) var(--ease),
+    background-color var(--dur-fast) var(--ease),
+    border-color var(--dur-fast) var(--ease),
+    box-shadow var(--dur-fast) var(--ease),
+    opacity var(--dur-fast) var(--ease),
+    transform var(--dur-fast) var(--ease);
 }
 
 .planner-block__task-move--label {
@@ -889,7 +919,13 @@
   font-size: var(--fs-micro);
   font-family: var(--font-body);
   cursor: pointer;
-  transition: all var(--dur) var(--ease);
+  transition:
+    color var(--dur) var(--ease),
+    background-color var(--dur) var(--ease),
+    border-color var(--dur) var(--ease),
+    box-shadow var(--dur) var(--ease),
+    opacity var(--dur) var(--ease),
+    transform var(--dur) var(--ease);
 }
 
 .planner-form__preset:hover {

@@ -369,7 +369,13 @@
   color: var(--text-tertiary);
   font-size: var(--fs-small);
   font-weight: 500;
-  transition: all var(--dur) var(--ease);
+  transition:
+    color var(--dur) var(--ease),
+    background-color var(--dur) var(--ease),
+    border-color var(--dur) var(--ease),
+    box-shadow var(--dur) var(--ease),
+    opacity var(--dur) var(--ease),
+    transform var(--dur) var(--ease);
   width: 100%;
   cursor: pointer;
 }
@@ -499,7 +505,13 @@
   flex-shrink: 0;
   cursor: pointer;
   padding: 0;
-  transition: all var(--dur) var(--ease-bounce);
+  transition:
+    color var(--dur) var(--ease),
+    background-color var(--dur) var(--ease),
+    border-color var(--dur) var(--ease),
+    box-shadow var(--dur) var(--ease),
+    opacity var(--dur) var(--ease),
+    transform var(--dur) var(--ease);
 }
 
 .today-priority-card__check:hover {
@@ -542,7 +554,13 @@
   background: transparent;
   color: var(--text);
   font-size: var(--fs-body);
-  transition: all var(--dur) var(--ease);
+  transition:
+    color var(--dur) var(--ease),
+    background-color var(--dur) var(--ease),
+    border-color var(--dur) var(--ease),
+    box-shadow var(--dur) var(--ease),
+    opacity var(--dur) var(--ease),
+    transform var(--dur) var(--ease);
 }
 
 .today-priority-card__input:hover {
@@ -575,7 +593,13 @@
   color: var(--text-tertiary);
   font-size: var(--fs-micro);
   min-width: 0;
-  transition: all var(--dur) var(--ease);
+  transition:
+    color var(--dur) var(--ease),
+    background-color var(--dur) var(--ease),
+    border-color var(--dur) var(--ease),
+    box-shadow var(--dur) var(--ease),
+    opacity var(--dur) var(--ease),
+    transform var(--dur) var(--ease);
   cursor: pointer;
 }
 
@@ -602,7 +626,13 @@
   max-width: 6rem;
   flex-shrink: 1;
   min-width: 0;
-  transition: all var(--dur) var(--ease);
+  transition:
+    color var(--dur) var(--ease),
+    background-color var(--dur) var(--ease),
+    border-color var(--dur) var(--ease),
+    box-shadow var(--dur) var(--ease),
+    opacity var(--dur) var(--ease),
+    transform var(--dur) var(--ease);
   cursor: pointer;
 }
 
@@ -640,7 +670,13 @@
   height: 1.5rem;
   border-radius: var(--r-xs);
   color: var(--text-tertiary);
-  transition: all var(--dur-fast) var(--ease);
+  transition:
+    color var(--dur-fast) var(--ease),
+    background-color var(--dur-fast) var(--ease),
+    border-color var(--dur-fast) var(--ease),
+    box-shadow var(--dur-fast) var(--ease),
+    opacity var(--dur-fast) var(--ease),
+    transform var(--dur-fast) var(--ease);
   border: 0;
   background: none;
   cursor: pointer;
@@ -851,7 +887,13 @@
   cursor: pointer;
   padding: 0;
   margin-top: 0.1rem;
-  transition: all var(--dur) var(--ease-bounce);
+  transition:
+    color var(--dur) var(--ease),
+    background-color var(--dur) var(--ease),
+    border-color var(--dur) var(--ease),
+    box-shadow var(--dur) var(--ease),
+    opacity var(--dur) var(--ease),
+    transform var(--dur) var(--ease);
 }
 
 .today-task-card__check:hover {
@@ -937,7 +979,13 @@
   height: 1.4rem;
   border-radius: var(--r-xs);
   color: var(--text-tertiary);
-  transition: all var(--dur-fast) var(--ease);
+  transition:
+    color var(--dur-fast) var(--ease),
+    background-color var(--dur-fast) var(--ease),
+    border-color var(--dur-fast) var(--ease),
+    box-shadow var(--dur-fast) var(--ease),
+    opacity var(--dur-fast) var(--ease),
+    transform var(--dur-fast) var(--ease);
   border: 0;
   background: none;
   cursor: pointer;
@@ -1236,7 +1284,13 @@
   font-size: var(--fs-micro);
   font-weight: 600;
   cursor: pointer;
-  transition: all var(--dur-fast) var(--ease);
+  transition:
+    color var(--dur-fast) var(--ease),
+    background-color var(--dur-fast) var(--ease),
+    border-color var(--dur-fast) var(--ease),
+    box-shadow var(--dur-fast) var(--ease),
+    opacity var(--dur-fast) var(--ease),
+    transform var(--dur-fast) var(--ease);
 }
 
 .today-day-note__chip:hover {
@@ -1512,7 +1566,13 @@
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  transition: all var(--dur-fast) var(--ease);
+  transition:
+    color var(--dur-fast) var(--ease),
+    background-color var(--dur-fast) var(--ease),
+    border-color var(--dur-fast) var(--ease),
+    box-shadow var(--dur-fast) var(--ease),
+    opacity var(--dur-fast) var(--ease),
+    transform var(--dur-fast) var(--ease);
   color: transparent;
 }
 
