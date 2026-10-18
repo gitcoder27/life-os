@@ -89,7 +89,7 @@ on in-flow panels.
 | Group | colors | gradients | backdrop | shadows | Fraunces | infinite | literal font-size | `transition: all` | hover lifts |
 |---|---|---|---|---|---|---|---|---|---|
 | Foundation (00,10,11,13,16,20) | 189 → 46 | 34 → 0 | 5 → 4 | 31 → 17 | 14 → 4 | 7 → 2 | 19 → 10 | 16 → 0 | 2 → 0 |
-| Home (90) | 152 → 2 | 20 → 0 | 0 → 0 | 21 → 6 | 7 → 1 | 0 → 0 | 73 → 2 | 0 → 0 | 11 → 0 |
+| Home (90) | 152 → 2 | 20 → 0 | 0 → 0 | 21 → 6 | 7 → 1 | 0 → 0 | 73 → 2 | 0 → 0 | 11 → 2* |
 | Today (today-desk, execute-v2, shared, adaptive-v2, 40) | 352 → 0 | 35 → 0 | 0 → 0 | 56 → 52 | 10 → 2 | 0 → 0 | 130 → 2 | 28 → 0 | 5 → 0 |
 | Planner (planner/*) | 372 → 0 | 18 → 1 | 4 → 0 | 38 → 32 | 4 → 0 | 4 → 1 | 46 → 3 | 10 → 0 | 6 → 0 |
 | Inbox (15) | 24 → 0 | 2 → 0 | 3 → 0 | 7 → 7 | 5 → 1 | 0 → 0 | 5 → 0 | 6 → 0 | 0 → 0 |
@@ -103,6 +103,7 @@ Notes on the leftovers:
 - Planner's one gradient is the dotted drag-handle pattern (`currentColor` dots).
 - The color left on Home and Habits is the categorical health teal (`#5db8b0`). Home also keeps the growth violet (`#b07cd8`).
 - Habits shadows went up by 2 because two inputs gained focus rings.
+- \* The 2 remaining Home matches are the history tooltip sliding into place when its day is hovered, not lifts on the hovered element.
 
 ### Foundation
 - **Before:** two amber/green radial light spots behind every page. 16–22px radii, colored glow shadows on buttons and dots, and a pulsing glow keyframe. Most controls had no `:focus-visible` style, and only 2 reduced-motion guards existed.
