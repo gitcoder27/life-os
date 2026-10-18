@@ -2,6 +2,7 @@
 
 Scope: `/home`, `/today`, `/planner`, `/inbox`, `/habits`, plus the shared foundation
 (tokens, shell, primitives). Visual-only: CSS, plus className/markup-wrapper tweaks. Dark-only.
+`/goals` followed on `style/goals-refresh`; see §6.
 
 ## 1. Audit (baseline: `main` @ 6890b41)
 
@@ -309,12 +310,186 @@ OS "reduce motion" on.
 
 ## 5. Left undone / follow-ups
 
-- **Other screens** (health, meals, finance, goals, reviews, notifications, settings, login) did not get the codemod. They inherit the new borders, radii and shadow tokens but keep their own literal colors, gradients and `transition: all`. The radius change (16→10px etc.) is the most visible inherited change there; review those screens too.
+- **Other screens** (health, meals, finance, reviews, notifications, settings, login) did not get the codemod. Goals has since been refreshed; see §6. They inherit the new borders, radii and shadow tokens but keep their own literal colors, gradients and `transition: all`. The radius change (16→10px etc.) is the most visible inherited change there; review those screens too.
 - **`--danger`** is still undefined. `14-review-and-domain.css:655` and an inline style in `features/auth/LoginPage.tsx:55` rely on the `#e88f8f` fallback. Map both to `--negative-text`.
-- **Categorical colors** remain literals: health `#5db8b0`, growth `#b07cd8` and discipline `#b48ead`. A small `--cat-*` set would make them themeable.
+- **Categorical colors** remain literals: health `#5db8b0`, growth `#b07cd8` and discipline `#b48ead`. The Goals pass added `--cat-*` (§6); Home and Habits still use the literals.
 - **Unreferenced CSS** (no matching `className` in TSX, e.g. `.today-hero*`, `.today-stage-empty*`, `.daily-launch*`, `.guidance-rail*`) was restyled but not deleted, because dynamic class names make removal risky without a coverage run.
 - **Keyboard access:** the Inbox inspector title and notes are click-to-edit `<h2>`/`<p>` elements with no keyboard entry point. That needs a behavior change (button role or tabindex), so it is out of scope for a visual pass.
 - **Focus-mode dimming** on Today (`stream-task--focus-muted` at 0.44 opacity, workbench support at 0.46) is intentionally kept. The muted rows fall below AA contrast while a session runs.
 - **Always-on rings:** the goal combobox input and the Inbox inspector inputs only exist while editing, so their rings are effectively always on while visible.
 - **Theme:** no light theme was added. The app stays dark-only.
 - **Not verified visually:** no browser was opened. Everything above was validated by typecheck, production build, both test suites and code review; the checklist in §4 covers what still needs eyes.
+
+## 6. Goals (branch `style/goals-refresh`, off `style/ui-refresh`)
+
+Scope: `/goals`, both modes: Overview, and Plan with its graph and outline subviews. The work is
+visual only, using the same rules as §1–5. Stylesheets: `60-goals-planning.css` and `50-active-pursuits.css`.
+`.ap-*` is only referenced from `features/goals`, so the whole of 50 serves Goals. The
+`settings-config-*` block at the end of 60 serves Settings and was tokenized in place.
+
+### Audit (baseline: `style/ui-refresh` @ 54cc7cc)
+
+**Overview**
+1. Every surface used gradients. Goal cards, the selected card, the four progress fills and the inspector CTA each had a gradient, and the selected card added an amber ring and a drop shadow. The card was defined twice: once in 50 and again in 60, with different values.
+2. Domains were marked with emoji, 21 of them across the live Goals components: filter pills, section titles, both inspectors and graph nodes, plus a calendar emoji on the card date. There was no quiet domain marker to use instead.
+3. Fraunces appeared on five things: the page title, domain-section titles, card titles, the inspector title and an inline `fontFamily` + `fontSize: 1.25rem` on the month focus in `GoalsOverviewWorkspace.tsx`. That file carried 5 more inline layout styles.
+4. Cards lifted on hover with a `translateY` and a shadow. `transition: all` was used on the mode toggle, filter pills, cards and every inspector control. The filter search and select used `outline: none` with only a soft ring.
+5. Tertiary text was dimmed with extra opacity on cards and sections.
+
+**Plan (outline and graph)**
+1. The graph canvas, the rail, the inspectors, the planning dock and the capacity card each sat on their own gradient. Five in-flow graph controls used `backdrop-filter` blur: the workbar, toolbar groups, toolbar buttons, the expand button and the viewport controls. The form overlay, the detail backdrop and the floating inspector were blurred too.
+2. Amber was everywhere on the graph, not just on the selection:
+   - selected, branch, spotlight and drop-target nodes each had an amber glow;
+   - the selection toolbar's primary button had a glow;
+   - edges were a literal `#d9993a`;
+   - the dot grid was literal amber `rgba(216,166,95,0.03)`;
+   - the four node progress fills were gradients.
+3. Nodes, dock slots and branch toggles lifted on hover, and nodes and dock slots also used `transition: all`. The planning form, graph search, child-draft and dock inputs had no focus style beyond the browser default.
+4. Fraunces appeared on the inspector title, the inspector empty state and the graph empty state. The graph empty state was a one-off markup block, and the outline inspector's empty state had its own copy block.
+5. Every color was hard-coded: 210 in 60 and 35 in 50. There were 45 literal font sizes and 13 literal radii.
+
+### What changed (before → after)
+
+Each commit passed `npm run typecheck`, `npm run build`, `npm test -w client` (86/86) and
+`npm test -w server` (340 passed, 8 skipped):
+
+| Commit | Scope |
+| --- | --- |
+| `11081f6` style(goals) | `--cat-*` tokens, domain dots in place of emoji, shared pieces (header, mode toggle, form overlay, progress, inspector shell) |
+| `5414617` style(goals) | Overview: filters, domain sections, the single GoalCard, weekly/monthly grid, the `.ap-inspector` contents |
+| `b0d94b5` style(goals) | Plan: rail, tree, outline inspector, graph canvas, nodes, edges, toolbars, dock, capacity, touch targets |
+
+Counts use the same script as §2, comments excluded:
+
+| File | colors | gradients | backdrop | shadows | Fraunces | literal font-size | literal radius | `transition: all` | hover lifts | `outline: none` |
+|---|---|---|---|---|---|---|---|---|---|---|
+| 60-goals-planning.css | 210 → 0 | 33 → 0 | 14 → 0 | 30 → 18 | 4 → 1 | 26 → 3 | 10 → 1 | 17 → 0 | 5 → 0 | 4 → 8 |
+| 50-active-pursuits.css | 35 → 0 | 9 → 0 | 0 → 0 | 5 → 2 | 4 → 0 | 19 → 0 | 3 → 0 | 7 → 0 | 2 → 0 | 1 → 1 |
+| Goals TSX (live components) | — | — | — | — | inline 1 → 0 | — | — | — | — | — |
+
+In the live TSX, emoji went from 21 to 0 and inline `style={{}}` from 11 to 4. The 4 that remain are the three dynamic progress widths and the hierarchy rail's indent.
+
+Notes on the leftovers:
+- **Shadows (20).** Nine are focus rings: the shared 3px `--accent-soft` ring on Goals inputs and selects, 2 of them Settings rows. The rest:
+  - 4 hairline insets: the unassigned domain dot, the subtle results pill, the horizon badge and the node badge;
+  - the selected tree row's 2px accent bar;
+  - 5 floating layers: the form overlay, the expanded canvas, the graph notice, the node menu and the dragged milestone row;
+  - the unrendered floating inspector.
+- **`outline: none` (9).** Each one is paired with the shared input focus: `--border-focus` plus the 3px `--accent-soft` ring. 60 rose from 4 to 8 because the planning form, graph search, child-draft and dock inputs had no focus style before; they now match the rest of the app.
+- **Literal font sizes (3).** These are the 0.5rem date glyph box, sized in ems for the drawn icon, and two Settings row glyphs.
+- **Literal radius (1).** The date glyph's 2px corner.
+- **Fraunces.** Only the "Goals" page title.
+
+**Shared**
+- Domains are marked by 7px `.ghq-domain-dot--{systemKey}` dots in `--cat-*` colors. They appear on filter pills, section titles, both inspectors and graph nodes. "Unassigned" is a hollow ring.
+- Accent appears in only three places:
+  - the primary action (+ New Goal, Save and the inspector CTA, all `.button--primary`);
+  - the selected goal or node: an accent border on a 5–6% accent tint, or the tree's 2px accent bar;
+  - the active mode, shown as `--accent-soft` with `--accent-bright` text.
+- The subview toggle, filter pills and capacity mode use a neutral `--wash-4/5` active state.
+- Progress fills are flat. On track is `--info`, drifting `--accent`, stalled `--negative`, achieved `--positive`. Drifting follows `.tag--warning`.
+- The form overlay is a `--scrim` with no blur. Its panel scales in over `--dur` with `--shadow-lg`.
+- Every transition lists explicit properties. Entrance motion is `fadeIn`/`scaleIn` over `--dur`. Node and edge reveals are switched off under `prefers-reduced-motion: reduce`, on top of the global block.
+
+**Overview**
+- **Before:** gradient cards that lifted and glowed, emoji domain markers, Fraunces on five things and inline type styles.
+- **After:**
+  - Cards: there is now one GoalCard definition, in 60. It is a flat `--panel` with a 1px `--border`. Hover shifts only the border. The selected card gets the accent line and tint.
+  - Section titles: body font at `--fs-h2`, with a domain dot and a tabular count.
+  - Month focus and priorities: the month focus is `--fs-h2` body font via `.ghq-month-focus`. The weekly and monthly priority rows use `.ghq-priority-*` classes in place of inline styles. Planning actions sit in a column behind a hairline.
+  - The tracking tag is `tag--neutral`.
+  - The inspector CTA is `.button--primary`, full width, without the pen emoji. Collapsible sections drop their icon, and the chevron is `aria-hidden`.
+
+**Plan**
+- **Before:** a gradient canvas behind blurred toolbars, amber glow on every node state, literal amber edges and grid, and lifting nodes.
+- **After:**
+  - In graph mode the outline's outer frame is dropped, so the canvas is the only frame: a flat `--bg-deep` with a 1px `--border`. React Flow's dot grid is `var(--wash-3)`. Edges are `var(--border-active)`, with `var(--accent)` on the selected path and `var(--accent-line)` on the draft edge, all passed as CSS variables.
+  - Toolbars, the workbar and viewport controls are opaque `--panel` groups with a hairline. Only the selection group has an accent line.
+  - Node states:
+    - spotlight: `--text-tertiary` border;
+    - branch: `--accent-line`;
+    - selected: `--accent` border on a 6% tint;
+    - drop target: a 10% tint.
+    
+    None of them use shadows or lifts. Hover changes only the border.
+  - Node outer dimensions are unchanged: 244px wide, the same padding, border and control sizes. A comment in the CSS records that `LEVEL_GAP`, `SIBLING_GAP` and `CONTENT_*` in `GoalsPlanGraphView.tsx` depend on them.
+  - The graph empty state and the outline's empty inspector render the shared `EmptyState` with the same copy and action.
+  - The outline inspector title is `--fs-h1`, weight 600, in body font.
+  - The tree marks health with a 7px dot and the selection with a 2px accent bar.
+  - Dock slots: filled is `--wash-2` and selected uses the accent line. The capacity card turns `--accent-wash` when tight and `--negative-soft` when overloaded.
+  - On `pointer: coarse`, the mode, subview, filter, tree, inspector, graph search/select, capacity and viewport controls get 44px minimums.
+
+### Tokens
+
+**Added** (in `00-foundations.css`): `--cat-health` `#5db8b0`, `--cat-money` `#d0b56a`, `--cat-work`
+(= `--info`), `--cat-home` `#c58b6c`, `--cat-discipline` `#b48ead`, `--cat-neutral` (= `--text-tertiary`).
+These are for small markers only, never fills. Health and discipline match the literals Home and
+Habits already used.
+
+These are dots, so the non-text contrast threshold of 3:1 applies. Against `--panel`, `--panel-elevated` and `--bg-deep`, the range is 4.8–9.9. The lowest is `--cat-neutral` on `--panel-elevated`.
+
+Text contrast:
+- Active mode (`--accent-bright` on `--accent-soft`): 8.7.
+- `--text` on the selected tint: 12.9.
+- `--text-tertiary` on the canvas (`--bg-deep`): 5.7.
+- The extra opacity dimming on tertiary text was removed. Stalled text uses `--negative-text` (6.5).
+
+### Manual checklist (`/goals`)
+
+Check at **~1440px** and **~390px**, then once with OS "reduce motion" on.
+
+**Both modes**
+- [ ] Only the "Goals" title is serif. Everything else is sans-serif.
+- [ ] Amber appears only on:
+  - the + New Goal / Save / inspector CTA buttons;
+  - the active Overview/Plan mode;
+  - the selected goal, card, tree row or node.
+  
+  Subview, filter and capacity toggles are neutral.
+- [ ] No gradients and no blur over in-flow panels. Only the goal form panel, the expanded canvas, node menus, notices and a dragged milestone row float with a shadow.
+- [ ] Domain dots show distinct colors: health teal, money gold, work blue-gray, home clay, discipline violet. Unassigned is a hollow ring.
+- [ ] Progress bars are flat. On track is blue-gray, drifting amber, stalled red, achieved green.
+- [ ] Tabbing shows the 2px amber ring on every button, pill, tree row and node. Inputs show the amber border plus a soft ring. Hovering never moves anything.
+- [ ] The goal form opens over a dim scrim with no blur, and its panel scales in briefly.
+- [ ] With reduce motion on, nothing fades, scales or slides in, including graph nodes and edges.
+
+**Overview**
+- [ ] Filter pills: the active pill is a lighter neutral segment. Search and select show the focus ring.
+- [ ] Domain sections: sans-serif title, dot, count. Cards are flat. Hover changes only the border. The selected card has a faint amber tint and line.
+- [ ] The card date shows a small drawn calendar glyph, not an emoji.
+- [ ] Weekly/monthly grid: the month focus reads as a sans-serif heading, and the W1, W2… priorities line up. Actions sit to the right behind a hairline.
+- [ ] Inspector:
+  - Sections expand and collapse, with no icons beside their titles.
+  - Milestone editing works: add, check, reorder and delete.
+  - The CTA is a full-width solid amber button, and disabled buttons look disabled.
+- [ ] At 390px the inspector opens full-screen, cards stack, and pills, section headers and card actions are at least 44px tall.
+
+**Plan: outline**
+- [ ] Rail: horizon roadmap with counts. Tree rows hover neutrally. The selected row has a 2px amber left bar on a faint wash, and health dots are visible.
+- [ ] Inspector: the title is sans-serif at h1 size. Domain shows as a dot plus label. Linked items, NBA and inactive goals are readable.
+- [ ] With nothing selected, the inspector shows the shared dashed "Select a goal" empty state.
+- [ ] Planning form inputs and selects show the focus border and ring.
+
+**Plan: graph**
+- [ ] The canvas is a flat near-black with a faint neutral dot grid. Edges are neutral, and the selected path is amber.
+- [ ] Nodes:
+  - Hover raises only the border.
+  - Selecting a node gives an amber border and faint tint.
+  - Spotlight and branch states read without glows.
+  - Dimmed nodes fade when filtering.
+- [ ] Drag a goal onto another: the drop target tints amber. Node spacing and edge routing look the same as before the refresh.
+- [ ] Toolbars, workbar and zoom controls are opaque and readable over the grid, with no blur.
+- [ ] The expanded canvas floats with one shadow. The child draft input and dock inputs show the focus ring.
+- [ ] The planning dock and capacity card are flat. Tight is amber-washed and overloaded is red-washed.
+- [ ] With no goals, the canvas shows the shared empty state with the + New Goal action.
+- [ ] At 390px the graph, toolbar and dock stack. Viewport buttons, subview toggle and capacity steppers are at least 44px.
+
+### Left undone / follow-ups (Goals)
+- **Milestone editor controls** (check, icon and drag buttons) stay 22–24px on touch. Raising them to 44px overflows the editor's 22px grid tracks at 390px and enlarges the bordered check box. Fixing that needs a layout change to the editor row.
+- **Graph node controls** (branch toggle, menu button) keep their size on touch, because node outer dimensions feed `LEVEL_GAP`/`SIBLING_GAP`/`CONTENT_*`.
+- **Dimmed nodes** stay at 0.28 opacity, unchanged, while filtering. Like Today's focus-mode dimming (§5), they fall below AA on purpose.
+- **`--cat-*` adoption elsewhere.** Home's goal dots and Habits' health teal still use their literals. Repointing them to `--cat-*` is a one-line change per rule.
+- **Dead code**, restyled but not deleted:
+  - Components not imported anywhere: `GoalDomainSections`, `GoalFilters`, `GoalDetailPanel`, `SortablePlanningEditor`.
+  - CSS with no matching `className`: the inline graph planner (`graph-planner*`, `graph-slot*`, `graph-column-*`, `graph-ghost*`, `graph-lane-label*`), `ghq-plan__floating-inspector`, `ghq-today-alignment`, and the old `ap-page*`, `ap-workspace*` and `ap-planning-panel*` shells in 50. A heuristic scan finds 68 such classes in 60 (not counting React Flow's own) and 13 in 50, including small leftovers such as `ghq-inspector__empty*` and `ghq-plan__floating-close`.
+- **Not verified visually.** No browser was opened. Everything above was validated by typecheck, production build, both test suites and code review. The checklist above covers what still needs eyes.
