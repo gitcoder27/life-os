@@ -114,4 +114,51 @@ describe("goal nudges", () => {
     expect(nudges[0]?.suggestedPriorityTitle).toBe("Define the next milestone");
     expect(nudges.map((nudge) => nudge.goal.id)).toEqual(["a", "b", "c"]);
   });
+
+  it("drops a nudge that repeats a concrete action already suggested", () => {
+    const nudges = buildGoalNudges([
+      {
+        goal: { id: "child", title: "Launch site", domain: "work_growth", status: "active" },
+        health: "stalled",
+        progressPercent: 20,
+        nextBestAction: "Finish task: Call caterer",
+        targetDate: null,
+        lastActivityAt: "2026-03-01T09:00:00.000Z",
+        todayPriorityCount: 0,
+        todayTaskCount: 0,
+      },
+      {
+        goal: { id: "parent", title: "Grow the business", domain: "work_growth", status: "active" },
+        health: "drifting",
+        progressPercent: 10,
+        nextBestAction: "Finish task: Call caterer",
+        targetDate: null,
+        lastActivityAt: "2026-03-01T09:00:00.000Z",
+        todayPriorityCount: 0,
+        todayTaskCount: 0,
+      },
+      {
+        goal: { id: "x", title: "X", domain: "other", status: "active" },
+        health: "drifting",
+        progressPercent: 0,
+        nextBestAction: "Define the next milestone",
+        targetDate: null,
+        lastActivityAt: "2026-03-02T09:00:00.000Z",
+        todayPriorityCount: 0,
+        todayTaskCount: 0,
+      },
+      {
+        goal: { id: "y", title: "Y", domain: "other", status: "active" },
+        health: "drifting",
+        progressPercent: 0,
+        nextBestAction: "Define the next milestone",
+        targetDate: null,
+        lastActivityAt: "2026-03-03T09:00:00.000Z",
+        todayPriorityCount: 0,
+        todayTaskCount: 0,
+      },
+    ]);
+
+    expect(nudges.map((nudge) => nudge.goal.id)).toEqual(["child", "x", "y"]);
+  });
 });
