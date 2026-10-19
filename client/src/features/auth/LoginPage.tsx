@@ -52,7 +52,7 @@ export function LoginPage() {
           </label>
 
           {loginMutation.error ? (
-            <p className="list__subtle" style={{ color: "var(--danger, #e88f8f)" }}>
+            <p className="list__subtle" style={{ color: "var(--negative-text)" }}>
               {loginMutation.error instanceof Error
                 ? loginMutation.error.message
                 : "Unable to sign in."}

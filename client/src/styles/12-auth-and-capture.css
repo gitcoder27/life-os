@@ -11,27 +11,29 @@
   display: grid;
   place-items: center;
   min-height: 100vh;
-  padding: 1.5rem;
-  background:
-    radial-gradient(ellipse at 50% 30%, rgba(217,153,58,0.08), transparent 50%),
-    var(--bg-deep);
+  padding: var(--space-6);
+  background: var(--bg);
 }
 
 .auth-layout__panel {
   width: min(100%, 28rem);
-  padding: 2rem;
+  padding: var(--space-8);
   border-radius: var(--r-lg);
-  border: 1px solid var(--border-active);
-  background: linear-gradient(180deg, var(--panel-elevated), var(--panel));
-  box-shadow: var(--shadow-lg);
-  animation: scaleIn 0.5s var(--ease) both;
+  border: 1px solid var(--border);
+  background: var(--panel);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .auth-layout__panel {
+    animation: scaleIn var(--dur-slow) var(--ease) both;
+  }
 }
 
 .auth-brand {
   display: flex;
   align-items: center;
-  gap: 0.9rem;
-  margin-bottom: 0.65rem;
+  gap: var(--space-4);
+  margin-bottom: var(--space-3);
 }
 
 .auth-brand--loading {
@@ -42,45 +44,42 @@
   width: 3rem;
   height: 3rem;
   flex-shrink: 0;
-  border-radius: 16px;
-  box-shadow:
-    0 14px 34px rgba(0, 0, 0, 0.3),
-    0 0 0 1px rgba(217,153,58,0.16);
+  border-radius: var(--r-lg);
+  box-shadow: 0 0 0 1px var(--border);
 }
 
 .auth-brand__copy {
   display: flex;
   flex-direction: column;
-  gap: 0.18rem;
+  gap: var(--space-1);
   min-width: 0;
 }
 
 .auth-brand__name {
-  font-family: var(--font-display);
-  font-size: 1.18rem;
+  font-size: var(--fs-h2);
   font-weight: 600;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.01em;
 }
 
 .auth-layout__panel--loading {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 1rem;
+  gap: var(--space-4);
 }
 
 .auth-layout__title {
   font-family: var(--font-display);
-  font-size: clamp(1.8rem, 3.5vw, 2.4rem);
+  font-size: var(--fs-display);
   font-weight: 500;
-  margin: 0.6rem 0 0;
+  margin: var(--space-2) 0 0;
   letter-spacing: -0.02em;
 }
 
 .auth-layout__copy {
   color: var(--text-secondary);
   font-size: var(--fs-body);
-  margin: 0.5rem 0 1.5rem;
+  margin: var(--space-2) 0 var(--space-6);
   line-height: 1.6;
 }
 
@@ -88,11 +87,7 @@
   .auth-brand__mark {
     width: 2.7rem;
     height: 2.7rem;
-    border-radius: 14px;
-  }
-
-  .auth-brand__name {
-    font-size: 1.05rem;
+    border-radius: var(--r-lg);
   }
 }
 
@@ -112,10 +107,9 @@
 .capture-sheet__backdrop {
   position: absolute;
   inset: 0;
-  background: rgba(0,0,0,0.55);
+  background: var(--scrim);
   opacity: 0;
   transition: opacity var(--dur-slow) var(--ease);
-  backdrop-filter: blur(4px);
 }
 
 .capture-sheet--open .capture-sheet__backdrop {
@@ -129,12 +123,14 @@
   width: min(100% - 2rem, 30rem);
   border-radius: var(--r-lg);
   border: 1px solid var(--border-active);
-  background: linear-gradient(180deg, var(--panel-elevated), var(--panel));
-  padding: 1.25rem;
+  background: var(--panel-elevated);
+  padding: var(--space-5);
   box-shadow: var(--shadow-lg);
-  transform: translateY(1.5rem);
+  transform: translateY(var(--space-4));
   opacity: 0;
-  transition: all 0.3s var(--ease);
+  transition:
+    transform var(--dur-slow) var(--ease),
+    opacity var(--dur-slow) var(--ease);
 }
 
 .capture-sheet--open .capture-sheet__panel {
@@ -146,12 +142,11 @@
   display: flex;
   align-items: start;
   justify-content: space-between;
-  gap: 1rem;
-  margin-bottom: 1rem;
+  gap: var(--space-4);
+  margin-bottom: var(--space-4);
 }
 
 .capture-sheet__title {
-  font-family: var(--font-display);
   font-size: var(--fs-h2);
   font-weight: 600;
 }
@@ -165,7 +160,7 @@
 .task-edit-sheet__grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 1rem;
+  gap: var(--space-4);
 }
 
 .task-edit-sheet__grid--date-time {
@@ -175,27 +170,41 @@
 .capture-grid {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.5rem;
-  margin-bottom: 1rem;
+  gap: var(--space-2);
+  margin-bottom: var(--space-4);
 }
 
 .capture-chip {
-  padding: 0.5rem 0.8rem;
+  padding: var(--space-2) var(--space-3);
   border-radius: var(--r-xs);
   border: 1px solid var(--border);
-  background: rgba(255,255,255,0.03);
+  background: var(--wash-2);
   color: var(--text-secondary);
   font-size: var(--fs-small);
   font-weight: 500;
-  transition: all var(--dur) var(--ease);
+  transition:
+    border-color var(--dur-fast) var(--ease),
+    background-color var(--dur-fast) var(--ease),
+    color var(--dur-fast) var(--ease),
+    transform var(--dur-fast) var(--ease);
   cursor: pointer;
 }
 
-.capture-chip:hover,
-.capture-chip--active {
-  border-color: var(--accent);
-  background: var(--accent-soft);
+.capture-chip:hover {
+  border-color: var(--border-active);
+  background: var(--wash-4);
   color: var(--text);
+}
+
+.capture-chip--active,
+.capture-chip--active:hover {
+  border-color: var(--accent-line);
+  background: var(--accent-wash);
+  color: var(--text);
+}
+
+.capture-chip:active {
+  transform: scale(0.98);
 }
 
 /* ── Progress Bar ── */
@@ -203,7 +212,7 @@
 .progress-bar {
   height: 8px;
   border-radius: var(--r-pill);
-  background: rgba(255,255,255,0.06);
+  background: var(--wash-4);
   overflow: hidden;
   position: relative;
 }
@@ -211,7 +220,7 @@
 .progress-bar__fill {
   height: 100%;
   border-radius: var(--r-pill);
-  background: linear-gradient(90deg, var(--accent), var(--accent-bright));
-  transition: width 0.8s var(--ease);
+  background: var(--accent);
+  transition: width var(--dur-slow) var(--ease);
   position: relative;
 }

@@ -196,7 +196,7 @@ export function SetupCategoryList({
     <div className="setup-manage-list setup-manage-list--chips">
       {categories.map((category) => (
         <div key={category.id} className="setup-category-chip">
-          <span style={{ background: category.color ?? "rgba(226, 184, 95, 0.7)" }} />
+          <span style={{ background: category.color ?? "var(--text-tertiary)" }} />
           <strong>{category.name}</strong>
           <button className="button button--ghost button--small" type="button" disabled={isUpdating} onClick={() => onArchive(category.id)}>Archive</button>
         </div>

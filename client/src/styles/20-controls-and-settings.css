@@ -408,7 +408,7 @@
 .goal-chip__dot--money        { background: var(--accent-bright); }
 .goal-chip__dot--work_growth  { background: var(--info); }
 .goal-chip__dot--home_admin   { background: var(--accent); }
-.goal-chip__dot--discipline   { background: #b48ead; }
+.goal-chip__dot--discipline   { background: var(--cat-discipline); }
 .goal-chip__dot--other        { background: var(--text-secondary); }
 
 /* ── Filter Bar ── */
@@ -492,7 +492,6 @@
 .goal-select:focus {
   outline: none;
   border-color: var(--border-focus);
-  box-shadow: 0 0 0 3px var(--accent-soft);
   box-shadow: 0 0 0 3px var(--accent-soft);
   color: var(--text);
 }
@@ -635,8 +634,7 @@
   padding: var(--space-4) var(--space-4);
   border-radius: var(--r);
   border: 1px solid var(--border);
-  background:
-    var(--panel-elevated);
+  background: var(--panel);
 }
 
 .settings-onboarding-cta__content {
@@ -673,8 +671,7 @@
 
 .settings-danger-zone {
   border-color: var(--negative-line);
-  background:
-    var(--panel-elevated);
+  background: var(--panel);
 }
 
 .settings-danger-zone .section-card__title {

@@ -1022,8 +1022,8 @@
 }
 
 .home-desk .focus-stage__goal-dot--career { background: var(--info); }
-.home-desk .focus-stage__goal-dot--health { background: #5db8b0; }
-.home-desk .focus-stage__goal-dot--growth { background: #b07cd8; }
+.home-desk .focus-stage__goal-dot--health { background: var(--cat-health); }
+.home-desk .focus-stage__goal-dot--growth { background: var(--cat-growth); }
 .home-desk .focus-stage__goal-dot--finance { background: var(--accent-bright); }
 
 /* Next action row */

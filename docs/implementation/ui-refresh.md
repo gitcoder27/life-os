@@ -2,7 +2,7 @@
 
 Scope: `/home`, `/today`, `/planner`, `/inbox`, `/habits`, plus the shared foundation
 (tokens, shell, primitives). Visual-only: CSS, plus className/markup-wrapper tweaks. Dark-only.
-`/goals` followed on `style/goals-refresh`; see §6.
+The remaining screens followed in a second pass (§6), and `/goals` got its own dedicated pass (§7), which replaces the Goals part of §6.
 
 ## 1. Audit (baseline: `main` @ 6890b41)
 
@@ -202,6 +202,7 @@ Notes on the leftovers:
 - Semantic: `--positive-line`, `--negative-text`, `--negative-line`, `--info`, `--info-soft`, `--info-line`
 - Spacing: `--space-1`, `--space-1-5`, `--space-2`, `--space-3`, `--space-4`, `--space-5`, `--space-6`, `--space-8`, `--space-10`, `--space-12`
 - Type: `--font-mono`, `--tracking-label`
+- Categorical (§6, §7): `--cat-health` `#5db8b0`, `--cat-money` `#d0b56a`, `--cat-work` (= `--info`), `--cat-home` `#c58b6c`, `--cat-growth` `#b07cd8`, `--cat-discipline` `#b48ead`, `--cat-neutral` (= `--text-tertiary`). These are data colors for goal domains and kinds, for small markers only, never state or fills.
 
 **Removed:** `--shadow-glow`, `--accent-glow`, and the `glowPulse` keyframe. Stale references to the undefined `--r-md`, `--warning`, `--radius` and `--accent-rgb` were repointed to defined tokens.
 
@@ -310,9 +311,9 @@ OS "reduce motion" on.
 
 ## 5. Left undone / follow-ups
 
-- **Other screens** (health, meals, finance, reviews, notifications, settings, login) did not get the codemod. Goals has since been refreshed; see §6. They inherit the new borders, radii and shadow tokens but keep their own literal colors, gradients and `transition: all`. The radius change (16→10px etc.) is the most visible inherited change there; review those screens too.
-- **`--danger`** is still undefined. `14-review-and-domain.css:655` and an inline style in `features/auth/LoginPage.tsx:55` rely on the `#e88f8f` fallback. Map both to `--negative-text`.
-- **Categorical colors** remain literals: health `#5db8b0`, growth `#b07cd8` and discipline `#b48ead`. The Goals pass added `--cat-*` (§6); Home and Habits still use the literals.
+- ~~**Other screens**~~ Done in the follow-up pass (§6). Goals then got a dedicated pass (§7).
+- ~~**`--danger`**~~ Resolved (§6): `14-review-and-domain.css` and `LoginPage.tsx` now use `--negative-text`.
+- ~~**Categorical colors**~~ Resolved (§6, extended in §7): `--cat-health`, `--cat-growth` and `--cat-discipline` replace the literals on Home, Habits, goal chips, Health water, review history and notification badges.
 - **Unreferenced CSS** (no matching `className` in TSX, e.g. `.today-hero*`, `.today-stage-empty*`, `.daily-launch*`, `.guidance-rail*`) was restyled but not deleted, because dynamic class names make removal risky without a coverage run.
 - **Keyboard access:** the Inbox inspector title and notes are click-to-edit `<h2>`/`<p>` elements with no keyboard entry point. That needs a behavior change (button role or tabindex), so it is out of scope for a visual pass.
 - **Focus-mode dimming** on Today (`stream-task--focus-muted` at 0.44 opacity, workbench support at 0.46) is intentionally kept. The muted rows fall below AA contrast while a session runs.
@@ -320,7 +321,105 @@ OS "reduce motion" on.
 - **Theme:** no light theme was added. The app stays dark-only.
 - **Not verified visually:** no browser was opened. Everything above was validated by typecheck, production build, both test suites and code review; the checklist in §4 covers what still needs eyes.
 
-## 6. Goals (branch `style/goals-refresh`, off `style/ui-refresh`)
+## 6. Follow-up pass: remaining screens
+
+> **Goals in this section is superseded by §7.** `b8da3af` restyled Goals here, but the dedicated Goals pass (§7) was built in parallel from the same base. When both were merged into `main`, the Goals files (`50-active-pursuits.css`, `60-goals-planning.css`, `GoalsPlanGraphView.tsx`) kept the §7 versions. The Goals row, notes and checklist below describe `b8da3af`, not what ships; use §7 for Goals.
+
+Scope: login, reviews (daily, weekly/monthly, history, onboarding), health, meals, goals (overview, plan, graph), notifications, finance and settings. The rules are the same as in §1–§3. Every commit passed `npm run typecheck`, `npm run build`, `npm test -w client` (86/86) and `npm test -w server` (340 passed, 8 skipped).
+
+| Commit | Scope |
+| --- | --- |
+| `3cdd1f4` style(auth) | Sign-in panel, capture sheet, `--danger` → `--negative-text` in `LoginPage.tsx` |
+| `6bc2b9d` style(ui) | `--cat-*` tokens; Home, Habits and goal-chip literals repointed |
+| `73eab7d` style(reviews) | 14, 14a, 70: banners, daily review, history ledger, `--danger` in 14 |
+| `c402d3d` style(health) | 35: panels, hydration dial, quick-action strip |
+| `ab2e9b3` style(meals) | 36: week header, calendar, recipe panels, picker |
+| `b8da3af` style(goals) | 50, 60, `GoalsPlanGraphView.tsx`: goal cards, plan workspace, graph canvas (superseded by §7) |
+| `bb0a075` style(notifications) | 80: notification center, action cards, bell, settings rows |
+| `017a9fe` style(finance) | 95, `FinanceSetupPanels.tsx`: cockpit, rail, plan bars, setup drawer |
+| `9f02769` style(settings) | 20: onboarding CTA, danger zone |
+
+Counts use the same script as §2, run on whole files, from `54cc7cc` (tip of the first pass) to now:
+
+| Group | colors | gradients | backdrop | shadows | Fraunces | infinite | literal font-size | `transition: all` | hover lifts | `outline: none` |
+|---|---|---|---|---|---|---|---|---|---|---|
+| Login (12) | 6 → 0 | 4 → 0 | 1 → 0 | 3 → 2 | 3 → 1 | 0 → 0 | 3 → 0 | 2 → 0 | 0 → 0 | 0 → 0 |
+| Reviews (14, 14a, 70) | 91 → 0 | 9 → 0 | 4 → 0 | 10 → 6 | 11 → 2 | 0 → 0 | 10 → 0 | 11 → 0 | 2 → 0 | 5 → 5 |
+| Health (35) | 49 → 0 | 14 → 0 | 2 → 0 | 5 → 4 | 1 → 1 | 0 → 0 | 37 → 0 | 0 → 0 | 3 → 0 | 0 → 0 |
+| Meals (36) | 31 → 0 | 7 → 0 | 0 → 0 | 11 → 7 | 8 → 1 | 1 → 0 | 24 → 1 | 14 → 0 | 0 → 0 | 9 → 9 |
+| Goals (50, 60) | 245 → 0 | 42 → 0 | 14 → 0 | 35 → 24 | 8 → 2 | 0 → 0 | 45 → 4 | 24 → 0 | 7 → 0 | 5 → 9 |
+| Notifications (80) | 47 → 0 | 5 → 0 | 2 → 0 | 7 → 5 | 6 → 0 | 0 → 0 | 12 → 0 | 0 → 0 | 1 → 0 | 1 → 1 |
+| Finance (95) | 121 → 0 | 13 → 0 | 0 → 0 | 5 → 3 | 11 → 2 | 0 → 0 | 12 → 0 | 8 → 0 | 0 → 0 | 0 → 0 |
+| Settings (20, 99) | 1 → 0 | 0 → 0 | 0 → 0 | 5 → 4 | 0 → 0 | 0 → 0 | 4 → 4 | 0 → 0 | 0 → 0 | 2 → 2 |
+
+Notes on the leftovers:
+- **Fraunces** remains only on page titles: sign-in, onboarding, health, the meal week range, goals overview and plan, and finance. The other remaining use is the daily-review score numeral. One of the two finance uses is the unreferenced `.finance__title`.
+- **Shadows** are focus rings, 2px inset state bars (selected goal card, unread notification, health action strip), and floating layers with one `--shadow-md`/`--shadow-lg`. The floating layers are the capture sheet, the meal picker, graph overlays, the notification panel and the finance setup drawer.
+- **`outline: none`**: every remaining rule pairs it with `--border-focus` and the 3px `--accent-soft` ring, or relies on a wrapper's `:focus-within` ring (`.rh-search`, `.ghq-filter-search`). Two rules are always-on edit inputs (the recipe list edit input, the goal combobox). The notification panel shows a `--border-focus` border on `:focus-visible`. Goals went from 5 to 9 because four inputs gained rings.
+- **Literal font sizes** left are `em`-relative glyph sizes inside chips and buttons (meals 1, goals 4). In 20 they are the first pass's foundation leftovers (a calendar chevron and three 480px overrides for Home and shell titles).
+- **Graph edges** with xyflow's `animated` prop still run its infinite dash animation. Turning it off is a prop change, so it was left alone; the global reduced-motion block stops it.
+- **Keyframe clash fixed:** 95-finance redefined `slideInRight`, which made the goals panels (`.goals-workspace__detail`, `.ghq-plan__floating-inspector`, `.graph-planner`) and `.ap-workspace__inspector` slide in from the far right instead of their intended 20px fade. The finance drawer now uses `setupDrawerIn`, and its duplicate `fadeIn` was removed.
+- **Unreferenced finance CSS** (`.finance__*`, `.fc-snapshot`, `.metric*`, `.feed__*` outside the setup drawer) was tokenized but not deleted.
+- Home and Habits no longer have color leftovers: the categorical literals noted in §2 now use `--cat-*`.
+
+### Manual checklist
+
+Check each screen at **~1440px** and **~390px**, then once with OS "reduce motion" on. The "All five screens" block in §4 applies here too: flat background, hairline panels, visible focus, no hover movement, serif only on titles and score numerals, tabular numbers, and no horizontal scroll at 390px.
+
+**/login and capture sheet**
+- [ ] 1440: the sign-in panel is flat on a flat background, with no shadow. The title is serif and the brand name is sans.
+- [ ] 1440: a wrong password shows the error in readable red (`--negative-text`), not pink.
+- [ ] 1440: the capture sheet (from any page) opens over a dim scrim with no blur. Chips hover neutrally, the active chip is amber-washed, and pressing a chip shrinks it slightly.
+- [ ] 390: the panel keeps side padding and the form fits without scrolling sideways.
+
+**Reviews (daily, weekly, monthly, history) and onboarding**
+- [ ] 1440: review window and locked banners are flat panels, and the status dots don't glow.
+- [ ] 1440: on the daily review, the progress strip and submit bar are solid when content scrolls under them. The energy scale runs red → amber → green from 1 to 5, and the selected dot is tinted with its own color.
+- [ ] 1440: the summary score numeral is serif; everything else is sans.
+- [ ] 1440: in history, monthly entries are violet. The cadence select and search field show the amber ring when focused, and "Load more" is a neutral button.
+- [ ] 1440: onboarding validation errors are readable red.
+- [ ] 390: the submit bar stays pinned and readable, and history filters wrap.
+
+**/health**
+- [ ] 1440: no light spots behind the page, and panels are flat.
+- [ ] 1440: the hydration dial has a teal pool on a sunken disc with no drop shadow. Its numerals are monospace.
+- [ ] 1440: quick actions hover neutrally. The active action has an amber wash and a 2px amber bottom bar.
+- [ ] 390: the fixed action strip floats above the content with a shadow, and the dial fits the width.
+
+**/meals**
+- [ ] 1440: the week header, calendar and recipe library are flat with no noise texture. Today's column has an amber hairline.
+- [ ] 1440: dragging a recipe over a slot highlights it without scaling or glowing. Filled slots are neutral.
+- [ ] 1440: the recipe picker floats above the page and is opaque. Every input, select and textarea shows the focus border and ring.
+- [ ] 1440: in the template creator, the actions row's divider reaches both panel edges.
+- [ ] 390: the recipe library strip scrolls sideways inside itself, and the page does not. The sticky template-creator actions clear the safe area.
+
+**/goals:** use the checklist in §7.
+
+**Notifications (bell, panel, /settings rows)**
+- [ ] 1440: the bell hovers neutrally and is amber-washed while open. The count badge is a red pill with readable 11px digits.
+- [ ] 1440: the panel is opaque with a shadow over an unblurred scrim. Tabbing into it shows an amber border.
+- [ ] 1440: unread cards have a 2px amber left bar, or red for critical. Dots don't glow and titles are sans.
+- [ ] 1440: the primary action is solid amber, darkens on hover and shrinks on press, with no lift.
+- [ ] 1440: category badges are review violet, finance blue-gray, health green and habit amber.
+- [ ] 390: the panel opens as a bottom sheet with safe-area padding under the last card.
+
+**/finance**
+- [ ] 1440: the page title is serif. Safe-to-spend is a large sans numeral with tabular figures, on a flat hero with a hairline border.
+- [ ] 1440: the hero track shows reserved in muted amber and spent in muted red.
+- [ ] 1440: the active tab is amber-washed with an amber hairline. Tabs, lane pills, actions and links shrink slightly on press instead of nudging down.
+- [ ] 1440: plan and watch bars are solid: green on pace, amber warning, red over.
+- [ ] 1440: the setup drawer slides in from the right over a scrim and floats with a shadow. Categories without a color show a gray dot.
+- [ ] 390: the hero stacks, the event table scrolls inside its card, and the drawer is full width.
+
+**/settings**
+- [ ] 1440: the onboarding CTA and danger zone are flat like the other section cards. The danger zone has a red hairline and a red title.
+- [ ] 1440: notification settings labels are sans. Toggles show a ring when tabbed to, and selects show the focus border.
+- [ ] 1440: goal domain and horizon editors show the focus ring on inputs. Their reorder arrows hover neutrally and are disabled at the ends.
+- [ ] 390: settings rows stack, and controls fill the width.
+
+**Not verified visually:** as in the first pass, no browser was opened. This section was validated by typecheck, production build, both test suites and code review.
+
+## 7. Goals (branch `style/goals-refresh`, off `style/ui-refresh`)
 
 Scope: `/goals`, both modes: Overview, and Plan with its graph and outline subviews. The work is
 visual only, using the same rules as §1–5. Stylesheets: `60-goals-planning.css` and `50-active-pursuits.css`.
@@ -424,7 +523,7 @@ Notes on the leftovers:
 **Added** (in `00-foundations.css`): `--cat-health` `#5db8b0`, `--cat-money` `#d0b56a`, `--cat-work`
 (= `--info`), `--cat-home` `#c58b6c`, `--cat-discipline` `#b48ead`, `--cat-neutral` (= `--text-tertiary`).
 These are for small markers only, never fills. Health and discipline match the literals Home and
-Habits already used.
+Habits already used. §6 added `--cat-growth` (`#b07cd8`) in parallel; `main` has the combined set.
 
 These are dots, so the non-text contrast threshold of 3:1 applies. Against `--panel`, `--panel-elevated` and `--bg-deep`, the range is 4.8–9.9. The lowest is `--cat-neutral` on `--panel-elevated`.
 
@@ -497,7 +596,7 @@ Check at **~1440px** and **~390px**, then once with OS "reduce motion" on.
 - **Milestone editor controls** (check, icon and drag buttons) stay 22–24px on touch. Raising them to 44px overflows the editor's 22px grid tracks at 390px and enlarges the bordered check box. Fixing that needs a layout change to the editor row.
 - **Graph node controls** (branch toggle, menu button) keep their size on touch, because node outer dimensions feed `LEVEL_GAP`/`SIBLING_GAP`/`CONTENT_*`.
 - **Dimmed nodes** stay at 0.28 opacity, unchanged, while filtering. Like Today's focus-mode dimming (§5), they fall below AA on purpose.
-- **`--cat-*` adoption elsewhere.** Home's goal dots and Habits' health teal still use their literals. Repointing them to `--cat-*` is a one-line change per rule.
+- ~~**`--cat-*` adoption elsewhere**~~ Done in §6 (`6bc2b9d`): Home, Habits, goal chips, Health, review history and notification badges use `--cat-*`. At the merge the two token sets were combined, adding `--cat-growth`.
 - **`priority-card*` / `priority-stack*` removed** (`refactor(today): remove dead priority-card CSS`). Only `SortablePlanningEditor` rendered them, so they were left for a Today cleanup, which deleted them from `40-today-workspace.css`. That included `.priority-card__actions`, dropped from the `(hover: none)` rule it shared with the live `.task-card__actions`. Today's live `PriorityCard` uses `today-priority-card*`, which is untouched. Neither class appears in 16 or 99.
   - The same commit removed the unreferenced `.priority-list__item--done`/`--dropped`, `.priority-list--editable`, `.priority-edit-row` and `.priority-inline-input` from `11-page-and-primitives.css`. `.priority-list` and `.priority-list__item` stay, because Goals Overview and the periodic review still render them.
 - **Not verified visually.** No browser was opened. Everything above was validated by typecheck, production build, both test suites and code review. The checklist above covers what still needs eyes.

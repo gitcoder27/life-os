@@ -62,11 +62,12 @@
   --info-soft: rgba(125, 145, 184, 0.12);
   --info-line: rgba(125, 145, 184, 0.3);
 
-  /* Category — goal domains; small markers (dots, edges), never fills */
+  /* Categorical — goal domains and kinds; small markers (dots, edges), never fills or state */
   --cat-health: #5db8b0;
   --cat-money: #d0b56a;
   --cat-work: var(--info);
   --cat-home: #c58b6c;
+  --cat-growth: #b07cd8;
   --cat-discipline: #b48ead;
   --cat-neutral: var(--text-tertiary);
 
