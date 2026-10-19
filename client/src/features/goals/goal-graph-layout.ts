@@ -9,16 +9,17 @@ import type { GoalHorizonItem, GoalOverviewItem } from "../../shared/lib/api";
    into another row inside the same lane. With no active horizons, rows fall
    back to tree depth. */
 
-export const NODE_W = 244;
-export const NODE_H = 88;
-export const ROW_GAP = 32;
+export const NODE_W = 208;
+export const NODE_H = 72;
+export const ROW_GAP = 28;
 export const ROW_H = NODE_H + ROW_GAP;
-export const SIBLING_GAP = 36;
-export const ROOT_GAP = 64;
-export const CONTENT_X = 48;
+export const SIBLING_GAP = 24;
+export const ROOT_GAP = 48;
+export const CONTENT_X = 32;
 export const CONTENT_Y = 0;
-export const LANE_PAD_Y = 28;
-export const EMPTY_LANE_H = 72;
+export const LANE_PAD_Y = 20;
+/* Empty lanes stay short: they are drop targets, not content. */
+export const EMPTY_LANE_H = 48;
 
 export const UNASSIGNED_LANE_ID = "unassigned";
 
@@ -308,7 +309,7 @@ export const buildGoalGraphLayout = ({
   const laneDefinitions = [
     ...activeHorizons.map((horizon) => ({ id: horizon.id, label: horizon.name, isUnassigned: false })),
     ...(rowsByLane.has(UNASSIGNED_LANE_ID)
-      ? [{ id: UNASSIGNED_LANE_ID, label: "No layer", isUnassigned: true }]
+      ? [{ id: UNASSIGNED_LANE_ID, label: "Unplaced", isUnassigned: true }]
       : []),
   ];
 
@@ -336,3 +337,15 @@ export const buildGoalGraphLayout = ({
 
   return { items, edges, lanes, visibleGoalIds, childrenByParent, goalMap };
 };
+
+/** The lane under a flow-space y. Above the first lane counts as the first;
+    below the last counts as the last, since the last band runs to the bottom. */
+export const findLaneAtY = (lanes: GoalGraphLane[], y: number): GoalGraphLane | null => {
+  if (lanes.length === 0) {
+    return null;
+  }
+  return lanes.find((lane) => y < lane.top + lane.height) ?? lanes[lanes.length - 1];
+};
+
+/** The horizon a lane stands for; the unplaced lane clears the horizon. */
+export const laneHorizonId = (lane: GoalGraphLane) => (lane.isUnassigned ? null : lane.id);

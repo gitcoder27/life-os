@@ -522,9 +522,14 @@ export function GoalsPlanWorkspace({
 }) {
   const [planView, setPlanView] = useState<PlanSubview>("graph");
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [isFocusOpen, setIsFocusOpen] = useState(false);
   const [inspectedGoalId, setInspectedGoalId] = useState<string | null>(null);
-  const [expandedGoalIds, setExpandedGoalIds] = useState<Set<string>>(new Set());
-  const expandInitializedRef = useRef(false);
+  // Every branch starts open so each horizon shows what it holds. Goals that
+  // are already loaded open on the first render, so the map doesn't jump.
+  const [expandedGoalIds, setExpandedGoalIds] = useState<Set<string>>(
+    () => new Set(goals.filter((goal) => goal.status === "active").map((goal) => goal.id)),
+  );
+  const expandInitializedRef = useRef(goals.some((goal) => goal.status === "active"));
   const [centerRequest, setCenterRequest] = useState<CenterRequest | null>(null);
   const [selectedPlanningSelection, setSelectedPlanningSelection] = useState<PlanningSelection | null>(null);
   const [planningDraft, setPlanningDraft] = useState<PlanningDraft | null>(null);
@@ -595,8 +600,8 @@ export function GoalsPlanWorkspace({
     }
   }, [planView]);
 
-  // Open every branch the first time goals arrive, so each planning layer shows
-  // what it holds; afterwards only drop ids that no longer exist.
+  // Goals that arrive after mount open once; afterwards only drop ids that no
+  // longer exist.
   useEffect(() => {
     const validGoalIds = new Set(activeGoals.map((goal) => goal.id));
     if (inspectedGoalId && !validGoalIds.has(inspectedGoalId)) {
@@ -845,46 +850,73 @@ export function GoalsPlanWorkspace({
     [activeGoals, laneItems, onSelectGoal, selectedGoalId],
   );
 
+  // Adding commits straight away; the goal title is a fine first wording and
+  // can be edited in Focus. A full lane opens Focus to choose what it replaces.
   const handleAddGoalToLane = useCallback(
-    (lane: RailLane, goalId: string) => {
+    async (lane: RailLane, goalId: string) => {
       const goal = activeGoals.find((item) => item.id === goalId);
       if (!goal) {
         return;
       }
 
-      // The rail shares the side column with details, so planning closes details.
-      setInspectedGoalId(null);
-      setPlanView("graph");
-      setPlanningDraft(null);
-      setPlanningReplaceState(null);
-      setSelectedPlanningSelection(null);
-      setPlanningError(null);
-
+      clearPlanningUi();
+      setGraphStructureError(null);
       if (selectedGoalId !== goal.id) {
         onSelectGoal(goal.id);
       }
 
       const items = laneItems(lane);
+      const prefix = lane === "month" ? "M" : "W";
+      const laneName = lane === "month" ? monthLabel : "this week";
       const existingItem = items.find((item) => item.goalId === goal.id);
       if (existingItem) {
-        setSelectedPlanningSelection({ lane, slot: existingItem.slot });
+        setGraphStructureMessage(`“${goal.title}” is already in ${laneName} as ${prefix}${existingItem.slot}.`);
         return;
       }
 
       const openSlot = findFirstOpenSlot(items.map((item) => item.slot));
       if (!openSlot) {
-        setPlanningError(`This ${lane} already has three. Pick one to replace with “${goal.title}”.`);
+        setPlanView("graph");
+        setInspectedGoalId(null);
+        setIsFocusOpen(true);
+        setPlanningError(
+          `${lane === "month" ? monthLabel : "This week"} already has three. Choose one to replace with “${goal.title}”.`,
+        );
         return;
       }
 
-      setPlanningDraft({
-        lane,
-        slot: openSlot,
-        title: buildDraftTitleForGoal(lane, goal),
-        goalId: goal.id,
-      });
+      try {
+        await commitLaneItems(lane, [
+          ...items.map((item) => ({ id: item.id, slot: item.slot, title: item.title, goalId: item.goalId })),
+          { slot: openSlot, title: buildDraftTitleForGoal(lane, goal), goalId: goal.id },
+        ]);
+        setGraphStructureMessage(`Added “${goal.title}” to ${laneName} as ${prefix}${openSlot}.`);
+      } catch (error) {
+        setGraphStructureError(error instanceof Error ? error.message : "The goal could not be added.");
+      }
     },
-    [activeGoals, laneItems, onSelectGoal, selectedGoalId],
+    [activeGoals, clearPlanningUi, commitLaneItems, laneItems, monthLabel, onSelectGoal, selectedGoalId],
+  );
+
+  const handleSetGoalHorizon = useCallback(
+    async (goalId: string, horizonId: string | null) => {
+      const goal = activeGoals.find((item) => item.id === goalId);
+      if (!goal || goal.horizonId === horizonId) {
+        return;
+      }
+
+      const horizonName = horizonId ? horizons.find((horizon) => horizon.id === horizonId)?.name ?? null : null;
+      try {
+        await updateGoalMutation.mutateAsync({ goalId, horizonId });
+        setGraphStructureError(null);
+        setGraphStructureMessage(
+          horizonId ? `Moved “${goal.title}” to ${horizonName ?? "that horizon"}.` : `“${goal.title}” is now unplaced.`,
+        );
+      } catch (error) {
+        setGraphStructureError(error instanceof Error ? error.message : "The goal could not be moved.");
+      }
+    },
+    [activeGoals, horizons, updateGoalMutation],
   );
 
   const handlePlanningDraftChange = useCallback((updates: Partial<PlanningDraft>) => {
@@ -1297,6 +1329,10 @@ export function GoalsPlanWorkspace({
       setInspectedGoalId(null);
       return;
     }
+    if (isFocusOpen) {
+      setIsFocusOpen(false);
+      return;
+    }
     if (selectedGoalId) {
       handleClearSelection();
       return;
@@ -1306,6 +1342,24 @@ export function GoalsPlanWorkspace({
     }
   };
   const handleEscape = useCallback(() => escapeRef.current(), []);
+
+  // Focus and details share the side column; details sit on top of Focus.
+  const handleToggleFocus = useCallback(() => {
+    if (inspectedGoalId) {
+      setInspectedGoalId(null);
+      setIsFocusOpen(true);
+      return;
+    }
+    if (isFocusOpen) {
+      clearPlanningUi();
+    }
+    setIsFocusOpen(!isFocusOpen);
+  }, [clearPlanningUi, inspectedGoalId, isFocusOpen]);
+
+  const handleCloseFocus = useCallback(() => {
+    clearPlanningUi();
+    setIsFocusOpen(false);
+  }, [clearPlanningUi]);
 
   const handleInspectorCreateChild = useCallback(
     (goal: GoalOverviewItem) => {
@@ -1442,9 +1496,59 @@ export function GoalsPlanWorkspace({
     );
   }
 
+  const focusPanel = (
+    <GoalsPlanCommitmentsRail
+      selectedGoal={selectedGoal}
+      activeGoals={activeGoals}
+      monthLabel={monthLabel}
+      weekLabel={weekLabel}
+      monthItems={monthItems}
+      weekItems={weekItems}
+      weekPlan={weekPlan}
+      selectedPlanningSelection={selectedPlanningSelection}
+      selectedPlanningItem={selectedPlanningItem}
+      planningDraft={planningDraft}
+      planningReplaceState={planningReplaceState}
+      planningError={planningError}
+      onSelectSlot={handleSelectPlanningSlot}
+      onDropGoalToSlot={handleDropGoalToPlanningSlot}
+      onPlanningDraftChange={handlePlanningDraftChange}
+      onSavePlanningDraft={() => void handlePlanningDraftSave()}
+      onCancelPlanningDraft={handlePlanningDraftCancel}
+      onPlanningReplaceAction={(action) => void handlePlanningReplaceAction(action)}
+      onCancelPlanningReplace={handlePlanningReplaceCancel}
+      getAvailableSlots={(lane, currentSlot) =>
+        planningSlots.filter((slot) => {
+          const itemAtSlot = getPlanningItemAtSlot(lane, slot, weekPlan, monthPlan, todayAlignment);
+          return !itemAtSlot || slot === currentSlot;
+        })
+      }
+      getDuplicateCount={(lane, goalId, excludeSlot) =>
+        getLaneDuplicateCount(lane, goalId, weekPlan, monthPlan, todayAlignment, excludeSlot)
+      }
+      isLanePending={getLanePending}
+      getLaneErrorMessage={getLaneErrorMessage}
+      onSaveSelectedItem={handlePlanningItemSave}
+      onRemoveSelectedItem={handlePlanningItemRemove}
+      onCloseSelectedItem={() => setSelectedPlanningSelection(null)}
+      onJumpToGoal={handleJumpToLinkedGoal}
+      onClose={handleCloseFocus}
+    />
+  );
+
+  const sideContent = inspectedGoalId
+    ? renderInspector(inspectedGoalId, () => setInspectedGoalId(null))
+    : isFocusOpen
+      ? focusPanel
+      : null;
+
   const stage = (
     <div
-      className={`ghq-stage${isFullscreen ? " ghq-stage--fullscreen" : ""}`}
+      className={[
+        "ghq-stage",
+        sideContent ? "ghq-stage--with-side" : "",
+        isFullscreen ? "ghq-stage--fullscreen" : "",
+      ].filter(Boolean).join(" ")}
       role="region"
       aria-label={isFullscreen ? "Goal map, full screen" : "Goal map"}
     >
@@ -1457,6 +1561,10 @@ export function GoalsPlanWorkspace({
         childDraftIsPending={createGoalMutation.isPending}
         monthSlotByGoalId={monthSlotByGoalId}
         weekSlotByGoalId={weekSlotByGoalId}
+        monthLabel={monthLabel}
+        monthCount={monthItems.length}
+        weekCount={weekItems.length}
+        isFocusOpen={isFocusOpen && !inspectedGoalId}
         structureError={graphStructureError}
         structureMessage={graphStructureMessage}
         isFullscreen={isFullscreen}
@@ -1475,6 +1583,7 @@ export function GoalsPlanWorkspace({
         onArchiveGoal={handleArchiveGoal}
         onAddToLane={handleAddGoalToLane}
         onDropGoalOnGoal={handleDropGoalOnGoal}
+        onSetGoalHorizon={handleSetGoalHorizon}
         onSaveChildDraft={handleGraphChildDraftSave}
         onCancelChildDraft={handleGraphChildDraftCancel}
         onCanvasClear={handleGraphPaneClear}
@@ -1482,52 +1591,16 @@ export function GoalsPlanWorkspace({
         onRequestCenter={handleRequestCenter}
         onEscape={handleEscape}
         onToggleFullscreen={handleToggleFullscreen}
+        onToggleFocus={handleToggleFocus}
       />
-      <aside
-        className="ghq-stage__side"
-        aria-label={inspectedGoalId ? "Goal details" : "Month and week focus"}
-      >
-        {inspectedGoalId ? (
-          renderInspector(inspectedGoalId, () => setInspectedGoalId(null))
-        ) : (
-          <GoalsPlanCommitmentsRail
-            selectedGoal={selectedGoal}
-            activeGoals={activeGoals}
-            monthLabel={monthLabel}
-            weekLabel={weekLabel}
-            monthItems={monthItems}
-            weekItems={weekItems}
-            weekPlan={weekPlan}
-            selectedPlanningSelection={selectedPlanningSelection}
-            selectedPlanningItem={selectedPlanningItem}
-            planningDraft={planningDraft}
-            planningReplaceState={planningReplaceState}
-            planningError={planningError}
-            onSelectSlot={handleSelectPlanningSlot}
-            onDropGoalToSlot={handleDropGoalToPlanningSlot}
-            onPlanningDraftChange={handlePlanningDraftChange}
-            onSavePlanningDraft={() => void handlePlanningDraftSave()}
-            onCancelPlanningDraft={handlePlanningDraftCancel}
-            onPlanningReplaceAction={(action) => void handlePlanningReplaceAction(action)}
-            onCancelPlanningReplace={handlePlanningReplaceCancel}
-            getAvailableSlots={(lane, currentSlot) =>
-              planningSlots.filter((slot) => {
-                const itemAtSlot = getPlanningItemAtSlot(lane, slot, weekPlan, monthPlan, todayAlignment);
-                return !itemAtSlot || slot === currentSlot;
-              })
-            }
-            getDuplicateCount={(lane, goalId, excludeSlot) =>
-              getLaneDuplicateCount(lane, goalId, weekPlan, monthPlan, todayAlignment, excludeSlot)
-            }
-            isLanePending={getLanePending}
-            getLaneErrorMessage={getLaneErrorMessage}
-            onSaveSelectedItem={handlePlanningItemSave}
-            onRemoveSelectedItem={handlePlanningItemRemove}
-            onCloseSelectedItem={() => setSelectedPlanningSelection(null)}
-            onJumpToGoal={handleJumpToLinkedGoal}
-          />
-        )}
-      </aside>
+      {sideContent ? (
+        <aside
+          className="ghq-stage__side"
+          aria-label={inspectedGoalId ? "Goal details" : "Month and week focus"}
+        >
+          {sideContent}
+        </aside>
+      ) : null}
     </div>
   );
 

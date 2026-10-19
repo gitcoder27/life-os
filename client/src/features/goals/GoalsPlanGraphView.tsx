@@ -1,4 +1,15 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState, type MouseEvent, type ReactNode } from "react";
+import {
+  memo,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type DragEvent,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type MouseEvent,
+  type ReactNode,
+} from "react";
 import { Link } from "react-router-dom";
 import {
   Background,
@@ -6,7 +17,6 @@ import {
   Position,
   ReactFlow,
   ReactFlowProvider,
-  getViewportForBounds,
   useReactFlow,
   useStore,
   useViewport,
@@ -22,17 +32,25 @@ import { EmptyState } from "../../shared/ui/PageState";
 import { formatGoalTargetMonth } from "./goal-date-logic";
 import {
   buildGoalGraphLayout,
+  findLaneAtY,
   getGoalTreeOrder,
+  laneHorizonId,
   NODE_H,
   NODE_W,
+  UNASSIGNED_LANE_ID,
   type GoalGraphLane,
 } from "./goal-graph-layout";
-import { GOAL_DRAG_MIME } from "./GoalsPlanCommitmentsRail";
+import { GOAL_DRAG_MIME, type RailLane } from "./GoalsPlanCommitmentsRail";
 
-const MIN_ZOOM = 0.22;
+const MIN_ZOOM = 0.2;
 const MAX_ZOOM = 1.35;
 const FIT_MAX_ZOOM = 1;
-const FIT_PADDING = 0.08;
+/* Below this, titles stop being readable, so the first view starts at the
+   left of a wide tree instead of shrinking it further. Fit shows everything. */
+const READABLE_ZOOM = 0.6;
+const FIT_PAD_X = 32;
+const FIT_PAD_Y = 16;
+const PLACE_HINT_STORAGE_KEY = "life-os.goals.place-hint-dismissed";
 
 type GoalNodeActions = {
   onSelect: (goalId: string) => void;
@@ -43,8 +61,10 @@ type GoalNodeActions = {
   onDetachGoal: (goalId: string) => void;
   onDuplicateGoal: (goal: GoalOverviewItem) => void;
   onArchiveGoal: (goal: GoalOverviewItem) => void;
-  onAddToLane: (lane: "month" | "week", goalId: string) => void;
+  onAddToLane: (lane: RailLane, goalId: string) => void;
   onDropGoalOnGoal: (targetGoalId: string, draggedGoalId: string) => void;
+  onDragGoalStart: (goalId: string) => void;
+  onDragGoalEnd: () => void;
 };
 
 type GoalNodeData = {
@@ -170,7 +190,10 @@ const GoalGraphNode = memo(function GoalGraphNode({ data }: NodeProps) {
       onDragStart={(event) => {
         event.dataTransfer.setData(GOAL_DRAG_MIME, goal.id);
         event.dataTransfer.effectAllowed = "move";
+        setMenuOpen(false);
+        actions.onDragGoalStart(goal.id);
       }}
+      onDragEnd={() => actions.onDragGoalEnd()}
       onDragOver={(event) => {
         if (!event.dataTransfer.types.includes(GOAL_DRAG_MIME)) {
           return;
@@ -588,8 +611,25 @@ const useStableEdges = (edges: Edge[]) => {
 
 /* Bands sit behind the flow and labels sit in a gutter, both following the
    viewport's vertical pan and zoom, so a lane's name stays readable however
-   far the map is panned sideways. */
-function LaneBands({ lanes }: { lanes: GoalGraphLane[] }) {
+   far the map is panned sideways. The last lane runs on to the bottom of the
+   canvas, so the map never ends in a dead strip. Lanes are drop targets:
+   dropping a goal on one sets its horizon. */
+const LAST_LANE_OVERHANG = 4000;
+
+const laneStyle = (lane: GoalGraphLane, isLast: boolean, y: number, zoom: number) => ({
+  transform: `translateY(${lane.top * zoom + y}px)`,
+  height: lane.height * zoom + (isLast ? LAST_LANE_OVERHANG : 0),
+});
+
+const laneClassName = (base: string, lane: GoalGraphLane, index: number, dropLaneId: string | null) =>
+  [
+    base,
+    index % 2 === 1 ? `${base}--alt` : "",
+    lane.isUnassigned ? `${base}--unassigned` : "",
+    dropLaneId === lane.id ? `${base}--drop` : "",
+  ].filter(Boolean).join(" ");
+
+function LaneBands({ lanes, dropLaneId }: { lanes: GoalGraphLane[]; dropLaneId: string | null }) {
   const { y, zoom } = useViewport();
 
   return (
@@ -597,37 +637,97 @@ function LaneBands({ lanes }: { lanes: GoalGraphLane[] }) {
       {lanes.map((lane, index) => (
         <div
           key={lane.id}
-          className={[
-            "ghq-lanes__band",
-            index % 2 === 1 ? "ghq-lanes__band--alt" : "",
-            lane.isUnassigned ? "ghq-lanes__band--unassigned" : "",
-          ].filter(Boolean).join(" ")}
-          style={{ transform: `translateY(${lane.top * zoom + y}px)`, height: lane.height * zoom }}
+          className={laneClassName("ghq-lanes__band", lane, index, dropLaneId)}
+          style={laneStyle(lane, index === lanes.length - 1, y, zoom)}
         />
       ))}
     </div>
   );
 }
 
-function LaneGutter({ lanes }: { lanes: GoalGraphLane[] }) {
+type LaneDropHandlers = {
+  onDragOver: (event: DragEvent<HTMLElement>) => void;
+  onDragLeave: (event: DragEvent<HTMLElement>) => void;
+  onDrop: (event: DragEvent<HTMLElement>) => void;
+};
+
+function LaneGutter({
+  lanes,
+  dropLaneId,
+  dropHandlers,
+}: {
+  lanes: GoalGraphLane[];
+  dropLaneId: string | null;
+  dropHandlers: LaneDropHandlers;
+}) {
   const { y, zoom } = useViewport();
 
   return (
-    <div className="ghq-lanes-gutter" aria-label="Planning layers">
+    <div className="ghq-lanes-gutter" role="group" aria-label="Time horizons" {...dropHandlers}>
       {lanes.map((lane, index) => (
         <div
           key={lane.id}
-          className={[
-            "ghq-lanes-gutter__lane",
-            index % 2 === 1 ? "ghq-lanes-gutter__lane--alt" : "",
-            lane.isUnassigned ? "ghq-lanes-gutter__lane--unassigned" : "",
-          ].filter(Boolean).join(" ")}
-          style={{ transform: `translateY(${lane.top * zoom + y}px)`, height: lane.height * zoom }}
+          className={laneClassName("ghq-lanes-gutter__lane", lane, index, dropLaneId)}
+          style={laneStyle(lane, index === lanes.length - 1, y, zoom)}
+          title={lane.label}
         >
           <span className="ghq-lanes-gutter__name">{lane.label}</span>
-          <span className="ghq-lanes-gutter__count">{lane.goalCount}</span>
+          {lane.goalCount > 0 ? <span className="ghq-lanes-gutter__count">{lane.goalCount}</span> : null}
         </div>
       ))}
+    </div>
+  );
+}
+
+/* ── Focus drop dock ── */
+
+/* Appears only while a goal is being dragged: drop it here to commit it to
+   this month or this week without opening anything. */
+function FocusDropDock({
+  monthLabel,
+  monthCount,
+  weekCount,
+  onDrop,
+}: {
+  monthLabel: string;
+  monthCount: number;
+  weekCount: number;
+  onDrop: (lane: RailLane, goalId: string) => void;
+}) {
+  const [overLane, setOverLane] = useState<RailLane | null>(null);
+
+  const target = (lane: RailLane, label: string, count: number) => (
+    <div
+      className={`ghq-drop-dock__target${overLane === lane ? " ghq-drop-dock__target--over" : ""}`}
+      onDragOver={(event) => {
+        if (!event.dataTransfer.types.includes(GOAL_DRAG_MIME)) {
+          return;
+        }
+        event.preventDefault();
+        event.stopPropagation();
+        event.dataTransfer.dropEffect = "copy";
+        setOverLane(lane);
+      }}
+      onDragLeave={() => setOverLane((current) => (current === lane ? null : current))}
+      onDrop={(event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        setOverLane(null);
+        const goalId = event.dataTransfer.getData(GOAL_DRAG_MIME);
+        if (goalId) {
+          onDrop(lane, goalId);
+        }
+      }}
+    >
+      <span className="ghq-drop-dock__label">{label}</span>
+      <span className="ghq-drop-dock__count">{count >= 3 ? "Full, choose one to replace" : `${count} of 3`}</span>
+    </div>
+  );
+
+  return (
+    <div className="ghq-drop-dock nopan" aria-hidden="true">
+      {target("month", `Add to ${monthLabel}`, monthCount)}
+      {target("week", "Add to this week", weekCount)}
     </div>
   );
 }
@@ -646,11 +746,23 @@ type GraphCanvasProps = {
   weekSlotByGoalId: Map<string, number>;
   isFullscreen: boolean;
   centerRequest: CenterRequest | null;
+  draggingGoalId: string | null;
+  monthLabel: string;
+  monthCount: number;
+  weekCount: number;
   actions: GoalNodeActions;
   onSaveChildDraft: (title: string) => void;
   onCancelChildDraft: () => void;
   onCanvasClear: () => void;
+  onSetGoalHorizon: (goalId: string, horizonId: string | null) => void;
 };
+
+type FitMode = "readable" | "all";
+
+const isGoalDrag = (event: DragEvent<HTMLElement>) => event.dataTransfer.types.includes(GOAL_DRAG_MIME);
+
+const isOverGoalNode = (target: EventTarget) =>
+  target instanceof Element && Boolean(target.closest(".graph-goal-node, .graph-child-draft"));
 
 function GraphCanvas({
   activeGoals,
@@ -664,16 +776,25 @@ function GraphCanvas({
   weekSlotByGoalId,
   isFullscreen,
   centerRequest,
+  draggingGoalId,
+  monthLabel,
+  monthCount,
+  weekCount,
   actions,
   onSaveChildDraft,
   onCancelChildDraft,
   onCanvasClear,
+  onSetGoalHorizon,
 }: GraphCanvasProps) {
-  const { setViewport, setCenter, getZoom, zoomIn, zoomOut } = useReactFlow();
+  const { setViewport, setCenter, getZoom, zoomIn, zoomOut, screenToFlowPosition } = useReactFlow();
   const flowWidth = useStore((state) => state.width);
   const flowHeight = useStore((state) => state.height);
-  const initialFitDoneRef = useRef(false);
   const handledCenterNonceRef = useRef<number | null>(null);
+  // Until the person pans or zooms, the map keeps itself fitted as the canvas,
+  // the tree or the side panel change; after that their view is left alone.
+  const autoFitModeRef = useRef<FitMode | null>("readable");
+  const hasFittedRef = useRef(false);
+  const [dropLaneId, setDropLaneId] = useState<string | null>(null);
 
   const layout = useMemo(
     () => buildGoalGraphLayout({
@@ -775,7 +896,7 @@ function GraphCanvas({
       id: edge.id,
       source: edge.source,
       target: edge.target,
-      type: "smoothstep",
+      type: "default",
       className:
         edge.kind === "draft"
           ? "ghq-edge ghq-edge--draft"
@@ -806,36 +927,51 @@ function GraphCanvas({
   }, [layout]);
 
   const fitMap = useCallback(
-    (duration: number) => {
+    (duration: number, mode: FitMode) => {
       if (!bounds || !flowWidth || !flowHeight) {
         return;
       }
-      void setViewport(
-        getViewportForBounds(bounds, flowWidth, flowHeight, MIN_ZOOM, FIT_MAX_ZOOM, FIT_PADDING),
-        { duration },
+      // Lanes start flush with the top edge; a plain tree gets a little air.
+      const padY = layout.lanes.length > 0 ? 0 : FIT_PAD_Y;
+      const fitZoom = Math.min(
+        (flowWidth - FIT_PAD_X * 2) / bounds.width,
+        (flowHeight - padY * 2) / bounds.height,
+        FIT_MAX_ZOOM,
       );
+      const zoom = Math.min(
+        MAX_ZOOM,
+        Math.max(MIN_ZOOM, mode === "readable" ? Math.max(fitZoom, READABLE_ZOOM) : fitZoom),
+      );
+      const contentWidth = bounds.width * zoom;
+      const x = contentWidth <= flowWidth - FIT_PAD_X * 2
+        ? (flowWidth - contentWidth) / 2 - bounds.x * zoom
+        : FIT_PAD_X - bounds.x * zoom;
+      void setViewport({ x, y: padY - bounds.y * zoom, zoom }, { duration });
     },
-    [bounds, flowHeight, flowWidth, setViewport],
+    [bounds, flowHeight, flowWidth, layout.lanes.length, setViewport],
   );
   const fitMapRef = useRef(fitMap);
   fitMapRef.current = fitMap;
 
   useEffect(() => {
-    if (initialFitDoneRef.current || !bounds || !flowWidth || !flowHeight) {
+    const mode = autoFitModeRef.current;
+    if (!mode || !bounds || !flowWidth || !flowHeight) {
       return;
     }
-    initialFitDoneRef.current = true;
-    fitMap(0);
+    fitMap(hasFittedRef.current ? 180 : 0, mode);
+    hasFittedRef.current = true;
   }, [bounds, fitMap, flowHeight, flowWidth]);
 
-  // Entering or leaving full screen resizes the canvas; refit once it settles.
+  // Entering or leaving full screen is a fresh look at the map: refit once the
+  // canvas settles, even if the person had moved it.
   const previousFullscreenRef = useRef(isFullscreen);
   useEffect(() => {
     if (previousFullscreenRef.current === isFullscreen) {
       return;
     }
     previousFullscreenRef.current = isFullscreen;
-    const timeoutId = window.setTimeout(() => fitMapRef.current(200), 120);
+    autoFitModeRef.current = autoFitModeRef.current ?? "readable";
+    const timeoutId = window.setTimeout(() => fitMapRef.current(200, autoFitModeRef.current ?? "readable"), 120);
     return () => window.clearTimeout(timeoutId);
   }, [isFullscreen]);
 
@@ -848,6 +984,7 @@ function GraphCanvas({
       return;
     }
     handledCenterNonceRef.current = centerRequest.nonce;
+    autoFitModeRef.current = null;
     void setCenter(item.x + NODE_W / 2, item.y + NODE_H / 2, {
       zoom: Math.max(getZoom(), 0.85),
       duration: 260,
@@ -857,22 +994,89 @@ function GraphCanvas({
   const centerSelectedGoal = useCallback(() => {
     const item = selectedGoalId ? layout.items.find((candidate) => candidate.id === selectedGoalId) : null;
     if (!item) {
-      fitMap(220);
       return;
     }
+    autoFitModeRef.current = null;
     void setCenter(item.x + NODE_W / 2, item.y + NODE_H / 2, { zoom: Math.max(getZoom(), 0.85), duration: 220 });
-  }, [fitMap, getZoom, layout.items, selectedGoalId, setCenter]);
+  }, [getZoom, layout.items, selectedGoalId, setCenter]);
+
+  useEffect(() => {
+    if (!draggingGoalId) {
+      setDropLaneId(null);
+    }
+  }, [draggingGoalId]);
+
+  const laneAtClientPoint = useCallback(
+    (clientX: number, clientY: number) =>
+      findLaneAtY(layout.lanes, screenToFlowPosition({ x: clientX, y: clientY }).y),
+    [layout.lanes, screenToFlowPosition],
+  );
+
+  const laneDropHandlers = useMemo<LaneDropHandlers>(
+    () => ({
+      onDragOver: (event) => {
+        if (layout.lanes.length === 0 || !isGoalDrag(event)) {
+          return;
+        }
+        // Over a goal, the goal takes the drop (move under it).
+        if (isOverGoalNode(event.target)) {
+          setDropLaneId(null);
+          return;
+        }
+        event.preventDefault();
+        event.dataTransfer.dropEffect = "move";
+        setDropLaneId(laneAtClientPoint(event.clientX, event.clientY)?.id ?? null);
+      },
+      onDragLeave: (event) => {
+        const next = event.relatedTarget;
+        if (!(next instanceof globalThis.Node) || !event.currentTarget.contains(next)) {
+          setDropLaneId(null);
+        }
+      },
+      onDrop: (event) => {
+        setDropLaneId(null);
+        if (event.defaultPrevented || layout.lanes.length === 0 || !isGoalDrag(event) || isOverGoalNode(event.target)) {
+          return;
+        }
+        const goal = layout.goalMap.get(event.dataTransfer.getData(GOAL_DRAG_MIME));
+        const lane = laneAtClientPoint(event.clientX, event.clientY);
+        if (!goal || !lane) {
+          return;
+        }
+        event.preventDefault();
+        const currentLaneId = goal.horizonId && layout.lanes.some((candidate) => candidate.id === goal.horizonId)
+          ? goal.horizonId
+          : UNASSIGNED_LANE_ID;
+        if (currentLaneId !== lane.id) {
+          onSetGoalHorizon(goal.id, laneHorizonId(lane));
+        }
+      },
+    }),
+    [laneAtClientPoint, layout.goalMap, layout.lanes, onSetGoalHorizon],
+  );
 
   return (
     <div className="ghq-graph__canvas">
-      {layout.lanes.length > 0 ? <LaneGutter lanes={layout.lanes} /> : null}
-      <div className="ghq-graph__flow" role="tree" aria-label="Goal map">
-        {layout.lanes.length > 0 ? <LaneBands lanes={layout.lanes} /> : null}
+      {layout.lanes.length > 0 ? (
+        <LaneGutter lanes={layout.lanes} dropLaneId={dropLaneId} dropHandlers={laneDropHandlers} />
+      ) : null}
+      <div
+        className={`ghq-graph__flow${draggingGoalId ? " ghq-graph__flow--dragging" : ""}`}
+        role="tree"
+        aria-label="Goal map"
+        {...laneDropHandlers}
+      >
+        {layout.lanes.length > 0 ? <LaneBands lanes={layout.lanes} dropLaneId={dropLaneId} /> : null}
         <ReactFlow
           nodes={animatedNodes}
           edges={stableEdges}
           nodeTypes={nodeTypes}
           onPaneClick={onCanvasClear}
+          onMoveStart={(event) => {
+            if (event) {
+              autoFitModeRef.current = null;
+            }
+          }}
           panOnScroll
           zoomOnScroll={false}
           nodesConnectable={false}
@@ -885,18 +1089,47 @@ function GraphCanvas({
         >
           <Background color="var(--wash-3)" gap={40} size={1} />
         </ReactFlow>
+        {draggingGoalId ? (
+          <FocusDropDock
+            monthLabel={monthLabel}
+            monthCount={monthCount}
+            weekCount={weekCount}
+            onDrop={actions.onAddToLane}
+          />
+        ) : null}
         <div className="ghq-graph__viewport-controls nopan" aria-label="Map view controls">
-          <button type="button" onClick={() => void zoomOut({ duration: 180 })} aria-label="Zoom out">
+          <button
+            type="button"
+            onClick={() => {
+              autoFitModeRef.current = null;
+              void zoomOut({ duration: 180 });
+            }}
+            aria-label="Zoom out"
+          >
             −
           </button>
-          <button type="button" onClick={() => void zoomIn({ duration: 180 })} aria-label="Zoom in">
+          <button
+            type="button"
+            onClick={() => {
+              autoFitModeRef.current = null;
+              void zoomIn({ duration: 180 });
+            }}
+            aria-label="Zoom in"
+          >
             +
           </button>
-          <button type="button" onClick={() => fitMap(220)}>
+          <button
+            type="button"
+            onClick={() => {
+              autoFitModeRef.current = "all";
+              fitMap(220, "all");
+            }}
+            title="Show the whole map"
+          >
             Fit
           </button>
           {selectedGoalId ? (
-            <button type="button" onClick={centerSelectedGoal}>
+            <button type="button" onClick={centerSelectedGoal} title="Center the selected goal">
               Center
             </button>
           ) : null}
@@ -908,20 +1141,11 @@ function GraphCanvas({
 
 /* ── Toolbar pieces ── */
 
-function FilterMenu({
-  filters,
-  domains,
-  horizons,
-  onChange,
-}: {
-  filters: GraphFilters;
-  domains: Array<[string, string]>;
-  horizons: GoalHorizonItem[];
-  onChange: (updates: Partial<GraphFilters>) => void;
-}) {
+/* Shared open/close behaviour for toolbar popovers: outside pointer or Esc
+   closes, and Esc doesn't reach the map's own Esc chain. */
+function usePopover() {
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement | null>(null);
-  const activeCount = [filters.domainId, filters.horizonId, filters.health].filter(Boolean).length;
 
   useEffect(() => {
     if (!isOpen) {
@@ -936,30 +1160,45 @@ function FilterMenu({
     return () => window.removeEventListener("pointerdown", handlePointerDown);
   }, [isOpen]);
 
+  const onKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (event.key === "Escape" && isOpen) {
+      event.preventDefault();
+      event.stopPropagation();
+      setIsOpen(false);
+    }
+  };
+
+  return { isOpen, setIsOpen, containerRef, onKeyDown };
+}
+
+function FilterMenu({
+  filters,
+  domains,
+  horizons,
+  onChange,
+}: {
+  filters: GraphFilters;
+  domains: Array<[string, string]>;
+  horizons: GoalHorizonItem[];
+  onChange: (updates: Partial<GraphFilters>) => void;
+}) {
+  const { isOpen, setIsOpen, containerRef, onKeyDown } = usePopover();
+  const activeCount = [filters.domainId, filters.horizonId, filters.health].filter(Boolean).length;
+
   return (
-    <div
-      className="ghq-filter-menu"
-      ref={containerRef}
-      onKeyDown={(event) => {
-        if (event.key === "Escape" && isOpen) {
-          event.preventDefault();
-          event.stopPropagation();
-          setIsOpen(false);
-        }
-      }}
-    >
+    <div className="ghq-menu" ref={containerRef} onKeyDown={onKeyDown}>
       <button
-        className={`button button--ghost button--small${activeCount > 0 ? " ghq-filter-menu__trigger--active" : ""}`}
+        className={`button button--ghost button--small${activeCount > 0 ? " ghq-menu__trigger--active" : ""}`}
         type="button"
         onClick={() => setIsOpen((current) => !current)}
         aria-expanded={isOpen}
         aria-haspopup="true"
       >
-        Filter{activeCount > 0 ? <span className="ghq-filter-menu__count">{activeCount}</span> : null}
+        Filter{activeCount > 0 ? <span className="ghq-menu__count">{activeCount}</span> : null}
       </button>
       {isOpen ? (
-        <div className="ghq-filter-menu__panel">
-          <label className="ghq-filter-menu__field">
+        <div className="ghq-menu__panel ghq-menu__panel--form">
+          <label className="ghq-menu__field">
             <span>Domain</span>
             <select
               className="ghq-planning-form__select"
@@ -972,20 +1211,20 @@ function FilterMenu({
               ))}
             </select>
           </label>
-          <label className="ghq-filter-menu__field">
-            <span>Planning layer</span>
+          <label className="ghq-menu__field">
+            <span>Time horizon</span>
             <select
               className="ghq-planning-form__select"
               value={filters.horizonId}
               onChange={(event) => onChange({ horizonId: event.target.value })}
             >
-              <option value="">All layers</option>
+              <option value="">All horizons</option>
               {horizons.map((horizon) => (
                 <option key={horizon.id} value={horizon.id}>{horizon.name}</option>
               ))}
             </select>
           </label>
-          <label className="ghq-filter-menu__field">
+          <label className="ghq-menu__field">
             <span>Health</span>
             <select
               className="ghq-planning-form__select"
@@ -1014,6 +1253,66 @@ function FilterMenu({
   );
 }
 
+function ViewMenu({
+  canExpand,
+  allExpanded,
+  onExpandAll,
+  onCollapseAll,
+  onShowShortcuts,
+}: {
+  canExpand: boolean;
+  allExpanded: boolean;
+  onExpandAll: () => void;
+  onCollapseAll: () => void;
+  onShowShortcuts: () => void;
+}) {
+  const { isOpen, setIsOpen, containerRef, onKeyDown } = usePopover();
+  const run = (action: () => void) => () => {
+    setIsOpen(false);
+    action();
+  };
+
+  return (
+    <div className="ghq-menu" ref={containerRef} onKeyDown={onKeyDown}>
+      <button
+        className="button button--ghost button--small"
+        type="button"
+        onClick={() => setIsOpen((current) => !current)}
+        aria-expanded={isOpen}
+        aria-haspopup="menu"
+      >
+        View
+      </button>
+      {isOpen ? (
+        <div className="ghq-menu__panel ghq-menu__panel--list ghq-menu__panel--end" role="menu">
+          <button type="button" role="menuitem" onClick={run(onExpandAll)} disabled={!canExpand || allExpanded}>
+            Expand all
+          </button>
+          <button type="button" role="menuitem" onClick={run(onCollapseAll)} disabled={!canExpand}>
+            Collapse all
+          </button>
+          <button type="button" role="menuitem" onClick={run(onShowShortcuts)}>
+            <span>Keyboard shortcuts</span>
+            <kbd>?</kbd>
+          </button>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function FullscreenIcon({ exit }: { exit: boolean }) {
+  return (
+    <svg viewBox="0 0 16 16" aria-hidden="true">
+      {exit ? (
+        <path d="M6 2v4H2M10 2v4h4M6 14v-4H2M10 14v-4h4" />
+      ) : (
+        <path d="M2 6V2h4M14 6V2h-4M2 10v4h4M14 10v4h-4" />
+      )}
+    </svg>
+  );
+}
+
 function DisplayFullscreenButton() {
   const [isDisplayFullscreen, setIsDisplayFullscreen] = useState(() => Boolean(document.fullscreenElement));
 
@@ -1029,7 +1328,7 @@ function DisplayFullscreenButton() {
 
   return (
     <button
-      className="button button--ghost button--small ghq-toolbar__icon-btn"
+      className="button button--ghost button--small"
       type="button"
       onClick={() => {
         if (document.fullscreenElement) {
@@ -1039,16 +1338,9 @@ function DisplayFullscreenButton() {
         }
       }}
       aria-pressed={isDisplayFullscreen}
-      aria-label={isDisplayFullscreen ? "Leave the whole display" : "Use the whole display"}
-      title={isDisplayFullscreen ? "Leave the whole display" : "Use the whole display (hides the browser)"}
+      title={isDisplayFullscreen ? "Show the browser again" : "Hide the browser too"}
     >
-      <svg viewBox="0 0 16 16" aria-hidden="true">
-        {isDisplayFullscreen ? (
-          <path d="M6 2v4H2M10 2v4h4M6 14v-4H2M10 14v-4h4" />
-        ) : (
-          <path d="M2 6V2h4M14 6V2h-4M2 10v4h4M14 10v4h-4" />
-        )}
-      </svg>
+      {isDisplayFullscreen ? "Show browser" : "Hide browser"}
     </button>
   );
 }
@@ -1063,7 +1355,7 @@ const shortcutRows: Array<[string[], string]> = [
   [["←", "→"], "Collapse or expand sub-goals"],
   [["/"], "Search; Enter jumps to the next match"],
   [["F"], "Full screen"],
-  [["Esc"], "Close details, clear selection, leave full screen"],
+  [["Esc"], "Close a panel, clear selection, leave full screen"],
   [["?"], "Show or hide this list"],
 ];
 
@@ -1088,11 +1380,26 @@ function ShortcutSheet({ onClose }: { onClose: () => void }) {
           </div>
         ))}
       </dl>
+      <h3 className="ghq-shortcuts__subhead">Drag a goal</h3>
+      <dl className="ghq-shortcuts__list">
+        <div className="ghq-shortcuts__row">
+          <dt><span className="ghq-shortcuts__lane-sample" /></dt>
+          <dd>Onto a row to set its time horizon</dd>
+        </div>
+        <div className="ghq-shortcuts__row">
+          <dt><span className="ghq-shortcuts__node-sample" /></dt>
+          <dd>Onto another goal to make it a sub-goal</dd>
+        </div>
+        <div className="ghq-shortcuts__row">
+          <dt><span className="graph-goal-node__slot">M1</span></dt>
+          <dd>Onto This month or This week, shown while you drag</dd>
+        </div>
+      </dl>
       <h3 className="ghq-shortcuts__subhead">On the map</h3>
       <dl className="ghq-shortcuts__list">
         <div className="ghq-shortcuts__row">
-          <dt><span className="graph-goal-node__slot">M1</span></dt>
-          <dd>Committed to this month (W for this week)</dd>
+          <dt><span className="graph-goal-node__slot">W2</span></dt>
+          <dd>In focus this month (M) or this week (W)</dd>
         </div>
         <div className="ghq-shortcuts__row">
           <dt><span className="graph-goal-node__health graph-goal-node__health--drifting" /></dt>
@@ -1102,14 +1409,26 @@ function ShortcutSheet({ onClose }: { onClose: () => void }) {
           <dt><span className="graph-goal-node__health graph-goal-node__health--stalled">Stalled</span></dt>
           <dd>No progress in 14 days and a date has passed</dd>
         </div>
-        <div className="ghq-shortcuts__row">
-          <dt><span className="ghq-shortcuts__lane-sample" /></dt>
-          <dd>Rows are planning layers, set in Settings</dd>
-        </div>
       </dl>
     </div>
   );
 }
+
+const readPlaceHintDismissed = () => {
+  try {
+    return window.localStorage.getItem(PLACE_HINT_STORAGE_KEY) === "1";
+  } catch {
+    return false;
+  }
+};
+
+const writePlaceHintDismissed = () => {
+  try {
+    window.localStorage.setItem(PLACE_HINT_STORAGE_KEY, "1");
+  } catch {
+    // Storage can be unavailable (private mode); the hint just comes back.
+  }
+};
 
 /* ── Main view ── */
 
@@ -1122,6 +1441,10 @@ export type GoalsPlanGraphViewProps = {
   childDraftIsPending: boolean;
   monthSlotByGoalId: Map<string, number>;
   weekSlotByGoalId: Map<string, number>;
+  monthLabel: string;
+  monthCount: number;
+  weekCount: number;
+  isFocusOpen: boolean;
   structureError: string | null;
   structureMessage: string | null;
   isFullscreen: boolean;
@@ -1138,8 +1461,9 @@ export type GoalsPlanGraphViewProps = {
   onDetachGoal: (goalId: string) => void;
   onDuplicateGoal: (goal: GoalOverviewItem) => void;
   onArchiveGoal: (goal: GoalOverviewItem) => void;
-  onAddToLane: (lane: "month" | "week", goalId: string) => void;
+  onAddToLane: (lane: RailLane, goalId: string) => void;
   onDropGoalOnGoal: (targetGoalId: string, draggedGoalId: string) => void;
+  onSetGoalHorizon: (goalId: string, horizonId: string | null) => void;
   onSaveChildDraft: (title: string) => void;
   onCancelChildDraft: () => void;
   onCanvasClear: () => void;
@@ -1147,6 +1471,7 @@ export type GoalsPlanGraphViewProps = {
   onRequestCenter: (goalId: string) => void;
   onEscape: () => void;
   onToggleFullscreen: () => void;
+  onToggleFocus: () => void;
 };
 
 export const GoalsPlanGraphView = ({
@@ -1158,6 +1483,10 @@ export const GoalsPlanGraphView = ({
   childDraftIsPending,
   monthSlotByGoalId,
   weekSlotByGoalId,
+  monthLabel,
+  monthCount,
+  weekCount,
+  isFocusOpen,
   structureError,
   structureMessage,
   isFullscreen,
@@ -1176,6 +1505,7 @@ export const GoalsPlanGraphView = ({
   onArchiveGoal,
   onAddToLane,
   onDropGoalOnGoal,
+  onSetGoalHorizon,
   onSaveChildDraft,
   onCancelChildDraft,
   onCanvasClear,
@@ -1183,10 +1513,13 @@ export const GoalsPlanGraphView = ({
   onRequestCenter,
   onEscape,
   onToggleFullscreen,
+  onToggleFocus,
 }: GoalsPlanGraphViewProps) => {
   const [filters, setFilters] = useState<GraphFilters>(emptyFilters);
   const [matchIndex, setMatchIndex] = useState(-1);
   const [isShortcutsOpen, setIsShortcutsOpen] = useState(false);
+  const [draggingGoalId, setDraggingGoalId] = useState<string | null>(null);
+  const [isPlaceHintDismissed, setIsPlaceHintDismissed] = useState(readPlaceHintDismissed);
   const searchRef = useRef<HTMLInputElement | null>(null);
 
   const activeGoals = useMemo(() => goals.filter((goal) => goal.status === "active"), [goals]);
@@ -1201,6 +1534,10 @@ export const GoalsPlanGraphView = ({
     () => horizons.filter((horizon) => !horizon.isArchived).sort((left, right) => left.sortOrder - right.sortOrder),
     [horizons],
   );
+  const unplacedCount = useMemo(() => {
+    const activeHorizonIds = new Set(activeHorizons.map((horizon) => horizon.id));
+    return activeGoals.filter((goal) => !goal.horizonId || !activeHorizonIds.has(goal.horizonId)).length;
+  }, [activeGoals, activeHorizons]);
   const spotlight = useMemo(() => buildSpotlightState(activeGoals, filters), [activeGoals, filters]);
   const treeOrder = useMemo(() => getGoalTreeOrder(activeGoals), [activeGoals]);
   const hasQuery = filters.query.trim().length > 0;
@@ -1214,6 +1551,21 @@ export const GoalsPlanGraphView = ({
   );
   const allExpanded = [...goalIdsWithChildren].every((goalId) => expandedGoalIds.has(goalId));
 
+  // dragend fires on the node that started the drag; if that node re-renders
+  // away mid-drag, these catch the end instead.
+  useEffect(() => {
+    if (!draggingGoalId) {
+      return;
+    }
+    const endDrag = () => setDraggingGoalId(null);
+    window.addEventListener("dragend", endDrag);
+    window.addEventListener("drop", endDrag);
+    return () => {
+      window.removeEventListener("dragend", endDrag);
+      window.removeEventListener("drop", endDrag);
+    };
+  }, [draggingGoalId]);
+
   const actions = useMemo<GoalNodeActions>(
     () => ({
       onSelect: onSelectGoal,
@@ -1226,6 +1578,8 @@ export const GoalsPlanGraphView = ({
       onArchiveGoal,
       onAddToLane,
       onDropGoalOnGoal,
+      onDragGoalStart: setDraggingGoalId,
+      onDragGoalEnd: () => setDraggingGoalId(null),
     }),
     [
       onAddToLane,
@@ -1346,6 +1700,8 @@ export const GoalsPlanGraphView = ({
     );
   }
 
+  const showPlaceHint = activeHorizons.length > 0 && unplacedCount > 0 && !isPlaceHintDismissed;
+
   return (
     <ReactFlowProvider>
       <div className="ghq-graph">
@@ -1402,34 +1758,36 @@ export const GoalsPlanGraphView = ({
             />
           </div>
           <div className="ghq-toolbar__group ghq-toolbar__group--end">
-            {goalIdsWithChildren.size > 0 ? (
-              <button
-                className="button button--ghost button--small"
-                type="button"
-                onClick={allExpanded ? onCollapseAll : onExpandAll}
-              >
-                {allExpanded ? "Collapse all" : "Expand all"}
-              </button>
-            ) : null}
             <button
-              className="button button--ghost button--small ghq-toolbar__icon-btn"
+              className={`button button--ghost button--small ghq-focus-btn${isFocusOpen ? " ghq-focus-btn--open" : ""}`}
               type="button"
-              onClick={() => setIsShortcutsOpen((current) => !current)}
-              aria-expanded={isShortcutsOpen}
-              aria-label="Keyboard shortcuts and legend"
-              title="Keyboard shortcuts (?)"
+              onClick={onToggleFocus}
+              aria-pressed={isFocusOpen}
+              title="This month's outcomes and this week's priorities"
             >
-              ?
+              Focus
+              <span className="ghq-focus-btn__counts" aria-hidden="true">
+                {monthCount}/3 · {weekCount}/3
+              </span>
+              <span className="sr-only">{`, ${monthLabel} ${monthCount} of 3, this week ${weekCount} of 3`}</span>
             </button>
+            <ViewMenu
+              canExpand={goalIdsWithChildren.size > 0}
+              allExpanded={allExpanded}
+              onExpandAll={onExpandAll}
+              onCollapseAll={onCollapseAll}
+              onShowShortcuts={() => setIsShortcutsOpen(true)}
+            />
             {isFullscreen ? <DisplayFullscreenButton /> : null}
             <button
-              className="button button--ghost button--small"
+              className={`button button--ghost button--small${isFullscreen ? "" : " ghq-toolbar__icon-btn"}`}
               type="button"
               onClick={onToggleFullscreen}
               aria-pressed={isFullscreen}
+              aria-label={isFullscreen ? "Exit full screen" : "Full screen"}
               title={isFullscreen ? "Leave full screen (F or Esc)" : "Full screen (F)"}
             >
-              {isFullscreen ? "Exit full screen" : "Full screen"}
+              {isFullscreen ? "Exit full screen" : <FullscreenIcon exit={false} />}
             </button>
             <button className="button button--primary button--small" type="button" onClick={onOpenCreateGoal}>
               + New goal
@@ -1450,10 +1808,15 @@ export const GoalsPlanGraphView = ({
             weekSlotByGoalId={weekSlotByGoalId}
             isFullscreen={isFullscreen}
             centerRequest={centerRequest}
+            draggingGoalId={draggingGoalId}
+            monthLabel={monthLabel}
+            monthCount={monthCount}
+            weekCount={weekCount}
             actions={actions}
             onSaveChildDraft={onSaveChildDraft}
             onCancelChildDraft={onCancelChildDraft}
             onCanvasClear={onCanvasClear}
+            onSetGoalHorizon={onSetGoalHorizon}
           />
 
           {isShortcutsOpen ? <ShortcutSheet onClose={() => setIsShortcutsOpen(false)} /> : null}
@@ -1469,7 +1832,24 @@ export const GoalsPlanGraphView = ({
 
           {activeHorizons.length === 0 ? (
             <p className="ghq-graph__hint">
-              <Link to="/settings#planning-layers">Add planning layers</Link> to see goals by time horizon.
+              <Link to="/settings#planning-layers">Add time horizons</Link> to lay goals out from life vision to this month.
+            </p>
+          ) : showPlaceHint ? (
+            <p className="ghq-graph__hint">
+              <span>
+                {unplacedCount === 1 ? "1 goal has" : `${unplacedCount} goals have`} no time horizon. Drag a goal into a row to place it.
+              </span>
+              <button
+                className="ghq-graph__hint-close"
+                type="button"
+                onClick={() => {
+                  setIsPlaceHintDismissed(true);
+                  writePlaceHintDismissed();
+                }}
+                aria-label="Dismiss hint"
+              >
+                ×
+              </button>
             </p>
           ) : null}
         </div>

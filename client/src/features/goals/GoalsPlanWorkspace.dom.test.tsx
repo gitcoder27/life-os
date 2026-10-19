@@ -16,6 +16,7 @@ import type {
 } from "../../shared/lib/api";
 import { emptyGoalForm } from "./GoalFormDialog";
 import { NODE_H, NODE_W } from "./goal-graph-layout";
+import { GOAL_DRAG_MIME } from "./GoalsPlanCommitmentsRail";
 import { GoalsPlanWorkspace } from "./GoalsPlanWorkspace";
 
 /* ── Fixture ── */
@@ -252,9 +253,25 @@ const selectedGoalTitles = () =>
     .filter((node) => node.getAttribute("aria-selected") === "true")
     .map((node) => node.querySelector(".graph-goal-node__title")?.textContent);
 
-const monthLane = () => {
-  const label = new Date(`${monthPlan.startDate}T12:00:00`).toLocaleDateString(undefined, { month: "long" });
-  return screen.getByRole("heading", { name: label }).closest("section") as HTMLElement;
+const monthLabel = new Date(`${monthPlan.startDate}T12:00:00`).toLocaleDateString(undefined, { month: "long" });
+
+const monthLane = () => screen.getByRole("heading", { name: monthLabel }).closest("section") as HTMLElement;
+
+const focusButton = () => screen.getByRole("button", { name: /^Focus/ });
+
+const focusPanel = () => screen.queryByRole("complementary", { name: "Month and week focus" });
+
+/* happy-dom has no DataTransfer for synthetic drag events; this carries the
+   goal id the way the browser would. */
+const goalDataTransfer = () => {
+  const data = new Map<string, string>();
+  return {
+    types: [GOAL_DRAG_MIME],
+    effectAllowed: "all",
+    dropEffect: "none",
+    setData: (type: string, value: string) => data.set(type, value),
+    getData: (type: string) => data.get(type) ?? "",
+  };
 };
 
 const shortcutSheet = () => screen.queryByRole("dialog", { name: "Keyboard shortcuts and legend" });
@@ -362,7 +379,7 @@ describe("GoalsPlanWorkspace map", () => {
     expect(document.body.classList.contains("ghq-fullscreen-body")).toBe(false);
   });
 
-  it("opens a month draft for the selected goal with M and cancels it with Esc in the input", () => {
+  it("adds the selected goal to the first open month slot with M, without opening anything", async () => {
     renderPlan();
 
     fireEvent.click(goalNode("Grow the consultancy"));
@@ -370,18 +387,66 @@ describe("GoalsPlanWorkspace map", () => {
 
     pressKey("m");
 
-    const draftRow = monthLane().querySelector<HTMLElement>(".ghq-rail__row--editing");
-    expect(draftRow).not.toBeNull();
-    // M1 is taken, so the draft lands in the first open slot.
-    expect(draftRow?.querySelector(".ghq-rail__slot")?.textContent).toBe("M2");
-    const input = within(draftRow!).getByRole("textbox", { name: "Month outcome title" }) as HTMLInputElement;
-    expect(input.value).toBe("Grow the consultancy");
-
-    pressKey("Escape", input);
-
-    expect(document.querySelector(".ghq-rail__row--editing")).toBeNull();
+    // M1 is taken, so the goal lands in M2 with its title as the first wording.
+    expect(apiMocks.mutation.mutateAsync).toHaveBeenCalledWith({
+      theme: null,
+      topOutcomes: [
+        { id: "month-1", slot: 1, title: "Finish the base block", goalId: "g-base" },
+        { id: undefined, slot: 2, title: "Grow the consultancy", goalId: "g-consultancy" },
+      ],
+    });
+    expect(await screen.findByText(`Added “Grow the consultancy” to ${monthLabel} as M2.`)).toBeTruthy();
+    expect(focusPanel()).toBeNull();
     expect(selectedGoalTitles()).toEqual(["Grow the consultancy"]);
+  });
+
+  it("does not add a goal twice; it says where the goal already is", async () => {
+    renderPlan();
+
+    fireEvent.click(goalNode("Build a running base"));
+    pressKey("m");
+
     expect(apiMocks.mutation.mutateAsync).not.toHaveBeenCalled();
+    expect(await screen.findByText(`“Build a running base” is already in ${monthLabel} as M1.`)).toBeTruthy();
+  });
+
+  it("opens Focus from the toolbar and closes it with Esc, keeping the selection", () => {
+    renderPlan();
+    expect(focusPanel()).toBeNull();
+    expect(focusButton().textContent).toContain("1/3 · 0/3");
+
+    fireEvent.click(goalNode("Sign two new clients"));
+    fireEvent.click(focusButton());
+
+    expect(focusPanel()).not.toBeNull();
+    expect(focusButton().getAttribute("aria-pressed")).toBe("true");
+    expect(within(monthLane()).getByText("Finish the base block")).toBeTruthy();
+
+    pressKey("Escape");
+
+    expect(focusPanel()).toBeNull();
+    expect(selectedGoalTitles()).toEqual(["Sign two new clients"]);
+  });
+
+  it("shows month and week drop targets while a goal is dragged and adds it on drop", () => {
+    renderPlan();
+    const dataTransfer = goalDataTransfer();
+    expect(screen.queryByText("Add to this week")).toBeNull();
+
+    fireEvent.dragStart(goalNode("Run a marathon"), { dataTransfer });
+
+    const weekTarget = screen.getByText("Add to this week").parentElement as HTMLElement;
+    expect(screen.getByText(`Add to ${monthLabel}`)).toBeTruthy();
+
+    fireEvent.dragOver(weekTarget, { dataTransfer });
+    fireEvent.drop(weekTarget, { dataTransfer });
+
+    expect(apiMocks.mutation.mutateAsync).toHaveBeenCalledWith({
+      priorities: [{ id: undefined, slot: 1, title: "Run a marathon", goalId: "g-marathon" }],
+    });
+
+    fireEvent.dragEnd(goalNode("Run a marathon"), { dataTransfer });
+    expect(screen.queryByText("Add to this week")).toBeNull();
   });
 
   it("peels Esc one layer at a time: details, then the selection", () => {
@@ -395,8 +460,8 @@ describe("GoalsPlanWorkspace map", () => {
 
     pressKey("Escape");
 
-    expect(screen.queryByRole("complementary", { name: "Goal details" })).toBeNull();
-    expect(screen.getByRole("complementary", { name: "Month and week focus" })).toBeTruthy();
+    // The map stands alone again: no side column until Focus or details opens.
+    expect(screen.queryByRole("complementary")).toBeNull();
     expect(selectedGoalTitles()).toEqual(["Run a marathon"]);
 
     pressKey("Escape");
@@ -441,7 +506,7 @@ describe("GoalsPlanWorkspace map", () => {
       expect(document.querySelector(".ghq-stage--fullscreen")).toBeNull();
       expect(document.body.classList.contains("ghq-fullscreen-body")).toBe(false);
       expect(shortcutSheet()).toBeNull();
-      expect(document.querySelector(".ghq-rail__row--editing")).toBeNull();
+      expect(apiMocks.mutation.mutateAsync).not.toHaveBeenCalled();
       expect(onOpenCreateGoal).not.toHaveBeenCalled();
       expect(selectedGoalTitles()).toEqual(["Grow the consultancy"]);
     } finally {

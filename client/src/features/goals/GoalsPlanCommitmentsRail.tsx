@@ -47,6 +47,7 @@ type RailProps = {
   onRemoveSelectedItem: () => Promise<void> | void;
   onCloseSelectedItem: () => void;
   onJumpToGoal: (goalId: string) => void;
+  onClose: () => void;
 };
 
 /* ── Inline editors ── */
@@ -295,6 +296,7 @@ export function GoalsPlanCommitmentsRail({
   onRemoveSelectedItem,
   onCloseSelectedItem,
   onJumpToGoal,
+  onClose,
 }: RailProps) {
   const [dragOverKey, setDragOverKey] = useState<string | null>(null);
   const goalTitleById = useMemo(
@@ -447,6 +449,18 @@ export function GoalsPlanCommitmentsRail({
 
   return (
     <div className="ghq-rail">
+      <header className="ghq-rail__header">
+        <div className="ghq-rail__header-text">
+          <h2 className="ghq-rail__heading">Focus</h2>
+          <p className="ghq-rail__intro">
+            Up to three outcomes for {monthLabel} and three priorities for this week. Goals in focus show M or W on the map.
+          </p>
+        </div>
+        <button className="ghq-inspector__close" type="button" onClick={onClose} aria-label="Close focus" title="Close (Esc)">
+          ×
+        </button>
+      </header>
+
       {lanes.map(({ lane, label, items }) => (
         <section key={lane} className="ghq-rail__lane">
           <header className="ghq-rail__lane-header">
@@ -470,7 +484,7 @@ export function GoalsPlanCommitmentsRail({
       {planningError && !selectedPlanningItem ? <p className="ghq-rail__error">{planningError}</p> : null}
 
       <p className="ghq-rail__hint">
-        Drag a goal onto a slot, or select it and press <kbd>M</kbd> or <kbd>W</kbd>.
+        Drag a goal from the map onto a slot, or select it and press <kbd>M</kbd> or <kbd>W</kbd>.
       </p>
     </div>
   );

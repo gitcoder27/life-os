@@ -3,6 +3,8 @@ import { describe, expect, it } from "vitest";
 import type { GoalHorizonItem, GoalOverviewItem } from "../../shared/lib/api";
 import {
   buildGoalGraphLayout,
+  findLaneAtY,
+  laneHorizonId,
   draftNodeId,
   getGoalAncestorIds,
   getGoalTreeOrder,
@@ -96,7 +98,7 @@ describe("goal graph layout", () => {
     expect(oneYear.goalCount).toBe(1);
   });
 
-  it("keeps empty horizon lanes and adds a No layer lane only when needed", () => {
+  it("keeps empty horizon lanes and adds an Unplaced lane only when needed", () => {
     const withHorizon = buildGoalGraphLayout({
       goals: [goal("a", { horizonId: "h-1y" })],
       horizons,
@@ -114,7 +116,7 @@ describe("goal graph layout", () => {
     });
     const unassigned = withoutHorizon.lanes.at(-1)!;
     expect(unassigned.id).toBe(UNASSIGNED_LANE_ID);
-    expect(unassigned.label).toBe("No layer");
+    expect(unassigned.label).toBe("Unplaced");
     expect(unassigned.goalCount).toBe(2);
   });
 
@@ -203,5 +205,22 @@ describe("goal graph layout", () => {
     expect(getGoalTreeOrder(goals)).toEqual(["a", "a1", "a1x", "b"]);
     expect(getGoalAncestorIds(goals, "a1x")).toEqual(["a1", "a"]);
     expect(getGoalAncestorIds(goals, "b")).toEqual([]);
+  });
+
+  it("finds the lane under a y position and maps it to a horizon", () => {
+    const layout = buildGoalGraphLayout({
+      goals: [goal("a", { horizonId: "h-year" }), goal("b", { horizonId: null })],
+      horizons: [horizon("h-five", "5 years", 1), horizon("h-year", "1 year", 2)],
+      expandedGoalIds: new Set(),
+      draft: null,
+    });
+    const [five, year, unplaced] = layout.lanes;
+
+    expect(findLaneAtY(layout.lanes, -40)?.id).toBe(five.id);
+    expect(findLaneAtY(layout.lanes, year.top + 1)?.id).toBe(year.id);
+    expect(findLaneAtY(layout.lanes, unplaced.top + unplaced.height + 500)?.id).toBe(unplaced.id);
+    expect(findLaneAtY([], 0)).toBeNull();
+    expect(laneHorizonId(year)).toBe("h-year");
+    expect(laneHorizonId(unplaced)).toBeNull();
   });
 });
