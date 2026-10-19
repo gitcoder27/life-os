@@ -429,13 +429,11 @@ Current capabilities:
 
 Current capabilities:
 
-- hierarchy rail for parent/child goal navigation
-- graph view for goal structure
-- planning dock for connecting goals to:
-  - today
-  - this week
-  - this month
-- plan inspector with ancestry, health state, milestones, linked work
+- outline view: hierarchy rail for parent/child goal navigation
+- map view: goals laid out in horizon lanes (one row per planning layer), with search that jumps to matches, a filter menu, and a keyboard shortcut sheet (`?`)
+- true full screen for the map (covers the whole app; `F` or Esc to leave), with an optional whole-display mode
+- commitments rail beside the map for this month's outcomes (M1–M3) and this week's priorities (W1–W3), filled by dragging a goal onto a slot or pressing `M` / `W`; the week's capacity shows as one line
+- plan inspector with ancestry, health state, milestones, linked work, month/week/today focus, and a "Part of" parent picker
 - create child goals with suggested horizon
 - inspect today alignment to see which goals are represented in current work
 - add a goal's next best action into planning lanes

@@ -18,6 +18,18 @@ export const formatGoalDate = (iso: string | null) => {
   });
 };
 
+/** Month and year only ("Jun 2027"): long-range goals rarely have a meaningful day. */
+export const formatGoalTargetMonth = (iso: string | null) => {
+  if (!iso) {
+    return "";
+  }
+
+  return toLocalNoon(iso).toLocaleDateString("en-US", {
+    month: "short",
+    year: "numeric",
+  });
+};
+
 export const isGoalMilestoneOverdue = (
   targetDate: string | null,
   contextDate = getTodayDate(),

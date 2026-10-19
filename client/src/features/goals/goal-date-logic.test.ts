@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   formatGoalDate,
+  formatGoalTargetMonth,
   getGoalMilestoneDueLabel,
   isGoalMilestoneOverdue,
 } from "./goal-date-logic";
@@ -22,5 +23,10 @@ describe("goal date logic", () => {
 
   it("formats ISO date-times by their date portion without constructing invalid dates", () => {
     expect(formatGoalDate("2026-05-03T20:15:00.000Z")).toBe("May 3");
+  });
+
+  it("formats target dates as month and year", () => {
+    expect(formatGoalTargetMonth("2027-06-30")).toBe("Jun 2027");
+    expect(formatGoalTargetMonth(null)).toBe("");
   });
 });

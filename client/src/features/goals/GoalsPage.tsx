@@ -211,11 +211,9 @@ export function GoalsPage() {
       <header className="ghq-page-header">
         <div className="ghq-page-header__left">
           <h1 className="ghq-page-header__title">Goals</h1>
-          <p className="ghq-page-header__subtitle">
-            {mode === "overview"
-              ? "Scan your active goals and current planning."
-              : "Structure your goals and connect them to weekly and monthly work."}
-          </p>
+          {mode === "overview" ? (
+            <p className="ghq-page-header__subtitle">Scan your active goals and current planning.</p>
+          ) : null}
         </div>
         <GoalsModeToggle mode={mode} onModeChange={setMode} />
       </header>
