@@ -204,12 +204,12 @@ const noop = () => undefined;
 const childForm = emptyGoalForm();
 
 /* Selection is owned by GoalsPage; the harness keeps it in state the same way. */
-function PlanHarness() {
+function PlanHarness({ goalList = goals }: { goalList?: GoalOverviewItem[] }) {
   const [selectedGoalId, setSelectedGoalId] = useState<string | null>(null);
 
   return (
     <GoalsPlanWorkspace
-      goals={goals}
+      goals={goalList}
       domains={domains}
       horizons={horizons}
       weekPlan={weekPlan}
@@ -333,6 +333,34 @@ describe("GoalsPlanWorkspace map", () => {
     expect(screen.getAllByRole("treeitem")).toHaveLength(goals.length);
     expect(goalNode("Build a running base").getAttribute("aria-label")).toContain("month slot M1");
     expect(selectedGoalTitles()).toEqual([]);
+  });
+
+  /* The nodes handle their own clicks, toggles and HTML drag. React Flow sets
+     pointer-events: none on node wrappers it thinks are inert, which made
+     every click and drag fall through to the canvas pan. */
+  it("keeps every node wrapper hit-testable", () => {
+    const { container } = renderPlan();
+
+    const wrappers = Array.from(container.querySelectorAll<HTMLElement>(".react-flow__node"));
+    expect(wrappers).toHaveLength(goals.length);
+    for (const wrapper of wrappers) {
+      expect(wrapper.style.pointerEvents).toBe("all");
+    }
+  });
+
+  it("selects a goal that appears after the first load", () => {
+    const { rerender } = renderPlan();
+    expect(selectedGoalTitles()).toEqual([]);
+
+    const added = goal("g-book", "Write the book", 5, {});
+    rerender(
+      <MemoryRouter>
+        <PlanHarness goalList={[...goals, added]} />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getAllByRole("treeitem")).toHaveLength(goals.length + 1);
+    expect(selectedGoalTitles()).toEqual(["Write the book"]);
   });
 
   it("moves the stage into document.body for full screen and back on Esc", () => {

@@ -92,9 +92,26 @@ export const buildGoalTree = (goals: GoalOverviewItem[]) => {
   return { goalMap, childrenByParent, roots };
 };
 
-/** Every goal in depth-first order, ignoring collapsed branches. */
-export const getGoalTreeOrder = (goals: GoalOverviewItem[]) => {
-  const { childrenByParent, roots } = buildGoalTree(goals);
+/** Top-level goals in lane order (longest horizon first), so a life-vision
+    tree starts at the left and unplaced goals come last. Siblings below a
+    goal keep their own order. */
+export const orderRootsByHorizon = (roots: GoalOverviewItem[], horizons: GoalHorizonItem[]) => {
+  const rankById = new Map(
+    horizons
+      .filter((horizon) => !horizon.isArchived)
+      .sort((left, right) => left.sortOrder - right.sortOrder)
+      .map((horizon, index) => [horizon.id, index]),
+  );
+  const rank = (goal: GoalOverviewItem) =>
+    (goal.horizonId ? rankById.get(goal.horizonId) : undefined) ?? Number.MAX_SAFE_INTEGER;
+  return [...roots].sort((left, right) => rank(left) - rank(right) || sortGoals(left, right));
+};
+
+/** Every goal in the map's left-to-right, depth-first order, ignoring
+    collapsed branches. */
+export const getGoalTreeOrder = (goals: GoalOverviewItem[], horizons: GoalHorizonItem[] = []) => {
+  const { childrenByParent, roots: treeRoots } = buildGoalTree(goals);
+  const roots = orderRootsByHorizon(treeRoots, horizons);
   const order: string[] = [];
   const visit = (goal: GoalOverviewItem) => {
     order.push(goal.id);
@@ -129,7 +146,8 @@ export const buildGoalGraphLayout = ({
   expandedGoalIds,
   draft,
 }: GoalGraphLayoutInput): GoalGraphLayout => {
-  const { goalMap, childrenByParent, roots } = buildGoalTree(goals);
+  const { goalMap, childrenByParent, roots: treeRoots } = buildGoalTree(goals);
+  const roots = orderRootsByHorizon(treeRoots, horizons);
 
   /* ── Visible tree ── */
 

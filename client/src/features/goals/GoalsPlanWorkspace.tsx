@@ -681,6 +681,29 @@ export function GoalsPlanWorkspace({
     [activeGoals],
   );
 
+  // A goal that appears after the first load (New goal, a duplicate, a
+  // sub-goal) becomes the selection and is brought into view, so it never
+  // lands somewhere off screen on a large map.
+  const knownGoalIdsRef = useRef<Set<string> | null>(null);
+  useEffect(() => {
+    const currentIds = new Set(activeGoals.map((goal) => goal.id));
+    const knownIds = knownGoalIdsRef.current;
+    knownGoalIdsRef.current = currentIds;
+    if (!knownIds) {
+      return;
+    }
+    const addedIds = [...currentIds].filter((goalId) => !knownIds.has(goalId));
+    if (addedIds.length !== 1) {
+      return;
+    }
+    const [goalId] = addedIds;
+    handleRevealGoal(goalId);
+    handleRequestCenter(goalId);
+    if (goalId !== selectedGoalId) {
+      onSelectGoal(goalId);
+    }
+  }, [activeGoals, handleRequestCenter, handleRevealGoal, onSelectGoal, selectedGoalId]);
+
   const getLanePending = useCallback(
     (lane: RailLane) => (lane === "month" ? updateMonthMutation.isPending : updateWeekMutation.isPending),
     [updateMonthMutation.isPending, updateWeekMutation.isPending],

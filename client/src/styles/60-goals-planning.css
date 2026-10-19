@@ -2302,17 +2302,17 @@
   color: var(--negative-text);
 }
 
+/* Bottom-left, clear of the goals at the top and the controls at the right. */
 .ghq-graph__hint {
   position: absolute;
-  top: var(--space-3);
-  left: 50%;
+  left: var(--space-3);
+  bottom: var(--space-3);
   z-index: 5;
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  transform: translateX(-50%);
   width: max-content;
-  max-width: calc(100% - 2rem);
+  max-width: min(30rem, calc(100% - 15rem));
   margin: 0;
   padding: var(--space-1-5) var(--space-2) var(--space-1-5) var(--space-3);
   border: 1px solid var(--border);
@@ -2458,7 +2458,7 @@
   border: 1px solid var(--border);
   border-radius: var(--r-sm);
   background: var(--panel-elevated);
-  cursor: pointer;
+  cursor: grab;
   transition:
     border-color var(--dur-fast) var(--ease),
     background-color var(--dur-fast) var(--ease),
@@ -2638,8 +2638,8 @@
   background: var(--accent);
 }
 
-/* Add and More appear on hover or keyboard focus; everything else lives in
-   the menu, the details panel or a shortcut. */
+/* Add and More appear on hover, keyboard focus and on the selected goal;
+   everything else lives in the menu, the details panel or a shortcut. */
 .graph-goal-node__controls {
   position: absolute;
   top: 0.4rem;
@@ -2657,9 +2657,15 @@
 
 .graph-goal-node:hover .graph-goal-node__controls,
 .graph-goal-node:focus-within .graph-goal-node__controls,
+.graph-goal-node--selected .graph-goal-node__controls,
 .graph-goal-node--menu-open .graph-goal-node__controls {
   opacity: 1;
   pointer-events: auto;
+}
+
+/* The selected goal keeps its controls, so its title wraps clear of them. */
+.graph-goal-node--selected .graph-goal-node__title {
+  padding-right: 3.6rem;
 }
 
 .graph-goal-node__controls button {
@@ -3419,6 +3425,14 @@ button.ghq-rail__row--empty:hover .ghq-rail__placeholder {
 }
 
 @media (max-width: 640px) {
+  /* Too narrow to share the bottom edge with the zoom controls. */
+  .ghq-graph__hint {
+    right: var(--space-3);
+    bottom: calc(var(--space-4) + 2.75rem);
+    width: auto;
+    max-width: none;
+  }
+
   .ghq-form-overlay {
     padding:
       calc(var(--shell-header-height, 0px) + var(--space-3))

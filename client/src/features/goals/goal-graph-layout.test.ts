@@ -223,4 +223,20 @@ describe("goal graph layout", () => {
     expect(laneHorizonId(year)).toBe("h-year");
     expect(laneHorizonId(unplaced)).toBeNull();
   });
+
+  it("starts top-level trees in lane order, so a life-vision goal sits at the left", () => {
+    const goals = [
+      goal("unplaced-root", { horizonId: null, sortOrder: 1 }),
+      goal("year-root", { horizonId: "h-year", sortOrder: 2 }),
+      goal("vision-root", { horizonId: "h-vision", sortOrder: 3 }),
+      goal("year-kid", { horizonId: "h-year", parentGoalId: "unplaced-root", sortOrder: 4 }),
+    ];
+    const horizons = [horizon("h-vision", "Life vision", 1), horizon("h-year", "1 year", 2)];
+    const layout = buildGoalGraphLayout({ goals, horizons, expandedGoalIds: new Set(["unplaced-root"]), draft: null });
+
+    expect(itemById(layout, "vision-root").x).toBeLessThan(itemById(layout, "year-root").x);
+    expect(itemById(layout, "year-root").x).toBeLessThan(itemById(layout, "unplaced-root").x);
+    expect(layout.visibleGoalIds).toEqual(["vision-root", "year-root", "unplaced-root", "year-kid"]);
+    expect(getGoalTreeOrder(goals, horizons)).toEqual(["vision-root", "year-root", "unplaced-root", "year-kid"]);
+  });
 });

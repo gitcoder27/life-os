@@ -450,6 +450,12 @@ const ChildDraftNode = memo(function ChildDraftNode({ data }: NodeProps) {
   );
 });
 
+/* React Flow gives a node wrapper pointer-events: none when the node is
+   neither selectable nor draggable and ReactFlow has no node mouse handlers.
+   Our nodes handle their own clicks, toggles and HTML drag, so they must stay
+   hit-testable; node.style is applied after React Flow's own. */
+const nodeHitStyle = { pointerEvents: "all" } as const;
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const nodeTypes: Record<string, any> = {
   goalNode: GoalGraphNode,
@@ -846,6 +852,7 @@ function GraphCanvas({
           } satisfies ChildDraftNodeData,
           selectable: false,
           draggable: false,
+          style: nodeHitStyle,
         };
       }
 
@@ -874,6 +881,7 @@ function GraphCanvas({
         } satisfies GoalNodeData,
         selectable: false,
         draggable: false,
+        style: nodeHitStyle,
       };
     });
   }, [
@@ -1539,7 +1547,7 @@ export const GoalsPlanGraphView = ({
     return activeGoals.filter((goal) => !goal.horizonId || !activeHorizonIds.has(goal.horizonId)).length;
   }, [activeGoals, activeHorizons]);
   const spotlight = useMemo(() => buildSpotlightState(activeGoals, filters), [activeGoals, filters]);
-  const treeOrder = useMemo(() => getGoalTreeOrder(activeGoals), [activeGoals]);
+  const treeOrder = useMemo(() => getGoalTreeOrder(activeGoals, activeHorizons), [activeGoals, activeHorizons]);
   const hasQuery = filters.query.trim().length > 0;
   const matchIds = useMemo(
     () => (hasQuery ? treeOrder.filter((goalId) => spotlight.exactGoalIds.has(goalId)) : []),
