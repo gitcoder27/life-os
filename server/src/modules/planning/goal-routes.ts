@@ -257,7 +257,7 @@ export const registerPlanningGoalRoutes: FastifyPluginAsync = async (app) => {
       }),
     ]);
 
-    const goalOverviews = await buildGoalOverviews(app, user.id, goals, context);
+    const goalOverviews = await buildGoalOverviews(app, user.id, goals, context, { allUserGoals: goals });
     const representedGoalIds = [
       ...new Set(
         [...dayCycle.priorities.map((priority) => priority.goalId), ...todayTasks.map((task) => task.goalId)].filter(

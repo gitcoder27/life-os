@@ -89,8 +89,26 @@ function isEligibleGoalNudgeCandidate(
   );
 }
 
+// A parent goal can borrow its child's next action, so keep only the first nudge for each concrete action.
+function dropRepeatedActions(candidates: EligibleGoalNudgeCandidate[]) {
+  const seenActions = new Set<string>();
+
+  return candidates.filter((candidate) => {
+    if (!ACTION_PREFIXES.some((prefix) => candidate.nextBestAction.startsWith(prefix))) {
+      return true;
+    }
+
+    if (seenActions.has(candidate.nextBestAction)) {
+      return false;
+    }
+
+    seenActions.add(candidate.nextBestAction);
+    return true;
+  });
+}
+
 export function buildGoalNudges(candidates: GoalNudgeCandidate[]): GoalNudgeItem[] {
-  return candidates
+  const rankedCandidates = candidates
     .filter(isEligibleGoalNudgeCandidate)
     .sort((left, right) => {
       const healthDiff = getHealthRank(left.health) - getHealthRank(right.health);
@@ -109,7 +127,9 @@ export function buildGoalNudges(candidates: GoalNudgeCandidate[]): GoalNudgeItem
       }
 
       return left.goal.title.localeCompare(right.goal.title);
-    })
+    });
+
+  return dropRepeatedActions(rankedCandidates)
     .slice(0, 3)
     .map((candidate) => ({
       goal: candidate.goal,
