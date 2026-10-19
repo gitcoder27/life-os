@@ -569,53 +569,6 @@
   color: var(--text-secondary);
 }
 
-.priority-list__item--done {
-  color: var(--text-tertiary);
-}
-
-.priority-list__item--done strong,
-.priority-list__item--done span:first-child {
-  text-decoration: line-through;
-}
-
-.priority-list__item--dropped {
-  color: var(--text-tertiary);
-  opacity: 0.8;
-}
-
-.priority-list__item--dropped strong,
-.priority-list__item--dropped span:first-child {
-  text-decoration: line-through;
-}
-
-.priority-list--editable .priority-list__item {
-  align-items: stretch;
-  flex-direction: column;
-}
-
-.priority-edit-row {
-  display: flex;
-  gap: var(--space-2);
-  align-items: center;
-  width: 100%;
-}
-
-.priority-inline-input {
-  width: 100%;
-  padding: var(--space-2);
-  border-radius: var(--r-sm);
-  border: 1px solid var(--border);
-  background: var(--wash-1);
-  color: var(--text);
-  transition: border-color var(--dur-fast) var(--ease), box-shadow var(--dur-fast) var(--ease);
-}
-
-.priority-inline-input:focus {
-  outline: none;
-  border-color: var(--border-focus);
-  box-shadow: 0 0 0 3px var(--accent-soft);
-}
-
 .task-list__item {
   align-items: flex-start !important;
 }
