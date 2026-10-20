@@ -1221,10 +1221,6 @@
   color: var(--text);
 }
 
-.ghq-inspector__breakdown-btn {
-  align-self: flex-start;
-}
-
 .ghq-inspector__loading {
   padding: var(--space-8) var(--space-5);
   text-align: center;
@@ -1232,19 +1228,7 @@
   font-size: var(--fs-small);
 }
 
-/* Planning editor fields (focus board) follow the shared .field input style. */
-.ghq-planning-form__field {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1-5);
-}
-
-.ghq-planning-form__field span {
-  font-size: var(--fs-small);
-  font-weight: 600;
-  color: var(--text-label);
-}
-
+/* Planning inputs (rail, filters, inspector) follow the shared .field input style. */
 .ghq-planning-form__input,
 .ghq-planning-form__select {
   width: 100%;
@@ -1278,18 +1262,6 @@
 .ghq-planning-form__select:disabled {
   border-color: var(--border-subtle);
   background: transparent;
-}
-
-.ghq-planning-form__warning {
-  margin: 0;
-  color: var(--accent);
-  font-size: var(--fs-small);
-}
-
-.ghq-planning-form__actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-2);
 }
 
 /* ── Health Badge ── */
@@ -1495,9 +1467,13 @@
     opacity: 1;
   }
 
-  .graph-goal-node__quick-add,
-  .graph-goal-node__menu-trigger {
+  .graph-goal-node__controls {
     opacity: 1;
+    pointer-events: auto;
+  }
+
+  .graph-goal-node__title {
+    padding-right: 4.75rem;
   }
 }
 
@@ -1710,11 +1686,6 @@
   gap: var(--space-3);
 }
 
-.ghq-plan-container--graph-expanded {
-  position: relative;
-  z-index: 12;
-}
-
 /* Secondary to the page mode toggle: the active view is a lighter neutral segment. */
 .ghq-plan-subview {
   display: inline-flex;
@@ -1758,104 +1729,316 @@
   background: var(--wash-5);
 }
 
-/* ── Graph Mode Layout ── */
+/* ── Plan Map Stage ── */
 
-/* Graph mode drops the outer frame: the canvas and the dock are each one bordered panel. */
-.ghq-plan--graph {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-4);
-  padding: 0;
-  border: none;
-  border-radius: 0;
-  background: transparent;
-  overflow: visible;
+/* One bordered surface: a single toolbar across the top and the map below.
+   A side column opens only for Focus or a goal's details. GoalsPlanGraphView's
+   wrapper is display: contents, so its toolbar and canvas land directly in
+   this grid. */
+.ghq-stage-slot,
+.ghq-stage-host {
+  display: contents;
 }
 
-.ghq-plan--graph-expanded {
-  overflow: visible;
-}
-
-.ghq-plan__graph-layout {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-4);
-  min-height: 0;
-}
-
-.ghq-plan__graph-stage {
+.ghq-stage {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  min-height: 0;
-}
-
-.ghq-plan__graph-stage--with-inspector {
-  grid-template-columns: minmax(0, 1fr) 380px;
-  gap: 0;
+  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-areas:
+    "toolbar"
+    "canvas";
+  height: max(520px, calc(100vh - 10.5rem));
   border: 1px solid var(--border);
   border-radius: var(--r);
+  background: var(--panel);
   overflow: hidden;
+}
+
+/* Full screen covers the whole app, sidebar and header included. The stage is
+   moved to <body>, so it escapes the page's stacking context; it stays below
+   the goal form overlay (95) and toasts (90). */
+.ghq-stage--fullscreen {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  height: auto;
+  border: none;
+  border-radius: 0;
+  background: var(--bg);
+  animation: fadeIn var(--dur-fast) var(--ease) both;
+}
+
+.ghq-stage--with-side {
+  grid-template-columns: minmax(0, 1fr) 360px;
+  grid-template-areas:
+    "toolbar toolbar"
+    "canvas side";
+}
+
+.ghq-fullscreen-body {
+  overflow: hidden;
+}
+
+.ghq-graph,
+.ghq-graph--empty {
+  display: contents;
+}
+
+.ghq-stage__side {
+  grid-area: side;
+  min-height: 0;
+  overflow-y: auto;
+  border-left: 1px solid var(--border);
+  background: var(--panel);
+  animation: fadeIn var(--dur-fast) var(--ease) both;
+}
+
+.ghq-stage__side .ghq-inspector__header {
+  padding: var(--space-4);
+}
+
+.ghq-stage__side .ghq-inspector__title {
+  font-size: var(--fs-h2);
+}
+
+.ghq-stage__side .ghq-inspector__body {
+  padding: var(--space-4) var(--space-4) var(--space-6);
+}
+
+/* ── Plan Map Toolbar ── */
+
+.ghq-toolbar {
+  grid-area: toolbar;
+  position: relative;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-3);
+  min-height: 3.25rem;
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--border);
   background: var(--panel);
 }
 
-/* The canvas sits one step below the page background, like a well. */
-.ghq-plan__graph {
+.ghq-toolbar__group {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.ghq-toolbar__group--end {
+  justify-content: flex-end;
+  margin-left: auto;
+}
+
+.ghq-toolbar .ghq-plan-subview {
+  align-self: center;
+}
+
+.ghq-toolbar__search {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.ghq-toolbar__search input {
+  width: min(16rem, 28vw);
+  height: 2rem;
+  padding: 0 var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  background: var(--wash-1);
+  color: var(--text);
+  font-size: var(--fs-small);
+  transition:
+    border-color var(--dur-fast) var(--ease),
+    box-shadow var(--dur-fast) var(--ease);
+}
+
+.ghq-toolbar__search input:hover:not(:focus) {
+  border-color: var(--border-active);
+}
+
+.ghq-toolbar__search input:focus {
+  outline: none;
+  border-color: var(--border-focus);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.ghq-toolbar__search input::placeholder {
+  color: var(--text-placeholder);
+}
+
+.ghq-toolbar__match-count {
+  color: var(--text-tertiary);
+  font-family: var(--font-mono);
+  font-size: var(--fs-micro);
+  white-space: nowrap;
+}
+
+.ghq-toolbar__icon-btn {
+  min-width: 2rem;
+  justify-content: center;
+  padding-inline: var(--space-2);
+}
+
+/* Focus: the button carries this month's and this week's fill, so the side
+   panel can stay closed most of the time. */
+.ghq-focus-btn {
+  gap: var(--space-2);
+}
+
+.ghq-focus-btn__counts {
+  color: var(--text-tertiary);
+  font-size: var(--fs-micro);
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+}
+
+.ghq-focus-btn--open {
+  border-color: var(--border-active);
+  background: var(--wash-4);
+  color: var(--text);
+}
+
+.ghq-toolbar__icon-btn svg {
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.75;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* ── Plan Map Menus ── */
+
+.ghq-menu {
   position: relative;
-  min-height: 500px;
-  height: calc(100vh - 18rem);
-  overflow: hidden;
+}
+
+.ghq-menu__trigger--active {
+  border-color: var(--border-active);
+  color: var(--text);
+}
+
+.ghq-menu__count {
+  margin-left: var(--space-1-5);
+  padding: 0 0.3rem;
+  border-radius: var(--r-xs);
+  background: var(--wash-5);
+  color: var(--text);
+  font-size: var(--fs-micro);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.45;
+}
+
+/* Popovers: the only floating layers in the toolbar. */
+.ghq-menu__panel {
+  position: absolute;
+  top: calc(100% + var(--space-1-5));
+  left: 0;
+  z-index: 20;
+  border: 1px solid var(--border-active);
+  border-radius: var(--r-sm);
+  background: var(--panel-elevated);
+  box-shadow: var(--shadow-md);
+}
+
+.ghq-menu__panel--end {
+  left: auto;
+  right: 0;
+}
+
+.ghq-menu__panel--form {
   display: flex;
   flex-direction: column;
-  border: 1px solid var(--border);
-  border-radius: var(--r);
-  background: var(--bg-deep);
+  gap: var(--space-3);
+  width: 16rem;
+  padding: var(--space-3);
 }
 
-.ghq-plan__graph-stage--with-inspector .ghq-plan__graph {
-  border: none;
-  border-right: 1px solid var(--border);
-  border-radius: 0;
+.ghq-menu__panel--list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+  min-width: 12rem;
+  padding: var(--space-1);
 }
 
-/* Expanded canvas is a floating layer over the page. */
-.ghq-plan__graph--expanded {
-  position: fixed;
-  top: calc(var(--shell-header-height, 0px) + var(--space-6));
-  right: var(--space-6);
-  bottom: var(--space-6);
-  left: calc(var(--shell-sidebar-width, 240px) + var(--space-6));
-  height: auto;
-  min-height: 0;
-  border: 1px solid var(--border-active);
-  border-radius: var(--r);
-  background: var(--bg-deep);
-  box-shadow: var(--shadow-lg);
-  z-index: 14;
-}
-
-.ghq-plan__inspector--graph {
-  border-left: none;
-  background: var(--panel);
-}
-
-/* ── Graph Canvas Overrides ── */
-
-.ghq-graph {
+.ghq-menu__panel--list button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
   width: 100%;
-  height: 100%;
-  flex: 1;
-  min-height: 0;
-  position: relative;
+  padding: var(--space-2) var(--space-3);
+  border: none;
+  border-radius: var(--r-xs);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: var(--fs-small);
+  text-align: left;
+  cursor: pointer;
+  transition:
+    color var(--dur-fast) var(--ease),
+    background-color var(--dur-fast) var(--ease);
 }
 
-.ghq-graph--expanded {
-  border-radius: inherit;
+.ghq-menu__panel--list button:hover:not(:disabled) {
+  background: var(--wash-3);
+  color: var(--text);
+}
+
+.ghq-menu__panel--list button:disabled {
+  color: var(--text-disabled);
+  cursor: default;
+}
+
+.ghq-menu__field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.ghq-menu__field span {
+  color: var(--text-tertiary);
+  font-size: var(--fs-micro);
+  font-weight: 600;
+}
+
+.ghq-menu__panel .ghq-rail__text-btn {
+  align-self: flex-start;
+}
+
+/* ── Plan Map Canvas ── */
+
+/* Isolated so canvas overlays never rise above the toolbar's popovers. */
+.ghq-graph__body {
+  grid-area: canvas;
+  position: relative;
+  isolation: isolate;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--bg-deep);
 }
 
 .ghq-graph__canvas {
-  width: 100%;
-  height: 100%;
-  min-height: 0;
+  position: absolute;
+  inset: 0;
+  display: flex;
+}
+
+.ghq-graph__flow {
+  position: relative;
+  flex: 1;
+  min-width: 0;
 }
 
 .ghq-graph .react-flow {
@@ -1873,178 +2056,181 @@
   pointer-events: none;
 }
 
-.ghq-graph .react-flow__attribution {
-  opacity: 0.4;
-  font-size: var(--fs-micro);
+.ghq-graph .react-flow__edge {
+  animation: graphEdgeReveal var(--dur) var(--ease) both;
 }
 
 .ghq-graph .react-flow__edge-path {
-  transition: stroke var(--dur) var(--ease);
+  stroke: var(--border-active);
+  stroke-width: 1.25;
+  transition:
+    stroke var(--dur) var(--ease),
+    opacity var(--dur) var(--ease);
 }
 
-.ghq-graph .react-flow__edge {
-  animation: graphEdgeReveal var(--dur) var(--ease) both;
+.ghq-graph .ghq-edge--branch .react-flow__edge-path {
+  stroke: var(--accent-line);
+  stroke-width: 1.5;
+}
+
+.ghq-graph .ghq-edge--draft .react-flow__edge-path {
+  stroke: var(--accent-line);
+  stroke-dasharray: 4 4;
+}
+
+.ghq-graph .ghq-edge--dimmed .react-flow__edge-path {
+  opacity: 0.3;
 }
 
 .ghq-graph .react-flow__node:has(.graph-goal-node__menu) {
   z-index: 1000 !important;
 }
 
-/* Canvas tools sit on the canvas as flat, opaque panels: no blur, no shadow. */
-.ghq-graph__workbar,
-.ghq-graph__toolbar {
+/* ── Plan Map Horizon Lanes ── */
+
+/* Bands and gutter labels follow the map's vertical pan and zoom (transform
+   and height are set inline); the gutter stays put when the map pans sideways. */
+.ghq-lanes {
   position: absolute;
-  top: var(--space-4);
-  z-index: 7;
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  max-width: calc(100% - 2rem);
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
 }
 
-.ghq-graph__workbar {
-  left: var(--space-4);
-  flex-wrap: wrap;
-  padding: var(--space-1-5);
-  border: 1px solid var(--border);
-  border-radius: var(--r);
-  background: var(--panel);
+.ghq-lanes__band {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  border-bottom: 1px solid var(--border-subtle);
 }
 
-.ghq-graph__toolbar {
-  right: var(--space-4);
-  justify-content: flex-end;
-  gap: var(--space-2);
-  transition: opacity var(--dur-fast) var(--ease);
-}
-
-.ghq-graph__toolbar-group {
-  display: flex;
-  align-items: center;
-  gap: var(--space-1-5);
-  padding: var(--space-1-5);
-  border: 1px solid var(--border);
-  border-radius: var(--r);
-  background: var(--panel);
-}
-
-.ghq-graph__toolbar-group--selection {
-  border-color: var(--accent-line);
-}
-
-.ghq-graph__toolbar-label {
-  padding: 0 var(--space-1-5) 0 var(--space-1);
-  color: var(--text-tertiary);
-  font-size: var(--fs-micro);
-  font-weight: 600;
-  letter-spacing: var(--tracking-label);
-  text-transform: uppercase;
-  white-space: nowrap;
-}
-
-.ghq-graph__parent-field {
-  display: inline-flex;
-  align-items: center;
-  min-width: 9rem;
-}
-
-.ghq-graph__parent-select {
-  min-width: 9rem;
-  max-width: 13rem;
-}
-
-.ghq-graph__search input,
-.ghq-graph__select {
-  height: 2rem;
-  border: 1px solid var(--border);
-  border-radius: var(--r-sm);
+.ghq-lanes__band--alt {
   background: var(--wash-1);
-  color: var(--text);
-  font-size: var(--fs-small);
-  transition:
-    border-color var(--dur-fast) var(--ease),
-    box-shadow var(--dur-fast) var(--ease);
 }
 
-.ghq-graph__search input:hover:not(:focus),
-.ghq-graph__select:hover:not(:focus) {
-  border-color: var(--border-active);
+.ghq-lanes__band--unassigned {
+  border-top: 1px dashed var(--border);
 }
 
-.ghq-graph__search input:focus,
-.ghq-graph__select:focus {
-  outline: none;
-  border-color: var(--border-focus);
-  box-shadow: 0 0 0 3px var(--accent-soft);
+.ghq-lanes__band--drop {
+  background: var(--accent-wash);
+  box-shadow: inset 0 1px 0 var(--accent-line), inset 0 -1px 0 var(--accent-line);
 }
 
-.ghq-graph__search input::placeholder {
-  color: var(--text-placeholder);
+.ghq-lanes-gutter {
+  position: relative;
+  z-index: 2;
+  flex: 0 0 7rem;
+  overflow: hidden;
+  border-right: 1px solid var(--border);
+  background: var(--panel);
 }
 
-.ghq-graph__search input {
-  width: min(15rem, 26vw);
-  padding: 0 var(--space-3);
+/* One line per lane (name, then count) so even a short empty lane fits it. */
+.ghq-lanes-gutter__lane {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: 0.4rem var(--space-3);
+  overflow: hidden;
+  border-bottom: 1px solid var(--border-subtle);
+  transition: background-color var(--dur-fast) var(--ease);
 }
 
-.ghq-graph__select {
-  max-width: 10rem;
-  padding: 0 var(--space-2);
+.ghq-lanes-gutter__lane--alt {
+  background: var(--wash-1);
 }
 
-.ghq-graph__match-count {
-  padding: 0 var(--space-1-5);
-  color: var(--text-tertiary);
+.ghq-lanes-gutter__lane--drop {
+  background: var(--accent-wash);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+.ghq-lanes-gutter__name {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-secondary);
   font-size: var(--fs-micro);
   font-weight: 600;
-  letter-spacing: var(--tracking-label);
-  text-transform: uppercase;
+  line-height: 1.35;
+  text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.ghq-lanes-gutter__lane--unassigned .ghq-lanes-gutter__name {
+  color: var(--text-tertiary);
+}
+
+.ghq-lanes-gutter__lane--drop .ghq-lanes-gutter__name {
+  color: var(--accent-bright);
+}
+
+.ghq-lanes-gutter__count {
+  flex-shrink: 0;
+  color: var(--text-tertiary);
+  font-size: var(--fs-micro);
   font-variant-numeric: tabular-nums;
 }
 
-/* Status notice floats over the canvas. */
-.ghq-graph__notice {
+/* ── Plan Map Drop Dock ── */
+
+/* Shown only while a goal is dragged. Two plain targets, centred at the
+   bottom of the map; the viewport controls step aside meanwhile. */
+.ghq-drop-dock {
   position: absolute;
   left: 50%;
   bottom: var(--space-4);
+  z-index: 8;
+  display: flex;
+  gap: var(--space-2);
   transform: translateX(-50%);
-  padding: var(--space-2) var(--space-4);
+  animation: fadeIn var(--dur-fast) var(--ease) both;
+}
+
+.ghq-drop-dock__target {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 11rem;
+  padding: var(--space-3) var(--space-4);
+  border: 1px dashed var(--border-active);
   border-radius: var(--r-sm);
-  border: 1px solid var(--border-active);
   background: var(--panel-elevated);
-  box-shadow: var(--shadow-md);
-  z-index: 5;
+  transition:
+    border-color var(--dur-fast) var(--ease),
+    background-color var(--dur-fast) var(--ease);
 }
 
-.ghq-graph__notice--error {
-  border-color: var(--negative-line);
+.ghq-drop-dock__target--over {
+  border-style: solid;
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 10%, var(--panel-elevated));
 }
 
-.ghq-graph__notice--success {
-  border-color: var(--positive-line);
-}
-
-.ghq-graph__notice p {
-  margin: 0;
-  font-size: var(--fs-small);
+.ghq-drop-dock__label {
   color: var(--text);
+  font-size: var(--fs-small);
+  font-weight: 600;
 }
 
-.ghq-graph__notice--error p {
-  color: var(--negative-text);
+.ghq-drop-dock__count {
+  color: var(--text-tertiary);
+  font-size: var(--fs-micro);
+  font-variant-numeric: tabular-nums;
 }
 
-/* Ghost buttons on the canvas need an opaque fill; primary keeps .button--primary. */
-.ghq-graph__expand-btn,
-.ghq-graph__toolbar-btn.button--ghost {
-  background-color: var(--panel-elevated);
+.ghq-graph__flow--dragging .ghq-graph__viewport-controls {
+  visibility: hidden;
 }
 
-.ghq-graph__expand-btn:hover:not(:disabled),
-.ghq-graph__toolbar-btn.button--ghost:hover:not(:disabled) {
-  background-color: var(--panel-hover);
-}
+/* ── Plan Map Overlays ── */
 
 .ghq-graph__viewport-controls {
   position: absolute;
@@ -2088,29 +2274,200 @@
   outline-offset: -2px;
 }
 
+/* Sits above the viewport controls' row so the two never overlap. */
+.ghq-graph__notice {
+  position: absolute;
+  left: 50%;
+  bottom: 3.75rem;
+  z-index: 6;
+  transform: translateX(-50%);
+  max-width: calc(100% - 2rem);
+  padding: var(--space-2) var(--space-4);
+  border: 1px solid var(--border-active);
+  border-radius: var(--r-sm);
+  background: var(--panel-elevated);
+}
+
+.ghq-graph__notice--error {
+  border-color: var(--negative-line);
+}
+
+.ghq-graph__notice p {
+  margin: 0;
+  color: var(--text);
+  font-size: var(--fs-small);
+}
+
+.ghq-graph__notice--error p {
+  color: var(--negative-text);
+}
+
+/* Bottom-left, clear of the goals at the top and the controls at the right. */
+.ghq-graph__hint {
+  position: absolute;
+  left: var(--space-3);
+  bottom: var(--space-3);
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: max-content;
+  max-width: min(30rem, calc(100% - 15rem));
+  margin: 0;
+  padding: var(--space-1-5) var(--space-2) var(--space-1-5) var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  background: var(--panel-elevated);
+  color: var(--text-secondary);
+  font-size: var(--fs-small);
+}
+
+.ghq-graph__hint a {
+  color: var(--text);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.ghq-graph__hint-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 1.5rem;
+  height: 1.5rem;
+  border: none;
+  border-radius: var(--r-xs);
+  background: transparent;
+  color: var(--text-tertiary);
+  font-size: var(--fs-body);
+  line-height: 1;
+  cursor: pointer;
+}
+
+.ghq-graph__hint-close:hover {
+  background: var(--wash-3);
+  color: var(--text);
+}
+
+/* ── Plan Map Shortcut Sheet ── */
+
+.ghq-shortcuts {
+  position: absolute;
+  top: var(--space-3);
+  right: var(--space-3);
+  z-index: 9;
+  width: min(22rem, calc(100% - 1.5rem));
+  max-height: calc(100% - 1.5rem);
+  overflow-y: auto;
+  padding: var(--space-4);
+  border: 1px solid var(--border-active);
+  border-radius: var(--r);
+  background: var(--panel-elevated);
+  animation: fadeIn var(--dur-fast) var(--ease) both;
+}
+
+.ghq-shortcuts__header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-bottom: var(--space-2);
+}
+
+.ghq-shortcuts__header h3,
+.ghq-shortcuts__subhead {
+  margin: 0;
+  color: var(--text-tertiary);
+  font-size: var(--fs-micro);
+  font-weight: 600;
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+}
+
+.ghq-shortcuts__subhead {
+  margin: var(--space-4) 0 var(--space-1);
+}
+
+.ghq-shortcuts__list {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+}
+
+.ghq-shortcuts__row {
+  display: grid;
+  grid-template-columns: 4.5rem minmax(0, 1fr);
+  align-items: baseline;
+  gap: var(--space-3);
+  padding: var(--space-1-5) 0;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.ghq-shortcuts__row:last-child {
+  border-bottom: none;
+}
+
+.ghq-shortcuts__row dt {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.ghq-shortcuts__row dd {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: var(--fs-small);
+  line-height: 1.45;
+}
+
+.ghq-shortcuts__row .graph-goal-node__health {
+  font-size: var(--fs-micro);
+}
+
+.ghq-shortcuts__node-sample {
+  display: inline-block;
+  width: 2.5rem;
+  height: 1rem;
+  border: 1px solid var(--border-active);
+  border-radius: var(--r-xs);
+  background: var(--panel);
+}
+
+.ghq-shortcuts__lane-sample {
+  display: inline-block;
+  width: 2.5rem;
+  height: 0.75rem;
+  border-top: 1px solid var(--border-active);
+  border-bottom: 1px solid var(--border-active);
+  background: var(--wash-2);
+}
+
 /* ── Graph: Goal Node ── */
 
-/* Box metrics (244px width, padding, 1px border, gap, control sizes) are
-   load-bearing: NODE_W, LEVEL_GAP and SIBLING_GAP in GoalsPlanGraphView.tsx
-   assume them. States change color only, never size. */
+/* Box metrics are load-bearing: NODE_W (208) and NODE_H (72) in
+   goal-graph-layout.ts assume them. States change color only, never size. */
 .graph-goal-node {
-  width: 244px;
-  padding: 0.6rem 0.85rem;
-  border-radius: var(--r-sm);
+  box-sizing: border-box;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  width: 208px;
+  height: 72px;
+  padding: 0.45rem 0.7rem;
   border: 1px solid var(--border);
+  border-radius: var(--r-sm);
   background: var(--panel-elevated);
   cursor: grab;
   transition:
     border-color var(--dur-fast) var(--ease),
     background-color var(--dur-fast) var(--ease),
     opacity var(--dur) var(--ease);
-  display: flex;
-  flex-direction: column;
-  gap: 0.3rem;
-  position: relative;
-  overflow: visible;
-  transform-origin: top center;
   animation: graphGoalNodeReveal var(--dur) var(--ease) both;
+}
+
+.graph-goal-node:active {
+  cursor: grabbing;
 }
 
 .graph-goal-node:hover:not(.graph-goal-node--dimmed) {
@@ -2138,7 +2495,6 @@
 
 .graph-goal-node--dimmed {
   opacity: 0.28;
-  pointer-events: auto;
 }
 
 .graph-goal-node--drop-target,
@@ -2147,71 +2503,105 @@
   background: color-mix(in srgb, var(--accent) 10%, var(--panel-elevated));
 }
 
-.graph-goal-node__row {
+.graph-goal-node__title {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+  color: var(--text);
+  font-size: var(--fs-small);
+  font-weight: 600;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.graph-goal-node__meta {
   display: flex;
   align-items: center;
   gap: 0.4rem;
-}
-
-.graph-goal-node__dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  flex-shrink: 0;
-  background: var(--info);
-}
-
-.graph-goal-node__dot--drifting { background: var(--accent); }
-.graph-goal-node__dot--stalled { background: var(--negative); }
-.graph-goal-node__dot--achieved { background: var(--positive); }
-
-.graph-goal-node__title {
-  font-weight: 600;
-  font-size: var(--fs-small);
+  min-width: 0;
+  margin-top: auto;
+  color: var(--text-tertiary);
+  font-size: var(--fs-micro);
   line-height: 1.3;
+}
+
+.graph-goal-node__facts {
+  flex: 1;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  flex: 1;
-  min-width: 0;
-  color: var(--text);
 }
 
-.graph-goal-node__controls {
+/* Health speaks only when it needs attention: a dot for drifting, a word for
+   stalled or achieved. On track shows nothing. */
+.graph-goal-node__health {
+  flex-shrink: 0;
+  font-weight: 600;
+}
+
+.graph-goal-node__health--drifting {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+.graph-goal-node__health--stalled {
+  color: var(--negative-text);
+}
+
+.graph-goal-node__health--achieved {
+  color: var(--positive);
+}
+
+.graph-goal-node__tags {
   display: inline-flex;
   align-items: center;
-  gap: 0.28rem;
+  gap: 0.25rem;
   flex-shrink: 0;
 }
 
-.graph-goal-node__branch-toggle {
-  min-width: 2.35rem;
-  height: 1.45rem;
-  padding: 0 0.38rem 0 0.3rem;
-  border: 1px solid var(--border);
+.graph-goal-node__slot {
+  padding: 0 0.3rem;
   border-radius: var(--r-xs);
-  background: var(--wash-2);
+  background: var(--wash-4);
   color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  line-height: 1.45;
+}
+
+.graph-goal-node__branch-toggle {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  gap: 0.08rem;
+  gap: 0.1rem;
+  height: 1.25rem;
+  padding: 0 0.3rem 0 0.15rem;
+  border: none;
+  border-radius: var(--r-xs);
+  background: transparent;
+  color: var(--text-tertiary);
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
   cursor: pointer;
   transition:
     background-color var(--dur-fast) var(--ease),
-    border-color var(--dur-fast) var(--ease),
     color var(--dur-fast) var(--ease);
 }
 
 .graph-goal-node__branch-toggle:hover {
-  border-color: var(--border-active);
   background: var(--wash-4);
   color: var(--text);
 }
 
 .graph-goal-node__branch-icon {
-  width: 0.76rem;
-  height: 0.76rem;
+  width: 0.75rem;
+  height: 0.75rem;
   fill: none;
   stroke: currentColor;
   stroke-width: 2;
@@ -2224,143 +2614,109 @@
   transform: rotate(90deg);
 }
 
-.graph-goal-node__branch-count {
-  min-width: 0.7rem;
-  font-size: var(--fs-micro);
-  font-weight: 600;
-  line-height: 1;
-  text-align: center;
-  font-variant-numeric: tabular-nums;
-}
-
-.graph-goal-node__quick-add,
-.graph-goal-node__menu-trigger {
-  width: 1.45rem;
-  min-width: 1.45rem;
-  height: 1.45rem;
-  border: 1px solid var(--border);
-  border-radius: var(--r-xs);
-  background: var(--wash-2);
-  color: var(--text-tertiary);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  transition:
-    background-color var(--dur-fast) var(--ease),
-    border-color var(--dur-fast) var(--ease),
-    color var(--dur-fast) var(--ease);
-}
-
-.graph-goal-node__quick-add {
-  font-size: var(--fs-body);
-  font-weight: 600;
-}
-
-.graph-goal-node__quick-add:hover,
-.graph-goal-node__menu-trigger:hover {
-  border-color: var(--border-active);
-  background: var(--wash-4);
-  color: var(--text);
-}
-
-.graph-goal-node__meta {
-  display: flex;
-  align-items: center;
-  gap: 0.35rem;
-  flex-wrap: wrap;
-}
-
-.graph-goal-node__domain {
-  font-size: var(--fs-micro);
-  color: var(--text-tertiary);
-  display: flex;
-  align-items: center;
-  gap: 0.3rem;
-}
-
-.graph-goal-node__badge {
-  font-size: var(--fs-micro);
-  font-weight: 500;
-  padding: 0.05rem 0.3rem;
-  border-radius: var(--r-xs);
-  box-shadow: inset 0 0 0 1px var(--border);
-  color: var(--text-tertiary);
-}
-
-.graph-goal-node__badge--focus {
-  font-weight: 600;
-  color: var(--text);
-  background: var(--wash-5);
-  box-shadow: none;
-}
-
+/* Progress is a neutral hairline along the bottom edge, outside the text
+   flow; color is kept for selection and health. */
 .graph-goal-node__bar {
-  height: 3px;
-  border-radius: var(--r-pill);
-  background: var(--wash-4);
+  position: absolute;
+  left: 0.7rem;
+  right: 0.7rem;
+  bottom: 3px;
+  height: 2px;
   overflow: hidden;
-  margin-top: 0.15rem;
+  border-radius: var(--r-pill);
+  background: var(--wash-3);
 }
 
 .graph-goal-node__bar-fill {
   height: 100%;
   border-radius: var(--r-pill);
-  background: var(--info);
+  background: var(--text-tertiary);
   transition: width var(--dur-slow) var(--ease);
 }
 
-.graph-goal-node__bar-fill--drifting { background: var(--accent); }
-.graph-goal-node__bar-fill--stalled { background: var(--negative); }
-.graph-goal-node__bar-fill--achieved { background: var(--positive); }
-
-.graph-goal-node__footer {
-  margin-top: 0.2rem;
-  display: flex;
-  gap: 0.65rem;
-  align-items: center;
-  flex-wrap: wrap;
+.graph-goal-node--selected .graph-goal-node__bar-fill {
+  background: var(--accent);
 }
 
-.graph-goal-node__action {
-  padding: 0;
-  border: none;
+/* Add and More appear on hover, keyboard focus and on the selected goal;
+   everything else lives in the menu, the details panel or a shortcut. */
+.graph-goal-node__controls {
+  position: absolute;
+  top: 0.4rem;
+  right: 0.4rem;
+  display: inline-flex;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--border);
   border-radius: var(--r-xs);
+  background: var(--panel-elevated);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--dur-fast) var(--ease);
+}
+
+.graph-goal-node:hover .graph-goal-node__controls,
+.graph-goal-node:focus-within .graph-goal-node__controls,
+.graph-goal-node--selected .graph-goal-node__controls,
+.graph-goal-node--menu-open .graph-goal-node__controls {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* The selected goal keeps its controls, so its title wraps clear of them. */
+.graph-goal-node--selected .graph-goal-node__title {
+  padding-right: 3.6rem;
+}
+
+.graph-goal-node__controls button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  border: none;
+  border-radius: 3px;
   background: transparent;
   color: var(--text-secondary);
-  font-size: var(--fs-micro);
+  font-size: var(--fs-small);
   font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
   cursor: pointer;
-  transition: color var(--dur-fast) var(--ease);
+  transition:
+    background-color var(--dur-fast) var(--ease),
+    color var(--dur-fast) var(--ease);
 }
 
-.graph-goal-node__action:hover {
+.graph-goal-node__controls button:hover {
+  background: var(--wash-4);
   color: var(--text);
 }
 
 .graph-goal-node__drop-hint {
-  margin-top: 0.1rem;
+  position: absolute;
+  top: calc(100% + 0.35rem);
+  left: 0;
+  right: 0;
+  color: var(--accent-bright);
   font-size: var(--fs-micro);
-  color: var(--text-secondary);
+  text-align: center;
+  pointer-events: none;
 }
 
 /* Node menu is a floating layer. */
 .graph-goal-node__menu {
   position: absolute;
-  top: 2.25rem;
-  right: var(--space-2);
+  top: 2.4rem;
+  right: 0.4rem;
   z-index: 10;
-  min-width: 10.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+  min-width: 11rem;
   padding: var(--space-1);
   border: 1px solid var(--border-active);
   border-radius: var(--r-sm);
   background: var(--panel-elevated);
   box-shadow: var(--shadow-md);
-  display: flex;
-  flex-direction: column;
-  gap: 0.125rem;
   cursor: default;
 }
 
@@ -2411,34 +2767,41 @@
 
 @media (prefers-reduced-motion: reduce) {
   .ghq-graph .react-flow__edge,
-  .graph-goal-node {
+  .graph-goal-node,
+  .ghq-stage--fullscreen,
+  .ghq-stage__side,
+  .ghq-drop-dock,
+  .ghq-shortcuts {
     animation: none;
   }
 }
 
 /* ── Graph: Child Draft ── */
 
-/* Same 244px column as a goal node. */
+/* Same 208 × 72 box as a goal node. */
 .graph-child-draft {
-  width: 244px;
-  min-height: 120px;
-  padding: 0.75rem;
-  border-radius: var(--r-sm);
-  border: 1px dashed var(--accent-line);
-  background: var(--panel-elevated);
+  box-sizing: border-box;
   display: flex;
   flex-direction: column;
-  gap: 0.55rem;
+  justify-content: center;
+  gap: 0.3rem;
+  width: 208px;
+  height: 72px;
+  padding: 0.35rem 0.5rem;
+  border: 1px dashed var(--accent-line);
+  border-radius: var(--r-sm);
+  background: var(--panel-elevated);
 }
 
 .graph-child-draft__input {
   width: 100%;
+  height: 1.75rem;
+  padding: 0 0.6rem;
   border: 1px solid var(--border);
-  border-radius: var(--r-sm);
+  border-radius: var(--r-xs);
   background: var(--wash-1);
   color: var(--text);
   font-size: var(--fs-small);
-  padding: 0.65rem 0.75rem;
   transition:
     border-color var(--dur-fast) var(--ease),
     box-shadow var(--dur-fast) var(--ease);
@@ -2457,51 +2820,27 @@
 .graph-child-draft__actions {
   display: flex;
   gap: var(--space-1-5);
-  flex-wrap: wrap;
+}
+
+.graph-child-draft__actions .button--small {
+  min-height: 1.5rem;
+  padding-block: 0;
 }
 
 /* ── Graph: Empty State ── */
 
-/* Centers the shared EmptyState on the canvas. */
 .ghq-graph-empty {
-  width: 100%;
-  height: 100%;
+  grid-area: canvas;
   display: flex;
   align-items: center;
   justify-content: center;
+  min-height: 0;
   padding: var(--space-6);
+  background: var(--bg-deep);
 }
 
 .ghq-graph-empty .empty-state {
   width: min(22rem, 100%);
-}
-
-/* ── Graph: Hint Overlay ── */
-
-.ghq-graph__hint {
-  position: absolute;
-  top: 4.9rem;
-  left: 50%;
-  transform: translateX(-50%);
-  padding: var(--space-1-5) var(--space-4);
-  border-radius: var(--r-pill);
-  background: var(--panel-elevated);
-  border: 1px solid var(--border);
-  z-index: 5;
-  pointer-events: none;
-  animation: fadeIn var(--dur) var(--ease) both;
-}
-
-.ghq-graph__hint p {
-  margin: 0;
-  font-size: var(--fs-small);
-  color: var(--text-secondary);
-  white-space: nowrap;
-}
-
-.ghq-graph__hint--bottom {
-  top: auto;
-  bottom: var(--space-4);
 }
 
 /* ── Inspector Focus ── */
@@ -2550,419 +2889,402 @@
   line-height: 1.55;
 }
 
-/* ── Planning Dock ── */
+/* ── Inspector Header ── */
 
-.ghq-plan-dock {
-  border: 1px solid var(--border);
-  border-radius: var(--r);
-  background: var(--panel);
+.ghq-inspector__title-row {
   display: flex;
-  flex-direction: column;
-  gap: 0;
-  z-index: 3;
-  overflow: hidden;
-}
-
-.ghq-plan-dock__summary {
-  display: flex;
-  justify-content: space-between;
-  gap: var(--space-4);
-  align-items: center;
-  padding: var(--space-4) var(--space-5);
-}
-
-.ghq-plan-dock__summary-copy {
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-}
-
-.ghq-plan-dock__summary-copy strong {
-  font-size: var(--fs-h2);
-  font-weight: 600;
-  color: var(--text);
-  font-variant-numeric: tabular-nums;
-}
-
-.ghq-plan-dock__summary-copy span:last-child {
-  color: var(--text-tertiary);
-  font-size: var(--fs-small);
-}
-
-.ghq-plan-dock__summary-actions {
-  display: flex;
-  gap: var(--space-2);
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  align-items: center;
-}
-
-.ghq-plan-dock__body {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-5);
-  padding: var(--space-5);
-  border-top: 1px solid var(--border);
-}
-
-/* The goal being placed: a flat strip with a 2px accent edge. */
-.ghq-plan-dock__commitment {
-  display: flex;
-  justify-content: space-between;
-  gap: var(--space-4);
-  align-items: center;
-  padding: var(--space-3) var(--space-4);
-  border: 1px solid var(--border-subtle);
-  border-left: 2px solid var(--accent);
-  border-radius: var(--r-sm);
-  background: var(--wash-1);
-}
-
-.ghq-plan-dock__eyebrow {
-  display: inline-block;
-  margin-bottom: var(--space-1);
-  color: var(--text-tertiary);
-  font-size: var(--fs-micro);
-  font-weight: 600;
-  letter-spacing: var(--tracking-label);
-  text-transform: uppercase;
-}
-
-.ghq-plan-dock__commitment h3 {
-  margin: 0;
-  font-size: var(--fs-h2);
-  font-weight: 600;
-  color: var(--text);
-}
-
-.ghq-plan-dock__commitment p {
-  max-width: 42rem;
-  margin: 0;
-  color: var(--text-tertiary);
-  font-size: var(--fs-small);
-  line-height: 1.55;
-}
-
-.ghq-plan-dock__commitment-label {
-  display: block;
-  margin-bottom: 0.125rem;
-  color: var(--text-tertiary);
-  font-size: var(--fs-micro);
-  font-weight: 600;
-  letter-spacing: var(--tracking-label);
-  text-transform: uppercase;
-}
-
-.ghq-plan-dock__lanes {
-  display: grid;
-  gap: var(--space-6);
-}
-
-.ghq-plan-dock__lane {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-}
-
-.ghq-plan-dock__lane-header {
-  display: flex;
-  justify-content: space-between;
-  gap: var(--space-3);
-  align-items: center;
-}
-
-.ghq-plan-dock__lane-header h4 {
-  margin: 0;
-  font-size: var(--fs-h3);
-  font-weight: 600;
-  color: var(--text);
-}
-
-.ghq-plan-dock__lane-header span {
-  color: var(--text-tertiary);
-  font-size: var(--fs-micro);
-  letter-spacing: var(--tracking-label);
-  text-transform: uppercase;
-  display: block;
-  margin-top: var(--space-1);
-}
-
-.ghq-plan-dock__slots {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: flex-start;
   gap: var(--space-2);
 }
 
-.ghq-plan-dock__slot {
-  width: 100%;
-  min-height: 78px;
-  padding: var(--space-3);
-  border-radius: var(--r-sm);
-  border: 1px solid var(--border);
-  background: var(--wash-1);
-  display: flex;
-  gap: var(--space-3);
-  cursor: pointer;
-  transition:
-    border-color var(--dur-fast) var(--ease),
-    background-color var(--dur-fast) var(--ease);
-  text-align: left;
-}
-
-.ghq-plan-dock__slot:hover {
-  border-color: var(--border-active);
-  background: var(--wash-2);
-}
-
-.ghq-plan-dock__slot--empty {
-  border-style: dashed;
-}
-
-.ghq-plan-dock__slot--filled {
-  background: var(--wash-2);
-}
-
-.ghq-plan-dock__slot--selected,
-.ghq-plan-dock__slot--selected:hover {
-  border-color: var(--accent-line);
-  background: color-mix(in srgb, var(--accent) 5%, var(--panel));
-}
-
-.ghq-plan-dock__slot--draft,
-.ghq-plan-dock__slot--replace {
-  cursor: default;
-  min-height: 120px;
-}
-
-.ghq-plan-dock__slot--draft:hover,
-.ghq-plan-dock__slot--replace:hover {
-  border-color: var(--border);
-  background: var(--wash-1);
-}
-
-.ghq-plan-dock__slot-badge {
-  flex-shrink: 0;
-  align-self: flex-start;
-  min-width: 2rem;
-  padding: 0.125rem var(--space-1-5);
-  border-radius: var(--r-xs);
-  background: var(--wash-4);
-  color: var(--text-secondary);
-  font-size: var(--fs-micro);
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  text-align: center;
-  font-variant-numeric: tabular-nums;
-}
-
-.ghq-plan-dock__slot-content {
+.ghq-inspector__title-block {
   flex: 1;
   min-width: 0;
+}
+
+.ghq-inspector__title {
+  overflow-wrap: anywhere;
+}
+
+.ghq-inspector__close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 2rem;
+  height: 2rem;
+  margin: -0.25rem -0.5rem 0 0;
+  border: none;
+  border-radius: var(--r-xs);
+  background: transparent;
+  color: var(--text-tertiary);
+  font-size: 1.25rem;
+  line-height: 1;
+  cursor: pointer;
+  transition:
+    color var(--dur-fast) var(--ease),
+    background-color var(--dur-fast) var(--ease);
+}
+
+.ghq-inspector__close:hover {
+  background: var(--wash-3);
+  color: var(--text);
+}
+
+.ghq-inspector__header--bare {
+  display: flex;
+  justify-content: flex-end;
+  padding-bottom: 0;
+  border-bottom: none;
+}
+
+.ghq-inspector__slot {
+  font-family: var(--font-mono);
+}
+
+/* ── Commitments Rail ── */
+
+/* Month and week slots as plain rows. A row is a button until it is being
+   edited; selection and drop targets use the same accent edge as the tree. */
+.ghq-rail {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+  padding: var(--space-4);
+}
+
+.ghq-rail__header {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+}
+
+.ghq-rail__header-text {
   display: flex;
   flex-direction: column;
   gap: var(--space-1);
+  flex: 1;
+  min-width: 0;
 }
 
-.ghq-plan-dock__slot-content strong {
-  font-size: var(--fs-small);
-  font-weight: 600;
-  color: var(--text);
-  line-height: 1.3;
-}
-
-.ghq-plan-dock__slot--empty .ghq-plan-dock__slot-content strong {
-  color: var(--text-secondary);
-}
-
-.ghq-plan-dock__slot-content span,
-.ghq-plan-dock__slot-content p {
+.ghq-rail__heading {
   margin: 0;
-  font-size: var(--fs-micro);
-  color: var(--text-tertiary);
-  line-height: 1.45;
-}
-
-.ghq-plan-dock__slot-actions {
-  display: flex;
-  gap: var(--space-1-5);
-  flex-wrap: wrap;
-  margin-top: var(--space-1);
-}
-
-.ghq-plan-dock__input,
-.ghq-plan-dock__select {
-  width: 100%;
-  min-height: 2.25rem;
-  border: 1px solid var(--border);
-  border-radius: var(--r-sm);
-  background: var(--wash-1);
   color: var(--text);
+  font-size: var(--fs-h2);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.ghq-rail__intro {
+  margin: 0;
+  color: var(--text-tertiary);
   font-size: var(--fs-small);
-  padding: var(--space-2) var(--space-3);
+  line-height: 1.5;
+}
+
+.ghq-rail__lane {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.ghq-rail__lane-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.ghq-rail__lane-header h3 {
+  margin: 0;
+  color: var(--text-tertiary);
+  font-size: var(--fs-micro);
+  font-weight: 600;
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+}
+
+.ghq-rail__count {
+  color: var(--text-tertiary);
+  font-family: var(--font-mono);
+  font-size: var(--fs-micro);
+}
+
+.ghq-rail__rows {
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.ghq-rail__row {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  width: 100%;
+  min-height: 2.75rem;
+  padding: var(--space-2);
+  border: none;
+  border-bottom: 1px solid var(--border-subtle);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
   transition:
-    border-color var(--dur-fast) var(--ease),
+    background-color var(--dur-fast) var(--ease),
     box-shadow var(--dur-fast) var(--ease);
 }
 
-.ghq-plan-dock__input:hover:not(:focus),
-.ghq-plan-dock__select:hover:not(:focus) {
-  border-color: var(--border-active);
+button.ghq-rail__row:hover {
+  background: var(--wash-2);
 }
 
-.ghq-plan-dock__input:focus,
-.ghq-plan-dock__select:focus {
-  outline: none;
-  border-color: var(--border-focus);
-  box-shadow: 0 0 0 3px var(--accent-soft);
+.ghq-rail__row--editing {
+  background: var(--wash-1);
+  cursor: default;
 }
 
-.ghq-plan-dock__input::placeholder {
-  color: var(--text-placeholder);
+.ghq-rail__row--linked,
+button.ghq-rail__row--linked:hover {
+  background: var(--accent-wash);
+  box-shadow: inset 2px 0 0 var(--accent);
 }
 
-.ghq-plan-dock__empty {
-  padding: var(--space-3) var(--space-4);
-  border: 1px dashed var(--border-active);
-  border-radius: var(--r-sm);
+.ghq-rail__row--drop,
+button.ghq-rail__row--drop:hover {
+  background: var(--accent-wash);
+  box-shadow: inset 0 0 0 1px var(--accent-line);
+}
+
+.ghq-rail__slot {
+  flex-shrink: 0;
+  width: 1.75rem;
+  padding-top: 0.1rem;
+  color: var(--text-tertiary);
+  font-family: var(--font-mono);
+  font-size: var(--fs-micro);
+}
+
+.ghq-rail__content {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+
+.ghq-rail__title {
+  color: var(--text);
+  font-size: var(--fs-small);
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.ghq-rail__row--done .ghq-rail__title {
+  color: var(--text-tertiary);
+  text-decoration: line-through;
+  text-decoration-color: var(--border-active);
+}
+
+.ghq-rail__goal,
+.ghq-rail__placeholder {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ghq-rail__goal {
+  color: var(--text-tertiary);
+  font-size: var(--fs-micro);
+}
+
+.ghq-rail__placeholder {
+  color: var(--text-tertiary);
+  font-size: var(--fs-small);
+  line-height: 1.4;
+  transition: color var(--dur-fast) var(--ease);
+}
+
+button.ghq-rail__row--empty:hover .ghq-rail__placeholder {
+  color: var(--text-secondary);
+}
+
+.ghq-rail__row--drop .ghq-rail__placeholder {
+  color: var(--accent-bright);
+}
+
+.ghq-rail__state {
+  flex-shrink: 0;
+  padding-top: 0.1rem;
+  color: var(--positive);
+  font-size: var(--fs-micro);
+  font-weight: 600;
+}
+
+.ghq-rail__editor {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  flex: 1;
+  min-width: 0;
+}
+
+.ghq-rail__editor > .ghq-rail__text-btn {
+  align-self: flex-start;
+}
+
+.ghq-rail__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.ghq-rail__prompt {
+  margin: 0;
+  color: var(--text);
+  font-size: var(--fs-small);
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.ghq-rail__warning {
+  margin: 0;
+  color: var(--accent-bright);
+  font-size: var(--fs-micro);
+}
+
+.ghq-rail__error {
+  margin: 0;
+  color: var(--negative-text);
+  font-size: var(--fs-small);
+  line-height: 1.45;
+}
+
+.ghq-rail__hint {
+  margin: 0;
+  color: var(--text-tertiary);
+  font-size: var(--fs-micro);
+  line-height: 1.6;
+}
+
+/* Quiet text action shared by the rail, capacity line, filter menu and inspector. */
+.ghq-rail__text-btn {
+  padding: 0;
+  border: none;
+  border-radius: var(--r-xs);
+  background: none;
   color: var(--text-secondary);
   font-size: var(--fs-small);
+  font-weight: 500;
+  text-decoration: underline;
+  text-decoration-color: transparent;
+  text-underline-offset: 2px;
+  cursor: pointer;
+  transition:
+    color var(--dur-fast) var(--ease),
+    text-decoration-color var(--dur-fast) var(--ease);
 }
 
-.ghq-plan-dock__empty p {
+.ghq-rail__text-btn:hover:not(:disabled) {
+  color: var(--text);
+  text-decoration-color: currentColor;
+}
+
+.ghq-rail__text-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.ghq-rail__text-btn--danger,
+.ghq-rail__text-btn--danger:hover:not(:disabled) {
+  color: var(--negative-text);
+}
+
+.ghq-rail__actions .ghq-rail__text-btn--danger {
+  margin-left: auto;
+}
+
+/* ── Weekly Capacity Line ── */
+
+/* Healthy stays neutral; only tight and overloaded take a color. */
+.ghq-capacity-line {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding-top: var(--space-1);
+}
+
+.ghq-capacity-line__summary {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.ghq-capacity-line__text {
+  color: var(--text-tertiary);
+  font-size: var(--fs-micro);
+  line-height: 1.5;
+}
+
+.ghq-capacity-line__status {
+  font-weight: 600;
+}
+
+.ghq-capacity-line--tight .ghq-capacity-line__status {
+  color: var(--accent-bright);
+}
+
+.ghq-capacity-line--overloaded .ghq-capacity-line__status {
+  color: var(--negative-text);
+}
+
+.ghq-capacity-line__summary .ghq-rail__text-btn {
+  flex-shrink: 0;
+  font-size: var(--fs-micro);
+}
+
+.ghq-capacity-line__advice {
   margin: 0;
+  color: var(--text-secondary);
+  font-size: var(--fs-micro);
 }
 
-/* ── Weekly Capacity Card ── */
-
-/* Healthy stays neutral; only tight and overloaded take a tint. */
-.ghq-capacity {
-  display: grid;
+.ghq-capacity-line__controls {
+  display: flex;
+  flex-direction: column;
   gap: var(--space-3);
-  padding: var(--space-3) var(--space-4);
+  padding: var(--space-3);
+  border: 1px solid var(--border-subtle);
   border-radius: var(--r-sm);
-  border: 1px solid var(--border);
   background: var(--wash-1);
-  position: relative;
 }
 
-.ghq-capacity--tight {
-  border-color: var(--accent-line);
-  background: var(--accent-wash);
-}
-
-.ghq-capacity--overloaded {
-  border-color: var(--negative-line);
-  background: var(--negative-soft);
-}
-
-.ghq-capacity__summary {
+.ghq-capacity-line__field {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: var(--space-3);
-}
-
-.ghq-capacity__summary-main {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: var(--space-1-5) var(--space-2);
-  min-width: 0;
-}
-
-.ghq-capacity__rail {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-2) var(--space-4);
-}
-
-.ghq-capacity__eyebrow {
-  font-size: var(--fs-micro);
-  color: var(--text-tertiary);
-  font-weight: 600;
-  letter-spacing: var(--tracking-label);
-  text-transform: uppercase;
-}
-
-.ghq-capacity__badge {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-1-5);
-  padding: 0.125rem var(--space-2);
-  border-radius: var(--r-pill);
-  background: var(--wash-3);
   color: var(--text-secondary);
-  font-size: var(--fs-micro);
-  font-weight: 600;
-  letter-spacing: 0.02em;
-}
-
-.ghq-capacity__status-icon {
-  flex-shrink: 0;
-  font-size: var(--fs-micro);
-  line-height: 1;
-}
-
-.ghq-capacity__badge--healthy .ghq-capacity__status-icon {
-  color: var(--positive);
-}
-
-.ghq-capacity__badge--tight .ghq-capacity__status-icon {
-  color: var(--accent);
-}
-
-.ghq-capacity__badge--overloaded .ghq-capacity__status-icon {
-  color: var(--negative-text);
-}
-
-.ghq-capacity__message {
-  margin: 0;
-  font-size: var(--fs-micro);
-  color: var(--text-secondary);
-  line-height: 1.4;
-  font-weight: 500;
-  min-width: 0;
-}
-
-.ghq-capacity__stepper-wrap {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-}
-
-.ghq-capacity__inline-field {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-2);
-}
-
-.ghq-capacity__label {
-  font-size: var(--fs-micro);
-  color: var(--text-tertiary);
-  font-weight: 600;
-  letter-spacing: 0.02em;
-  white-space: nowrap;
+  font-size: var(--fs-small);
 }
 
 /* Intensity: a secondary segmented control, neutral active segment. */
-.ghq-capacity__modes {
-  display: flex;
+.ghq-capacity-line__modes {
+  display: inline-flex;
   gap: 2px;
   padding: 2px;
+  border: 1px solid var(--border);
   border-radius: var(--r-sm);
   background: var(--wash-1);
-  border: 1px solid var(--border);
 }
 
-.ghq-capacity__mode-btn {
-  min-width: 3.8rem;
+.ghq-capacity-line__mode {
   min-height: 1.75rem;
-  padding: var(--space-1) var(--space-2);
-  border-radius: var(--r-xs);
+  padding: 0 var(--space-2);
   border: none;
+  border-radius: var(--r-xs);
   background: transparent;
   color: var(--text-secondary);
   font-size: var(--fs-micro);
@@ -2971,167 +3293,66 @@
   transition:
     color var(--dur-fast) var(--ease),
     background-color var(--dur-fast) var(--ease);
-  white-space: nowrap;
 }
 
-.ghq-capacity__mode-btn:hover:not(:disabled) {
-  color: var(--text);
+.ghq-capacity-line__mode:hover:not(:disabled) {
   background: var(--wash-3);
-}
-
-.ghq-capacity__mode-btn--active,
-.ghq-capacity__mode-btn--active:hover:not(:disabled) {
   color: var(--text);
+}
+
+.ghq-capacity-line__mode--active,
+.ghq-capacity-line__mode--active:hover:not(:disabled) {
   background: var(--wash-5);
+  color: var(--text);
 }
 
-.ghq-capacity__mode-btn:disabled {
-  color: var(--text-disabled);
-  cursor: not-allowed;
-}
-
-.ghq-capacity__stepper {
-  display: flex;
+.ghq-capacity-line__stepper {
+  display: inline-flex;
   align-items: center;
-  gap: 0;
-  border-radius: var(--r-sm);
-  border: 1px solid var(--border);
-  background: var(--wash-1);
   overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
 }
 
-.ghq-capacity__stepper-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 2rem;
+.ghq-capacity-line__stepper button {
+  width: 1.9rem;
   height: 1.75rem;
   border: none;
   background: transparent;
   color: var(--text-secondary);
-  font-size: var(--fs-body);
-  font-weight: 600;
+  font-size: var(--fs-small);
   cursor: pointer;
   transition:
     color var(--dur-fast) var(--ease),
     background-color var(--dur-fast) var(--ease);
 }
 
-.ghq-capacity__stepper-btn:hover:not(:disabled) {
-  color: var(--text);
+.ghq-capacity-line__stepper button:hover:not(:disabled) {
   background: var(--wash-3);
+  color: var(--text);
+}
+
+.ghq-capacity-line__stepper button:disabled {
+  color: var(--text-disabled);
+  cursor: default;
 }
 
 /* Inset ring: the stepper's overflow would clip an outset outline. */
-.ghq-capacity__stepper-btn:focus-visible {
+.ghq-capacity-line__stepper button:focus-visible {
   outline-offset: -2px;
 }
 
-.ghq-capacity__stepper-btn:disabled {
-  color: var(--text-disabled);
-  cursor: not-allowed;
-}
-
-.ghq-capacity__stepper-value {
-  min-width: 2rem;
+.ghq-capacity-line__value {
+  min-width: 1.75rem;
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: var(--fs-small);
   text-align: center;
-  font-size: var(--fs-micro);
-  font-weight: 600;
-  color: var(--text);
-  font-variant-numeric: tabular-nums;
 }
 
-.ghq-capacity__stepper-note {
+.ghq-capacity-line__saving {
   color: var(--text-tertiary);
   font-size: var(--fs-micro);
-  font-weight: 500;
-}
-
-.ghq-capacity__cues {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-1-5);
-}
-
-.ghq-capacity__cue {
-  display: inline-block;
-  padding: 0.125rem var(--space-2);
-  border-radius: var(--r-pill);
-  background: var(--wash-3);
-  color: var(--text-secondary);
-  font-size: var(--fs-micro);
-  font-weight: 500;
-  white-space: nowrap;
-}
-
-.ghq-capacity__cue--signal {
-  color: var(--accent);
-  background: var(--accent-wash);
-}
-
-.ghq-capacity__saving {
-  font-size: var(--fs-micro);
-  color: var(--text-tertiary);
-  white-space: nowrap;
-}
-
-/* ── Planning Editor ── */
-
-.ghq-plan-editor {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-4);
-  padding: var(--space-4);
-  border-radius: var(--r-sm);
-  border: 1px solid var(--border);
-  background: var(--wash-1);
-}
-
-.ghq-plan-editor__header {
-  display: flex;
-  justify-content: space-between;
-  gap: var(--space-4);
-  align-items: flex-start;
-}
-
-.ghq-plan-editor__eyebrow {
-  display: block;
-  margin-bottom: var(--space-1);
-  color: var(--text-tertiary);
-  font-size: var(--fs-micro);
-  font-weight: 600;
-  letter-spacing: var(--tracking-label);
-  text-transform: uppercase;
-}
-
-.ghq-plan-editor__title {
-  margin: 0;
-  font-size: var(--fs-h2);
-  font-weight: 600;
-  color: var(--text);
-}
-
-.ghq-plan-editor__slot {
-  flex-shrink: 0;
-  padding: 0.125rem var(--space-1-5);
-  border-radius: var(--r-xs);
-  background: var(--wash-4);
-  color: var(--text-secondary);
-  font-size: var(--fs-micro);
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  font-variant-numeric: tabular-nums;
-}
-
-.ghq-plan-editor__body {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-}
-
-.ghq-graph-expanded-body {
-  overflow: hidden;
 }
 
 /* ── Responsive ── */
@@ -3148,66 +3369,50 @@
     max-height: 40vh;
   }
 
-  .ghq-plan__graph-stage--with-inspector {
-    grid-template-columns: 1fr;
-  }
-
-  .ghq-plan__graph {
-    height: 60vh;
-    min-height: 300px;
-  }
-
-  .ghq-graph__workbar,
-  .ghq-graph__toolbar {
-    position: relative;
-    top: auto;
-    left: auto;
-    right: auto;
-    margin: var(--space-3);
-    max-width: calc(100% - 1.5rem);
-  }
-
-  .ghq-graph__toolbar {
-    justify-content: flex-start;
-    flex-wrap: wrap;
-  }
-
-  .ghq-graph__toolbar-group {
-    flex-wrap: wrap;
-  }
-
-  .ghq-graph__search input {
-    width: min(16rem, 100%);
-  }
-
-  .ghq-graph__select {
-    max-width: none;
-  }
-
-  .ghq-graph__hint {
-    top: 7rem;
-    max-width: calc(100% - 2rem);
-    border-radius: var(--r-sm);
-  }
-
-  .ghq-graph__hint p {
-    white-space: normal;
-  }
-
-  .ghq-plan__graph-stage--with-inspector .ghq-plan__graph {
-    border-right: none;
-    border-bottom: 1px solid var(--border);
-  }
-
-  .ghq-plan__graph--expanded {
-    top: calc(var(--shell-header-height, 0px) + var(--space-4));
-    right: var(--space-4);
-    bottom: 5.75rem;
-    left: var(--space-4);
-  }
-
   .ghq-plan__inspector {
     max-height: none;
+  }
+
+  /* The side column drops below the map. */
+  .ghq-stage {
+    grid-template-rows: auto minmax(360px, 62vh);
+    height: auto;
+  }
+
+  .ghq-stage--with-side {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(360px, 62vh) auto;
+    grid-template-areas:
+      "toolbar"
+      "canvas"
+      "side";
+  }
+
+  .ghq-stage__side {
+    overflow: visible;
+    border-left: none;
+    border-top: 1px solid var(--border);
+  }
+
+  .ghq-stage--fullscreen {
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+
+  .ghq-stage--fullscreen.ghq-stage--with-side {
+    grid-template-rows: auto minmax(0, 1fr) minmax(0, 40vh);
+  }
+
+  .ghq-stage--fullscreen .ghq-stage__side {
+    overflow-y: auto;
+  }
+
+  .ghq-lanes-gutter {
+    flex-basis: 5.5rem;
+  }
+
+  .ghq-drop-dock__target {
+    min-width: 8.5rem;
+    padding: var(--space-2) var(--space-3);
   }
 
   .ghq-domain-section__cards {
@@ -3217,42 +3422,17 @@
   .ghq-form__row {
     grid-template-columns: 1fr;
   }
-
-  .ghq-plan-dock__summary {
-    flex-direction: column;
-    align-items: flex-start;
-    padding: var(--space-4);
-  }
-
-  .ghq-plan-dock__body {
-    padding: var(--space-4);
-  }
-
-  .ghq-plan-dock__commitment {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: var(--space-2);
-  }
-
-  .ghq-plan-dock__summary-actions {
-    justify-content: flex-start;
-  }
-
-  .ghq-plan-dock__slots {
-    grid-template-columns: 1fr;
-  }
-
-  .ghq-capacity__summary {
-    flex-direction: column;
-    align-items: flex-start;
-  }
-
-  .ghq-capacity__summary-main {
-    align-items: flex-start;
-  }
 }
 
 @media (max-width: 640px) {
+  /* Too narrow to share the bottom edge with the zoom controls. */
+  .ghq-graph__hint {
+    right: var(--space-3);
+    bottom: calc(var(--space-4) + 2.75rem);
+    width: auto;
+    max-width: none;
+  }
+
   .ghq-form-overlay {
     padding:
       calc(var(--shell-header-height, 0px) + var(--space-3))
@@ -3283,15 +3463,34 @@
     padding: var(--space-4);
   }
 
-  .ghq-graph__workbar {
-    align-items: stretch;
+  .ghq-toolbar__group {
+    width: 100%;
   }
 
-  .ghq-graph__workbar .button,
-  .ghq-graph__search,
-  .ghq-graph__search input,
-  .ghq-graph__select {
+  .ghq-toolbar__group--end {
+    justify-content: flex-start;
+    margin-left: 0;
+  }
+
+  .ghq-toolbar__search {
+    flex: 1;
+  }
+
+  .ghq-toolbar__search input {
     width: 100%;
+    min-width: 0;
+  }
+
+  .ghq-menu__panel--form {
+    width: min(16rem, calc(100vw - 2rem));
+  }
+
+  .ghq-lanes-gutter {
+    flex-basis: 4.25rem;
+  }
+
+  .ghq-lanes-gutter__lane {
+    padding-inline: var(--space-2);
   }
 
   .ghq-graph__viewport-controls {
@@ -3305,32 +3504,6 @@
 
   .ghq-planning-grid {
     grid-template-columns: 1fr;
-  }
-
-  .ghq-capacity {
-    padding: var(--space-3);
-  }
-
-  .ghq-capacity__modes {
-    width: 100%;
-  }
-
-  .ghq-capacity__mode-btn {
-    flex: 1;
-    min-width: 0;
-  }
-
-  .ghq-capacity__stepper-wrap {
-    justify-content: space-between;
-  }
-
-  .ghq-capacity__inline-field {
-    width: 100%;
-    justify-content: space-between;
-  }
-
-  .ghq-capacity__rail {
-    gap: var(--space-2);
   }
 
   .ghq-plan {
@@ -3360,7 +3533,8 @@
   .ap-goal-card__action,
   .ghq-goal-chip--button,
   .ap-inspector-milestones__text-btn,
-  .ghq-plan__settings-link {
+  .ghq-plan__settings-link,
+  .ghq-rail__text-btn {
     min-height: 44px;
     padding-inline: var(--space-1);
   }
@@ -3368,23 +3542,33 @@
   .ghq-plan-subview__btn,
   .ghq-tree-node__row,
   .ghq-inspector__child-row,
-  .ghq-graph__search input,
-  .ghq-graph__select,
-  .ghq-capacity__mode-btn,
-  .ghq-capacity__stepper-btn {
+  .ghq-toolbar__search input,
+  .ghq-menu__panel--list button,
+  .ghq-rail__row,
+  .ghq-capacity-line__mode,
+  .ghq-capacity-line__stepper button {
     min-height: 44px;
   }
 
-  .ghq-plan__settings-link {
+  .ghq-plan__settings-link,
+  .ghq-rail__text-btn {
     display: inline-flex;
     align-items: center;
   }
 
   .ghq-tree-node__toggle,
-  .ghq-capacity__stepper-btn,
+  .ghq-inspector__close,
+  .ghq-graph__hint-close,
+  .ghq-capacity-line__stepper button,
   .ghq-graph__viewport-controls button {
     min-width: 44px;
     min-height: 44px;
+  }
+
+  /* Node controls sit inside the fixed 88px box, so they grow only a little. */
+  .graph-goal-node__controls button {
+    width: 2rem;
+    height: 2rem;
   }
 
   .ap-inspector__action-btn,

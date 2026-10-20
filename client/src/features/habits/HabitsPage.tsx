@@ -1,25 +1,49 @@
 import { useEffect, useState } from "react";
 import { useLocation } from "react-router-dom";
-import { PageHeader } from "../../shared/ui/PageHeader";
-import {
-  PageErrorState,
-  PageLoadingState,
-} from "../../shared/ui/PageState";
+import { PageErrorState } from "../../shared/ui/PageState";
 import { readHomeDestinationState } from "../../shared/lib/homeNavigation";
 
-import { DailyFocusSection } from "./components/DailyFocusSection";
-import { HabitsScoreStrip } from "./components/HabitsScoreStrip";
+import { DayTimeline } from "./components/DayTimeline";
+import { HabitsSkeleton } from "./components/HabitsSkeleton";
 import { ManageHabitsSection } from "./components/ManageHabitsSection";
 import { ManageRoutinesSection } from "./components/ManageRoutinesSection";
 import { SignalsSection } from "./components/SignalsSection";
+import { TodayHero } from "./components/TodayHero";
 import { useHabitsPageController } from "./useHabitsPageController";
+
+function scrollBehavior(): ScrollBehavior {
+  return window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth";
+}
 
 export function HabitsPage() {
   const location = useLocation();
   const controller = useHabitsPageController();
   const [highlightedHabitId, setHighlightedHabitId] = useState<string | null>(null);
   const [highlightWeeklyChallenge, setHighlightWeeklyChallenge] = useState(false);
+  const [scrollTargetId, setScrollTargetId] = useState<string | null>(null);
   const homeDestination = readHomeDestinationState(location.state);
+
+  // Manage sections open a render or two after a form is requested, so wait for the target to exist.
+  useEffect(() => {
+    if (!scrollTargetId) return;
+
+    let frame = 0;
+    let attempts = 0;
+    const scrollWhenReady = () => {
+      const target = document.getElementById(scrollTargetId);
+      if (!target && attempts < 10) {
+        attempts += 1;
+        frame = requestAnimationFrame(scrollWhenReady);
+        return;
+      }
+
+      target?.scrollIntoView({ behavior: scrollBehavior(), block: "start" });
+      setScrollTargetId(null);
+    };
+    frame = requestAnimationFrame(scrollWhenReady);
+
+    return () => cancelAnimationFrame(frame);
+  }, [scrollTargetId]);
 
   useEffect(() => {
     if (homeDestination?.kind !== "habit_focus") {
@@ -39,156 +63,177 @@ export function HabitsPage() {
 
     requestAnimationFrame(() => {
       document.getElementById(targetId)?.scrollIntoView({
-        behavior: "smooth",
+        behavior: scrollBehavior(),
         block: "start",
       });
     });
   }, [homeDestination, location.key]);
 
   if (controller.habitsQuery.isLoading && !controller.habitsQuery.data) {
-    return (
-      <PageLoadingState
-        title="Loading habits"
-        description="Checking due habits, routines, and consistency signals."
-      />
-    );
+    return <HabitsSkeleton />;
   }
 
   if (controller.habitsQuery.isError || !controller.habitsQuery.data) {
     return (
       <PageErrorState
-        title="Habits could not load"
+        title="Habits didn't load"
         message={
           controller.habitsQuery.error instanceof Error
             ? controller.habitsQuery.error.message
-            : undefined
+            : "Check your connection, then try again."
         }
         onRetry={() => void controller.habitsQuery.refetch()}
       />
     );
   }
 
+  const hasAnyHabits = controller.nonArchivedHabits.length > 0;
+  const hasAnyRoutines = controller.nonArchivedRoutines.length > 0;
+  const showRail = hasAnyHabits || hasAnyRoutines;
+
+  function handleAddHabit() {
+    controller.handleOpenAddHabit();
+    setScrollTargetId("habits-manage-habits");
+  }
+
+  function handleAddRoutine() {
+    controller.handleOpenAddRoutine();
+    setScrollTargetId("habits-manage-routines");
+  }
+
+  function handleEditFromTimeline(habitId: string) {
+    controller.handleEditHabit(habitId);
+    setScrollTargetId(`habits-manage-${habitId}`);
+  }
+
   return (
     <div className="page habits-page">
-      <PageHeader
-        eyebrow="Consistency"
-        title="Habits and routines"
-        description="Check in on what matters today, track your streaks, and keep the system working."
-      />
+      <header className="page-header hb-header">
+        <div className="hb-header__text">
+          <h1 className="page-title">Habits</h1>
+          <p className="page-description">Check in on today. The streaks follow.</p>
+        </div>
+        {showRail ? (
+          <button className="button button--ghost button--small" type="button" onClick={handleAddHabit}>
+            New habit
+          </button>
+        ) : null}
+      </header>
 
-      <HabitsScoreStrip
-        score={controller.score}
-        scoreError={controller.scoreQuery.isError}
-        scorePercent={controller.scorePercent}
-        consistencyBars={controller.consistencyBars}
-        trendError={controller.weeklyMomentumQuery.isError}
-        statsCount={controller.statsCount}
-        dueCompletedUnits={controller.dueCompletedUnits}
-        dueTargetUnits={controller.dueTargetUnits}
-        routineCompleted={controller.routineCompleted}
-        routineTotal={controller.routineTotal}
-        momentumValue={controller.weeklyMomentumQuery.data?.value}
-        strongDayStreak={controller.strongDayStreak}
-      />
+      <div className={`hb-layout${showRail ? "" : " hb-layout--single"}`}>
+        {showRail ? (
+          <aside className="hb-rail" aria-label="Today at a glance">
+            <TodayHero
+              dueCompletedUnits={controller.dueCompletedUnits}
+              dueTargetUnits={controller.dueTargetUnits}
+              routineCompleted={controller.routineCompleted}
+              routineTotal={controller.routineTotal}
+              score={controller.score}
+              scoreError={controller.scoreQuery.isError}
+              consistencyBars={controller.consistencyBars}
+              trendError={controller.weeklyMomentumQuery.isError}
+              momentumValue={controller.weeklyMomentumQuery.data?.value}
+              strongDayStreak={controller.strongDayStreak}
+            />
+            <SignalsSection
+              weeklyChallenge={controller.weeklyChallenge}
+              highlightWeeklyChallenge={highlightWeeklyChallenge}
+              isMomentumError={controller.weeklyMomentumQuery.isError}
+              momentumErrorMessage={
+                controller.weeklyMomentumQuery.error instanceof Error
+                  ? controller.weeklyMomentumQuery.error.message
+                  : undefined
+              }
+              onRetry={() => void controller.weeklyMomentumQuery.refetch()}
+            />
+          </aside>
+        ) : null}
 
-      <DailyFocusSection
-        allHabits={controller.allHabits}
-        dueHabits={controller.dueHabits}
-        activeRoutines={controller.activeRoutines}
-        isRescueMode={controller.isRescueMode}
-        highlightedHabitId={highlightedHabitId}
-        dueCompletedUnits={controller.dueCompletedUnits}
-        dueTargetUnits={controller.dueTargetUnits}
-        isHabitCheckinPending={
-          controller.habitCheckinMutation.isPending ||
-          controller.deleteHabitCheckinMutation.isPending
-        }
-        isRoutineCheckinPending={
-          controller.routineCheckinMutation.isPending ||
-          controller.deleteRoutineCheckinMutation.isPending
-        }
-        isPausePending={controller.createHabitPauseWindowMutation.isPending}
-        onCreateFirstHabit={controller.handleOpenAddHabit}
-        onHabitCheckin={(habitId, level) => controller.habitCheckinMutation.mutate({ habitId, level })}
-        onHabitUndo={(habitId) => controller.deleteHabitCheckinMutation.mutate(habitId)}
-        onRoutineItemCheckin={(itemId) => controller.routineCheckinMutation.mutate(itemId)}
-        onRoutineItemUndo={(itemId) => controller.deleteRoutineCheckinMutation.mutate(itemId)}
-        onRestDay={controller.handleRestDay}
-      />
+        <div className="hb-main">
+          <DayTimeline
+            hasAnyHabits={hasAnyHabits}
+            hasAnyRoutines={hasAnyRoutines}
+            dueHabits={controller.dueHabits}
+            activeRoutines={controller.activeRoutines}
+            isRescueMode={controller.isRescueMode}
+            highlightedHabitId={highlightedHabitId}
+            pendingHabitIds={controller.pendingHabitIds}
+            pendingStepIds={controller.pendingStepIds}
+            isPausePending={controller.createHabitPauseWindowMutation.isPending}
+            onAddHabit={handleAddHabit}
+            onAddRoutine={handleAddRoutine}
+            onHabitCheckin={controller.checkInHabit}
+            onHabitUndo={controller.undoHabitCheckin}
+            onToggleRoutineStep={controller.toggleRoutineStep}
+            onRestDay={controller.handleRestDay}
+            onEditHabit={handleEditFromTimeline}
+          />
 
-      <SignalsSection
-        weeklyChallenge={controller.weeklyChallenge}
-        highlightWeeklyChallenge={highlightWeeklyChallenge}
-        isMomentumError={controller.weeklyMomentumQuery.isError}
-        momentumErrorMessage={
-          controller.weeklyMomentumQuery.error instanceof Error
-            ? controller.weeklyMomentumQuery.error.message
-            : undefined
-        }
-        onRetry={() => void controller.weeklyMomentumQuery.refetch()}
-      />
+          <div className="hb-manage">
+            <ManageHabitsSection
+              allHabits={controller.allHabits}
+              nonArchivedHabits={controller.nonArchivedHabits}
+              archivedHabits={controller.archivedHabits}
+              showAddHabit={controller.showAddHabit}
+              editingHabitId={controller.editingHabitId}
+              vacationHabitId={controller.vacationHabitId}
+              vacationForm={controller.vacationForm}
+              confirmArchiveHabitId={controller.confirmArchiveHabitId}
+              createPending={controller.createHabitMutation.isPending}
+              updatePending={controller.updateHabitMutation.isPending}
+              pausePending={controller.createHabitPauseWindowMutation.isPending}
+              deletePausePending={controller.deleteHabitPauseWindowMutation.isPending}
+              createError={controller.createHabitMutation.error}
+              updateError={controller.updateHabitMutation.error}
+              pauseError={controller.createHabitPauseWindowMutation.error}
+              deletePauseError={controller.deleteHabitPauseWindowMutation.error}
+              onOpenAddHabit={controller.handleOpenAddHabit}
+              onCloseAddHabit={() => controller.setShowAddHabit(false)}
+              onEditHabit={controller.handleEditHabit}
+              onCancelEditHabit={() => controller.setEditingHabitId(null)}
+              onCreateHabit={controller.handleCreateHabit}
+              onUpdateHabit={controller.handleUpdateHabit}
+              onRestDay={controller.handleRestDay}
+              onOpenVacation={controller.handleOpenVacation}
+              onCloseVacation={() => controller.setVacationHabitId(null)}
+              onVacationFormChange={controller.setVacationForm}
+              onSaveVacation={controller.handleSaveVacation}
+              onDeletePauseWindow={controller.handleDeletePauseWindow}
+              onChangeHabitStatus={controller.handlePermanentHabitStatusChange}
+              onRequestArchiveHabit={controller.setConfirmArchiveHabitId}
+              onCancelArchiveHabit={() => controller.setConfirmArchiveHabitId(null)}
+              onConfirmArchiveHabit={controller.handleArchiveHabit}
+            />
 
-      <ManageHabitsSection
-        allHabits={controller.allHabits}
-        nonArchivedHabits={controller.nonArchivedHabits}
-        archivedHabits={controller.archivedHabits}
-        showAddHabit={controller.showAddHabit}
-        editingHabitId={controller.editingHabitId}
-        vacationHabitId={controller.vacationHabitId}
-        vacationForm={controller.vacationForm}
-        confirmArchiveHabitId={controller.confirmArchiveHabitId}
-        createPending={controller.createHabitMutation.isPending}
-        updatePending={controller.updateHabitMutation.isPending}
-        pausePending={controller.createHabitPauseWindowMutation.isPending}
-        deletePausePending={controller.deleteHabitPauseWindowMutation.isPending}
-        createError={controller.createHabitMutation.error}
-        updateError={controller.updateHabitMutation.error}
-        pauseError={controller.createHabitPauseWindowMutation.error}
-        deletePauseError={controller.deleteHabitPauseWindowMutation.error}
-        onOpenAddHabit={controller.handleOpenAddHabit}
-        onCloseAddHabit={() => controller.setShowAddHabit(false)}
-        onEditHabit={controller.handleEditHabit}
-        onCancelEditHabit={() => controller.setEditingHabitId(null)}
-        onCreateHabit={controller.handleCreateHabit}
-        onUpdateHabit={controller.handleUpdateHabit}
-        onRestDay={controller.handleRestDay}
-        onOpenVacation={controller.handleOpenVacation}
-        onCloseVacation={() => controller.setVacationHabitId(null)}
-        onVacationFormChange={controller.setVacationForm}
-        onSaveVacation={controller.handleSaveVacation}
-        onDeletePauseWindow={controller.handleDeletePauseWindow}
-        onChangeHabitStatus={controller.handlePermanentHabitStatusChange}
-        onRequestArchiveHabit={controller.setConfirmArchiveHabitId}
-        onCancelArchiveHabit={() => controller.setConfirmArchiveHabitId(null)}
-        onConfirmArchiveHabit={controller.handleArchiveHabit}
-      />
-
-      <ManageRoutinesSection
-        routines={controller.routines}
-        activeRoutineCount={controller.activeRoutines.length}
-        nonArchivedRoutines={controller.nonArchivedRoutines}
-        archivedRoutines={controller.archivedRoutines}
-        showAddRoutine={controller.showAddRoutine}
-        editingRoutineId={controller.editingRoutineId}
-        confirmArchiveRoutineId={controller.confirmArchiveRoutineId}
-        createPending={controller.createRoutineMutation.isPending}
-        updatePending={controller.updateRoutineMutation.isPending}
-        createError={controller.createRoutineMutation.error}
-        updateError={controller.updateRoutineMutation.error}
-        onOpenAddRoutine={controller.handleOpenAddRoutine}
-        onCloseAddRoutine={() => controller.setShowAddRoutine(false)}
-        onEditRoutine={controller.handleEditRoutine}
-        onCancelEditRoutine={() => controller.setEditingRoutineId(null)}
-        onCreateRoutine={controller.handleCreateRoutine}
-        onUpdateRoutine={controller.handleUpdateRoutine}
-        onMoveRoutine={controller.handleMoveRoutine}
-        onRequestArchiveRoutine={controller.setConfirmArchiveRoutineId}
-        onCancelArchiveRoutine={() => controller.setConfirmArchiveRoutineId(null)}
-        onConfirmArchiveRoutine={controller.handleArchiveRoutine}
-        onRestoreRoutine={(routineId) =>
-          controller.updateRoutineMutation.mutate({ routineId, status: "active" })
-        }
-      />
+            <ManageRoutinesSection
+              routines={controller.routines}
+              activeRoutineCount={controller.activeRoutines.length}
+              nonArchivedRoutines={controller.nonArchivedRoutines}
+              archivedRoutines={controller.archivedRoutines}
+              showAddRoutine={controller.showAddRoutine}
+              editingRoutineId={controller.editingRoutineId}
+              confirmArchiveRoutineId={controller.confirmArchiveRoutineId}
+              createPending={controller.createRoutineMutation.isPending}
+              updatePending={controller.updateRoutineMutation.isPending}
+              createError={controller.createRoutineMutation.error}
+              updateError={controller.updateRoutineMutation.error}
+              onOpenAddRoutine={controller.handleOpenAddRoutine}
+              onCloseAddRoutine={() => controller.setShowAddRoutine(false)}
+              onEditRoutine={controller.handleEditRoutine}
+              onCancelEditRoutine={() => controller.setEditingRoutineId(null)}
+              onCreateRoutine={controller.handleCreateRoutine}
+              onUpdateRoutine={controller.handleUpdateRoutine}
+              onMoveRoutine={controller.handleMoveRoutine}
+              onRequestArchiveRoutine={controller.setConfirmArchiveRoutineId}
+              onCancelArchiveRoutine={() => controller.setConfirmArchiveRoutineId(null)}
+              onConfirmArchiveRoutine={controller.handleArchiveRoutine}
+              onRestoreRoutine={(routineId) =>
+                controller.updateRoutineMutation.mutate({ routineId, status: "active" })
+              }
+            />
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

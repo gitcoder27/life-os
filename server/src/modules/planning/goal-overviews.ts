@@ -1,16 +1,24 @@
 import type { Goal, GoalDomainConfig, GoalHorizonConfig, GoalMilestone } from "@prisma/client";
 
 import { addDays } from "../../lib/time/cycle.js";
-import { buildGoalInsights } from "./goal-insights.js";
+import { buildGoalTreeInsights, countsTowardParentGoal } from "./goal-insights.js";
 import {
   type GoalLinkedHabitRecord,
+  fromPrismaGoalHorizonSystemKey,
   fromPrismaGoalMilestoneStatus,
   fromPrismaGoalStatus,
   serializeGoal,
   serializeGoalLinkedHabit,
 } from "./planning-mappers.js";
 import { getCurrentGoalCycleFilters, type GoalContext } from "./planning-context.js";
+import { goalWithMilestonesInclude } from "./planning-record-shapes.js";
 import type { PlanningApp } from "./planning-types.js";
+
+type GoalOverviewRecord = Goal & {
+  domain: GoalDomainConfig;
+  horizon: GoalHorizonConfig | null;
+  milestones: GoalMilestone[];
+};
 
 export function buildTodayLinkedGoalCounts(
   priorities: Array<{ goalId: string | null }>,
@@ -47,23 +55,66 @@ export function buildTodayLinkedGoalCounts(
   return counts;
 }
 
+// Returns the requested goals plus every descendant that counts toward their roll-ups.
+function collectGoalSubtrees(goals: GoalOverviewRecord[], allUserGoals: GoalOverviewRecord[]) {
+  const goalsById = new Map(allUserGoals.map((goal) => [goal.id, goal]));
+  for (const goal of goals) {
+    goalsById.set(goal.id, goal);
+  }
+
+  const childrenByParentId = new Map<string, GoalOverviewRecord[]>();
+  for (const goal of goalsById.values()) {
+    if (!goal.parentGoalId) {
+      continue;
+    }
+
+    const bucket = childrenByParentId.get(goal.parentGoalId) ?? [];
+    bucket.push(goal);
+    childrenByParentId.set(goal.parentGoalId, bucket);
+  }
+
+  const subtreeGoals = new Map<string, GoalOverviewRecord>();
+  const queue = goals.map((goal) => goalsById.get(goal.id) ?? goal);
+  while (queue.length > 0) {
+    const goal = queue.shift()!;
+    if (subtreeGoals.has(goal.id)) {
+      continue;
+    }
+
+    subtreeGoals.set(goal.id, goal);
+    for (const child of childrenByParentId.get(goal.id) ?? []) {
+      if (countsTowardParentGoal(fromPrismaGoalStatus(child.status))) {
+        queue.push(child);
+      }
+    }
+  }
+
+  return [...subtreeGoals.values()];
+}
+
 export async function buildGoalOverviews(
   app: PlanningApp,
   userId: string,
-  goals: Array<
-    Goal & {
-      domain: GoalDomainConfig;
-      horizon: GoalHorizonConfig | null;
-      milestones: GoalMilestone[];
-    }
-  >,
+  goals: GoalOverviewRecord[],
   context: GoalContext,
+  options: {
+    // Every goal the user owns, when the caller has already loaded them; saves a query.
+    allUserGoals?: GoalOverviewRecord[];
+  } = {},
 ) {
   if (goals.length === 0) {
     return [];
   }
 
+  const allUserGoals =
+    options.allUserGoals
+    ?? (await app.prisma.goal.findMany({
+      where: { userId },
+      include: goalWithMilestonesInclude,
+    }));
+  const treeGoals = collectGoalSubtrees(goals, allUserGoals);
   const goalIds = goals.map((goal) => goal.id);
+  const treeGoalIds = treeGoals.map((goal) => goal.id);
   const currentCycleFilters = getCurrentGoalCycleFilters(context.contextIsoDate, context.weekStartsOn);
   const habitsCheckinStart = addDays(context.contextDate, -30);
 
@@ -99,7 +150,7 @@ export async function buildGoalOverviews(
       where: {
         userId,
         goalId: {
-          in: goalIds,
+          in: treeGoalIds,
         },
         status: "PENDING",
       },
@@ -116,7 +167,7 @@ export async function buildGoalOverviews(
       where: {
         userId,
         goalId: {
-          in: goalIds,
+          in: treeGoalIds,
         },
         completedAt: {
           not: null,
@@ -130,7 +181,7 @@ export async function buildGoalOverviews(
     app.prisma.cyclePriority.findMany({
       where: {
         goalId: {
-          in: goalIds,
+          in: treeGoalIds,
         },
         completedAt: {
           not: null,
@@ -148,7 +199,7 @@ export async function buildGoalOverviews(
       where: {
         userId,
         goalId: {
-          in: goalIds,
+          in: treeGoalIds,
         },
       },
       include: {
@@ -215,7 +266,7 @@ export async function buildGoalOverviews(
   }
 
   const completionDatesByGoal = new Map<string, Date[]>();
-  for (const goal of goals) {
+  for (const goal of treeGoals) {
     completionDatesByGoal.set(
       goal.id,
       goal.milestones.flatMap((milestone) => (milestone.completedAt ? [milestone.completedAt] : [])),
@@ -259,12 +310,20 @@ export async function buildGoalOverviews(
     );
   }
 
-  return goals.map((goal) => {
-    const goalHabits = linkedHabitsByGoal.get(goal.id) ?? [];
-    const linkedHabitStates = goalHabits.map((habit) =>
-      serializeGoalLinkedHabit(habit as GoalLinkedHabitRecord, context.contextIsoDate),
-    );
-    const insights = buildGoalInsights({
+  const linkedHabitStatesByGoal = new Map(
+    treeGoals.map((goal) => [
+      goal.id,
+      (linkedHabitsByGoal.get(goal.id) ?? []).map((habit) =>
+        serializeGoalLinkedHabit(habit as GoalLinkedHabitRecord, context.contextIsoDate),
+      ),
+    ]),
+  );
+  const insightsByGoal = buildGoalTreeInsights(
+    treeGoals.map((goal) => ({
+      id: goal.id,
+      parentGoalId: goal.parentGoalId,
+      horizonSystemKey: fromPrismaGoalHorizonSystemKey(goal.horizon?.systemKey ?? null),
+      horizonSpanMonths: goal.horizon?.spanMonths ?? null,
       goalStatus: fromPrismaGoalStatus(goal.status),
       targetDate: goal.targetDate,
       milestones: goal.milestones.map((milestone) => ({
@@ -279,14 +338,19 @@ export async function buildGoalOverviews(
         scheduledForDate: task.scheduledForDate,
         createdAt: task.createdAt,
       })),
-      habits: linkedHabitStates.map((habit) => ({
+      habits: (linkedHabitStatesByGoal.get(goal.id) ?? []).map((habit) => ({
         title: habit.title,
         dueToday: habit.dueToday,
         completedToday: habit.completedToday,
       })),
       completionDates: completionDatesByGoal.get(goal.id) ?? [],
-      contextDate: context.contextDate,
-    });
+    })),
+    context.contextDate,
+  );
+
+  return goals.map((goal) => {
+    const linkedHabitStates = linkedHabitStatesByGoal.get(goal.id) ?? [];
+    const insights = insightsByGoal.get(goal.id)!;
     const currentCounts = currentPriorityCounts.get(goal.id) ?? {
       currentDayPriorities: 0,
       currentWeekPriorities: 0,

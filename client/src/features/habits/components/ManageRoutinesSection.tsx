@@ -4,12 +4,15 @@ import type {
   Routine,
   RoutineFormValues,
 } from "../types";
+import { routineMetaItems } from "../libraryFormat";
+import { formatMinutesToTimeInput } from "../timing";
+import { ActionMenu } from "./ActionMenu";
 import { CollapsibleSection } from "./CollapsibleSection";
+import { ArchiveConfirm, ArchivedList, FormPanel, InlineError } from "./LibraryParts";
 import {
   buildRoutineFormItems,
   RoutineForm,
 } from "./RoutineForm";
-import { formatMinutesToTimeInput } from "../timing";
 
 type ManageRoutinesSectionProps = {
   routines: Routine[];
@@ -71,7 +74,8 @@ export function ManageRoutinesSection({
 
   return (
     <CollapsibleSection
-      title="Manage routines"
+      id="habits-manage-routines"
+      title="All routines"
       subtitle={`${activeRoutineCount} active`}
       defaultOpen={routines.length === 0}
       isOpen={isOpen}
@@ -81,195 +85,139 @@ export function ManageRoutinesSection({
           <button
             className="button button--ghost button--small"
             type="button"
-            onClick={(event) => {
-              event.stopPropagation();
+            onClick={() => {
               setIsOpen(true);
               onOpenAddRoutine();
             }}
           >
-            + Add routine
+            New routine
           </button>
         ) : null
       }
     >
       {showAddRoutine ? (
-        <RoutineForm
-          submitLabel="Create routine"
-          isPending={createPending}
-          onSubmit={onCreateRoutine}
-          onCancel={() => {
-            onCloseAddRoutine();
-            if (routines.length === 0) {
-              setIsOpen(true);
-            }
-          }}
-        />
+        <FormPanel title="New routine">
+          <RoutineForm
+            submitLabel="Create routine"
+            isPending={createPending}
+            onSubmit={onCreateRoutine}
+            onCancel={onCloseAddRoutine}
+          />
+        </FormPanel>
       ) : null}
 
       {createError ? (
-        <InlineError message={createError.message || "Could not create routine."} />
+        <InlineError message={createError.message || "Couldn't create the routine."} />
       ) : null}
 
       {nonArchivedRoutines.length > 0 ? (
-        <div className="manage-list">
+        <ul className="hb-items">
           {nonArchivedRoutines.map((routine) => (
-            <div key={routine.id} className="manage-list__item">
+            <li key={routine.id} className="hb-item" id={`habits-manage-routine-${routine.id}`}>
               {editingRoutineId === routine.id ? (
-                <RoutineForm
-                  initial={{
-                    name: routine.name,
-                    windowStartTime: formatMinutesToTimeInput(routine.windowStartMinutes),
-                    windowEndTime: formatMinutesToTimeInput(routine.windowEndMinutes),
-                    items: buildRoutineFormItems(routine.items),
-                  }}
-                  submitLabel="Save changes"
-                  isPending={updatePending}
-                  onSubmit={(values) => onUpdateRoutine(routine.id, values)}
-                  onCancel={onCancelEditRoutine}
-                />
+                <FormPanel title={`Edit ${routine.name}`}>
+                  <RoutineForm
+                    initial={{
+                      name: routine.name,
+                      windowStartTime: formatMinutesToTimeInput(routine.windowStartMinutes),
+                      windowEndTime: formatMinutesToTimeInput(routine.windowEndMinutes),
+                      items: buildRoutineFormItems(routine.items),
+                    }}
+                    submitLabel="Save changes"
+                    isPending={updatePending}
+                    onSubmit={(values) => onUpdateRoutine(routine.id, values)}
+                    onCancel={onCancelEditRoutine}
+                  />
+                </FormPanel>
               ) : (
-                <div className="manage-list__row">
-                  <div className="manage-list__info">
-                    <div className="manage-list__name">
-                      <span className={`status-dot status-dot--${routine.status}`} />
-                      {routine.name}
+                <>
+                  <div className="hb-item__row">
+                    <span className={`hb-item__dot hb-item__dot--${routine.status}`} aria-hidden="true" />
+                    <div className="hb-item__body">
+                      <span className="hb-item__name">{routine.name}</span>
+                      <span className="hb-item__meta">
+                        {routineMetaItems(routine).map((item, index) => (
+                          <span key={index}>{item}</span>
+                        ))}
+                      </span>
                     </div>
-                    <div className="manage-list__meta">
-                      {routine.items.length} step{routine.items.length !== 1 ? "s" : ""}
-                      {" · "}
-                      {routine.completedItems}/{routine.totalItems} today
-                      {routine.timingLabel ? ` · ${routine.timingLabel}` : ""}
+                    <div className="hb-item__actions">
+                      <button
+                        className="hb-item__edit"
+                        type="button"
+                        onClick={() => onEditRoutine(routine.id)}
+                        aria-label={`Edit ${routine.name}`}
+                      >
+                        Edit
+                      </button>
+                      <ActionMenu
+                        label={`More actions for ${routine.name}`}
+                        items={[
+                          {
+                            label: "Move up",
+                            onSelect: () => onMoveRoutine(routine.id, Math.max(0, routine.sortOrder - 1)),
+                            disabled: updatePending || routine.sortOrder === 0,
+                          },
+                          {
+                            label: "Move down",
+                            onSelect: () =>
+                              onMoveRoutine(routine.id, Math.min(routines.length - 1, routine.sortOrder + 1)),
+                            disabled: updatePending || routine.sortOrder === routines.length - 1,
+                          },
+                          {
+                            label: "Archive",
+                            tone: "danger",
+                            onSelect: () => onRequestArchiveRoutine(routine.id),
+                            disabled: updatePending,
+                          },
+                        ]}
+                      />
                     </div>
                   </div>
-                  <div className="habits-manage-actions">
-                    <button
-                      className="button button--ghost button--small"
-                      type="button"
-                      onClick={() => onEditRoutine(routine.id)}
-                    >
-                      Edit
-                    </button>
-                    <button
-                      className="button button--ghost button--small"
-                      type="button"
-                      onClick={() => onMoveRoutine(routine.id, Math.max(0, routine.sortOrder - 1))}
-                      disabled={updatePending || routine.sortOrder === 0}
-                    >
-                      Move up
-                    </button>
-                    <button
-                      className="button button--ghost button--small"
-                      type="button"
-                      onClick={() =>
-                        onMoveRoutine(
-                          routine.id,
-                          Math.min(routines.length - 1, routine.sortOrder + 1),
-                        )
-                      }
-                      disabled={updatePending || routine.sortOrder === routines.length - 1}
-                    >
-                      Move down
-                    </button>
-                    {routine.status !== "archived" ? (
-                      confirmArchiveRoutineId === routine.id ? (
-                        <span className="confirm-archive">
-                          <span className="confirm-archive__label">Archive?</span>
-                          <button
-                            className="button button--ghost button--small"
-                            type="button"
-                            style={{ color: "var(--negative)" }}
-                            onClick={() => onConfirmArchiveRoutine(routine.id)}
-                            disabled={updatePending}
-                          >
-                            Yes
-                          </button>
-                          <button
-                            className="button button--ghost button--small"
-                            type="button"
-                            onClick={onCancelArchiveRoutine}
-                          >
-                            No
-                          </button>
-                        </span>
-                      ) : (
-                        <button
-                          className="button button--ghost button--small"
-                          type="button"
-                          style={{ color: "var(--negative)" }}
-                          onClick={() => onRequestArchiveRoutine(routine.id)}
-                          disabled={updatePending}
-                        >
-                          Archive
-                        </button>
-                      )
-                    ) : null}
-                  </div>
-                </div>
+
+                  {confirmArchiveRoutineId === routine.id ? (
+                    <ArchiveConfirm
+                      name={routine.name}
+                      detail="It leaves today's list. You can restore it later."
+                      isPending={updatePending}
+                      onConfirm={() => onConfirmArchiveRoutine(routine.id)}
+                      onCancel={onCancelArchiveRoutine}
+                    />
+                  ) : null}
+                </>
               )}
-            </div>
+            </li>
           ))}
-        </div>
+        </ul>
       ) : !showAddRoutine ? (
-        <div className="habits-group__empty">
-          <span className="habits-group__empty-text">
-            No routines yet. Add your first routine to build structure.
-          </span>
+        <div className="hb-library__empty">
+          <span>No routines yet. A routine is a short checklist you run in a set window.</span>
           <button
             className="button button--ghost button--small"
             type="button"
             onClick={onOpenAddRoutine}
           >
-            + Add your first routine
+            Add your first routine
           </button>
         </div>
       ) : null}
 
       {archivedRoutines.length > 0 ? (
-        <CollapsibleSection
-          title="Archived routines"
-          subtitle={`${archivedRoutines.length} archived`}
-        >
-          <div className="manage-list manage-list--archived">
-            {archivedRoutines.map((routine) => (
-              <div key={routine.id} className="manage-list__item">
-                <div className="manage-list__row">
-                  <div className="manage-list__info">
-                    <div className="manage-list__name">
-                      <span className="status-dot status-dot--archived" />
-                      {routine.name}
-                    </div>
-                    <div className="manage-list__meta">
-                      {routine.items.length} step{routine.items.length !== 1 ? "s" : ""}
-                    </div>
-                  </div>
-                  <div className="habits-manage-actions">
-                    <button
-                      className="button button--ghost button--small"
-                      type="button"
-                      onClick={() => onRestoreRoutine(routine.id)}
-                      disabled={updatePending}
-                    >
-                      Restore
-                    </button>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </CollapsibleSection>
+        <ArchivedList
+          noun="routine"
+          items={archivedRoutines.map((routine) => ({
+            id: routine.id,
+            name: routine.name,
+            meta: `${routine.items.length} ${routine.items.length === 1 ? "step" : "steps"}`,
+          }))}
+          isPending={updatePending}
+          onRestore={onRestoreRoutine}
+        />
       ) : null}
 
       {updateError ? (
-        <InlineError message={updateError.message || "Could not update routine."} />
+        <InlineError message={updateError.message || "Couldn't update the routine."} />
       ) : null}
     </CollapsibleSection>
-  );
-}
-
-function InlineError({ message }: { message: string }) {
-  return (
-    <div className="inline-state inline-state--error" style={{ marginTop: "0.5rem" }}>
-      {message}
-    </div>
   );
 }

@@ -57,7 +57,25 @@ export interface HabitItem {
   achievedLevelToday: HabitCheckinLevel | null;
   streakCount: number;
   risk: HabitRiskState;
+  /** Last 7 local days, oldest first, ending with the target date. */
+  recentDays: HabitDayMark[];
   pauseWindows: HabitPauseWindow[];
+}
+
+/**
+ * Per-day state for a habit's recent history.
+ * - done: due (or bonus) and the daily target was met
+ * - partial: due, some but not all of the daily target logged
+ * - missed: due and nothing logged (past days only)
+ * - rest: scheduled but covered by a rest day or vacation
+ * - not_due: not scheduled
+ * - open: the target date, due and not yet complete
+ */
+export type HabitDayState = "done" | "partial" | "missed" | "rest" | "not_due" | "open";
+
+export interface HabitDayMark {
+  date: IsoDateString;
+  state: HabitDayState;
 }
 
 export interface HabitPauseWindow {

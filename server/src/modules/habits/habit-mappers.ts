@@ -21,6 +21,7 @@ import type {
 
 import {
   calculateHabitActiveStreak,
+  calculateHabitRecentDays,
   calculateHabitRisk,
 } from "../../lib/habits/guidance.js";
 import {
@@ -324,6 +325,7 @@ export const serializeHabit = (
           completionRate7d: 100,
         }
       : calculateHabitRisk(checkins, recurrence, targetIsoDate, pauseWindows, habit.targetPerDay),
+    recentDays: calculateHabitRecentDays(checkins, recurrence, targetIsoDate, pauseWindows, habit.targetPerDay),
     pauseWindows: pauseWindows
       .filter(
         (pauseWindow) =>

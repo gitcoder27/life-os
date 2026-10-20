@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Link } from "react-router-dom";
 
 import type {
@@ -10,6 +11,7 @@ import type {
   WeekPlanResponse,
 } from "../../shared/lib/api";
 import {
+  formatShortDate,
   getMonthStartDate,
   getTodayDate,
   getWeekStartDate,
@@ -20,6 +22,7 @@ import {
   useUpdateWeekPrioritiesMutation,
 } from "../../shared/lib/api";
 import { EmptyState, InlineErrorState } from "../../shared/ui/PageState";
+import { getGoalAncestorIds } from "./goal-graph-layout";
 import { GoalInspectorMilestones } from "./GoalInspectorMilestones";
 import {
   GoalFormDialog,
@@ -28,11 +31,10 @@ import {
 } from "./GoalFormDialog";
 import {
   buildHierarchyTree,
-  getRootGoalIds,
   HierarchyRail,
 } from "./GoalsHierarchyRail";
-import { GoalsPlanGraphView } from "./GoalsPlanGraphView";
-import { GoalsPlanPlanningDock } from "./GoalsPlanPlanningDock";
+import { GoalsPlanCommitmentsRail, type RailLane } from "./GoalsPlanCommitmentsRail";
+import { GoalsPlanGraphView, type CenterRequest } from "./GoalsPlanGraphView";
 import { useGoalTodayAction } from "./useGoalTodayAction";
 import {
   buildDraftTitleForGoal,
@@ -42,14 +44,12 @@ import {
   planningSlots,
   type PlanningItem,
   type PlanningDraft,
-  type PlanningLane,
   type PlanningReplaceState,
   type PlanningSelection,
   type PlanningSlot,
 } from "./GoalsPlanTypes";
 
 /* ── Helpers ── */
-
 
 const healthLabels: Record<string, string> = {
   on_track: "On Track",
@@ -64,20 +64,6 @@ function findFirstOpenSlot(occupiedSlots: PlanningSlot[]) {
 
 function sortPlanningItemsBySlot<T extends { slot: PlanningSlot }>(items: T[]) {
   return [...items].sort((left, right) => left.slot - right.slot);
-}
-
-function areGoalIdSetsEqual(left: Set<string>, right: Set<string>) {
-  if (left.size !== right.size) {
-    return false;
-  }
-
-  for (const value of left) {
-    if (!right.has(value)) {
-      return false;
-    }
-  }
-
-  return true;
 }
 
 function isGoalDescendant(
@@ -98,17 +84,65 @@ function isGoalDescendant(
   return false;
 }
 
+function buildSlotMap(items: PlanningItem[]) {
+  const slotByGoalId = new Map<string, number>();
+  for (const item of sortPlanningItemsBySlot(items)) {
+    if (item.goalId && !slotByGoalId.has(item.goalId)) {
+      slotByGoalId.set(item.goalId, item.slot);
+    }
+  }
+  return slotByGoalId;
+}
+
+/* The map's stage moves between its place on the page and document.body when
+   full screen toggles. The portal target stays the same element, so React keeps
+   the map mounted (viewport, filters and drafts survive) while the element
+   escapes the shell's stacking contexts. */
+function useMovableHost(isDetached: boolean) {
+  const [host] = useState(() => {
+    const element = document.createElement("div");
+    element.className = "ghq-stage-host";
+    return element;
+  });
+  const slotRef = useRef<HTMLDivElement | null>(null);
+  const isDetachedRef = useRef(isDetached);
+  isDetachedRef.current = isDetached;
+
+  const attachSlot = useCallback(
+    (node: HTMLDivElement | null) => {
+      slotRef.current = node;
+      if (node && !isDetachedRef.current && host.parentNode !== node) {
+        node.appendChild(host);
+      }
+    },
+    [host],
+  );
+
+  useLayoutEffect(() => {
+    const target = isDetached ? document.body : slotRef.current;
+    if (target && host.parentNode !== target) {
+      // Moving a subtree drops focus inside it; put it back for keyboard users.
+      const active = document.activeElement;
+      const focusToRestore = active instanceof HTMLElement && host.contains(active) ? active : null;
+      target.appendChild(host);
+      focusToRestore?.focus({ preventScroll: true });
+    }
+  });
+
+  useEffect(() => () => host.remove(), [host]);
+
+  return { host, attachSlot };
+}
+
 /* ── Plan Inspector ── */
 
 type PlanInspectorFocusGoal = Pick<GoalOverviewItem, "id" | "status" | "nextBestAction">;
 
-function PlanInspectorFocusActions({
+function PlanInspectorTodayActions({
   goal,
-  onOpenPlanning,
   onLinkedToToday,
 }: {
   goal: PlanInspectorFocusGoal;
-  onOpenPlanning: (goalId: string) => void;
   onLinkedToToday: () => Promise<unknown> | unknown;
 }) {
   const todayAction = useGoalTodayAction({
@@ -121,13 +155,6 @@ function PlanInspectorFocusActions({
   return (
     <>
       <div className="ghq-inspector__focus-actions">
-        <button
-          className="button button--ghost button--small"
-          type="button"
-          onClick={() => onOpenPlanning(goal.id)}
-        >
-          Open focus board
-        </button>
         {todayAction.isAvailable ? (
           <button
             className="button button--ghost button--small"
@@ -152,24 +179,43 @@ function PlanInspectorFocusActions({
 function PlanInspector({
   goalId,
   domains,
+  activeGoals,
+  onClose,
   onSelectGoal,
   onEditGoal,
   onCreateChild,
-  onOpenPlanning,
+  onAddToLane,
+  onReparent,
 }: {
   goalId: string;
   domains: GoalDomainItem[];
+  activeGoals: GoalOverviewItem[];
+  onClose: () => void;
   onSelectGoal: (goalId: string) => void;
   onEditGoal: (goal: GoalOverviewItem) => void;
   onCreateChild: (parentGoal: GoalOverviewItem) => void;
-  onOpenPlanning: (goalId: string) => void;
+  onAddToLane: (lane: RailLane, goalId: string) => void;
+  onReparent: (goalId: string, parentGoalId: string | null) => void;
 }) {
   const detailQuery = useGoalDetailQuery(goalId);
+  const parentOptions = useMemo(
+    () =>
+      activeGoals
+        .filter((candidate) => candidate.id !== goalId && !isGoalDescendant(activeGoals, goalId, candidate.id))
+        .sort((left, right) => left.title.localeCompare(right.title)),
+    [activeGoals, goalId],
+  );
+
+  const closeButton = (
+    <button className="ghq-inspector__close" type="button" onClick={onClose} aria-label="Close details" title="Close (Esc)">
+      ×
+    </button>
+  );
 
   if (detailQuery.isLoading) {
     return (
       <div className="ghq-inspector">
-        <div className="ghq-inspector__loading">Loading goal details...</div>
+        <div className="ghq-inspector__loading">Loading goal details…</div>
       </div>
     );
   }
@@ -177,6 +223,7 @@ function PlanInspector({
   if (detailQuery.isError || !detailQuery.data) {
     return (
       <div className="ghq-inspector">
+        <div className="ghq-inspector__header ghq-inspector__header--bare">{closeButton}</div>
         <InlineErrorState
           message={detailQuery.error instanceof Error ? detailQuery.error.message : "Could not load goal details."}
           onRetry={() => void detailQuery.refetch()}
@@ -191,44 +238,29 @@ function PlanInspector({
 
   return (
     <div className="ghq-inspector">
-      {/* Header */}
       <div className="ghq-inspector__header">
-        {/* Breadcrumb / ancestry */}
-        {goal.ancestors.length > 0 && (
-          <div className="ghq-inspector__breadcrumb">
-            {goal.ancestors.map((ancestor, i) => (
-              <span key={ancestor.id}>
-                {i > 0 && <span className="ghq-inspector__breadcrumb-sep">/</span>}
-                <button
-                  className="ghq-inspector__breadcrumb-link"
-                  type="button"
-                  onClick={() => onSelectGoal(ancestor.id)}
-                >
-                  {ancestor.title}
-                </button>
-              </span>
-            ))}
-            <span className="ghq-inspector__breadcrumb-sep">/</span>
+        <div className="ghq-inspector__title-row">
+          <div className="ghq-inspector__title-block">
+            {goal.ancestors.length > 0 && (
+              <div className="ghq-inspector__breadcrumb">
+                {goal.ancestors.map((ancestor, i) => (
+                  <span key={ancestor.id}>
+                    {i > 0 && <span className="ghq-inspector__breadcrumb-sep">/</span>}
+                    <button
+                      className="ghq-inspector__breadcrumb-link"
+                      type="button"
+                      onClick={() => onSelectGoal(ancestor.id)}
+                    >
+                      {ancestor.title}
+                    </button>
+                  </span>
+                ))}
+                <span className="ghq-inspector__breadcrumb-sep">/</span>
+              </div>
+            )}
+            <h2 className="ghq-inspector__title">{goal.title}</h2>
           </div>
-        )}
-
-        <h2 className="ghq-inspector__title">{goal.title}</h2>
-
-        <div className="ghq-inspector__header-actions">
-          <button
-            className="button button--primary button--small"
-            type="button"
-            onClick={() => onOpenPlanning(goal.id)}
-          >
-            Plan goal
-          </button>
-          <button
-            className="button button--ghost button--small"
-            type="button"
-            onClick={() => onEditGoal(goal)}
-          >
-            Edit goal
-          </button>
+          {closeButton}
         </div>
 
         <div className="ghq-inspector__meta">
@@ -247,7 +279,6 @@ function PlanInspector({
           </span>
         </div>
 
-        {/* Progress */}
         {goal.milestoneCounts.total > 0 && (
           <div className="goal-progress ghq-inspector__progress">
             <div className="goal-progress__bar">
@@ -259,11 +290,18 @@ function PlanInspector({
             <span className="goal-progress__label">{goal.progressPercent}%</span>
           </div>
         )}
+
+        <div className="ghq-inspector__header-actions">
+          <button className="button button--ghost button--small" type="button" onClick={() => onEditGoal(goal)}>
+            Edit goal
+          </button>
+          <button className="button button--ghost button--small" type="button" onClick={() => onCreateChild(goal)}>
+            Add sub-goal
+          </button>
+        </div>
       </div>
 
-      {/* Body */}
       <div className="ghq-inspector__body">
-        {/* Why */}
         {goal.why && (
           <div className="ghq-inspector__section">
             <h3 className="ghq-inspector__section-title">Why</h3>
@@ -283,34 +321,36 @@ function PlanInspector({
           <div className="ghq-inspector__focus-status">
             <div className="ghq-inspector__focus-row">
               <span>Month</span>
-              <strong>
-                {goal.currentMonthOutcomes.length > 0
-                  ? goal.currentMonthOutcomes.map((item) => `M${item.slot}`).join(", ")
-                  : "Not in month focus"}
-              </strong>
+              {goal.currentMonthOutcomes.length > 0 ? (
+                <strong className="ghq-inspector__slot">
+                  {goal.currentMonthOutcomes.map((item) => `M${item.slot}`).join(", ")}
+                </strong>
+              ) : (
+                <button className="ghq-rail__text-btn" type="button" onClick={() => onAddToLane("month", goal.id)}>
+                  Add to month
+                </button>
+              )}
             </div>
             <div className="ghq-inspector__focus-row">
               <span>Week</span>
-              <strong>
-                {goal.currentWeekPriorities.length > 0
-                  ? goal.currentWeekPriorities.map((item) => `W${item.slot}`).join(", ")
-                  : "Not in week focus"}
-              </strong>
+              {goal.currentWeekPriorities.length > 0 ? (
+                <strong className="ghq-inspector__slot">
+                  {goal.currentWeekPriorities.map((item) => `W${item.slot}`).join(", ")}
+                </strong>
+              ) : (
+                <button className="ghq-rail__text-btn" type="button" onClick={() => onAddToLane("week", goal.id)}>
+                  Add to week
+                </button>
+              )}
             </div>
             <div className="ghq-inspector__focus-row">
               <span>Today</span>
               <strong>
-                {goal.linkedSummary.currentDayPriorities > 0
-                  ? "Already represented in Today"
-                  : "Handled later in the Today workspace"}
+                {goal.linkedSummary.currentDayPriorities > 0 ? "In today's priorities" : "Not in today yet"}
               </strong>
             </div>
           </div>
-          <PlanInspectorFocusActions
-            goal={goal}
-            onOpenPlanning={onOpenPlanning}
-            onLinkedToToday={() => detailQuery.refetch()}
-          />
+          <PlanInspectorTodayActions goal={goal} onLinkedToToday={() => detailQuery.refetch()} />
         </div>
 
         <div className="ghq-inspector__section">
@@ -324,7 +364,7 @@ function PlanInspector({
 
         {goal.children.length > 0 && (
           <div className="ghq-inspector__section">
-            <h3 className="ghq-inspector__section-title">Supporting goals</h3>
+            <h3 className="ghq-inspector__section-title">Sub-goals</h3>
             <div className="ghq-inspector__children">
               {goal.children.map((child) => (
                 <button
@@ -333,7 +373,6 @@ function PlanInspector({
                   type="button"
                   onClick={() => onSelectGoal(child.id)}
                 >
-                  <span className="ghq-tree-node__health ghq-tree-node__health--on_track" />
                   <span>{child.title}</span>
                   {child.horizonName && (
                     <span className="ghq-tree-node__horizon">{child.horizonName}</span>
@@ -344,13 +383,21 @@ function PlanInspector({
           </div>
         )}
 
-        <button
-          className="button button--ghost button--small ghq-inspector__breakdown-btn"
-          type="button"
-          onClick={() => onCreateChild(goal)}
-        >
-          + Add sub-goal
-        </button>
+        <label className="ghq-inspector__section">
+          <span className="ghq-inspector__section-title">Part of</span>
+          <select
+            className="ghq-planning-form__select"
+            value={goal.parentGoalId ?? ""}
+            onChange={(event) => onReparent(goal.id, event.target.value || null)}
+          >
+            <option value="">Nothing (top-level goal)</option>
+            {parentOptions.map((option) => (
+              <option key={option.id} value={option.id}>
+                {option.title}
+              </option>
+            ))}
+          </select>
+        </label>
 
         {goal.linkedHabits.length > 0 && (
           <div className="ghq-inspector__section">
@@ -474,12 +521,16 @@ export function GoalsPlanWorkspace({
   createIsPending: boolean;
 }) {
   const [planView, setPlanView] = useState<PlanSubview>("graph");
-  const [isGraphExpanded, setIsGraphExpanded] = useState(false);
-  const [isGraphFocusMode, setIsGraphFocusMode] = useState(false);
-  const [isFocusBoardOpen, setIsFocusBoardOpen] = useState(false);
-  const [focusBoardScrollRequest, setFocusBoardScrollRequest] = useState(0);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [isFocusOpen, setIsFocusOpen] = useState(false);
   const [inspectedGoalId, setInspectedGoalId] = useState<string | null>(null);
-  const [expandedGoalIds, setExpandedGoalIds] = useState<Set<string>>(new Set());
+  // Every branch starts open so each horizon shows what it holds. Goals that
+  // are already loaded open on the first render, so the map doesn't jump.
+  const [expandedGoalIds, setExpandedGoalIds] = useState<Set<string>>(
+    () => new Set(goals.filter((goal) => goal.status === "active").map((goal) => goal.id)),
+  );
+  const expandInitializedRef = useRef(goals.some((goal) => goal.status === "active"));
+  const [centerRequest, setCenterRequest] = useState<CenterRequest | null>(null);
   const [selectedPlanningSelection, setSelectedPlanningSelection] = useState<PlanningSelection | null>(null);
   const [planningDraft, setPlanningDraft] = useState<PlanningDraft | null>(null);
   const [planningReplaceState, setPlanningReplaceState] = useState<PlanningReplaceState | null>(null);
@@ -492,30 +543,38 @@ export function GoalsPlanWorkspace({
     horizonId: string | null;
     domainId: string;
   } | null>(null);
-  const focusBoardRef = useRef<HTMLDivElement | null>(null);
+  const { host: stageHost, attachSlot: attachStageSlot } = useMovableHost(isFullscreen && planView === "graph");
 
   const activeGoals = useMemo(
     () => goals.filter((goal) => goal.status === "active"),
     [goals],
   );
-  const rootGoalIds = useMemo(() => getRootGoalIds(activeGoals), [activeGoals]);
   const tree = useMemo(() => buildHierarchyTree(activeGoals), [activeGoals]);
   const selectedGoal = useMemo(
     () => (selectedGoalId ? goals.find((goal) => goal.id === selectedGoalId) ?? null : null),
     [goals, selectedGoalId],
   );
-  const inspectedGoal = useMemo(
-    () => (inspectedGoalId ? goals.find((goal) => goal.id === inspectedGoalId) ?? null : null),
-    [goals, inspectedGoalId],
-  );
   const todayDate = todayAlignment.date || getTodayDate();
   const weekStart = weekPlan?.startDate ?? getWeekStartDate(todayDate);
   const monthStart = monthPlan?.startDate ?? getMonthStartDate(todayDate);
+  const monthLabel = new Date(`${monthStart}T12:00:00`).toLocaleDateString(undefined, { month: "long" });
+  const weekLabel = `Week of ${formatShortDate(weekStart)}`;
 
   const updateWeekMutation = useUpdateWeekPrioritiesMutation(weekStart);
   const updateMonthMutation = useUpdateMonthFocusMutation(monthStart);
   const updateGoalMutation = useUpdateGoalMutation();
   const createGoalMutation = useCreateGoalMutation();
+
+  const monthItems = useMemo(
+    () => getPlanningItems("month", weekPlan, monthPlan, todayAlignment),
+    [monthPlan, todayAlignment, weekPlan],
+  );
+  const weekItems = useMemo(
+    () => getPlanningItems("week", weekPlan, monthPlan, todayAlignment),
+    [monthPlan, todayAlignment, weekPlan],
+  );
+  const monthSlotByGoalId = useMemo(() => buildSlotMap(monthItems), [monthItems]);
+  const weekSlotByGoalId = useMemo(() => buildSlotMap(weekItems), [weekItems]);
 
   const clearPlanningUi = useCallback(() => {
     setSelectedPlanningSelection(null);
@@ -536,44 +595,39 @@ export function GoalsPlanWorkspace({
 
   useEffect(() => {
     if (planView !== "graph") {
-      setIsGraphExpanded(false);
-      setIsGraphFocusMode(false);
+      setIsFullscreen(false);
+      setCenterRequest(null);
     }
   }, [planView]);
 
+  // Goals that arrive after mount open once; afterwards only drop ids that no
+  // longer exist.
   useEffect(() => {
     const validGoalIds = new Set(activeGoals.map((goal) => goal.id));
     if (inspectedGoalId && !validGoalIds.has(inspectedGoalId)) {
       setInspectedGoalId(null);
     }
 
+    if (!expandInitializedRef.current && activeGoals.length > 0) {
+      expandInitializedRef.current = true;
+      setExpandedGoalIds(new Set(validGoalIds));
+      return;
+    }
+
     setExpandedGoalIds((current) => {
       const next = new Set([...current].filter((goalId) => validGoalIds.has(goalId)));
-      if (next.size === 0) {
-        for (const rootGoalId of rootGoalIds) {
-          next.add(rootGoalId);
-        }
-      }
-      return areGoalIdSetsEqual(current, next) ? current : next;
+      return next.size === current.size ? current : next;
     });
-  }, [activeGoals, inspectedGoalId, rootGoalIds]);
+  }, [activeGoals, inspectedGoalId]);
 
   useEffect(() => {
-    clearPlanningUi();
-  }, [selectedGoalId, clearPlanningUi]);
-
-  useEffect(() => {
-    setGraphStructureError(null);
-    setGraphStructureMessage(null);
     setGraphChildDraft((current) => {
       if (!current) {
         return current;
       }
-
-      const parentStillExists = activeGoals.some((goal) => goal.id === current.parentGoalId);
-      return parentStillExists ? current : null;
+      return activeGoals.some((goal) => goal.id === current.parentGoalId) ? current : null;
     });
-  }, [activeGoals, selectedGoalId]);
+  }, [activeGoals]);
 
   useEffect(() => {
     if (selectedPlanningSelection && !selectedPlanningItem) {
@@ -582,67 +636,90 @@ export function GoalsPlanWorkspace({
   }, [selectedPlanningItem, selectedPlanningSelection]);
 
   useEffect(() => {
-    if (selectedPlanningSelection || planningDraft || planningReplaceState) {
-      setIsFocusBoardOpen(true);
+    if (!graphStructureMessage) {
+      return undefined;
     }
-  }, [planningDraft, planningReplaceState, selectedPlanningSelection]);
-
-  useEffect(() => {
-    if (!focusBoardScrollRequest || !isFocusBoardOpen || isGraphExpanded) {
-      return;
-    }
-
-    const timeoutId = window.setTimeout(() => {
-      focusBoardRef.current?.scrollIntoView({
-        behavior: "smooth",
-        block: "start",
-      });
-    }, 80);
-
+    const timeoutId = window.setTimeout(() => setGraphStructureMessage(null), 3500);
     return () => window.clearTimeout(timeoutId);
-  }, [focusBoardScrollRequest, isFocusBoardOpen, isGraphExpanded]);
+  }, [graphStructureMessage]);
 
   useEffect(() => {
-    if (!isGraphExpanded) return undefined;
+    if (!isFullscreen) {
+      return undefined;
+    }
 
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        setIsGraphExpanded(false);
+    document.body.classList.add("ghq-fullscreen-body");
+    return () => {
+      document.body.classList.remove("ghq-fullscreen-body");
+      if (document.fullscreenElement) {
+        void document.exitFullscreen().catch(() => undefined);
       }
     };
+  }, [isFullscreen]);
 
-    document.body.classList.add("ghq-graph-expanded-body");
-    window.addEventListener("keydown", handleKeyDown);
+  const handleToggleFullscreen = useCallback(() => {
+    setIsFullscreen((current) => !current);
+  }, []);
 
-    return () => {
-      document.body.classList.remove("ghq-graph-expanded-body");
-      window.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [isGraphExpanded]);
+  const handleRequestCenter = useCallback((goalId: string) => {
+    setCenterRequest({ goalId, nonce: Date.now() });
+  }, []);
+
+  const handleRevealGoal = useCallback(
+    (goalId: string) => {
+      const ancestorIds = getGoalAncestorIds(activeGoals, goalId);
+      if (ancestorIds.length === 0) {
+        return;
+      }
+      setExpandedGoalIds((current) => {
+        if (ancestorIds.every((ancestorId) => current.has(ancestorId))) {
+          return current;
+        }
+        return new Set([...current, ...ancestorIds]);
+      });
+    },
+    [activeGoals],
+  );
+
+  // A goal that appears after the first load (New goal, a duplicate, a
+  // sub-goal) becomes the selection and is brought into view, so it never
+  // lands somewhere off screen on a large map.
+  const knownGoalIdsRef = useRef<Set<string> | null>(null);
+  useEffect(() => {
+    const currentIds = new Set(activeGoals.map((goal) => goal.id));
+    const knownIds = knownGoalIdsRef.current;
+    knownGoalIdsRef.current = currentIds;
+    if (!knownIds) {
+      return;
+    }
+    const addedIds = [...currentIds].filter((goalId) => !knownIds.has(goalId));
+    if (addedIds.length !== 1) {
+      return;
+    }
+    const [goalId] = addedIds;
+    handleRevealGoal(goalId);
+    handleRequestCenter(goalId);
+    if (goalId !== selectedGoalId) {
+      onSelectGoal(goalId);
+    }
+  }, [activeGoals, handleRequestCenter, handleRevealGoal, onSelectGoal, selectedGoalId]);
 
   const getLanePending = useCallback(
-    (lane: PlanningLane) => {
-      if (lane === "month") return updateMonthMutation.isPending;
-      return updateWeekMutation.isPending;
-    },
+    (lane: RailLane) => (lane === "month" ? updateMonthMutation.isPending : updateWeekMutation.isPending),
     [updateMonthMutation.isPending, updateWeekMutation.isPending],
   );
 
   const getLaneErrorMessage = useCallback(
-    (lane: PlanningLane) => {
-      const error =
-        lane === "month"
-          ? updateMonthMutation.error
-          : updateWeekMutation.error;
-
-      return error instanceof Error ? error.message : null;
+    (lane: RailLane) => {
+      const error = lane === "month" ? updateMonthMutation.error : updateWeekMutation.error;
+      return planningError ?? (error instanceof Error ? error.message : null);
     },
-    [updateMonthMutation.error, updateWeekMutation.error],
+    [planningError, updateMonthMutation.error, updateWeekMutation.error],
   );
 
   const commitLaneItems = useCallback(
     async (
-      lane: PlanningLane,
+      lane: RailLane,
       items: Array<{
         id?: string;
         slot: PlanningSlot;
@@ -651,50 +728,48 @@ export function GoalsPlanWorkspace({
       }>,
     ) => {
       setPlanningError(null);
+      const payload = sortPlanningItemsBySlot(items).map((item) => ({
+        id: item.id,
+        slot: item.slot,
+        title: item.title.trim(),
+        goalId: item.goalId,
+      }));
 
       if (lane === "month") {
         await updateMonthMutation.mutateAsync({
           theme: monthPlan?.theme ?? null,
-          topOutcomes: sortPlanningItemsBySlot(items).map((item) => ({
-            id: item.id,
-            slot: item.slot,
-            title: item.title.trim(),
-            goalId: item.goalId,
-          })),
+          topOutcomes: payload,
         });
         return;
       }
 
-      if (lane === "week") {
-        await updateWeekMutation.mutateAsync({
-          priorities: sortPlanningItemsBySlot(items).map((item) => ({
-            id: item.id,
-            slot: item.slot,
-            title: item.title.trim(),
-            goalId: item.goalId,
-          })),
-        });
-        return;
-      }
+      await updateWeekMutation.mutateAsync({ priorities: payload });
     },
     [monthPlan?.theme, updateMonthMutation, updateWeekMutation],
+  );
+
+  const laneItems = useCallback(
+    (lane: RailLane): PlanningItem[] => (lane === "month" ? monthItems : weekItems),
+    [monthItems, weekItems],
   );
 
   const handleGraphSelectGoal = useCallback(
     (goalId: string) => {
       clearPlanningUi();
       setGraphStructureError(null);
-      setGraphStructureMessage(null);
-      onSelectGoal(goalId);
+      // An open details panel follows the selection.
+      setInspectedGoalId((current) => (current ? goalId : current));
+      if (goalId !== selectedGoalId) {
+        onSelectGoal(goalId);
+      }
     },
-    [clearPlanningUi, onSelectGoal],
+    [clearPlanningUi, onSelectGoal, selectedGoalId],
   );
 
   const handleInspectGoal = useCallback(
     (goalId: string) => {
       clearPlanningUi();
       setGraphStructureError(null);
-      setGraphStructureMessage(null);
       setInspectedGoalId(goalId);
 
       if (selectedGoalId !== goalId) {
@@ -712,33 +787,19 @@ export function GoalsPlanWorkspace({
     [onSelectGoal],
   );
 
-  const handleOpenPlanningBoard = useCallback(
-    (goalId?: string) => {
-      clearPlanningUi();
-      if (goalId && goalId !== selectedGoalId) {
-        onSelectGoal(goalId);
-      }
-      setIsFocusBoardOpen(true);
-      setFocusBoardScrollRequest((current) => current + 1);
-      setGraphStructureError(null);
-      setGraphStructureMessage(null);
-    },
-    [clearPlanningUi, onSelectGoal, selectedGoalId],
-  );
-
   const handleSelectPlanningSlot = useCallback(
-    (lane: PlanningLane, slot: PlanningSlot) => {
+    (lane: RailLane, slot: PlanningSlot) => {
       setPlanningError(null);
 
-      const laneItems = getPlanningItems(lane, weekPlan, monthPlan, todayAlignment);
-      const existingItem = laneItems.find((item) => item.slot === slot) ?? null;
+      const items = laneItems(lane);
+      const existingItem = items.find((item) => item.slot === slot) ?? null;
 
       if (existingItem) {
         setPlanningDraft(null);
         const selectedGoalAlreadyInLane = selectedGoal
-          ? laneItems.some((item) => item.goalId === selectedGoal.id)
+          ? items.some((item) => item.goalId === selectedGoal.id)
           : false;
-        const openSlot = findFirstOpenSlot(laneItems.map((item) => item.slot as PlanningSlot));
+        const openSlot = findFirstOpenSlot(items.map((item) => item.slot));
 
         if (
           selectedGoal
@@ -756,43 +817,43 @@ export function GoalsPlanWorkspace({
         return;
       }
 
-      if (!selectedGoal) {
-        return;
-      }
+      const goalForDraft = selectedGoal && !items.some((item) => item.goalId === selectedGoal.id)
+        ? selectedGoal
+        : null;
 
       setSelectedPlanningSelection(null);
+      setPlanningReplaceState(null);
       setPlanningDraft({
         lane,
         slot,
-        title: buildDraftTitleForGoal(lane, selectedGoal),
-        goalId: selectedGoal.id,
+        title: buildDraftTitleForGoal(lane, goalForDraft),
+        goalId: goalForDraft?.id ?? "",
       });
     },
-    [monthPlan, selectedGoal, todayAlignment, weekPlan],
+    [laneItems, selectedGoal],
   );
 
   const handleDropGoalToPlanningSlot = useCallback(
-    (lane: "month" | "week", slot: PlanningSlot, goalId: string) => {
+    (lane: RailLane, slot: PlanningSlot, goalId: string) => {
       const goal = activeGoals.find((item) => item.id === goalId);
       if (!goal) {
         return;
       }
 
-      const laneItems = getPlanningItems(lane, weekPlan, monthPlan, todayAlignment);
-      const existingItem = laneItems.find((item) => item.slot === slot) ?? null;
-      const goalAlreadyInLane = laneItems.find((item) => item.goalId === goal.id) ?? null;
+      const items = laneItems(lane);
+      const existingItem = items.find((item) => item.slot === slot) ?? null;
+      const goalAlreadyInLane = items.find((item) => item.goalId === goal.id) ?? null;
 
       if (selectedGoalId !== goal.id) {
         onSelectGoal(goal.id);
       }
 
-      setIsFocusBoardOpen(true);
       setPlanningError(null);
       setPlanningDraft(null);
       setSelectedPlanningSelection(null);
+      setPlanningReplaceState(null);
 
       if (goalAlreadyInLane) {
-        setPlanningReplaceState(null);
         setSelectedPlanningSelection({ lane, slot: goalAlreadyInLane.slot });
         return;
       }
@@ -802,7 +863,6 @@ export function GoalsPlanWorkspace({
         return;
       }
 
-      setPlanningReplaceState(null);
       setPlanningDraft({
         lane,
         slot,
@@ -810,63 +870,76 @@ export function GoalsPlanWorkspace({
         goalId: goal.id,
       });
     },
-    [activeGoals, monthPlan, onSelectGoal, selectedGoalId, todayAlignment, weekPlan],
+    [activeGoals, laneItems, onSelectGoal, selectedGoalId],
   );
 
+  // Adding commits straight away; the goal title is a fine first wording and
+  // can be edited in Focus. A full lane opens Focus to choose what it replaces.
   const handleAddGoalToLane = useCallback(
-    (lane: "month" | "week", goal: GoalOverviewItem | null) => {
+    async (lane: RailLane, goalId: string) => {
+      const goal = activeGoals.find((item) => item.id === goalId);
       if (!goal) {
         return;
       }
 
-      const items = getPlanningItems(lane, weekPlan, monthPlan, todayAlignment);
-      const existingItem = items.find((item) => item.goalId === goal.id);
-      if (existingItem) {
-        setPlanningDraft(null);
-        setPlanningReplaceState(null);
-        setSelectedPlanningSelection({ lane, slot: existingItem.slot });
-        setIsFocusBoardOpen(true);
-        return;
-      }
-
-      const openSlot = findFirstOpenSlot(items.map((item) => item.slot as PlanningSlot));
-      if (!openSlot) {
-        setPlanningError(`All ${lane} slots are full. Select a slot to replace.`);
-        setIsFocusBoardOpen(true);
-        return;
-      }
-
+      clearPlanningUi();
+      setGraphStructureError(null);
       if (selectedGoalId !== goal.id) {
         onSelectGoal(goal.id);
       }
 
-      setSelectedPlanningSelection(null);
-      setPlanningReplaceState(null);
-      setPlanningDraft({
-        lane,
-        slot: openSlot,
-        title: buildDraftTitleForGoal(lane, goal),
-        goalId: goal.id,
-      });
-      setIsFocusBoardOpen(true);
-      setFocusBoardScrollRequest((current) => current + 1);
+      const items = laneItems(lane);
+      const prefix = lane === "month" ? "M" : "W";
+      const laneName = lane === "month" ? monthLabel : "this week";
+      const existingItem = items.find((item) => item.goalId === goal.id);
+      if (existingItem) {
+        setGraphStructureMessage(`“${goal.title}” is already in ${laneName} as ${prefix}${existingItem.slot}.`);
+        return;
+      }
+
+      const openSlot = findFirstOpenSlot(items.map((item) => item.slot));
+      if (!openSlot) {
+        setPlanView("graph");
+        setInspectedGoalId(null);
+        setIsFocusOpen(true);
+        setPlanningError(
+          `${lane === "month" ? monthLabel : "This week"} already has three. Choose one to replace with “${goal.title}”.`,
+        );
+        return;
+      }
+
+      try {
+        await commitLaneItems(lane, [
+          ...items.map((item) => ({ id: item.id, slot: item.slot, title: item.title, goalId: item.goalId })),
+          { slot: openSlot, title: buildDraftTitleForGoal(lane, goal), goalId: goal.id },
+        ]);
+        setGraphStructureMessage(`Added “${goal.title}” to ${laneName} as ${prefix}${openSlot}.`);
+      } catch (error) {
+        setGraphStructureError(error instanceof Error ? error.message : "The goal could not be added.");
+      }
     },
-    [monthPlan, onSelectGoal, selectedGoalId, todayAlignment, weekPlan],
+    [activeGoals, clearPlanningUi, commitLaneItems, laneItems, monthLabel, onSelectGoal, selectedGoalId],
   );
 
-  const handleAddSelectedGoalToLane = useCallback(
-    (lane: "month" | "week") => {
-      handleAddGoalToLane(lane, selectedGoal);
-    },
-    [handleAddGoalToLane, selectedGoal],
-  );
+  const handleSetGoalHorizon = useCallback(
+    async (goalId: string, horizonId: string | null) => {
+      const goal = activeGoals.find((item) => item.id === goalId);
+      if (!goal || goal.horizonId === horizonId) {
+        return;
+      }
 
-  const handleAddGoalIdToLane = useCallback(
-    (lane: "month" | "week", goalId: string) => {
-      const goal = activeGoals.find((item) => item.id === goalId) ?? null;
-      handleAddGoalToLane(lane, goal);
+      const horizonName = horizonId ? horizons.find((horizon) => horizon.id === horizonId)?.name ?? null : null;
+      try {
+        await updateGoalMutation.mutateAsync({ goalId, horizonId });
+        setGraphStructureError(null);
+        setGraphStructureMessage(
+          horizonId ? `Moved “${goal.title}” to ${horizonName ?? "that horizon"}.` : `“${goal.title}” is now unplaced.`,
+        );
+      } catch (error) {
+        setGraphStructureError(error instanceof Error ? error.message : "The goal could not be moved.");
+      }
     },
-    [activeGoals, handleAddGoalToLane],
+    [activeGoals, horizons, updateGoalMutation],
   );
 
   const handlePlanningDraftChange = useCallback((updates: Partial<PlanningDraft>) => {
@@ -874,18 +947,15 @@ export function GoalsPlanWorkspace({
   }, []);
 
   const handlePlanningDraftSave = useCallback(async () => {
-    if (!planningDraft || !planningDraft.title.trim()) {
+    if (!planningDraft || !planningDraft.title.trim() || planningDraft.lane === "today") {
       return;
     }
 
-    const currentItems: PlanningItem[] =
-      planningDraft.lane === "month"
-        ? monthPlan?.topOutcomes ?? []
-        : weekPlan?.priorities ?? [];
+    const lane = planningDraft.lane;
 
     try {
-      await commitLaneItems(planningDraft.lane, [
-        ...currentItems.map((item) => ({
+      await commitLaneItems(lane, [
+        ...laneItems(lane).map((item) => ({
           id: item.id,
           slot: item.slot,
           title: item.title,
@@ -898,15 +968,11 @@ export function GoalsPlanWorkspace({
         },
       ]);
 
-      setSelectedPlanningSelection({
-        lane: planningDraft.lane,
-        slot: planningDraft.slot,
-      });
       setPlanningDraft(null);
     } catch (error) {
       setPlanningError(error instanceof Error ? error.message : "Planning item could not be saved.");
     }
-  }, [commitLaneItems, monthPlan?.topOutcomes, planningDraft, weekPlan?.priorities]);
+  }, [commitLaneItems, laneItems, planningDraft]);
 
   const handlePlanningDraftCancel = useCallback(() => {
     setPlanningDraft(null);
@@ -920,22 +986,20 @@ export function GoalsPlanWorkspace({
 
   const handlePlanningReplaceAction = useCallback(
     async (action: "replace" | "move") => {
-      if (!planningReplaceState) {
+      if (!planningReplaceState || planningReplaceState.lane === "today") {
         return;
       }
 
+      const lane = planningReplaceState.lane;
       const goal = activeGoals.find((item) => item.id === planningReplaceState.goalId);
       if (!goal) {
         return;
       }
 
-      const currentItems: PlanningItem[] =
-        planningReplaceState.lane === "month"
-          ? monthPlan?.topOutcomes ?? []
-          : weekPlan?.priorities ?? [];
+      const currentItems = laneItems(lane);
       const targetItem = currentItems.find((item) => item.slot === planningReplaceState.slot) ?? null;
-      const openSlot = findFirstOpenSlot(currentItems.map((item) => item.slot as PlanningSlot));
-      const replacementTitle = buildDraftTitleForGoal(planningReplaceState.lane, goal);
+      const openSlot = findFirstOpenSlot(currentItems.map((item) => item.slot));
+      const replacementTitle = buildDraftTitleForGoal(lane, goal);
 
       if (!targetItem) {
         setPlanningReplaceState(null);
@@ -944,33 +1008,16 @@ export function GoalsPlanWorkspace({
 
       try {
         if (action === "move" && openSlot) {
-          await commitLaneItems(
-            planningReplaceState.lane,
-            sortPlanningItemsBySlot([
-              ...currentItems
-                .filter((item) => item.slot !== planningReplaceState.slot)
-                .map((item) => ({
-                  id: item.id,
-                  slot: item.slot,
-                  title: item.title,
-                  goalId: item.goalId,
-                })),
-              {
-                id: targetItem.id,
-                slot: openSlot,
-                title: targetItem.title,
-                goalId: targetItem.goalId,
-              },
-              {
-                slot: planningReplaceState.slot,
-                title: replacementTitle,
-                goalId: planningReplaceState.goalId,
-              },
-            ]),
-          );
+          await commitLaneItems(lane, [
+            ...currentItems
+              .filter((item) => item.slot !== planningReplaceState.slot)
+              .map((item) => ({ id: item.id, slot: item.slot, title: item.title, goalId: item.goalId })),
+            { id: targetItem.id, slot: openSlot, title: targetItem.title, goalId: targetItem.goalId },
+            { slot: planningReplaceState.slot, title: replacementTitle, goalId: planningReplaceState.goalId },
+          ]);
         } else {
           await commitLaneItems(
-            planningReplaceState.lane,
+            lane,
             currentItems.map((item) => ({
               id: item.id,
               slot: item.slot,
@@ -980,16 +1027,12 @@ export function GoalsPlanWorkspace({
           );
         }
 
-        setSelectedPlanningSelection({
-          lane: planningReplaceState.lane,
-          slot: planningReplaceState.slot,
-        });
         setPlanningReplaceState(null);
       } catch (error) {
         setPlanningError(error instanceof Error ? error.message : "Planning item could not be replaced.");
       }
     },
-    [activeGoals, commitLaneItems, monthPlan?.topOutcomes, planningReplaceState, weekPlan?.priorities],
+    [activeGoals, commitLaneItems, laneItems, planningReplaceState],
   );
 
   const handleToggleGoalExpanded = useCallback((goalId: string) => {
@@ -1006,16 +1049,11 @@ export function GoalsPlanWorkspace({
 
   const handleExpandAllGoals = useCallback(() => {
     setExpandedGoalIds(new Set(activeGoals.map((goal) => goal.id)));
-    setGraphStructureError(null);
-    setGraphStructureMessage("All branches expanded.");
   }, [activeGoals]);
 
   const handleCollapseAllGoals = useCallback(() => {
-    setExpandedGoalIds(new Set(rootGoalIds));
-    setGraphStructureError(null);
-    setGraphStructureMessage("Showing top-level goals only.");
-    setIsGraphFocusMode(false);
-  }, [rootGoalIds]);
+    setExpandedGoalIds(new Set());
+  }, []);
 
   const handleOpenGraphChildDraft = useCallback(
     (parentGoalId: string) => {
@@ -1025,19 +1063,13 @@ export function GoalsPlanWorkspace({
       }
 
       setGraphStructureError(null);
-      setGraphStructureMessage(null);
       setGraphChildDraft({
         parentGoalId,
         title: "",
         horizonId: suggestChildHorizon(parentGoal.horizonId, horizons) || null,
         domainId: parentGoal.domainId,
       });
-      setExpandedGoalIds((current) => new Set(current).add(parentGoalId));
-      window.setTimeout(() => {
-        const input = document.querySelector<HTMLInputElement>(".graph-child-draft__input");
-        input?.focus();
-        input?.select();
-      }, 60);
+      setExpandedGoalIds((current) => (current.has(parentGoalId) ? current : new Set(current).add(parentGoalId)));
 
       if (selectedGoalId !== parentGoalId) {
         onSelectGoal(parentGoalId);
@@ -1069,7 +1101,7 @@ export function GoalsPlanWorkspace({
       setGraphStructureMessage("Sub-goal created.");
       setExpandedGoalIds((current) => new Set(current).add(graphChildDraft.parentGoalId));
     } catch (error) {
-      setGraphStructureError(error instanceof Error ? error.message : "Supporting goal could not be created.");
+      setGraphStructureError(error instanceof Error ? error.message : "Sub-goal could not be created.");
     }
   }, [createGoalMutation, graphChildDraft]);
 
@@ -1085,7 +1117,7 @@ export function GoalsPlanWorkspace({
       }
 
       if (isGoalDescendant(activeGoals, draggedGoalId, targetGoalId)) {
-        setGraphStructureError("A goal cannot be moved under one of its own descendants.");
+        setGraphStructureError("A goal can't move under one of its own sub-goals.");
         return;
       }
 
@@ -1099,10 +1131,10 @@ export function GoalsPlanWorkspace({
           parentGoalId: targetGoalId,
         });
         setGraphStructureError(null);
-        setGraphStructureMessage(`Moved "${draggedGoal.title}" under this goal.`);
+        setGraphStructureMessage(`Moved “${draggedGoal.title}”.`);
         setExpandedGoalIds((current) => new Set(current).add(targetGoalId));
       } catch (error) {
-        setGraphStructureError(error instanceof Error ? error.message : "Goal hierarchy could not be updated.");
+        setGraphStructureError(error instanceof Error ? error.message : "Goal could not be moved.");
       }
     },
     [activeGoals, updateGoalMutation],
@@ -1121,8 +1153,7 @@ export function GoalsPlanWorkspace({
           parentGoalId: null,
         });
         setGraphStructureError(null);
-        setGraphStructureMessage(`"${goal.title}" is now top-level.`);
-        setExpandedGoalIds((current) => new Set(current).add(goalId));
+        setGraphStructureMessage(`“${goal.title}” is now top-level.`);
       } catch (error) {
         setGraphStructureError(error instanceof Error ? error.message : "Goal could not be detached.");
       }
@@ -1164,10 +1195,7 @@ export function GoalsPlanWorkspace({
           parkingRule: goal.parkingRule,
         });
         setGraphStructureError(null);
-        setGraphStructureMessage(`Duplicated "${goal.title}".`);
-        if (goal.parentGoalId) {
-          setExpandedGoalIds((current) => new Set(current).add(goal.parentGoalId!));
-        }
+        setGraphStructureMessage(`Duplicated “${goal.title}”.`);
       } catch (error) {
         setGraphStructureError(error instanceof Error ? error.message : "Goal could not be duplicated.");
       }
@@ -1183,7 +1211,7 @@ export function GoalsPlanWorkspace({
           status: "archived",
         });
         setGraphStructureError(null);
-        setGraphStructureMessage(`Archived "${goal.title}".`);
+        setGraphStructureMessage(`Archived “${goal.title}”.`);
         if (selectedGoalId === goal.id) {
           onClearSelectedGoal();
         }
@@ -1199,108 +1227,77 @@ export function GoalsPlanWorkspace({
 
   const handlePlanningItemSave = useCallback(
     async (updates: { title: string; goalId: string | null; slot: PlanningSlot }) => {
-      if (!selectedPlanningSelection || !selectedPlanningItem || !updates.title.trim()) {
+      if (
+        !selectedPlanningSelection
+        || !selectedPlanningItem
+        || !updates.title.trim()
+        || selectedPlanningSelection.lane === "today"
+      ) {
         return;
       }
 
-      const currentItems: PlanningItem[] =
-        selectedPlanningSelection.lane === "month"
-          ? monthPlan?.topOutcomes ?? []
-          : weekPlan?.priorities ?? [];
+      const lane = selectedPlanningSelection.lane;
 
       try {
-        await commitLaneItems(
-          selectedPlanningSelection.lane,
-          sortPlanningItemsBySlot([
-            ...currentItems
-              .filter((item) => item.slot !== selectedPlanningItem.slot)
-              .map((item) => ({
-                id: item.id,
-                slot: item.slot,
-                title: item.title,
-                goalId: item.goalId,
-              })),
-            {
-              id: selectedPlanningItem.id,
-              slot: updates.slot,
-              title: updates.title.trim(),
-              goalId: updates.goalId,
-            },
-          ]),
-        );
+        await commitLaneItems(lane, [
+          ...laneItems(lane)
+            .filter((item) => item.slot !== selectedPlanningItem.slot)
+            .map((item) => ({ id: item.id, slot: item.slot, title: item.title, goalId: item.goalId })),
+          {
+            id: selectedPlanningItem.id,
+            slot: updates.slot,
+            title: updates.title.trim(),
+            goalId: updates.goalId,
+          },
+        ]);
 
-        setSelectedPlanningSelection({
-          lane: selectedPlanningSelection.lane,
-          slot: updates.slot,
-        });
+        setSelectedPlanningSelection(null);
       } catch (error) {
         setPlanningError(error instanceof Error ? error.message : "Planning item could not be updated.");
       }
     },
-    [commitLaneItems, monthPlan?.topOutcomes, selectedPlanningItem, selectedPlanningSelection, weekPlan?.priorities],
+    [commitLaneItems, laneItems, selectedPlanningItem, selectedPlanningSelection],
   );
 
   const handlePlanningItemRemove = useCallback(async () => {
-    if (!selectedPlanningSelection || !selectedPlanningItem) {
+    if (!selectedPlanningSelection || !selectedPlanningItem || selectedPlanningSelection.lane === "today") {
       return;
     }
 
-    const currentItems: PlanningItem[] =
-      selectedPlanningSelection.lane === "month"
-        ? monthPlan?.topOutcomes ?? []
-        : weekPlan?.priorities ?? [];
+    const lane = selectedPlanningSelection.lane;
 
     try {
       await commitLaneItems(
-        selectedPlanningSelection.lane,
-        currentItems
+        lane,
+        laneItems(lane)
           .filter((item) => item.slot !== selectedPlanningItem.slot)
-          .map((item) => ({
-            id: item.id,
-            slot: item.slot,
-            title: item.title,
-            goalId: item.goalId,
-          })),
+          .map((item) => ({ id: item.id, slot: item.slot, title: item.title, goalId: item.goalId })),
       );
       setSelectedPlanningSelection(null);
     } catch (error) {
       setPlanningError(error instanceof Error ? error.message : "Planning item could not be removed.");
     }
-  }, [commitLaneItems, monthPlan?.topOutcomes, selectedPlanningItem, selectedPlanningSelection, weekPlan?.priorities]);
+  }, [commitLaneItems, laneItems, selectedPlanningItem, selectedPlanningSelection]);
 
   const handleJumpToLinkedGoal = useCallback(
     (goalId: string) => {
-      setSelectedPlanningSelection(null);
-      setPlanningDraft(null);
-      setPlanningReplaceState(null);
-      setPlanningError(null);
+      clearPlanningUi();
       setGraphStructureError(null);
+      handleRevealGoal(goalId);
+      handleRequestCenter(goalId);
 
       if (selectedGoalId !== goalId) {
         onSelectGoal(goalId);
       }
     },
-    [onSelectGoal, selectedGoalId],
+    [clearPlanningUi, handleRequestCenter, handleRevealGoal, onSelectGoal, selectedGoalId],
   );
 
-  const handleEnterGraphFocusMode = useCallback(() => {
-    if (!selectedGoalId) {
-      return;
-    }
-    setIsGraphFocusMode(true);
-  }, [selectedGoalId]);
-
-  const handleExitGraphFocusMode = useCallback(() => {
-    setIsGraphFocusMode(false);
-  }, []);
-
-  const handleClearGraphSelection = useCallback(() => {
+  const handleClearSelection = useCallback(() => {
     clearPlanningUi();
     setGraphChildDraft(null);
     setGraphStructureError(null);
-    setGraphStructureMessage(null);
     setInspectedGoalId(null);
-    setIsGraphFocusMode(false);
 
     if (showChildForm) {
       onCancelChildForm();
@@ -1311,7 +1308,6 @@ export function GoalsPlanWorkspace({
 
   const handleGraphPaneClear = useCallback(() => {
     setGraphStructureError(null);
-    setGraphStructureMessage(null);
 
     if (showChildForm) {
       onCancelChildForm();
@@ -1319,25 +1315,20 @@ export function GoalsPlanWorkspace({
     }
 
     if (
-      selectedGoalId ||
-      inspectedGoalId ||
-      selectedPlanningSelection ||
-      planningDraft ||
-      planningReplaceState ||
-      graphChildDraft
+      selectedGoalId
+      || inspectedGoalId
+      || selectedPlanningSelection
+      || planningDraft
+      || planningReplaceState
+      || graphChildDraft
     ) {
-      clearPlanningUi();
-      setGraphChildDraft(null);
-      setInspectedGoalId(null);
-      setIsGraphFocusMode(false);
-      onClearSelectedGoal();
+      handleClearSelection();
     }
   }, [
-    clearPlanningUi,
     graphChildDraft,
+    handleClearSelection,
     inspectedGoalId,
     onCancelChildForm,
-    onClearSelectedGoal,
     planningDraft,
     planningReplaceState,
     selectedGoalId,
@@ -1345,250 +1336,301 @@ export function GoalsPlanWorkspace({
     showChildForm,
   ]);
 
-  const inspectorContent = showChildForm && childFormParent ? (
-    <div className="ghq-inspector">
-      <div className="ghq-inspector__header">
-        <h2 className="ghq-inspector__title">Create sub-goal</h2>
-      </div>
-      <div className="ghq-inspector__body">
-        <GoalFormDialog
-          form={childForm}
-          editing={false}
-          isPending={createIsPending}
-          domains={domains}
-          horizons={horizons}
-          parentGoal={childFormParent}
-          onChangeForm={onChangeChildForm}
-          onSubmit={onSubmitChildForm}
-          onCancel={onCancelChildForm}
-        />
-      </div>
-    </div>
-  ) : inspectedGoalId ? (
+  // Esc peels one layer at a time: an open edit, then details, then the
+  // selection, then full screen.
+  const escapeRef = useRef<() => void>(() => undefined);
+  escapeRef.current = () => {
+    if (planningDraft || planningReplaceState || selectedPlanningSelection) {
+      clearPlanningUi();
+      return;
+    }
+    if (graphChildDraft) {
+      setGraphChildDraft(null);
+      return;
+    }
+    if (inspectedGoalId) {
+      setInspectedGoalId(null);
+      return;
+    }
+    if (isFocusOpen) {
+      setIsFocusOpen(false);
+      return;
+    }
+    if (selectedGoalId) {
+      handleClearSelection();
+      return;
+    }
+    if (isFullscreen) {
+      setIsFullscreen(false);
+    }
+  };
+  const handleEscape = useCallback(() => escapeRef.current(), []);
+
+  // Focus and details share the side column; details sit on top of Focus.
+  const handleToggleFocus = useCallback(() => {
+    if (inspectedGoalId) {
+      setInspectedGoalId(null);
+      setIsFocusOpen(true);
+      return;
+    }
+    if (isFocusOpen) {
+      clearPlanningUi();
+    }
+    setIsFocusOpen(!isFocusOpen);
+  }, [clearPlanningUi, inspectedGoalId, isFocusOpen]);
+
+  const handleCloseFocus = useCallback(() => {
+    clearPlanningUi();
+    setIsFocusOpen(false);
+  }, [clearPlanningUi]);
+
+  const handleInspectorCreateChild = useCallback(
+    (goal: GoalOverviewItem) => {
+      if (planView === "graph") {
+        handleOpenGraphChildDraft(goal.id);
+        return;
+      }
+      onStartCreateChild(goal);
+    },
+    [handleOpenGraphChildDraft, onStartCreateChild, planView],
+  );
+
+  const renderInspector = (goalId: string, onClose: () => void) => (
     <PlanInspector
-      goalId={inspectedGoalId}
+      goalId={goalId}
       domains={domains}
+      activeGoals={activeGoals}
+      onClose={onClose}
       onSelectGoal={handleInspectGoal}
       onEditGoal={onEditGoal}
-      onCreateChild={(goal) => {
-        if (planView === "graph") {
-          handleOpenGraphChildDraft(goal.id);
-          return;
-        }
-        onStartCreateChild(goal);
-      }}
-      onOpenPlanning={handleOpenPlanningBoard}
+      onCreateChild={handleInspectorCreateChild}
+      onAddToLane={handleAddGoalToLane}
+      onReparent={handleReparentGoal}
     />
-  ) : planView === "outline" ? (
-    <div className="ghq-inspector ghq-inspector--empty">
-      <EmptyState
-        title="Select a goal"
-        description="Choose a goal from the hierarchy to inspect its context, edit milestones, and decide whether it belongs in your month or week focus."
-      />
+  );
+
+  const viewSwitch = (
+    <div className="ghq-plan-subview" role="group" aria-label="Plan view">
+      <button
+        className={`ghq-plan-subview__btn${planView === "graph" ? " ghq-plan-subview__btn--active" : ""}`}
+        type="button"
+        aria-pressed={planView === "graph"}
+        onClick={() => setPlanView("graph")}
+      >
+        Map
+      </button>
+      <button
+        className={`ghq-plan-subview__btn${planView === "outline" ? " ghq-plan-subview__btn--active" : ""}`}
+        type="button"
+        aria-pressed={planView === "outline"}
+        onClick={() => setPlanView("outline")}
+      >
+        Outline
+      </button>
     </div>
-  ) : null;
-
-  const monthDockItems = getPlanningItems("month", weekPlan, monthPlan, todayAlignment).map((item) => ({
-    id: item.id,
-    slot: item.slot,
-    title: item.title,
-    goalId: item.goalId,
-  }));
-  const weekDockItems = getPlanningItems("week", weekPlan, monthPlan, todayAlignment).map((item) => ({
-    id: item.id,
-    slot: item.slot,
-    title: item.title,
-    goalId: item.goalId,
-  }));
-  const monthFocusGoalIds = useMemo(
-    () => new Set(monthDockItems.flatMap((item) => (item.goalId ? [item.goalId] : []))),
-    [monthDockItems],
-  );
-  const weekFocusGoalIds = useMemo(
-    () => new Set(weekDockItems.flatMap((item) => (item.goalId ? [item.goalId] : []))),
-    [weekDockItems],
   );
 
-  return (
-    <div className={`ghq-plan-container${isGraphExpanded ? " ghq-plan-container--graph-expanded" : ""}`}>
-      <div className="ghq-plan-subview">
-        <button
-          className={`ghq-plan-subview__btn ghq-plan-subview__btn--graph${planView === "graph" ? " ghq-plan-subview__btn--active" : ""}`}
-          type="button"
-          onClick={() => setPlanView("graph")}
-        >
-          Graph
-        </button>
-        <button
-          className={`ghq-plan-subview__btn${planView === "outline" ? " ghq-plan-subview__btn--active" : ""}`}
-          type="button"
-          onClick={() => {
-            setPlanView("outline");
-            setIsGraphExpanded(false);
-          }}
-        >
-          Outline
-        </button>
+  if (planView === "outline") {
+    // The outline always shows the selected goal; closing it clears the selection.
+    const outlineGoalId = inspectedGoalId ?? selectedGoalId;
+    const outlineInspector = showChildForm && childFormParent ? (
+      <div className="ghq-inspector">
+        <div className="ghq-inspector__header">
+          <h2 className="ghq-inspector__title">Create sub-goal</h2>
+        </div>
+        <div className="ghq-inspector__body">
+          <GoalFormDialog
+            form={childForm}
+            editing={false}
+            isPending={createIsPending}
+            domains={domains}
+            horizons={horizons}
+            parentGoal={childFormParent}
+            onChangeForm={onChangeChildForm}
+            onSubmit={onSubmitChildForm}
+            onCancel={onCancelChildForm}
+          />
+        </div>
       </div>
+    ) : outlineGoalId ? (
+      renderInspector(outlineGoalId, handleClearSelection)
+    ) : (
+      <div className="ghq-inspector ghq-inspector--empty">
+        <EmptyState
+          title="Select a goal"
+          description="Choose a goal from the hierarchy to see its context, edit milestones, and decide whether it belongs in your month or week focus."
+        />
+      </div>
+    );
 
-      <div className={`ghq-plan${planView === "graph" ? " ghq-plan--graph" : ""}${isGraphExpanded ? " ghq-plan--graph-expanded" : ""}`}>
-        {planView === "outline" ? (
-          <>
-            <div className="ghq-plan__rail">
-              <div className="ghq-plan__rail-header">
-                <h2 className="ghq-plan__rail-title">Goal hierarchy</h2>
+    return (
+      <div className="ghq-plan-container">
+        {viewSwitch}
+        <div className="ghq-plan">
+          <div className="ghq-plan__rail">
+            <div className="ghq-plan__rail-header">
+              <h2 className="ghq-plan__rail-title">Goal hierarchy</h2>
+              <button
+                className="button button--ghost button--small"
+                type="button"
+                onClick={onOpenCreateGoal}
+              >
+                + New
+              </button>
+            </div>
+
+            <HorizonRoadmap horizons={horizons} goals={goals} />
+
+            {tree.length > 0 ? (
+              <HierarchyRail
+                roots={tree}
+                horizons={horizons}
+                selectedGoalId={selectedGoalId}
+                onSelectGoal={handleOutlineSelectGoal}
+              />
+            ) : (
+              <div className="ghq-plan__empty-tree">
+                <p>No active goals yet.</p>
                 <button
-                  className="button button--ghost button--small"
+                  className="button button--primary button--small"
                   type="button"
                   onClick={onOpenCreateGoal}
                 >
-                  + New
+                  Create your first goal
                 </button>
               </div>
+            )}
 
-              <HorizonRoadmap horizons={horizons} goals={goals} />
-
-              {tree.length > 0 ? (
-                <HierarchyRail
-                  roots={tree}
-                  horizons={horizons}
-                  selectedGoalId={selectedGoalId}
-                  onSelectGoal={handleOutlineSelectGoal}
-                />
-              ) : (
-                <div className="ghq-plan__empty-tree">
-                  <p>No active goals yet.</p>
-                  <button
-                    className="button button--primary button--small"
-                    type="button"
-                    onClick={onOpenCreateGoal}
-                  >
-                    Create your first goal
-                  </button>
-                </div>
-              )}
-
-              <div className="ghq-plan__rail-footer">
-                <Link to="/settings#goal-domains" className="ghq-plan__settings-link">
-                  Manage domains
-                </Link>
-                <Link to="/settings#planning-layers" className="ghq-plan__settings-link">
-                  Manage planning layers
-                </Link>
-              </div>
+            <div className="ghq-plan__rail-footer">
+              <Link to="/settings#goal-domains" className="ghq-plan__settings-link">
+                Manage domains
+              </Link>
+              <Link to="/settings#planning-layers" className="ghq-plan__settings-link">
+                Manage planning layers
+              </Link>
             </div>
-
-            <div className="ghq-plan__inspector">
-              {inspectorContent}
-            </div>
-          </>
-        ) : (
-          <div className="ghq-plan__graph-layout">
-            <div className={`ghq-plan__graph-stage${inspectedGoal && !isGraphExpanded ? " ghq-plan__graph-stage--with-inspector" : ""}`}>
-              <div className={`ghq-plan__graph${isGraphExpanded ? " ghq-plan__graph--expanded" : ""}`}>
-                <GoalsPlanGraphView
-                  goals={goals}
-                  horizons={horizons}
-                  selectedGoalId={selectedGoalId}
-                  expandedGoalIds={expandedGoalIds}
-                  isFocusMode={isGraphFocusMode}
-                  childDraft={graphChildDraft}
-                  childDraftIsPending={createGoalMutation.isPending}
-                  monthFocusGoalIds={monthFocusGoalIds}
-                  weekFocusGoalIds={weekFocusGoalIds}
-                  structureError={graphStructureError}
-                  structureMessage={graphStructureMessage}
-                  onSelectGoal={handleGraphSelectGoal}
-                  onToggleExpanded={handleToggleGoalExpanded}
-                  onExpandAll={handleExpandAllGoals}
-                  onCollapseAll={handleCollapseAllGoals}
-                  onOpenCreateGoal={onOpenCreateGoal}
-                  onOpenAddChild={handleOpenGraphChildDraft}
-                  onOpenDetails={handleInspectGoal}
-                  onOpenPlanning={handleOpenPlanningBoard}
-                  onEditGoal={onEditGoal}
-                  onDetachGoal={handleDetachGoal}
-                  onReparentGoal={handleReparentGoal}
-                  onDuplicateGoal={(goal) => void handleDuplicateGoal(goal)}
-                  onArchiveGoal={(goal) => void handleArchiveGoal(goal)}
-                  onAddToLane={handleAddGoalIdToLane}
-                  onDropGoalOnGoal={handleDropGoalOnGoal}
-                  onSaveChildDraft={handleGraphChildDraftSave}
-                  onCancelChildDraft={handleGraphChildDraftCancel}
-                  onCanvasClear={handleGraphPaneClear}
-                  isExpanded={isGraphExpanded}
-                  onEnterFocusMode={handleEnterGraphFocusMode}
-                  onExitFocusMode={handleExitGraphFocusMode}
-                  onClearSelection={handleClearGraphSelection}
-                  onToggleExpandedCanvas={() => setIsGraphExpanded((current) => !current)}
-                />
-              </div>
-
-              {inspectedGoal && !isGraphExpanded ? (
-                <aside
-                  className="ghq-plan__inspector ghq-plan__inspector--graph"
-                  aria-label="Goal details"
-                >
-                  {inspectorContent}
-                </aside>
-              ) : null}
-            </div>
-
-            {!isGraphExpanded ? (
-              <div ref={focusBoardRef}>
-                <GoalsPlanPlanningDock
-                  selectedGoal={selectedGoal}
-                  activeGoals={activeGoals}
-                  monthItems={monthDockItems}
-                  weekItems={weekDockItems}
-                  weekPlan={weekPlan}
-                  selectedPlanningSelection={selectedPlanningSelection}
-                  selectedPlanningItem={selectedPlanningItem}
-                  planningDraft={planningDraft}
-                  planningReplaceState={planningReplaceState}
-                  planningError={planningError}
-                  isOpen={isFocusBoardOpen}
-                  onToggleOpen={() => {
-                    setIsFocusBoardOpen((current) => {
-                      const next = !current;
-                      if (next) {
-                        setFocusBoardScrollRequest((request) => request + 1);
-                      }
-                      return next;
-                    });
-                  }}
-                  onClose={() => {
-                    setIsFocusBoardOpen(false);
-                    clearPlanningUi();
-                  }}
-                  onAddSelectedGoal={handleAddSelectedGoalToLane}
-                  onSelectSlot={handleSelectPlanningSlot}
-                  onDropGoalToSlot={handleDropGoalToPlanningSlot}
-                  onPlanningDraftChange={handlePlanningDraftChange}
-                  onSavePlanningDraft={handlePlanningDraftSave}
-                  onCancelPlanningDraft={handlePlanningDraftCancel}
-                  onPlanningReplaceAction={handlePlanningReplaceAction}
-                  onCancelPlanningReplace={handlePlanningReplaceCancel}
-                  getDuplicateCount={(lane, goalId, excludeSlot) =>
-                    getLaneDuplicateCount(lane, goalId, weekPlan, monthPlan, todayAlignment, excludeSlot)
-                  }
-                  getAvailableSlots={(lane, currentSlot) =>
-                    planningSlots.filter((slot) => {
-                      const itemAtSlot = getPlanningItemAtSlot(lane, slot, weekPlan, monthPlan, todayAlignment);
-                      return !itemAtSlot || slot === currentSlot;
-                    })
-                  }
-                  isLanePending={(lane) => getLanePending(lane)}
-                  getLaneErrorMessage={(lane) => planningError ?? getLaneErrorMessage(lane)}
-                  onSaveSelectedItem={handlePlanningItemSave}
-                  onRemoveSelectedItem={handlePlanningItemRemove}
-                  onJumpToGoal={handleJumpToLinkedGoal}
-                />
-              </div>
-            ) : null}
           </div>
-        )}
+
+          <div className="ghq-plan__inspector">
+            {outlineInspector}
+          </div>
+        </div>
       </div>
+    );
+  }
+
+  const focusPanel = (
+    <GoalsPlanCommitmentsRail
+      selectedGoal={selectedGoal}
+      activeGoals={activeGoals}
+      monthLabel={monthLabel}
+      weekLabel={weekLabel}
+      monthItems={monthItems}
+      weekItems={weekItems}
+      weekPlan={weekPlan}
+      selectedPlanningSelection={selectedPlanningSelection}
+      selectedPlanningItem={selectedPlanningItem}
+      planningDraft={planningDraft}
+      planningReplaceState={planningReplaceState}
+      planningError={planningError}
+      onSelectSlot={handleSelectPlanningSlot}
+      onDropGoalToSlot={handleDropGoalToPlanningSlot}
+      onPlanningDraftChange={handlePlanningDraftChange}
+      onSavePlanningDraft={() => void handlePlanningDraftSave()}
+      onCancelPlanningDraft={handlePlanningDraftCancel}
+      onPlanningReplaceAction={(action) => void handlePlanningReplaceAction(action)}
+      onCancelPlanningReplace={handlePlanningReplaceCancel}
+      getAvailableSlots={(lane, currentSlot) =>
+        planningSlots.filter((slot) => {
+          const itemAtSlot = getPlanningItemAtSlot(lane, slot, weekPlan, monthPlan, todayAlignment);
+          return !itemAtSlot || slot === currentSlot;
+        })
+      }
+      getDuplicateCount={(lane, goalId, excludeSlot) =>
+        getLaneDuplicateCount(lane, goalId, weekPlan, monthPlan, todayAlignment, excludeSlot)
+      }
+      isLanePending={getLanePending}
+      getLaneErrorMessage={getLaneErrorMessage}
+      onSaveSelectedItem={handlePlanningItemSave}
+      onRemoveSelectedItem={handlePlanningItemRemove}
+      onCloseSelectedItem={() => setSelectedPlanningSelection(null)}
+      onJumpToGoal={handleJumpToLinkedGoal}
+      onClose={handleCloseFocus}
+    />
+  );
+
+  const sideContent = inspectedGoalId
+    ? renderInspector(inspectedGoalId, () => setInspectedGoalId(null))
+    : isFocusOpen
+      ? focusPanel
+      : null;
+
+  const stage = (
+    <div
+      className={[
+        "ghq-stage",
+        sideContent ? "ghq-stage--with-side" : "",
+        isFullscreen ? "ghq-stage--fullscreen" : "",
+      ].filter(Boolean).join(" ")}
+      role="region"
+      aria-label={isFullscreen ? "Goal map, full screen" : "Goal map"}
+    >
+      <GoalsPlanGraphView
+        goals={goals}
+        horizons={horizons}
+        selectedGoalId={selectedGoalId}
+        expandedGoalIds={expandedGoalIds}
+        childDraft={graphChildDraft}
+        childDraftIsPending={createGoalMutation.isPending}
+        monthSlotByGoalId={monthSlotByGoalId}
+        weekSlotByGoalId={weekSlotByGoalId}
+        monthLabel={monthLabel}
+        monthCount={monthItems.length}
+        weekCount={weekItems.length}
+        isFocusOpen={isFocusOpen && !inspectedGoalId}
+        structureError={graphStructureError}
+        structureMessage={graphStructureMessage}
+        isFullscreen={isFullscreen}
+        centerRequest={centerRequest}
+        viewSwitch={viewSwitch}
+        onSelectGoal={handleGraphSelectGoal}
+        onToggleExpanded={handleToggleGoalExpanded}
+        onExpandAll={handleExpandAllGoals}
+        onCollapseAll={handleCollapseAllGoals}
+        onOpenCreateGoal={onOpenCreateGoal}
+        onOpenAddChild={handleOpenGraphChildDraft}
+        onOpenDetails={handleInspectGoal}
+        onEditGoal={onEditGoal}
+        onDetachGoal={handleDetachGoal}
+        onDuplicateGoal={handleDuplicateGoal}
+        onArchiveGoal={handleArchiveGoal}
+        onAddToLane={handleAddGoalToLane}
+        onDropGoalOnGoal={handleDropGoalOnGoal}
+        onSetGoalHorizon={handleSetGoalHorizon}
+        onSaveChildDraft={handleGraphChildDraftSave}
+        onCancelChildDraft={handleGraphChildDraftCancel}
+        onCanvasClear={handleGraphPaneClear}
+        onRevealGoal={handleRevealGoal}
+        onRequestCenter={handleRequestCenter}
+        onEscape={handleEscape}
+        onToggleFullscreen={handleToggleFullscreen}
+        onToggleFocus={handleToggleFocus}
+      />
+      {sideContent ? (
+        <aside
+          className="ghq-stage__side"
+          aria-label={inspectedGoalId ? "Goal details" : "Month and week focus"}
+        >
+          {sideContent}
+        </aside>
+      ) : null}
+    </div>
+  );
+
+  return (
+    <div className="ghq-plan-container">
+      <div className="ghq-stage-slot" ref={attachStageSlot} />
+      {createPortal(stage, stageHost)}
     </div>
   );
 }

@@ -1,29 +1,71 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  memo,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type DragEvent,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type MouseEvent,
+  type ReactNode,
+} from "react";
+import { Link } from "react-router-dom";
 import {
   Background,
   Handle,
   Position,
   ReactFlow,
   ReactFlowProvider,
-  useNodesInitialized,
   useReactFlow,
+  useStore,
+  useViewport,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import type { Edge, Node, NodeMouseHandler, NodeProps, Viewport } from "@xyflow/react";
+import type { Edge, Node, NodeProps } from "@xyflow/react";
 
 import type {
   GoalHorizonItem,
   GoalOverviewItem,
 } from "../../shared/lib/api";
 import { EmptyState } from "../../shared/ui/PageState";
+import { formatGoalTargetMonth } from "./goal-date-logic";
+import {
+  buildGoalGraphLayout,
+  findLaneAtY,
+  getGoalTreeOrder,
+  laneHorizonId,
+  NODE_H,
+  NODE_W,
+  UNASSIGNED_LANE_ID,
+  type GoalGraphLane,
+} from "./goal-graph-layout";
+import { GOAL_DRAG_MIME, type RailLane } from "./GoalsPlanCommitmentsRail";
 
-const NODE_W = 244;
-const CONTENT_X = 80;
-const CONTENT_Y = 132;
-const LEVEL_GAP = 168;
-const SIBLING_GAP = 36;
-const ROOT_GAP = 64;
-const GOAL_DRAG_MIME = "application/x-life-os-goal-id";
+const MIN_ZOOM = 0.2;
+const MAX_ZOOM = 1.35;
+const FIT_MAX_ZOOM = 1;
+/* Below this, titles stop being readable, so the first view starts at the
+   left of a wide tree instead of shrinking it further. Fit shows everything. */
+const READABLE_ZOOM = 0.6;
+const FIT_PAD_X = 32;
+const FIT_PAD_Y = 16;
+const PLACE_HINT_STORAGE_KEY = "life-os.goals.place-hint-dismissed";
+
+type GoalNodeActions = {
+  onSelect: (goalId: string) => void;
+  onToggleExpanded: (goalId: string) => void;
+  onOpenAddChild: (goalId: string) => void;
+  onOpenDetails: (goalId: string) => void;
+  onEditGoal: (goal: GoalOverviewItem) => void;
+  onDetachGoal: (goalId: string) => void;
+  onDuplicateGoal: (goal: GoalOverviewItem) => void;
+  onArchiveGoal: (goal: GoalOverviewItem) => void;
+  onAddToLane: (lane: RailLane, goalId: string) => void;
+  onDropGoalOnGoal: (targetGoalId: string, draggedGoalId: string) => void;
+  onDragGoalStart: (goalId: string) => void;
+  onDragGoalEnd: () => void;
+};
 
 type GoalNodeData = {
   goal: GoalOverviewItem;
@@ -37,19 +79,9 @@ type GoalNodeData = {
   previousVisibleGoalId: string | null;
   nextVisibleGoalId: string | null;
   childCount: number;
-  isInMonthFocus: boolean;
-  isInWeekFocus: boolean;
-  onSelect: (goalId: string) => void;
-  onToggleExpanded: (goalId: string) => void;
-  onOpenAddChild: (goalId: string) => void;
-  onOpenDetails: (goalId: string) => void;
-  onOpenPlanning: (goalId: string) => void;
-  onEditGoal: (goal: GoalOverviewItem) => void;
-  onDetachGoal: (goalId: string) => void;
-  onDuplicateGoal: (goal: GoalOverviewItem) => void;
-  onArchiveGoal: (goal: GoalOverviewItem) => void;
-  onAddToLane: (lane: "month" | "week", goalId: string) => void;
-  onDropGoalOnGoal: (targetGoalId: string, draggedGoalId: string) => void;
+  monthSlot: number | null;
+  weekSlot: number | null;
+  actions: GoalNodeActions;
 };
 
 type ChildDraftNodeData = {
@@ -65,33 +97,6 @@ type ChildDraft = {
   horizonId: string | null;
 };
 
-type LayoutProps = {
-  goals: GoalOverviewItem[];
-  horizons: GoalHorizonItem[];
-  selectedGoalId: string | null;
-  expandedGoalIds: Set<string>;
-  isFocusMode: boolean;
-  spotlightGoalIds: Set<string> | null;
-  spotlightExactGoalIds: Set<string>;
-  childDraft: ChildDraft | null;
-  childDraftIsPending: boolean;
-  monthFocusGoalIds: Set<string>;
-  weekFocusGoalIds: Set<string>;
-  onSelectGoal: (goalId: string) => void;
-  onToggleExpanded: (goalId: string) => void;
-  onOpenAddChild: (goalId: string) => void;
-  onOpenDetails: (goalId: string) => void;
-  onOpenPlanning: (goalId: string) => void;
-  onEditGoal: (goal: GoalOverviewItem) => void;
-  onDetachGoal: (goalId: string) => void;
-  onDuplicateGoal: (goal: GoalOverviewItem) => void;
-  onArchiveGoal: (goal: GoalOverviewItem) => void;
-  onAddToLane: (lane: "month" | "week", goalId: string) => void;
-  onDropGoalOnGoal: (targetGoalId: string, draggedGoalId: string) => void;
-  onSaveChildDraft: (title: string) => void;
-  onCancelChildDraft: () => void;
-};
-
 type GraphFilters = {
   query: string;
   domainId: string;
@@ -105,32 +110,9 @@ type SpotlightState = {
   relatedGoalIds: Set<string>;
 };
 
-type TreeChildItem =
-  | { type: "goal"; goal: GoalOverviewItem }
-  | { type: "draft"; parentGoalId: string };
+export type CenterRequest = { goalId: string; nonce: number };
 
-const sortGoals = (left: GoalOverviewItem, right: GoalOverviewItem) => {
-  if (left.sortOrder !== right.sortOrder) return left.sortOrder - right.sortOrder;
-  return left.createdAt.localeCompare(right.createdAt);
-};
-
-const isGoalDescendant = (
-  goals: GoalOverviewItem[],
-  ancestorGoalId: string,
-  candidateGoalId: string,
-) => {
-  const goalMap = new Map(goals.map((goal) => [goal.id, goal]));
-  let current = goalMap.get(candidateGoalId) ?? null;
-
-  while (current?.parentGoalId) {
-    if (current.parentGoalId === ancestorGoalId) {
-      return true;
-    }
-    current = goalMap.get(current.parentGoalId) ?? null;
-  }
-
-  return false;
-};
+const emptyFilters: GraphFilters = { query: "", domainId: "", horizonId: "", health: "" };
 
 const focusGraphGoalNode = (goalId: string) => {
   window.requestAnimationFrame(() => {
@@ -138,12 +120,37 @@ const focusGraphGoalNode = (goalId: string) => {
   });
 };
 
+const isTypingTarget = (target: EventTarget | null) => {
+  const element = target as HTMLElement | null;
+  return Boolean(
+    element
+    && (element.tagName === "INPUT"
+      || element.tagName === "TEXTAREA"
+      || element.tagName === "SELECT"
+      || element.isContentEditable),
+  );
+};
+
+/* ── Goal node ── */
+
+/* Quiet by default: title, one line of facts, and a slot tag when the goal is
+   committed this month or week. Health shows only when it needs attention.
+   Add and menu controls appear on hover, focus or selection. */
 const GoalGraphNode = memo(function GoalGraphNode({ data }: NodeProps) {
   const d = data as unknown as GoalNodeData;
+  const { goal, actions } = d;
   const [isDragOver, setIsDragOver] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const nodeRef = useRef<HTMLDivElement | null>(null);
-  const health = d.goal.health ?? "on_track";
+  const health = goal.health ?? "on_track";
+  const facts = [
+    goal.domain,
+    goal.targetDate
+      ? formatGoalTargetMonth(goal.targetDate)
+      : goal.milestoneCounts.total > 0
+        ? `${goal.milestoneCounts.completed} of ${goal.milestoneCounts.total}`
+        : null,
+  ].filter(Boolean).join(" · ");
 
   useEffect(() => {
     if (!menuOpen) {
@@ -160,16 +167,37 @@ const GoalGraphNode = memo(function GoalGraphNode({ data }: NodeProps) {
     return () => window.removeEventListener("pointerdown", handlePointerDown);
   }, [menuOpen]);
 
+  const runMenuAction = (action: () => void) => (event: MouseEvent) => {
+    event.stopPropagation();
+    setMenuOpen(false);
+    action();
+  };
+
   return (
     <div
       ref={nodeRef}
-      className={`graph-goal-node nopan${d.isSelected ? " graph-goal-node--selected" : ""}${d.isInBranch ? " graph-goal-node--branch" : ""}${d.isDimmed ? " graph-goal-node--dimmed" : ""}${d.isSpotlightMatch ? " graph-goal-node--spotlight" : ""}${isDragOver ? " graph-goal-node--drop-target" : ""}`}
+      className={[
+        "graph-goal-node",
+        "nopan",
+        d.isSelected ? "graph-goal-node--selected" : "",
+        d.isInBranch ? "graph-goal-node--branch" : "",
+        d.isDimmed ? "graph-goal-node--dimmed" : "",
+        d.isSpotlightMatch ? "graph-goal-node--spotlight" : "",
+        isDragOver ? "graph-goal-node--drop-target" : "",
+        menuOpen ? "graph-goal-node--menu-open" : "",
+      ].filter(Boolean).join(" ")}
       draggable
       onDragStart={(event) => {
-        event.dataTransfer.setData(GOAL_DRAG_MIME, d.goal.id);
+        event.dataTransfer.setData(GOAL_DRAG_MIME, goal.id);
         event.dataTransfer.effectAllowed = "move";
+        setMenuOpen(false);
+        actions.onDragGoalStart(goal.id);
       }}
+      onDragEnd={() => actions.onDragGoalEnd()}
       onDragOver={(event) => {
+        if (!event.dataTransfer.types.includes(GOAL_DRAG_MIME)) {
+          return;
+        }
         event.preventDefault();
         setIsDragOver(true);
       }}
@@ -179,280 +207,186 @@ const GoalGraphNode = memo(function GoalGraphNode({ data }: NodeProps) {
         setIsDragOver(false);
         const draggedGoalId = event.dataTransfer.getData(GOAL_DRAG_MIME);
         if (draggedGoalId) {
-          d.onDropGoalOnGoal(d.goal.id, draggedGoalId);
+          actions.onDropGoalOnGoal(goal.id, draggedGoalId);
         }
       }}
       onClick={(event) => {
         event.stopPropagation();
-        d.onSelect(d.goal.id);
+        actions.onSelect(goal.id);
       }}
       onDoubleClick={(event) => {
         event.stopPropagation();
-        d.onOpenDetails(d.goal.id);
+        actions.onOpenDetails(goal.id);
       }}
       onContextMenu={(event) => {
         event.preventDefault();
         event.stopPropagation();
-        d.onSelect(d.goal.id);
+        actions.onSelect(goal.id);
         setMenuOpen(true);
       }}
       onKeyDown={(event) => {
+        if (event.key === "Escape" && menuOpen) {
+          event.preventDefault();
+          event.stopPropagation();
+          setMenuOpen(false);
+          nodeRef.current?.focus();
+          return;
+        }
+
         if (event.target !== event.currentTarget) {
           return;
         }
 
+        const handle = (run: () => void) => {
+          event.preventDefault();
+          event.stopPropagation();
+          run();
+        };
+
         if (event.key === " ") {
-          event.preventDefault();
-          event.stopPropagation();
-          d.onSelect(d.goal.id);
-          return;
-        }
-
-        if (event.key === "Enter") {
-          event.preventDefault();
-          event.stopPropagation();
-          d.onSelect(d.goal.id);
-          d.onOpenDetails(d.goal.id);
-          return;
-        }
-
-        if (event.key === "ArrowRight" && d.canExpand && !d.isExpanded) {
-          event.preventDefault();
-          event.stopPropagation();
-          d.onToggleExpanded(d.goal.id);
-          return;
-        }
-
-        if (event.key === "ArrowLeft" && d.canExpand && d.isExpanded) {
-          event.preventDefault();
-          event.stopPropagation();
-          d.onToggleExpanded(d.goal.id);
-          return;
-        }
-
-        if (event.key === "ArrowDown" && d.nextVisibleGoalId) {
-          event.preventDefault();
-          event.stopPropagation();
-          d.onSelect(d.nextVisibleGoalId);
-          focusGraphGoalNode(d.nextVisibleGoalId);
-          return;
-        }
-
-        if (event.key === "ArrowUp" && d.previousVisibleGoalId) {
-          event.preventDefault();
-          event.stopPropagation();
-          d.onSelect(d.previousVisibleGoalId);
-          focusGraphGoalNode(d.previousVisibleGoalId);
+          handle(() => actions.onSelect(goal.id));
+        } else if (event.key === "Enter") {
+          handle(() => {
+            actions.onSelect(goal.id);
+            actions.onOpenDetails(goal.id);
+          });
+        } else if (event.key === "ArrowRight" && d.canExpand && !d.isExpanded) {
+          handle(() => actions.onToggleExpanded(goal.id));
+        } else if (event.key === "ArrowLeft" && d.canExpand && d.isExpanded) {
+          handle(() => actions.onToggleExpanded(goal.id));
+        } else if (event.key === "ArrowDown" && d.nextVisibleGoalId) {
+          const nextId = d.nextVisibleGoalId;
+          handle(() => {
+            actions.onSelect(nextId);
+            focusGraphGoalNode(nextId);
+          });
+        } else if (event.key === "ArrowUp" && d.previousVisibleGoalId) {
+          const previousId = d.previousVisibleGoalId;
+          handle(() => {
+            actions.onSelect(previousId);
+            focusGraphGoalNode(previousId);
+          });
         }
       }}
       role="treeitem"
       tabIndex={0}
-      data-goal-node-id={d.goal.id}
-      aria-label={`${d.goal.title}, ${d.goal.domain}${d.goal.horizonName ? `, ${d.goal.horizonName}` : ""}`}
+      data-goal-node-id={goal.id}
+      aria-label={[
+        goal.title,
+        goal.domain,
+        goal.horizonName,
+        d.monthSlot ? `month slot M${d.monthSlot}` : null,
+        d.weekSlot ? `week slot W${d.weekSlot}` : null,
+        health === "drifting" || health === "stalled" ? health : null,
+      ].filter(Boolean).join(", ")}
       aria-level={d.level}
       aria-selected={d.isSelected}
       aria-expanded={d.canExpand ? d.isExpanded : undefined}
-      aria-keyshortcuts="Space Enter ArrowRight ArrowLeft ArrowDown ArrowUp"
-      title="Click to select. Double-click or press Enter for details. Drag onto another goal or use the parent control to re-parent."
     >
       <Handle type="target" position={Position.Top} className="graph-handle--hidden" />
-      <div className="graph-goal-node__row">
-        <span className={`graph-goal-node__dot graph-goal-node__dot--${health}`} />
-        <span className="graph-goal-node__title">{d.goal.title}</span>
-        <div className="graph-goal-node__controls" aria-label="Goal actions">
+      <span className="graph-goal-node__title">{goal.title}</span>
+      <div className="graph-goal-node__meta">
+        {health === "stalled" ? (
+          <span className="graph-goal-node__health graph-goal-node__health--stalled">Stalled</span>
+        ) : health === "drifting" ? (
+          <span
+            className="graph-goal-node__health graph-goal-node__health--drifting"
+            title="Drifting: nothing linked to this goal was completed in the last 7 days"
+          />
+        ) : health === "achieved" ? (
+          <span className="graph-goal-node__health graph-goal-node__health--achieved">Achieved</span>
+        ) : null}
+        <span className="graph-goal-node__facts">{facts}</span>
+        <span className="graph-goal-node__tags">
+          {d.monthSlot ? <span className="graph-goal-node__slot">M{d.monthSlot}</span> : null}
+          {d.weekSlot ? <span className="graph-goal-node__slot">W{d.weekSlot}</span> : null}
           {d.canExpand ? (
             <button
-              className={[
-                "graph-goal-node__branch-toggle",
-                d.isExpanded ? "graph-goal-node__branch-toggle--open" : "",
-              ].filter(Boolean).join(" ")}
+              className={`graph-goal-node__branch-toggle${d.isExpanded ? " graph-goal-node__branch-toggle--open" : ""}`}
               type="button"
               onClick={(event) => {
                 event.stopPropagation();
-                d.onToggleExpanded(d.goal.id);
+                actions.onToggleExpanded(goal.id);
               }}
-              aria-label={
-                d.isExpanded
-                  ? `Collapse ${d.childCount} sub-goals`
-                  : `Expand ${d.childCount} sub-goals`
-              }
+              aria-label={d.isExpanded ? `Collapse ${d.childCount} sub-goals` : `Expand ${d.childCount} sub-goals`}
               title={d.isExpanded ? "Collapse sub-goals" : "Expand sub-goals"}
             >
               <svg className="graph-goal-node__branch-icon" viewBox="0 0 16 16" aria-hidden="true">
                 <path d="M5.5 3.5L10 8l-4.5 4.5" />
               </svg>
-              <span className="graph-goal-node__branch-count">{d.childCount}</span>
+              <span>{d.childCount}</span>
             </button>
           ) : null}
-          <button
-            className="graph-goal-node__quick-add"
-            type="button"
-            onClick={(event) => {
-              event.stopPropagation();
-              d.onOpenAddChild(d.goal.id);
-            }}
-            aria-label={`Add sub-goal under ${d.goal.title}`}
-            title="Add sub-goal"
-          >
-            +
-          </button>
-          <button
-            className="graph-goal-node__menu-trigger"
-            type="button"
-            onClick={(event) => {
-              event.stopPropagation();
-              setMenuOpen((current) => !current);
-            }}
-            aria-label={`Open actions for ${d.goal.title}`}
-            aria-expanded={menuOpen}
-            title="More actions"
-          >
-            ⋯
-          </button>
-        </div>
-      </div>
-      <div className="graph-goal-node__meta">
-        <span className="graph-goal-node__domain">
-          <span
-            className={`ghq-domain-dot ghq-domain-dot--${d.goal.domainSystemKey ?? "other"}`}
-            aria-hidden="true"
-          />
-          {d.goal.domain}
         </span>
-        {d.goal.horizonName ? (
-          <span className="graph-goal-node__badge">{d.goal.horizonName}</span>
-        ) : null}
-        {d.isInMonthFocus ? (
-          <span className="graph-goal-node__badge graph-goal-node__badge--focus">Month</span>
-        ) : null}
-        {d.isInWeekFocus ? (
-          <span className="graph-goal-node__badge graph-goal-node__badge--focus">Week</span>
-        ) : null}
       </div>
-      {d.goal.progressPercent > 0 ? (
-        <div className="graph-goal-node__bar">
-          <div
-            className={`graph-goal-node__bar-fill graph-goal-node__bar-fill--${health}`}
-            style={{ width: `${Math.min(d.goal.progressPercent, 100)}%` }}
-          />
+      {goal.progressPercent > 0 ? (
+        <div className="graph-goal-node__bar" aria-hidden="true">
+          <div className="graph-goal-node__bar-fill" style={{ width: `${Math.min(goal.progressPercent, 100)}%` }} />
         </div>
       ) : null}
-      {d.isSelected ? (
-        <div className="graph-goal-node__footer">
-          <button
-            className="graph-goal-node__action"
-            type="button"
-            onClick={(event) => {
-              event.stopPropagation();
-              d.onOpenAddChild(d.goal.id);
-            }}
-          >
-            Add sub-goal
-          </button>
-          <button
-            className="graph-goal-node__action"
-            type="button"
-            onClick={(event) => {
-              event.stopPropagation();
-              d.onOpenPlanning(d.goal.id);
-            }}
-          >
-            Plan
-          </button>
-          <button
-            className="graph-goal-node__action"
-            type="button"
-            onClick={(event) => {
-              event.stopPropagation();
-              d.onOpenDetails(d.goal.id);
-            }}
-          >
-            Details
-          </button>
-          <button
-            className="graph-goal-node__action"
-            type="button"
-            onClick={(event) => {
-              event.stopPropagation();
-              d.onAddToLane("week", d.goal.id);
-            }}
-          >
-            Week
-          </button>
-        </div>
-      ) : null}
+      <div className="graph-goal-node__controls">
+        <button
+          type="button"
+          onClick={(event) => {
+            event.stopPropagation();
+            actions.onOpenAddChild(goal.id);
+          }}
+          aria-label={`Add sub-goal under ${goal.title}`}
+          title="Add sub-goal (A)"
+        >
+          +
+        </button>
+        <button
+          type="button"
+          onClick={(event) => {
+            event.stopPropagation();
+            actions.onSelect(goal.id);
+            setMenuOpen((current) => !current);
+          }}
+          aria-label={`More actions for ${goal.title}`}
+          aria-haspopup="menu"
+          aria-expanded={menuOpen}
+          title="More actions"
+        >
+          ⋯
+        </button>
+      </div>
       {menuOpen ? (
         <div className="graph-goal-node__menu" role="menu">
-          <button type="button" role="menuitem" onClick={(event) => {
-            event.stopPropagation();
-            d.onOpenDetails(d.goal.id);
-            setMenuOpen(false);
-          }}>
-            Details
+          <button type="button" role="menuitem" onClick={runMenuAction(() => actions.onOpenDetails(goal.id))}>
+            Open details
           </button>
-          <button type="button" role="menuitem" onClick={(event) => {
-            event.stopPropagation();
-            d.onOpenAddChild(d.goal.id);
-            setMenuOpen(false);
-          }}>
+          <button type="button" role="menuitem" onClick={runMenuAction(() => actions.onOpenAddChild(goal.id))}>
             Add sub-goal
           </button>
-          <button type="button" role="menuitem" onClick={(event) => {
-            event.stopPropagation();
-            d.onOpenPlanning(d.goal.id);
-            setMenuOpen(false);
-          }}>
-            Open focus board
+          <button type="button" role="menuitem" onClick={runMenuAction(() => actions.onAddToLane("month", goal.id))}>
+            {d.monthSlot ? `In month as M${d.monthSlot}` : "Add to month"}
           </button>
-          <button type="button" role="menuitem" onClick={(event) => {
-            event.stopPropagation();
-            d.onAddToLane("month", d.goal.id);
-            setMenuOpen(false);
-          }}>
-            Add to month
+          <button type="button" role="menuitem" onClick={runMenuAction(() => actions.onAddToLane("week", goal.id))}>
+            {d.weekSlot ? `In week as W${d.weekSlot}` : "Add to week"}
           </button>
-          <button type="button" role="menuitem" onClick={(event) => {
-            event.stopPropagation();
-            d.onAddToLane("week", d.goal.id);
-            setMenuOpen(false);
-          }}>
-            Add to week
-          </button>
-          <button type="button" role="menuitem" onClick={(event) => {
-            event.stopPropagation();
-            d.onEditGoal(d.goal);
-            setMenuOpen(false);
-          }}>
+          <button type="button" role="menuitem" onClick={runMenuAction(() => actions.onEditGoal(goal))}>
             Edit goal
           </button>
-          <button type="button" role="menuitem" onClick={(event) => {
-            event.stopPropagation();
-            d.onDuplicateGoal(d.goal);
-            setMenuOpen(false);
-          }}>
+          <button type="button" role="menuitem" onClick={runMenuAction(() => actions.onDuplicateGoal(goal))}>
             Duplicate
           </button>
-          {d.goal.parentGoalId ? (
-            <button type="button" role="menuitem" onClick={(event) => {
-              event.stopPropagation();
-              d.onDetachGoal(d.goal.id);
-              setMenuOpen(false);
-            }}>
+          {goal.parentGoalId ? (
+            <button type="button" role="menuitem" onClick={runMenuAction(() => actions.onDetachGoal(goal.id))}>
               Make top-level
             </button>
           ) : null}
-          <button type="button" role="menuitem" className="graph-goal-node__menu-danger" onClick={(event) => {
-            event.stopPropagation();
-            d.onArchiveGoal(d.goal);
-            setMenuOpen(false);
-          }}>
+          <button
+            type="button"
+            role="menuitem"
+            className="graph-goal-node__menu-danger"
+            onClick={runMenuAction(() => actions.onArchiveGoal(goal))}
+          >
             Archive
           </button>
         </div>
       ) : null}
-      {isDragOver ? (
-        <div className="graph-goal-node__drop-hint">Drop here to re-parent</div>
-      ) : null}
+      {isDragOver ? <div className="graph-goal-node__drop-hint">Drop to move under this goal</div> : null}
       <Handle type="source" position={Position.Bottom} className="graph-handle--hidden" />
     </div>
   );
@@ -465,14 +399,8 @@ const ChildDraftNode = memo(function ChildDraftNode({ data }: NodeProps) {
 
   useEffect(() => {
     const frame = window.requestAnimationFrame(() => {
-      if (inputRef.current) {
-        inputRef.current.focus();
-        if (!inputRef.current.value) {
-          inputRef.current.select();
-        }
-      }
+      inputRef.current?.focus();
     });
-
     return () => window.cancelAnimationFrame(frame);
   }, []);
 
@@ -484,9 +412,17 @@ const ChildDraftNode = memo(function ChildDraftNode({ data }: NodeProps) {
         className="graph-child-draft__input"
         type="text"
         value={title}
-        placeholder="Supporting goal title"
+        placeholder="Sub-goal title"
+        aria-label="Sub-goal title"
         onChange={(event) => setTitle(event.target.value)}
         onKeyDown={(event) => {
+          if (event.key === "Escape") {
+            event.preventDefault();
+            event.stopPropagation();
+            d.onCancel();
+            return;
+          }
+
           if (event.key !== "Enter" || event.nativeEvent.isComposing) {
             return;
           }
@@ -504,14 +440,9 @@ const ChildDraftNode = memo(function ChildDraftNode({ data }: NodeProps) {
           onClick={() => d.onSave(title)}
           disabled={d.isPending || !title.trim()}
         >
-          {d.isPending ? "Saving..." : "Save"}
+          {d.isPending ? "Saving…" : "Save"}
         </button>
-        <button
-          className="button button--ghost button--small"
-          type="button"
-          onClick={d.onCancel}
-          disabled={d.isPending}
-        >
+        <button className="button button--ghost button--small" type="button" onClick={d.onCancel} disabled={d.isPending}>
           Cancel
         </button>
       </div>
@@ -519,86 +450,19 @@ const ChildDraftNode = memo(function ChildDraftNode({ data }: NodeProps) {
   );
 });
 
+/* React Flow gives a node wrapper pointer-events: none when the node is
+   neither selectable nor draggable and ReactFlow has no node mouse handlers.
+   Our nodes handle their own clicks, toggles and HTML drag, so they must stay
+   hit-testable; node.style is applied after React Flow's own. */
+const nodeHitStyle = { pointerEvents: "all" } as const;
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const nodeTypes: Record<string, any> = {
   goalNode: GoalGraphNode,
   childDraftNode: ChildDraftNode,
 };
 
-const buildVisibleTree = (goals: GoalOverviewItem[], expandedGoalIds: Set<string>) => {
-  const goalMap = new Map(goals.map((goal) => [goal.id, goal]));
-  const childrenByParent = new Map<string, GoalOverviewItem[]>();
-
-  for (const goal of goals) {
-    if (!goal.parentGoalId || !goalMap.has(goal.parentGoalId)) {
-      continue;
-    }
-
-    const children = childrenByParent.get(goal.parentGoalId) ?? [];
-    children.push(goal);
-    childrenByParent.set(goal.parentGoalId, children);
-  }
-
-  for (const children of childrenByParent.values()) {
-    children.sort(sortGoals);
-  }
-
-  const roots = goals
-    .filter((goal) => !goal.parentGoalId || !goalMap.has(goal.parentGoalId))
-    .sort(sortGoals);
-
-  const visibleIds = new Set<string>();
-
-  const markVisible = (goal: GoalOverviewItem) => {
-    visibleIds.add(goal.id);
-    if (!expandedGoalIds.has(goal.id)) {
-      return;
-    }
-
-    for (const child of childrenByParent.get(goal.id) ?? []) {
-      markVisible(child);
-    }
-  };
-
-  roots.forEach(markVisible);
-
-  return { goalMap, childrenByParent, roots, visibleIds };
-};
-
-const buildBranchIds = (
-  selectedGoalId: string | null,
-  goalMap: Map<string, GoalOverviewItem>,
-  childrenByParent: Map<string, GoalOverviewItem[]>,
-  visibleIds: Set<string>,
-) => {
-  const branchIds = new Set<string>();
-  if (!selectedGoalId) {
-    return branchIds;
-  }
-
-  let current = goalMap.get(selectedGoalId) ?? null;
-  while (current) {
-    if (visibleIds.has(current.id)) {
-      branchIds.add(current.id);
-    }
-    current = current.parentGoalId ? goalMap.get(current.parentGoalId) ?? null : null;
-  }
-
-  const stack = [selectedGoalId];
-  while (stack.length > 0) {
-    const goalId = stack.pop()!;
-    if (visibleIds.has(goalId)) {
-      branchIds.add(goalId);
-    }
-    for (const child of childrenByParent.get(goalId) ?? []) {
-      if (visibleIds.has(child.id)) {
-        stack.push(child.id);
-      }
-    }
-  }
-
-  return branchIds;
-};
+/* ── Filters and spotlight ── */
 
 const goalMatchesFilters = (goal: GoalOverviewItem, filters: GraphFilters) => {
   const query = filters.query.trim().toLowerCase();
@@ -615,19 +479,10 @@ const goalMatchesFilters = (goal: GoalOverviewItem, filters: GraphFilters) => {
 };
 
 const buildSpotlightState = (goals: GoalOverviewItem[], filters: GraphFilters): SpotlightState => {
-  const hasActiveFilters = Boolean(
-    filters.query.trim()
-    || filters.domainId
-    || filters.horizonId
-    || filters.health,
-  );
+  const hasActiveFilters = Boolean(filters.query.trim() || filters.domainId || filters.horizonId || filters.health);
 
   if (!hasActiveFilters) {
-    return {
-      active: false,
-      exactGoalIds: new Set(),
-      relatedGoalIds: new Set(),
-    };
+    return { active: false, exactGoalIds: new Set(), relatedGoalIds: new Set() };
   }
 
   const goalMap = new Map(goals.map((goal) => [goal.id, goal]));
@@ -636,7 +491,6 @@ const buildSpotlightState = (goals: GoalOverviewItem[], filters: GraphFilters): 
     if (!goal.parentGoalId) {
       continue;
     }
-
     const children = childrenByParent.get(goal.parentGoalId) ?? [];
     children.push(goal);
     childrenByParent.set(goal.parentGoalId, children);
@@ -660,202 +514,10 @@ const buildSpotlightState = (goals: GoalOverviewItem[], filters: GraphFilters): 
     }
   }
 
-  return {
-    active: true,
-    exactGoalIds,
-    relatedGoalIds,
-  };
+  return { active: true, exactGoalIds, relatedGoalIds };
 };
 
-const buildLayout = (props: LayoutProps) => {
-  const activeGoals = props.goals.filter((goal) => goal.status === "active");
-  const { goalMap, childrenByParent, roots, visibleIds } = buildVisibleTree(activeGoals, props.expandedGoalIds);
-  const visibleGoalIds = [...visibleIds];
-  const visibleGoalIndexById = new Map(visibleGoalIds.map((goalId, index) => [goalId, index]));
-  const branchIds = buildBranchIds(props.selectedGoalId, goalMap, childrenByParent, visibleIds);
-
-  const nodes: Node[] = [];
-  const edges: Edge[] = [];
-
-  const childItemsForGoal = (goal: GoalOverviewItem): TreeChildItem[] => {
-    const items: TreeChildItem[] = [];
-
-    if (props.expandedGoalIds.has(goal.id)) {
-      for (const child of childrenByParent.get(goal.id) ?? []) {
-        if (visibleIds.has(child.id)) {
-          items.push({ type: "goal", goal: child });
-        }
-      }
-    }
-
-    if (props.childDraft?.parentGoalId === goal.id) {
-      items.push({ type: "draft", parentGoalId: goal.id });
-    }
-
-    return items;
-  };
-
-  const widthCache = new Map<string, number>();
-
-  const measureItemWidth = (item: TreeChildItem): number => {
-    if (item.type === "goal") {
-      return measureGoalWidth(item.goal);
-    }
-    return NODE_W;
-  };
-
-  const measureGoalWidth = (goal: GoalOverviewItem): number => {
-    const cached = widthCache.get(goal.id);
-    if (cached !== undefined) {
-      return cached;
-    }
-
-    const childItems = childItemsForGoal(goal);
-    if (childItems.length === 0) {
-      widthCache.set(goal.id, NODE_W);
-      return NODE_W;
-    }
-
-    const childrenWidth = childItems.reduce((total, item, index) => {
-      return total + measureItemWidth(item) + (index > 0 ? SIBLING_GAP : 0);
-    }, 0);
-    const width = Math.max(NODE_W, childrenWidth);
-    widthCache.set(goal.id, width);
-    return width;
-  };
-
-  const layoutGoal = (
-    goal: GoalOverviewItem,
-    leftX: number,
-    depth: number,
-  ) => {
-    const childItems = childItemsForGoal(goal);
-    const goalWidth = measureGoalWidth(goal);
-    const visibleGoalIndex = visibleGoalIndexById.get(goal.id) ?? -1;
-    const childrenWidth = childItems.reduce((total, item, index) => {
-      return total + measureItemWidth(item) + (index > 0 ? SIBLING_GAP : 0);
-    }, 0);
-    const goalX = leftX + (goalWidth - NODE_W) / 2;
-    const goalY = CONTENT_Y + depth * LEVEL_GAP;
-
-    nodes.push({
-      id: goal.id,
-      type: "goalNode",
-      position: { x: goalX, y: goalY },
-      zIndex:
-        props.selectedGoalId === goal.id
-          ? 80
-          : branchIds.has(goal.id)
-            ? 20
-            : 1,
-      data: {
-        goal,
-        level: depth + 1,
-        isSelected: props.selectedGoalId === goal.id,
-        isInBranch: branchIds.has(goal.id),
-        isDimmed:
-          (props.isFocusMode && props.selectedGoalId !== null && !branchIds.has(goal.id))
-          || (props.spotlightGoalIds !== null && !props.spotlightGoalIds.has(goal.id)),
-        isSpotlightMatch: props.spotlightExactGoalIds.has(goal.id),
-        canExpand: (childrenByParent.get(goal.id)?.length ?? 0) > 0,
-        isExpanded: props.expandedGoalIds.has(goal.id),
-        previousVisibleGoalId: visibleGoalIndex > 0 ? visibleGoalIds[visibleGoalIndex - 1] : null,
-        nextVisibleGoalId: visibleGoalIndex >= 0 ? visibleGoalIds[visibleGoalIndex + 1] ?? null : null,
-        childCount: childrenByParent.get(goal.id)?.length ?? 0,
-        isInMonthFocus: props.monthFocusGoalIds.has(goal.id),
-        isInWeekFocus: props.weekFocusGoalIds.has(goal.id),
-        onSelect: props.onSelectGoal,
-        onToggleExpanded: props.onToggleExpanded,
-        onOpenAddChild: props.onOpenAddChild,
-        onOpenDetails: props.onOpenDetails,
-        onOpenPlanning: props.onOpenPlanning,
-        onEditGoal: props.onEditGoal,
-        onDetachGoal: props.onDetachGoal,
-        onDuplicateGoal: props.onDuplicateGoal,
-        onArchiveGoal: props.onArchiveGoal,
-        onAddToLane: props.onAddToLane,
-        onDropGoalOnGoal: props.onDropGoalOnGoal,
-      } satisfies GoalNodeData,
-      selectable: false,
-      draggable: false,
-    });
-
-    if (childItems.length === 0) {
-      return;
-    }
-
-    let currentLeft = leftX + (goalWidth - childrenWidth) / 2;
-
-    for (const item of childItems) {
-      const itemWidth = measureItemWidth(item);
-      const itemNodeX = currentLeft + (itemWidth - NODE_W) / 2;
-      const itemNodeY = CONTENT_Y + (depth + 1) * LEVEL_GAP;
-
-      if (item.type === "goal") {
-        layoutGoal(item.goal, currentLeft, depth + 1);
-        edges.push({
-          id: `edge-${goal.id}-${item.goal.id}`,
-          source: goal.id,
-          target: item.goal.id,
-          type: "smoothstep",
-          animated: props.selectedGoalId === goal.id || props.selectedGoalId === item.goal.id,
-          style: {
-            stroke:
-              branchIds.has(goal.id) && branchIds.has(item.goal.id)
-                ? "var(--accent)"
-                : "var(--border-active)",
-            strokeWidth: branchIds.has(goal.id) && branchIds.has(item.goal.id) ? 2 : 1,
-            opacity: props.isFocusMode && !branchIds.has(item.goal.id) ? 0.2 : 1,
-          },
-        });
-      } else {
-        const draftNodeId = `child-draft-${item.parentGoalId}`;
-        nodes.push({
-          id: draftNodeId,
-          type: "childDraftNode",
-          position: { x: itemNodeX, y: itemNodeY },
-          zIndex: props.selectedGoalId === goal.id ? 70 : 5,
-          data: {
-            initialTitle: props.childDraft?.title ?? "",
-            isPending: props.childDraftIsPending,
-            onSave: props.onSaveChildDraft,
-            onCancel: props.onCancelChildDraft,
-          } satisfies ChildDraftNodeData,
-          selectable: false,
-          draggable: false,
-        });
-        edges.push({
-          id: `edge-${goal.id}-${draftNodeId}`,
-          source: goal.id,
-          target: draftNodeId,
-          type: "smoothstep",
-          animated: true,
-          style: {
-            stroke: "var(--accent-line)",
-            strokeWidth: 1.5,
-            strokeDasharray: "6 4",
-          },
-        });
-      }
-
-      currentLeft += itemWidth + SIBLING_GAP;
-    }
-  };
-
-  let currentLeft = CONTENT_X;
-  for (const root of roots) {
-    const rootWidth = measureGoalWidth(root);
-    layoutGoal(root, currentLeft, 0);
-    currentLeft += rootWidth + ROOT_GAP;
-  }
-
-  return {
-    nodes,
-    edges,
-    visibleGoalIds,
-    branchNodeIds: [...branchIds].filter((goalId) => visibleIds.has(goalId)),
-  };
-};
+/* ── Node animation and stable edges ── */
 
 const easeOutCubic = (t: number) => 1 - Math.pow(1 - t, 3);
 
@@ -869,37 +531,19 @@ const useAnimatedNodes = (nodes: Node[], disabled = false) => {
   }, [animatedNodes]);
 
   useEffect(() => {
-    if (disabled) {
-      if (frameRef.current !== null) {
-        window.cancelAnimationFrame(frameRef.current);
-        frameRef.current = null;
-      }
-
-      displayedNodesRef.current = nodes;
-      setAnimatedNodes(nodes);
-      return;
-    }
-
-    const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    const sourceNodes = displayedNodesRef.current;
-    const sourceById = new Map(sourceNodes.map((node) => [node.id, node]));
-    const hasPositionChanges = nodes.some((node) => {
-      const source = sourceById.get(node.id);
-      return Boolean(
-        source
-        && (
-          source.position.x !== node.position.x
-          || source.position.y !== node.position.y
-        ),
-      );
-    });
-
     if (frameRef.current !== null) {
       window.cancelAnimationFrame(frameRef.current);
       frameRef.current = null;
     }
 
-    if (prefersReducedMotion || !hasPositionChanges) {
+    const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const sourceById = new Map(displayedNodesRef.current.map((node) => [node.id, node]));
+    const hasPositionChanges = nodes.some((node) => {
+      const source = sourceById.get(node.id);
+      return Boolean(source && (source.position.x !== node.position.x || source.position.y !== node.position.y));
+    });
+
+    if (disabled || prefersReducedMotion || !hasPositionChanges) {
       displayedNodesRef.current = nodes;
       setAnimatedNodes(nodes);
       return;
@@ -909,15 +553,12 @@ const useAnimatedNodes = (nodes: Node[], disabled = false) => {
     const duration = 240;
 
     const tick = (timestamp: number) => {
-      const progress = Math.min((timestamp - start) / duration, 1);
-      const eased = easeOutCubic(progress);
+      const eased = easeOutCubic(Math.min((timestamp - start) / duration, 1));
       const nextNodes = nodes.map((node) => {
         const source = sourceById.get(node.id);
-
         if (!source) {
           return node;
         }
-
         return {
           ...node,
           position: {
@@ -930,7 +571,7 @@ const useAnimatedNodes = (nodes: Node[], disabled = false) => {
       displayedNodesRef.current = nextNodes;
       setAnimatedNodes(nextNodes);
 
-      if (progress < 1) {
+      if (eased < 1) {
         frameRef.current = window.requestAnimationFrame(tick);
         return;
       }
@@ -953,226 +594,870 @@ const useAnimatedNodes = (nodes: Node[], disabled = false) => {
   return disabled ? nodes : animatedNodes;
 };
 
-const edgeStyleMatches = (
-  left: Edge["style"],
-  right: Edge["style"],
-) => {
-  if (left === right) {
-    return true;
-  }
-
-  if (!left || !right) {
-    return false;
-  }
-
-  return (
-    left.stroke === right.stroke
-    && left.strokeWidth === right.strokeWidth
-    && left.opacity === right.opacity
-    && left.strokeDasharray === right.strokeDasharray
-  );
-};
-
-const edgeMatches = (left: Edge, right: Edge) => (
+const edgeMatches = (left: Edge, right: Edge) =>
   left.id === right.id
   && left.source === right.source
   && left.target === right.target
-  && left.type === right.type
-  && left.animated === right.animated
-  && edgeStyleMatches(left.style, right.style)
-);
+  && left.className === right.className;
 
 const useStableEdges = (edges: Edge[]) => {
   const stableEdgesRef = useRef(edges);
 
   return useMemo(() => {
     const previousEdges = stableEdgesRef.current;
-    const canReusePrevious =
-      previousEdges.length === edges.length
-      && previousEdges.every((edge, index) => edgeMatches(edge, edges[index]));
-
-    if (canReusePrevious) {
+    if (previousEdges.length === edges.length && previousEdges.every((edge, index) => edgeMatches(edge, edges[index]))) {
       return previousEdges;
     }
-
     stableEdgesRef.current = edges;
     return edges;
   }, [edges]);
 };
 
-type GraphInnerProps = LayoutProps & {
-  isExpanded: boolean;
-  onCanvasClear: () => void;
+/* ── Horizon lanes ── */
+
+/* Bands sit behind the flow and labels sit in a gutter, both following the
+   viewport's vertical pan and zoom, so a lane's name stays readable however
+   far the map is panned sideways. The last lane runs on to the bottom of the
+   canvas, so the map never ends in a dead strip. Lanes are drop targets:
+   dropping a goal on one sets its horizon. */
+const LAST_LANE_OVERHANG = 4000;
+
+const laneStyle = (lane: GoalGraphLane, isLast: boolean, y: number, zoom: number) => ({
+  transform: `translateY(${lane.top * zoom + y}px)`,
+  height: lane.height * zoom + (isLast ? LAST_LANE_OVERHANG : 0),
+});
+
+const laneClassName = (base: string, lane: GoalGraphLane, index: number, dropLaneId: string | null) =>
+  [
+    base,
+    index % 2 === 1 ? `${base}--alt` : "",
+    lane.isUnassigned ? `${base}--unassigned` : "",
+    dropLaneId === lane.id ? `${base}--drop` : "",
+  ].filter(Boolean).join(" ");
+
+function LaneBands({ lanes, dropLaneId }: { lanes: GoalGraphLane[]; dropLaneId: string | null }) {
+  const { y, zoom } = useViewport();
+
+  return (
+    <div className="ghq-lanes" aria-hidden="true">
+      {lanes.map((lane, index) => (
+        <div
+          key={lane.id}
+          className={laneClassName("ghq-lanes__band", lane, index, dropLaneId)}
+          style={laneStyle(lane, index === lanes.length - 1, y, zoom)}
+        />
+      ))}
+    </div>
+  );
+}
+
+type LaneDropHandlers = {
+  onDragOver: (event: DragEvent<HTMLElement>) => void;
+  onDragLeave: (event: DragEvent<HTMLElement>) => void;
+  onDrop: (event: DragEvent<HTMLElement>) => void;
 };
 
-const GraphInner = (props: GraphInnerProps) => {
-  const { fitView, getViewport, setViewport, zoomIn, zoomOut } = useReactFlow();
-  const nodesInitialized = useNodesInitialized();
-  const initialFitDoneRef = useRef(false);
-  const savedViewportRef = useRef<Viewport | null>(null);
-  const previousFocusModeRef = useRef(false);
+function LaneGutter({
+  lanes,
+  dropLaneId,
+  dropHandlers,
+}: {
+  lanes: GoalGraphLane[];
+  dropLaneId: string | null;
+  dropHandlers: LaneDropHandlers;
+}) {
+  const { y, zoom } = useViewport();
 
-  const { nodes, edges, visibleGoalIds, branchNodeIds } = useMemo(
-    () => buildLayout(props),
-    [props],
+  return (
+    <div className="ghq-lanes-gutter" role="group" aria-label="Time horizons" {...dropHandlers}>
+      {lanes.map((lane, index) => (
+        <div
+          key={lane.id}
+          className={laneClassName("ghq-lanes-gutter__lane", lane, index, dropLaneId)}
+          style={laneStyle(lane, index === lanes.length - 1, y, zoom)}
+          title={lane.label}
+        >
+          <span className="ghq-lanes-gutter__name">{lane.label}</span>
+          {lane.goalCount > 0 ? <span className="ghq-lanes-gutter__count">{lane.goalCount}</span> : null}
+        </div>
+      ))}
+    </div>
   );
-  const animatedNodes = useAnimatedNodes(nodes, Boolean(props.childDraft));
-  const stableEdges = useStableEdges(edges);
+}
 
-  useEffect(() => {
-    if (!nodesInitialized || visibleGoalIds.length === 0) {
-      return;
+/* ── Focus drop dock ── */
+
+/* Appears only while a goal is being dragged: drop it here to commit it to
+   this month or this week without opening anything. */
+function FocusDropDock({
+  monthLabel,
+  monthCount,
+  weekCount,
+  onDrop,
+}: {
+  monthLabel: string;
+  monthCount: number;
+  weekCount: number;
+  onDrop: (lane: RailLane, goalId: string) => void;
+}) {
+  const [overLane, setOverLane] = useState<RailLane | null>(null);
+
+  const target = (lane: RailLane, label: string, count: number) => (
+    <div
+      className={`ghq-drop-dock__target${overLane === lane ? " ghq-drop-dock__target--over" : ""}`}
+      onDragOver={(event) => {
+        if (!event.dataTransfer.types.includes(GOAL_DRAG_MIME)) {
+          return;
+        }
+        event.preventDefault();
+        event.stopPropagation();
+        event.dataTransfer.dropEffect = "copy";
+        setOverLane(lane);
+      }}
+      onDragLeave={() => setOverLane((current) => (current === lane ? null : current))}
+      onDrop={(event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        setOverLane(null);
+        const goalId = event.dataTransfer.getData(GOAL_DRAG_MIME);
+        if (goalId) {
+          onDrop(lane, goalId);
+        }
+      }}
+    >
+      <span className="ghq-drop-dock__label">{label}</span>
+      <span className="ghq-drop-dock__count">{count >= 3 ? "Full, choose one to replace" : `${count} of 3`}</span>
+    </div>
+  );
+
+  return (
+    <div className="ghq-drop-dock nopan" aria-hidden="true">
+      {target("month", `Add to ${monthLabel}`, monthCount)}
+      {target("week", "Add to this week", weekCount)}
+    </div>
+  );
+}
+
+/* ── Canvas ── */
+
+type GraphCanvasProps = {
+  activeGoals: GoalOverviewItem[];
+  horizons: GoalHorizonItem[];
+  selectedGoalId: string | null;
+  expandedGoalIds: Set<string>;
+  spotlight: SpotlightState;
+  childDraft: ChildDraft | null;
+  childDraftIsPending: boolean;
+  monthSlotByGoalId: Map<string, number>;
+  weekSlotByGoalId: Map<string, number>;
+  isFullscreen: boolean;
+  centerRequest: CenterRequest | null;
+  draggingGoalId: string | null;
+  monthLabel: string;
+  monthCount: number;
+  weekCount: number;
+  actions: GoalNodeActions;
+  onSaveChildDraft: (title: string) => void;
+  onCancelChildDraft: () => void;
+  onCanvasClear: () => void;
+  onSetGoalHorizon: (goalId: string, horizonId: string | null) => void;
+};
+
+type FitMode = "readable" | "all";
+
+const isGoalDrag = (event: DragEvent<HTMLElement>) => event.dataTransfer.types.includes(GOAL_DRAG_MIME);
+
+const isOverGoalNode = (target: EventTarget) =>
+  target instanceof Element && Boolean(target.closest(".graph-goal-node, .graph-child-draft"));
+
+function GraphCanvas({
+  activeGoals,
+  horizons,
+  selectedGoalId,
+  expandedGoalIds,
+  spotlight,
+  childDraft,
+  childDraftIsPending,
+  monthSlotByGoalId,
+  weekSlotByGoalId,
+  isFullscreen,
+  centerRequest,
+  draggingGoalId,
+  monthLabel,
+  monthCount,
+  weekCount,
+  actions,
+  onSaveChildDraft,
+  onCancelChildDraft,
+  onCanvasClear,
+  onSetGoalHorizon,
+}: GraphCanvasProps) {
+  const { setViewport, setCenter, getZoom, zoomIn, zoomOut, screenToFlowPosition } = useReactFlow();
+  const flowWidth = useStore((state) => state.width);
+  const flowHeight = useStore((state) => state.height);
+  const handledCenterNonceRef = useRef<number | null>(null);
+  // Until the person pans or zooms, the map keeps itself fitted as the canvas,
+  // the tree or the side panel change; after that their view is left alone.
+  const autoFitModeRef = useRef<FitMode | null>("readable");
+  const hasFittedRef = useRef(false);
+  const [dropLaneId, setDropLaneId] = useState<string | null>(null);
+
+  const layout = useMemo(
+    () => buildGoalGraphLayout({
+      goals: activeGoals,
+      horizons,
+      expandedGoalIds,
+      draft: childDraft ? { parentGoalId: childDraft.parentGoalId, horizonId: childDraft.horizonId } : null,
+    }),
+    [activeGoals, childDraft, expandedGoalIds, horizons],
+  );
+
+  const branchIds = useMemo(() => {
+    const ids = new Set<string>();
+    if (!selectedGoalId) {
+      return ids;
     }
-
-    if (initialFitDoneRef.current) {
-      return;
+    const visible = new Set(layout.visibleGoalIds);
+    let current = layout.goalMap.get(selectedGoalId) ?? null;
+    while (current) {
+      if (visible.has(current.id)) ids.add(current.id);
+      current = current.parentGoalId ? layout.goalMap.get(current.parentGoalId) ?? null : null;
     }
-
-    initialFitDoneRef.current = true;
-    const targets = visibleGoalIds.map((id) => ({ id }));
-    const firstFrame = window.requestAnimationFrame(() => {
-      void fitView({
-        nodes: targets,
-        padding: props.isExpanded ? 0.12 : 0.16,
-        duration: 0,
-      });
-    });
-    const secondFrame = window.setTimeout(() => {
-      window.requestAnimationFrame(() => {
-        void fitView({
-          nodes: targets,
-          padding: props.isExpanded ? 0.12 : 0.16,
-          duration: 180,
-        });
-      });
-    }, 120);
-
-    return () => {
-      window.cancelAnimationFrame(firstFrame);
-      window.clearTimeout(secondFrame);
-    };
-  }, [fitView, nodesInitialized, props.isExpanded, visibleGoalIds]);
-
-  useEffect(() => {
-    if (!nodesInitialized) {
-      return;
+    const stack = [selectedGoalId];
+    while (stack.length > 0) {
+      const goalId = stack.pop()!;
+      if (visible.has(goalId)) ids.add(goalId);
+      for (const child of layout.childrenByParent.get(goalId) ?? []) {
+        if (visible.has(child.id)) stack.push(child.id);
+      }
     }
+    return ids;
+  }, [layout, selectedGoalId]);
 
-    if (props.isFocusMode && props.selectedGoalId && branchNodeIds.length > 0) {
-      if (!previousFocusModeRef.current) {
-        savedViewportRef.current = getViewport();
+  const nodes = useMemo<Node[]>(() => {
+    const indexById = new Map(layout.visibleGoalIds.map((goalId, index) => [goalId, index]));
+
+    return layout.items.map((item) => {
+      if (item.kind === "draft") {
+        return {
+          id: item.id,
+          type: "childDraftNode",
+          position: { x: item.x, y: item.y },
+          zIndex: 70,
+          data: {
+            initialTitle: childDraft?.title ?? "",
+            isPending: childDraftIsPending,
+            onSave: onSaveChildDraft,
+            onCancel: onCancelChildDraft,
+          } satisfies ChildDraftNodeData,
+          selectable: false,
+          draggable: false,
+          style: nodeHitStyle,
+        };
       }
 
-      previousFocusModeRef.current = true;
-      const frame = window.requestAnimationFrame(() => {
-        void fitView({
-          nodes: branchNodeIds.map((id) => ({ id })),
-          padding: props.isExpanded ? 0.16 : 0.22,
-          duration: 280,
-        });
-      });
-
-      return () => window.cancelAnimationFrame(frame);
-    }
-
-    if (previousFocusModeRef.current && savedViewportRef.current) {
-      previousFocusModeRef.current = false;
-      void setViewport(savedViewportRef.current, { duration: 220 });
-      return;
-    }
-
-    previousFocusModeRef.current = false;
+      const index = indexById.get(item.id) ?? -1;
+      const childCount = layout.childrenByParent.get(item.id)?.length ?? 0;
+      return {
+        id: item.id,
+        type: "goalNode",
+        position: { x: item.x, y: item.y },
+        zIndex: selectedGoalId === item.id ? 80 : branchIds.has(item.id) ? 20 : 1,
+        data: {
+          goal: item.goal,
+          level: item.depth + 1,
+          isSelected: selectedGoalId === item.id,
+          isInBranch: branchIds.has(item.id),
+          isDimmed: spotlight.active && !spotlight.relatedGoalIds.has(item.id),
+          isSpotlightMatch: spotlight.exactGoalIds.has(item.id),
+          canExpand: childCount > 0,
+          isExpanded: expandedGoalIds.has(item.id),
+          previousVisibleGoalId: index > 0 ? layout.visibleGoalIds[index - 1] : null,
+          nextVisibleGoalId: index >= 0 ? layout.visibleGoalIds[index + 1] ?? null : null,
+          childCount,
+          monthSlot: monthSlotByGoalId.get(item.id) ?? null,
+          weekSlot: weekSlotByGoalId.get(item.id) ?? null,
+          actions,
+        } satisfies GoalNodeData,
+        selectable: false,
+        draggable: false,
+        style: nodeHitStyle,
+      };
+    });
   }, [
-    branchNodeIds,
-    fitView,
-    getViewport,
-    nodesInitialized,
-    props.isExpanded,
-    props.isFocusMode,
-    props.selectedGoalId,
-    setViewport,
+    actions,
+    branchIds,
+    childDraft?.title,
+    childDraftIsPending,
+    expandedGoalIds,
+    layout,
+    monthSlotByGoalId,
+    onCancelChildDraft,
+    onSaveChildDraft,
+    selectedGoalId,
+    spotlight,
+    weekSlotByGoalId,
   ]);
 
-  const handleNodeClick: NodeMouseHandler<Node> = (_event, node) => {
-    if (node.type === "goalNode") {
-      props.onSelectGoal(node.id);
+  const edges = useMemo<Edge[]>(
+    () => layout.edges.map((edge) => ({
+      id: edge.id,
+      source: edge.source,
+      target: edge.target,
+      type: "default",
+      className:
+        edge.kind === "draft"
+          ? "ghq-edge ghq-edge--draft"
+          : branchIds.has(edge.source) && branchIds.has(edge.target)
+            ? "ghq-edge ghq-edge--branch"
+            : spotlight.active && !(spotlight.relatedGoalIds.has(edge.source) && spotlight.relatedGoalIds.has(edge.target))
+              ? "ghq-edge ghq-edge--dimmed"
+              : "ghq-edge",
+    })),
+    [branchIds, layout.edges, spotlight],
+  );
+
+  const animatedNodes = useAnimatedNodes(nodes, Boolean(childDraft));
+  const stableEdges = useStableEdges(edges);
+
+  const bounds = useMemo(() => {
+    if (layout.items.length === 0) {
+      return null;
+    }
+    const xs = layout.items.map((item) => item.x);
+    const ys = layout.items.map((item) => item.y);
+    const minX = Math.min(...xs);
+    const maxX = Math.max(...xs) + NODE_W;
+    const lastLane = layout.lanes.at(-1);
+    const minY = layout.lanes.length > 0 ? layout.lanes[0].top : Math.min(...ys);
+    const maxY = lastLane ? lastLane.top + lastLane.height : Math.max(...ys) + NODE_H;
+    return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
+  }, [layout]);
+
+  const fitMap = useCallback(
+    (duration: number, mode: FitMode) => {
+      if (!bounds || !flowWidth || !flowHeight) {
+        return;
+      }
+      // Lanes start flush with the top edge; a plain tree gets a little air.
+      const padY = layout.lanes.length > 0 ? 0 : FIT_PAD_Y;
+      const fitZoom = Math.min(
+        (flowWidth - FIT_PAD_X * 2) / bounds.width,
+        (flowHeight - padY * 2) / bounds.height,
+        FIT_MAX_ZOOM,
+      );
+      const zoom = Math.min(
+        MAX_ZOOM,
+        Math.max(MIN_ZOOM, mode === "readable" ? Math.max(fitZoom, READABLE_ZOOM) : fitZoom),
+      );
+      const contentWidth = bounds.width * zoom;
+      const x = contentWidth <= flowWidth - FIT_PAD_X * 2
+        ? (flowWidth - contentWidth) / 2 - bounds.x * zoom
+        : FIT_PAD_X - bounds.x * zoom;
+      void setViewport({ x, y: padY - bounds.y * zoom, zoom }, { duration });
+    },
+    [bounds, flowHeight, flowWidth, layout.lanes.length, setViewport],
+  );
+  const fitMapRef = useRef(fitMap);
+  fitMapRef.current = fitMap;
+
+  useEffect(() => {
+    const mode = autoFitModeRef.current;
+    if (!mode || !bounds || !flowWidth || !flowHeight) {
+      return;
+    }
+    fitMap(hasFittedRef.current ? 180 : 0, mode);
+    hasFittedRef.current = true;
+  }, [bounds, fitMap, flowHeight, flowWidth]);
+
+  // Entering or leaving full screen is a fresh look at the map: refit once the
+  // canvas settles, even if the person had moved it.
+  const previousFullscreenRef = useRef(isFullscreen);
+  useEffect(() => {
+    if (previousFullscreenRef.current === isFullscreen) {
+      return;
+    }
+    previousFullscreenRef.current = isFullscreen;
+    autoFitModeRef.current = autoFitModeRef.current ?? "readable";
+    const timeoutId = window.setTimeout(() => fitMapRef.current(200, autoFitModeRef.current ?? "readable"), 120);
+    return () => window.clearTimeout(timeoutId);
+  }, [isFullscreen]);
+
+  useEffect(() => {
+    if (!centerRequest || handledCenterNonceRef.current === centerRequest.nonce) {
+      return;
+    }
+    const item = layout.items.find((candidate) => candidate.id === centerRequest.goalId);
+    if (!item) {
+      return;
+    }
+    handledCenterNonceRef.current = centerRequest.nonce;
+    autoFitModeRef.current = null;
+    void setCenter(item.x + NODE_W / 2, item.y + NODE_H / 2, {
+      zoom: Math.max(getZoom(), 0.85),
+      duration: 260,
+    });
+  }, [centerRequest, getZoom, layout.items, setCenter]);
+
+  const centerSelectedGoal = useCallback(() => {
+    const item = selectedGoalId ? layout.items.find((candidate) => candidate.id === selectedGoalId) : null;
+    if (!item) {
+      return;
+    }
+    autoFitModeRef.current = null;
+    void setCenter(item.x + NODE_W / 2, item.y + NODE_H / 2, { zoom: Math.max(getZoom(), 0.85), duration: 220 });
+  }, [getZoom, layout.items, selectedGoalId, setCenter]);
+
+  useEffect(() => {
+    if (!draggingGoalId) {
+      setDropLaneId(null);
+    }
+  }, [draggingGoalId]);
+
+  const laneAtClientPoint = useCallback(
+    (clientX: number, clientY: number) =>
+      findLaneAtY(layout.lanes, screenToFlowPosition({ x: clientX, y: clientY }).y),
+    [layout.lanes, screenToFlowPosition],
+  );
+
+  const laneDropHandlers = useMemo<LaneDropHandlers>(
+    () => ({
+      onDragOver: (event) => {
+        if (layout.lanes.length === 0 || !isGoalDrag(event)) {
+          return;
+        }
+        // Over a goal, the goal takes the drop (move under it).
+        if (isOverGoalNode(event.target)) {
+          setDropLaneId(null);
+          return;
+        }
+        event.preventDefault();
+        event.dataTransfer.dropEffect = "move";
+        setDropLaneId(laneAtClientPoint(event.clientX, event.clientY)?.id ?? null);
+      },
+      onDragLeave: (event) => {
+        const next = event.relatedTarget;
+        if (!(next instanceof globalThis.Node) || !event.currentTarget.contains(next)) {
+          setDropLaneId(null);
+        }
+      },
+      onDrop: (event) => {
+        setDropLaneId(null);
+        if (event.defaultPrevented || layout.lanes.length === 0 || !isGoalDrag(event) || isOverGoalNode(event.target)) {
+          return;
+        }
+        const goal = layout.goalMap.get(event.dataTransfer.getData(GOAL_DRAG_MIME));
+        const lane = laneAtClientPoint(event.clientX, event.clientY);
+        if (!goal || !lane) {
+          return;
+        }
+        event.preventDefault();
+        const currentLaneId = goal.horizonId && layout.lanes.some((candidate) => candidate.id === goal.horizonId)
+          ? goal.horizonId
+          : UNASSIGNED_LANE_ID;
+        if (currentLaneId !== lane.id) {
+          onSetGoalHorizon(goal.id, laneHorizonId(lane));
+        }
+      },
+    }),
+    [laneAtClientPoint, layout.goalMap, layout.lanes, onSetGoalHorizon],
+  );
+
+  return (
+    <div className="ghq-graph__canvas">
+      {layout.lanes.length > 0 ? (
+        <LaneGutter lanes={layout.lanes} dropLaneId={dropLaneId} dropHandlers={laneDropHandlers} />
+      ) : null}
+      <div
+        className={`ghq-graph__flow${draggingGoalId ? " ghq-graph__flow--dragging" : ""}`}
+        role="tree"
+        aria-label="Goal map"
+        {...laneDropHandlers}
+      >
+        {layout.lanes.length > 0 ? <LaneBands lanes={layout.lanes} dropLaneId={dropLaneId} /> : null}
+        <ReactFlow
+          nodes={animatedNodes}
+          edges={stableEdges}
+          nodeTypes={nodeTypes}
+          onPaneClick={onCanvasClear}
+          onMoveStart={(event) => {
+            if (event) {
+              autoFitModeRef.current = null;
+            }
+          }}
+          panOnScroll
+          zoomOnScroll={false}
+          nodesConnectable={false}
+          nodesDraggable={false}
+          nodesFocusable={false}
+          edgesFocusable={false}
+          minZoom={MIN_ZOOM}
+          maxZoom={MAX_ZOOM}
+          proOptions={{ hideAttribution: true }}
+        >
+          <Background color="var(--wash-3)" gap={40} size={1} />
+        </ReactFlow>
+        {draggingGoalId ? (
+          <FocusDropDock
+            monthLabel={monthLabel}
+            monthCount={monthCount}
+            weekCount={weekCount}
+            onDrop={actions.onAddToLane}
+          />
+        ) : null}
+        <div className="ghq-graph__viewport-controls nopan" aria-label="Map view controls">
+          <button
+            type="button"
+            onClick={() => {
+              autoFitModeRef.current = null;
+              void zoomOut({ duration: 180 });
+            }}
+            aria-label="Zoom out"
+          >
+            −
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              autoFitModeRef.current = null;
+              void zoomIn({ duration: 180 });
+            }}
+            aria-label="Zoom in"
+          >
+            +
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              autoFitModeRef.current = "all";
+              fitMap(220, "all");
+            }}
+            title="Show the whole map"
+          >
+            Fit
+          </button>
+          {selectedGoalId ? (
+            <button type="button" onClick={centerSelectedGoal} title="Center the selected goal">
+              Center
+            </button>
+          ) : null}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ── Toolbar pieces ── */
+
+/* Shared open/close behaviour for toolbar popovers: outside pointer or Esc
+   closes, and Esc doesn't reach the map's own Esc chain. */
+function usePopover() {
+  const [isOpen, setIsOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!isOpen) {
+      return;
+    }
+    const handlePointerDown = (event: PointerEvent) => {
+      if (!containerRef.current?.contains(event.target as globalThis.Node)) {
+        setIsOpen(false);
+      }
+    };
+    window.addEventListener("pointerdown", handlePointerDown);
+    return () => window.removeEventListener("pointerdown", handlePointerDown);
+  }, [isOpen]);
+
+  const onKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (event.key === "Escape" && isOpen) {
+      event.preventDefault();
+      event.stopPropagation();
+      setIsOpen(false);
     }
   };
 
-  const fitVisibleGoals = useCallback(() => {
-    if (visibleGoalIds.length === 0) {
-      return;
-    }
+  return { isOpen, setIsOpen, containerRef, onKeyDown };
+}
 
-    void fitView({
-      nodes: visibleGoalIds.map((id) => ({ id })),
-      padding: props.isExpanded ? 0.12 : 0.16,
-      duration: 220,
-    });
-  }, [fitView, props.isExpanded, visibleGoalIds]);
-
-  const centerSelectedGoal = useCallback(() => {
-    if (!props.selectedGoalId) {
-      fitVisibleGoals();
-      return;
-    }
-
-    void fitView({
-      nodes: [{ id: props.selectedGoalId }],
-      padding: 0.46,
-      duration: 220,
-    });
-  }, [fitView, fitVisibleGoals, props.selectedGoalId]);
+function FilterMenu({
+  filters,
+  domains,
+  horizons,
+  onChange,
+}: {
+  filters: GraphFilters;
+  domains: Array<[string, string]>;
+  horizons: GoalHorizonItem[];
+  onChange: (updates: Partial<GraphFilters>) => void;
+}) {
+  const { isOpen, setIsOpen, containerRef, onKeyDown } = usePopover();
+  const activeCount = [filters.domainId, filters.horizonId, filters.health].filter(Boolean).length;
 
   return (
-    <div className="ghq-graph__canvas" role="tree" aria-label="Goal hierarchy graph">
-      <ReactFlow
-        nodes={animatedNodes}
-        edges={stableEdges}
-        nodeTypes={nodeTypes}
-        onNodeClick={handleNodeClick}
-        onPaneClick={props.onCanvasClear}
-        panOnScroll
-        zoomOnScroll={false}
-        nodesConnectable={false}
-        nodesDraggable={false}
-        minZoom={0.22}
-        maxZoom={1.35}
-        proOptions={{ hideAttribution: true }}
+    <div className="ghq-menu" ref={containerRef} onKeyDown={onKeyDown}>
+      <button
+        className={`button button--ghost button--small${activeCount > 0 ? " ghq-menu__trigger--active" : ""}`}
+        type="button"
+        onClick={() => setIsOpen((current) => !current)}
+        aria-expanded={isOpen}
+        aria-haspopup="true"
       >
-        <Background color="var(--wash-3)" gap={40} size={1} />
-        <div className="ghq-graph__viewport-controls nopan" aria-label="Canvas view controls">
-          <button type="button" onClick={() => void zoomIn({ duration: 180 })} aria-label="Zoom in">
-            +
-          </button>
-          <button type="button" onClick={() => void zoomOut({ duration: 180 })} aria-label="Zoom out">
-            −
-          </button>
-          <button type="button" onClick={fitVisibleGoals}>
-            Fit
-          </button>
-          <button type="button" onClick={centerSelectedGoal}>
-            Center
-          </button>
+        Filter{activeCount > 0 ? <span className="ghq-menu__count">{activeCount}</span> : null}
+      </button>
+      {isOpen ? (
+        <div className="ghq-menu__panel ghq-menu__panel--form">
+          <label className="ghq-menu__field">
+            <span>Domain</span>
+            <select
+              className="ghq-planning-form__select"
+              value={filters.domainId}
+              onChange={(event) => onChange({ domainId: event.target.value })}
+            >
+              <option value="">All domains</option>
+              {domains.map(([domainId, domain]) => (
+                <option key={domainId} value={domainId}>{domain}</option>
+              ))}
+            </select>
+          </label>
+          <label className="ghq-menu__field">
+            <span>Time horizon</span>
+            <select
+              className="ghq-planning-form__select"
+              value={filters.horizonId}
+              onChange={(event) => onChange({ horizonId: event.target.value })}
+            >
+              <option value="">All horizons</option>
+              {horizons.map((horizon) => (
+                <option key={horizon.id} value={horizon.id}>{horizon.name}</option>
+              ))}
+            </select>
+          </label>
+          <label className="ghq-menu__field">
+            <span>Health</span>
+            <select
+              className="ghq-planning-form__select"
+              value={filters.health}
+              onChange={(event) => onChange({ health: event.target.value })}
+            >
+              <option value="">Any health</option>
+              <option value="on_track">On track</option>
+              <option value="drifting">Drifting</option>
+              <option value="stalled">Stalled</option>
+              <option value="achieved">Achieved</option>
+            </select>
+          </label>
+          {activeCount > 0 ? (
+            <button
+              className="ghq-rail__text-btn"
+              type="button"
+              onClick={() => onChange({ domainId: "", horizonId: "", health: "" })}
+            >
+              Clear filters
+            </button>
+          ) : null}
         </div>
-      </ReactFlow>
+      ) : null}
     </div>
   );
+}
+
+function ViewMenu({
+  canExpand,
+  allExpanded,
+  onExpandAll,
+  onCollapseAll,
+  onShowShortcuts,
+}: {
+  canExpand: boolean;
+  allExpanded: boolean;
+  onExpandAll: () => void;
+  onCollapseAll: () => void;
+  onShowShortcuts: () => void;
+}) {
+  const { isOpen, setIsOpen, containerRef, onKeyDown } = usePopover();
+  const run = (action: () => void) => () => {
+    setIsOpen(false);
+    action();
+  };
+
+  return (
+    <div className="ghq-menu" ref={containerRef} onKeyDown={onKeyDown}>
+      <button
+        className="button button--ghost button--small"
+        type="button"
+        onClick={() => setIsOpen((current) => !current)}
+        aria-expanded={isOpen}
+        aria-haspopup="menu"
+      >
+        View
+      </button>
+      {isOpen ? (
+        <div className="ghq-menu__panel ghq-menu__panel--list ghq-menu__panel--end" role="menu">
+          <button type="button" role="menuitem" onClick={run(onExpandAll)} disabled={!canExpand || allExpanded}>
+            Expand all
+          </button>
+          <button type="button" role="menuitem" onClick={run(onCollapseAll)} disabled={!canExpand}>
+            Collapse all
+          </button>
+          <button type="button" role="menuitem" onClick={run(onShowShortcuts)}>
+            <span>Keyboard shortcuts</span>
+            <kbd>?</kbd>
+          </button>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function FullscreenIcon({ exit }: { exit: boolean }) {
+  return (
+    <svg viewBox="0 0 16 16" aria-hidden="true">
+      {exit ? (
+        <path d="M6 2v4H2M10 2v4h4M6 14v-4H2M10 14v-4h4" />
+      ) : (
+        <path d="M2 6V2h4M14 6V2h-4M2 10v4h4M14 10v4h-4" />
+      )}
+    </svg>
+  );
+}
+
+function DisplayFullscreenButton() {
+  const [isDisplayFullscreen, setIsDisplayFullscreen] = useState(() => Boolean(document.fullscreenElement));
+
+  useEffect(() => {
+    const handleChange = () => setIsDisplayFullscreen(Boolean(document.fullscreenElement));
+    document.addEventListener("fullscreenchange", handleChange);
+    return () => document.removeEventListener("fullscreenchange", handleChange);
+  }, []);
+
+  if (!document.fullscreenEnabled) {
+    return null;
+  }
+
+  return (
+    <button
+      className="button button--ghost button--small"
+      type="button"
+      onClick={() => {
+        if (document.fullscreenElement) {
+          void document.exitFullscreen().catch(() => undefined);
+        } else {
+          void document.documentElement.requestFullscreen().catch(() => undefined);
+        }
+      }}
+      aria-pressed={isDisplayFullscreen}
+      title={isDisplayFullscreen ? "Show the browser again" : "Hide the browser too"}
+    >
+      {isDisplayFullscreen ? "Show browser" : "Hide browser"}
+    </button>
+  );
+}
+
+const shortcutRows: Array<[string[], string]> = [
+  [["N"], "New goal"],
+  [["A"], "Add a sub-goal to the selected goal"],
+  [["M"], "Add the selected goal to this month"],
+  [["W"], "Add the selected goal to this week"],
+  [["Enter"], "Open details (or double-click)"],
+  [["↑", "↓"], "Move between goals"],
+  [["←", "→"], "Collapse or expand sub-goals"],
+  [["/"], "Search; Enter jumps to the next match"],
+  [["F"], "Full screen"],
+  [["Esc"], "Close a panel, clear selection, leave full screen"],
+  [["?"], "Show or hide this list"],
+];
+
+function ShortcutSheet({ onClose }: { onClose: () => void }) {
+  return (
+    <div className="ghq-shortcuts" role="dialog" aria-label="Keyboard shortcuts and legend">
+      <div className="ghq-shortcuts__header">
+        <h3>Keyboard shortcuts</h3>
+        <button className="ghq-rail__text-btn" type="button" onClick={onClose}>
+          Close
+        </button>
+      </div>
+      <dl className="ghq-shortcuts__list">
+        {shortcutRows.map(([keys, label]) => (
+          <div key={label} className="ghq-shortcuts__row">
+            <dt>
+              {keys.map((key) => (
+                <kbd key={key}>{key}</kbd>
+              ))}
+            </dt>
+            <dd>{label}</dd>
+          </div>
+        ))}
+      </dl>
+      <h3 className="ghq-shortcuts__subhead">Drag a goal</h3>
+      <dl className="ghq-shortcuts__list">
+        <div className="ghq-shortcuts__row">
+          <dt><span className="ghq-shortcuts__lane-sample" /></dt>
+          <dd>Onto a row to set its time horizon</dd>
+        </div>
+        <div className="ghq-shortcuts__row">
+          <dt><span className="ghq-shortcuts__node-sample" /></dt>
+          <dd>Onto another goal to make it a sub-goal</dd>
+        </div>
+        <div className="ghq-shortcuts__row">
+          <dt><span className="graph-goal-node__slot">M1</span></dt>
+          <dd>Onto This month or This week, shown while you drag</dd>
+        </div>
+      </dl>
+      <h3 className="ghq-shortcuts__subhead">On the map</h3>
+      <dl className="ghq-shortcuts__list">
+        <div className="ghq-shortcuts__row">
+          <dt><span className="graph-goal-node__slot">W2</span></dt>
+          <dd>In focus this month (M) or this week (W)</dd>
+        </div>
+        <div className="ghq-shortcuts__row">
+          <dt><span className="graph-goal-node__health graph-goal-node__health--drifting" /></dt>
+          <dd>Drifting: nothing linked was completed in 7 days</dd>
+        </div>
+        <div className="ghq-shortcuts__row">
+          <dt><span className="graph-goal-node__health graph-goal-node__health--stalled">Stalled</span></dt>
+          <dd>No progress in 14 days and a date has passed</dd>
+        </div>
+      </dl>
+    </div>
+  );
+}
+
+const readPlaceHintDismissed = () => {
+  try {
+    return window.localStorage.getItem(PLACE_HINT_STORAGE_KEY) === "1";
+  } catch {
+    return false;
+  }
 };
+
+const writePlaceHintDismissed = () => {
+  try {
+    window.localStorage.setItem(PLACE_HINT_STORAGE_KEY, "1");
+  } catch {
+    // Storage can be unavailable (private mode); the hint just comes back.
+  }
+};
+
+/* ── Main view ── */
 
 export type GoalsPlanGraphViewProps = {
   goals: GoalOverviewItem[];
   horizons: GoalHorizonItem[];
   selectedGoalId: string | null;
   expandedGoalIds: Set<string>;
-  isFocusMode: boolean;
   childDraft: ChildDraft | null;
   childDraftIsPending: boolean;
-  monthFocusGoalIds: Set<string>;
-  weekFocusGoalIds: Set<string>;
+  monthSlotByGoalId: Map<string, number>;
+  weekSlotByGoalId: Map<string, number>;
+  monthLabel: string;
+  monthCount: number;
+  weekCount: number;
+  isFocusOpen: boolean;
   structureError: string | null;
   structureMessage: string | null;
-  isExpanded: boolean;
+  isFullscreen: boolean;
+  centerRequest: CenterRequest | null;
+  viewSwitch: ReactNode;
   onSelectGoal: (goalId: string) => void;
   onToggleExpanded: (goalId: string) => void;
   onExpandAll: () => void;
@@ -1180,21 +1465,21 @@ export type GoalsPlanGraphViewProps = {
   onOpenCreateGoal: () => void;
   onOpenAddChild: (goalId: string) => void;
   onOpenDetails: (goalId: string) => void;
-  onOpenPlanning: (goalId: string) => void;
   onEditGoal: (goal: GoalOverviewItem) => void;
   onDetachGoal: (goalId: string) => void;
-  onReparentGoal: (goalId: string, parentGoalId: string | null) => void;
   onDuplicateGoal: (goal: GoalOverviewItem) => void;
   onArchiveGoal: (goal: GoalOverviewItem) => void;
-  onAddToLane: (lane: "month" | "week", goalId: string) => void;
+  onAddToLane: (lane: RailLane, goalId: string) => void;
   onDropGoalOnGoal: (targetGoalId: string, draggedGoalId: string) => void;
+  onSetGoalHorizon: (goalId: string, horizonId: string | null) => void;
   onSaveChildDraft: (title: string) => void;
   onCancelChildDraft: () => void;
   onCanvasClear: () => void;
-  onEnterFocusMode: () => void;
-  onExitFocusMode: () => void;
-  onClearSelection: () => void;
-  onToggleExpandedCanvas: () => void;
+  onRevealGoal: (goalId: string) => void;
+  onRequestCenter: (goalId: string) => void;
+  onEscape: () => void;
+  onToggleFullscreen: () => void;
+  onToggleFocus: () => void;
 };
 
 export const GoalsPlanGraphView = ({
@@ -1202,14 +1487,19 @@ export const GoalsPlanGraphView = ({
   horizons,
   selectedGoalId,
   expandedGoalIds,
-  isFocusMode,
   childDraft,
   childDraftIsPending,
-  monthFocusGoalIds,
-  weekFocusGoalIds,
+  monthSlotByGoalId,
+  weekSlotByGoalId,
+  monthLabel,
+  monthCount,
+  weekCount,
+  isFocusOpen,
   structureError,
   structureMessage,
-  isExpanded,
+  isFullscreen,
+  centerRequest,
+  viewSwitch,
   onSelectGoal,
   onToggleExpanded,
   onExpandAll,
@@ -1217,44 +1507,30 @@ export const GoalsPlanGraphView = ({
   onOpenCreateGoal,
   onOpenAddChild,
   onOpenDetails,
-  onOpenPlanning,
   onEditGoal,
   onDetachGoal,
-  onReparentGoal,
   onDuplicateGoal,
   onArchiveGoal,
   onAddToLane,
   onDropGoalOnGoal,
+  onSetGoalHorizon,
   onSaveChildDraft,
   onCancelChildDraft,
   onCanvasClear,
-  onEnterFocusMode,
-  onExitFocusMode,
-  onClearSelection,
-  onToggleExpandedCanvas,
+  onRevealGoal,
+  onRequestCenter,
+  onEscape,
+  onToggleFullscreen,
+  onToggleFocus,
 }: GoalsPlanGraphViewProps) => {
-  const hasGoals = goals.some((goal) => goal.status === "active");
-  const [filters, setFilters] = useState<GraphFilters>({
-    query: "",
-    domainId: "",
-    horizonId: "",
-    health: "",
-  });
+  const [filters, setFilters] = useState<GraphFilters>(emptyFilters);
+  const [matchIndex, setMatchIndex] = useState(-1);
+  const [isShortcutsOpen, setIsShortcutsOpen] = useState(false);
+  const [draggingGoalId, setDraggingGoalId] = useState<string | null>(null);
+  const [isPlaceHintDismissed, setIsPlaceHintDismissed] = useState(readPlaceHintDismissed);
+  const searchRef = useRef<HTMLInputElement | null>(null);
+
   const activeGoals = useMemo(() => goals.filter((goal) => goal.status === "active"), [goals]);
-  const selectedGoal = useMemo(
-    () => (selectedGoalId ? activeGoals.find((goal) => goal.id === selectedGoalId) ?? null : null),
-    [activeGoals, selectedGoalId],
-  );
-  const parentGoalOptions = useMemo(
-    () => (
-      selectedGoalId
-        ? activeGoals
-            .filter((goal) => goal.id !== selectedGoalId && !isGoalDescendant(activeGoals, selectedGoalId, goal.id))
-            .sort(sortGoals)
-        : []
-    ),
-    [activeGoals, selectedGoalId],
-  );
   const activeDomains = useMemo(() => {
     const domainMap = new Map<string, string>();
     for (const goal of activeGoals) {
@@ -1262,250 +1538,330 @@ export const GoalsPlanGraphView = ({
     }
     return [...domainMap.entries()].sort((left, right) => left[1].localeCompare(right[1]));
   }, [activeGoals]);
-  const activeHorizonIds = useMemo(() => new Set(activeGoals.flatMap((goal) => (goal.horizonId ? [goal.horizonId] : []))), [activeGoals]);
   const activeHorizons = useMemo(
-    () => horizons.filter((horizon) => !horizon.isArchived && activeHorizonIds.has(horizon.id)),
-    [activeHorizonIds, horizons],
+    () => horizons.filter((horizon) => !horizon.isArchived).sort((left, right) => left.sortOrder - right.sortOrder),
+    [horizons],
   );
+  const unplacedCount = useMemo(() => {
+    const activeHorizonIds = new Set(activeHorizons.map((horizon) => horizon.id));
+    return activeGoals.filter((goal) => !goal.horizonId || !activeHorizonIds.has(goal.horizonId)).length;
+  }, [activeGoals, activeHorizons]);
   const spotlight = useMemo(() => buildSpotlightState(activeGoals, filters), [activeGoals, filters]);
-  const filterMatchCount = spotlight.active ? spotlight.exactGoalIds.size : activeGoals.length;
-  const hasActiveFilters = spotlight.active;
+  const treeOrder = useMemo(() => getGoalTreeOrder(activeGoals, activeHorizons), [activeGoals, activeHorizons]);
+  const hasQuery = filters.query.trim().length > 0;
+  const matchIds = useMemo(
+    () => (hasQuery ? treeOrder.filter((goalId) => spotlight.exactGoalIds.has(goalId)) : []),
+    [hasQuery, spotlight.exactGoalIds, treeOrder],
+  );
+  const goalIdsWithChildren = useMemo(
+    () => new Set(activeGoals.flatMap((goal) => (goal.parentGoalId ? [goal.parentGoalId] : []))),
+    [activeGoals],
+  );
+  const allExpanded = [...goalIdsWithChildren].every((goalId) => expandedGoalIds.has(goalId));
 
+  // dragend fires on the node that started the drag; if that node re-renders
+  // away mid-drag, these catch the end instead.
+  useEffect(() => {
+    if (!draggingGoalId) {
+      return;
+    }
+    const endDrag = () => setDraggingGoalId(null);
+    window.addEventListener("dragend", endDrag);
+    window.addEventListener("drop", endDrag);
+    return () => {
+      window.removeEventListener("dragend", endDrag);
+      window.removeEventListener("drop", endDrag);
+    };
+  }, [draggingGoalId]);
+
+  const actions = useMemo<GoalNodeActions>(
+    () => ({
+      onSelect: onSelectGoal,
+      onToggleExpanded,
+      onOpenAddChild,
+      onOpenDetails,
+      onEditGoal,
+      onDetachGoal,
+      onDuplicateGoal,
+      onArchiveGoal,
+      onAddToLane,
+      onDropGoalOnGoal,
+      onDragGoalStart: setDraggingGoalId,
+      onDragGoalEnd: () => setDraggingGoalId(null),
+    }),
+    [
+      onAddToLane,
+      onArchiveGoal,
+      onDetachGoal,
+      onDropGoalOnGoal,
+      onDuplicateGoal,
+      onEditGoal,
+      onOpenAddChild,
+      onOpenDetails,
+      onSelectGoal,
+      onToggleExpanded,
+    ],
+  );
+
+  const jumpToMatch = useCallback(
+    (direction: 1 | -1) => {
+      if (matchIds.length === 0) {
+        return;
+      }
+      const nextIndex = matchIndex < 0
+        ? (direction === 1 ? 0 : matchIds.length - 1)
+        : (matchIndex + direction + matchIds.length) % matchIds.length;
+      const goalId = matchIds[nextIndex];
+      setMatchIndex(nextIndex);
+      onRevealGoal(goalId);
+      onSelectGoal(goalId);
+      onRequestCenter(goalId);
+    },
+    [matchIds, matchIndex, onRequestCenter, onRevealGoal, onSelectGoal],
+  );
+
+  // One keyboard map for the whole Plan map. Inputs, the goal form and open
+  // menus handle their own keys first.
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      const target = event.target as HTMLElement | null;
-      const isTyping =
-        target?.tagName === "INPUT"
-        || target?.tagName === "TEXTAREA"
-        || target?.tagName === "SELECT"
-        || target?.isContentEditable;
-
-      if (isTyping || event.metaKey || event.ctrlKey || event.altKey) {
+      if (event.defaultPrevented || event.metaKey || event.ctrlKey || event.altKey) {
+        return;
+      }
+      // Modals (goal form, quick capture) and other dialogs own their keys.
+      if (
+        document.querySelector("[aria-modal=\"true\"]")
+        || (event.target instanceof Element && event.target.closest("[role=\"dialog\"]:not(.ghq-shortcuts)"))
+      ) {
         return;
       }
 
-      if (event.key === "n") {
+      const typing = isTypingTarget(event.target);
+
+      if (event.key === "Escape") {
+        if (typing) {
+          return;
+        }
         event.preventDefault();
-        onOpenCreateGoal();
-      } else if (event.key === "a" && selectedGoalId) {
+        if (isShortcutsOpen) {
+          setIsShortcutsOpen(false);
+          return;
+        }
+        onEscape();
+        return;
+      }
+
+      if (typing) {
+        return;
+      }
+
+      const run = (action: () => void) => {
         event.preventDefault();
-        onOpenAddChild(selectedGoalId);
-      } else if (event.key === "p" && selectedGoalId) {
-        event.preventDefault();
-        onOpenPlanning(selectedGoalId);
-      } else if (event.key === "Escape" && selectedGoalId) {
-        event.preventDefault();
-        onClearSelection();
+        action();
+      };
+
+      switch (event.key) {
+        case "n":
+          run(onOpenCreateGoal);
+          break;
+        case "a":
+          if (selectedGoalId) run(() => onOpenAddChild(selectedGoalId));
+          break;
+        case "m":
+          if (selectedGoalId) run(() => onAddToLane("month", selectedGoalId));
+          break;
+        case "w":
+          if (selectedGoalId) run(() => onAddToLane("week", selectedGoalId));
+          break;
+        case "f":
+          run(onToggleFullscreen);
+          break;
+        case "/":
+          run(() => searchRef.current?.focus());
+          break;
+        case "?":
+          run(() => setIsShortcutsOpen((current) => !current));
+          break;
+        default:
+          break;
       }
     };
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [onClearSelection, onOpenAddChild, onOpenCreateGoal, onOpenPlanning, selectedGoalId]);
+  }, [isShortcutsOpen, onAddToLane, onEscape, onOpenAddChild, onOpenCreateGoal, onToggleFullscreen, selectedGoalId]);
 
-  if (!hasGoals) {
+  if (activeGoals.length === 0) {
     return (
-      <div className="ghq-graph-empty">
-        <EmptyState
-          title="No active goals yet"
-          description="Create your first goal to see your planning map come to life."
-          actionLabel="+ New Goal"
-          onAction={onOpenCreateGoal}
-        />
+      <div className="ghq-graph ghq-graph--empty">
+        <div className="ghq-toolbar">
+          <div className="ghq-toolbar__group">{viewSwitch}</div>
+        </div>
+        <div className="ghq-graph-empty">
+          <EmptyState
+            title="Map your first goal"
+            description="Start with something big, like a five-year direction. You can break it down into yearly and quarterly goals here."
+            actionLabel="+ New goal"
+            onAction={onOpenCreateGoal}
+          />
+        </div>
       </div>
     );
   }
 
+  const showPlaceHint = activeHorizons.length > 0 && unplacedCount > 0 && !isPlaceHintDismissed;
+
   return (
-    <div className={`ghq-graph${isExpanded ? " ghq-graph--expanded" : ""}`}>
-      <div className="ghq-graph__workbar" aria-label="Goal canvas tools">
-        <button className="button button--primary button--small" type="button" onClick={onOpenCreateGoal}>
-          + New Goal
-        </button>
-        <label className="ghq-graph__search">
-          <span className="sr-only">Search goal canvas</span>
-          <input
-            type="search"
-            value={filters.query}
-            placeholder="Search canvas"
-            onChange={(event) => setFilters((current) => ({ ...current, query: event.target.value }))}
-          />
-        </label>
-        <select
-          className="ghq-graph__select"
-          value={filters.domainId}
-          onChange={(event) => setFilters((current) => ({ ...current, domainId: event.target.value }))}
-          aria-label="Filter by domain"
-        >
-          <option value="">All domains</option>
-          {activeDomains.map(([domainId, domain]) => (
-            <option key={domainId} value={domainId}>{domain}</option>
-          ))}
-        </select>
-        <select
-          className="ghq-graph__select"
-          value={filters.horizonId}
-          onChange={(event) => setFilters((current) => ({ ...current, horizonId: event.target.value }))}
-          aria-label="Filter by planning layer"
-        >
-          <option value="">All layers</option>
-          {activeHorizons.map((horizon) => (
-            <option key={horizon.id} value={horizon.id}>{horizon.name}</option>
-          ))}
-        </select>
-        <select
-          className="ghq-graph__select"
-          value={filters.health}
-          onChange={(event) => setFilters((current) => ({ ...current, health: event.target.value }))}
-          aria-label="Filter by health"
-        >
-          <option value="">All health</option>
-          <option value="on_track">On track</option>
-          <option value="drifting">Drifting</option>
-          <option value="stalled">Stalled</option>
-          <option value="achieved">Achieved</option>
-        </select>
-        {hasActiveFilters ? (
-          <button
-            className="button button--ghost button--small"
-            type="button"
-            onClick={() => setFilters({ query: "", domainId: "", horizonId: "", health: "" })}
-          >
-            Clear
-          </button>
-        ) : null}
-        <span className="ghq-graph__match-count">{filterMatchCount} shown</span>
-      </div>
-      <div className="ghq-graph__toolbar">
-        {selectedGoalId ? (
-          <div className="ghq-graph__toolbar-group ghq-graph__toolbar-group--selection" aria-label="Selected goal actions">
-            <span className="ghq-graph__toolbar-label">Selected</span>
-            <button
-              className="button button--primary button--small ghq-graph__toolbar-btn"
-              type="button"
-              onClick={() => onOpenDetails(selectedGoalId)}
-            >
-              Open details
-            </button>
-            <button
-              className="button button--ghost button--small ghq-graph__toolbar-btn"
-              type="button"
-              onClick={() => onOpenPlanning(selectedGoalId)}
-            >
-              Open plan
-            </button>
-            <button
-              className="button button--ghost button--small ghq-graph__toolbar-btn"
-              type="button"
-              onClick={isFocusMode ? onExitFocusMode : onEnterFocusMode}
-              aria-pressed={isFocusMode}
-            >
-              {isFocusMode ? "Exit focus" : "Focus"}
-            </button>
-            {selectedGoal ? (
-              <label className="ghq-graph__parent-field">
-                <span className="sr-only">Move selected goal under</span>
-                <select
-                  className="ghq-graph__select ghq-graph__parent-select"
-                  value={selectedGoal.parentGoalId ?? ""}
-                  onChange={(event) => onReparentGoal(selectedGoal.id, event.target.value || null)}
-                  aria-label="Move selected goal under"
-                >
-                  <option value="">Top-level</option>
-                  {parentGoalOptions.map((goal) => (
-                    <option key={goal.id} value={goal.id}>
-                      {goal.title}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            ) : null}
+    <ReactFlowProvider>
+      <div className="ghq-graph">
+        <div className="ghq-toolbar">
+          <div className="ghq-toolbar__group">
+            {viewSwitch}
+            <label className="ghq-toolbar__search">
+              <span className="sr-only">Search goals</span>
+              <input
+                ref={searchRef}
+                type="search"
+                value={filters.query}
+                placeholder="Search goals"
+                onChange={(event) => {
+                  setMatchIndex(-1);
+                  setFilters((current) => ({ ...current, query: event.target.value }));
+                }}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" && !event.nativeEvent.isComposing) {
+                    event.preventDefault();
+                    jumpToMatch(event.shiftKey ? -1 : 1);
+                  } else if (event.key === "ArrowDown") {
+                    event.preventDefault();
+                    jumpToMatch(1);
+                  } else if (event.key === "ArrowUp") {
+                    event.preventDefault();
+                    jumpToMatch(-1);
+                  } else if (event.key === "Escape") {
+                    event.preventDefault();
+                    if (filters.query) {
+                      setMatchIndex(-1);
+                      setFilters((current) => ({ ...current, query: "" }));
+                    } else {
+                      searchRef.current?.blur();
+                    }
+                  }
+                }}
+              />
+              {hasQuery ? (
+                <span className="ghq-toolbar__match-count" aria-live="polite">
+                  {matchIds.length === 0
+                    ? "No matches"
+                    : matchIndex >= 0
+                      ? `${matchIndex + 1} of ${matchIds.length}`
+                      : `${matchIds.length} found`}
+                </span>
+              ) : null}
+            </label>
+            <FilterMenu
+              filters={filters}
+              domains={activeDomains}
+              horizons={activeHorizons}
+              onChange={(updates) => setFilters((current) => ({ ...current, ...updates }))}
+            />
           </div>
-        ) : null}
-        <div className="ghq-graph__toolbar-group ghq-graph__toolbar-group--view" aria-label="Canvas view actions">
-          <button
-            className="button button--ghost button--small ghq-graph__toolbar-btn"
-            type="button"
-            onClick={onExpandAll}
-          >
-            Expand
-          </button>
-          <button
-            className="button button--ghost button--small ghq-graph__toolbar-btn"
-            type="button"
-            onClick={onCollapseAll}
-          >
-            Collapse
-          </button>
-          {selectedGoalId ? (
+          <div className="ghq-toolbar__group ghq-toolbar__group--end">
             <button
-              className="button button--ghost button--small ghq-graph__toolbar-btn"
+              className={`button button--ghost button--small ghq-focus-btn${isFocusOpen ? " ghq-focus-btn--open" : ""}`}
               type="button"
-              onClick={onClearSelection}
+              onClick={onToggleFocus}
+              aria-pressed={isFocusOpen}
+              title="This month's outcomes and this week's priorities"
             >
-              Clear
+              Focus
+              <span className="ghq-focus-btn__counts" aria-hidden="true">
+                {monthCount}/3 · {weekCount}/3
+              </span>
+              <span className="sr-only">{`, ${monthLabel} ${monthCount} of 3, this week ${weekCount} of 3`}</span>
             </button>
+            <ViewMenu
+              canExpand={goalIdsWithChildren.size > 0}
+              allExpanded={allExpanded}
+              onExpandAll={onExpandAll}
+              onCollapseAll={onCollapseAll}
+              onShowShortcuts={() => setIsShortcutsOpen(true)}
+            />
+            {isFullscreen ? <DisplayFullscreenButton /> : null}
+            <button
+              className={`button button--ghost button--small${isFullscreen ? "" : " ghq-toolbar__icon-btn"}`}
+              type="button"
+              onClick={onToggleFullscreen}
+              aria-pressed={isFullscreen}
+              aria-label={isFullscreen ? "Exit full screen" : "Full screen"}
+              title={isFullscreen ? "Leave full screen (F or Esc)" : "Full screen (F)"}
+            >
+              {isFullscreen ? "Exit full screen" : <FullscreenIcon exit={false} />}
+            </button>
+            <button className="button button--primary button--small" type="button" onClick={onOpenCreateGoal}>
+              + New goal
+            </button>
+          </div>
+        </div>
+
+        <div className="ghq-graph__body">
+          <GraphCanvas
+            activeGoals={activeGoals}
+            horizons={horizons}
+            selectedGoalId={selectedGoalId}
+            expandedGoalIds={expandedGoalIds}
+            spotlight={spotlight}
+            childDraft={childDraft}
+            childDraftIsPending={childDraftIsPending}
+            monthSlotByGoalId={monthSlotByGoalId}
+            weekSlotByGoalId={weekSlotByGoalId}
+            isFullscreen={isFullscreen}
+            centerRequest={centerRequest}
+            draggingGoalId={draggingGoalId}
+            monthLabel={monthLabel}
+            monthCount={monthCount}
+            weekCount={weekCount}
+            actions={actions}
+            onSaveChildDraft={onSaveChildDraft}
+            onCancelChildDraft={onCancelChildDraft}
+            onCanvasClear={onCanvasClear}
+            onSetGoalHorizon={onSetGoalHorizon}
+          />
+
+          {isShortcutsOpen ? <ShortcutSheet onClose={() => setIsShortcutsOpen(false)} /> : null}
+
+          {structureError || structureMessage ? (
+            <div
+              className={`ghq-graph__notice${structureError ? " ghq-graph__notice--error" : ""}`}
+              role={structureError ? "alert" : "status"}
+            >
+              <p>{structureError ?? structureMessage}</p>
+            </div>
           ) : null}
-          <button
-            className="button button--ghost button--small ghq-graph__expand-btn"
-            type="button"
-            onClick={onToggleExpandedCanvas}
-            aria-label={isExpanded ? "Exit expanded graph view" : "Expand graph view"}
-            aria-pressed={isExpanded}
-          >
-            {isExpanded ? "Canvas off" : "Canvas"}
-          </button>
+
+          {activeHorizons.length === 0 ? (
+            <p className="ghq-graph__hint">
+              <Link to="/settings#planning-layers">Add time horizons</Link> to lay goals out from life vision to this month.
+            </p>
+          ) : showPlaceHint ? (
+            <p className="ghq-graph__hint">
+              <span>
+                {unplacedCount === 1 ? "1 goal has" : `${unplacedCount} goals have`} no time horizon. Drag a goal into a row to place it.
+              </span>
+              <button
+                className="ghq-graph__hint-close"
+                type="button"
+                onClick={() => {
+                  setIsPlaceHintDismissed(true);
+                  writePlaceHintDismissed();
+                }}
+                aria-label="Dismiss hint"
+              >
+                ×
+              </button>
+            </p>
+          ) : null}
         </div>
       </div>
-
-      <ReactFlowProvider>
-        <GraphInner
-          goals={goals}
-          horizons={horizons}
-          selectedGoalId={selectedGoalId}
-          expandedGoalIds={expandedGoalIds}
-          isFocusMode={isFocusMode}
-          spotlightGoalIds={spotlight.active ? spotlight.relatedGoalIds : null}
-          spotlightExactGoalIds={spotlight.exactGoalIds}
-          childDraft={childDraft}
-          childDraftIsPending={childDraftIsPending}
-          monthFocusGoalIds={monthFocusGoalIds}
-          weekFocusGoalIds={weekFocusGoalIds}
-          onSelectGoal={onSelectGoal}
-          onToggleExpanded={onToggleExpanded}
-          onOpenAddChild={onOpenAddChild}
-          onOpenDetails={onOpenDetails}
-          onOpenPlanning={onOpenPlanning}
-          onEditGoal={onEditGoal}
-          onDetachGoal={onDetachGoal}
-          onDuplicateGoal={onDuplicateGoal}
-          onArchiveGoal={onArchiveGoal}
-          onAddToLane={onAddToLane}
-          onDropGoalOnGoal={onDropGoalOnGoal}
-          onSaveChildDraft={onSaveChildDraft}
-          onCancelChildDraft={onCancelChildDraft}
-          isExpanded={isExpanded}
-          onCanvasClear={onCanvasClear}
-        />
-      </ReactFlowProvider>
-
-      {structureError ? (
-        <div className="ghq-graph__notice ghq-graph__notice--error">
-          <p>{structureError}</p>
-        </div>
-      ) : null}
-
-      {structureMessage ? (
-        <div className="ghq-graph__notice ghq-graph__notice--success">
-          <p>{structureMessage}</p>
-        </div>
-      ) : null}
-
-      {horizons.filter((horizon) => !horizon.isArchived).length === 0 ? (
-        <div className="ghq-graph__hint ghq-graph__hint--bottom">
-          <p>Add planning layers in Settings to make the hierarchy clearer.</p>
-        </div>
-      ) : null}
-    </div>
+    </ReactFlowProvider>
   );
 };

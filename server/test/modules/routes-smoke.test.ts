@@ -1336,6 +1336,7 @@ describe("module route smoke tests", () => {
           },
         ],
       }),
+      findMany: vi.fn().mockResolvedValue([]),
     } as any;
     prisma.goalMilestone = {
       findMany: vi
@@ -1445,6 +1446,12 @@ describe("module route smoke tests", () => {
     });
 
     expect(detail.statusCode).toBe(200);
+    expect(prisma.goal.findMany).toHaveBeenCalledTimes(1);
+    expect(prisma.goal.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { userId: "user-1" },
+      }),
+    );
     expect(JSON.parse(detail.body)).toEqual(
       expect.objectContaining({
         contextDate: "2026-03-22",
