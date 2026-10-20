@@ -1,6 +1,7 @@
 import { type ReactNode, useId, useState } from "react";
 
 type CollapsibleSectionProps = {
+  id?: string;
   title: string;
   subtitle?: string;
   defaultOpen?: boolean;
@@ -11,6 +12,7 @@ type CollapsibleSectionProps = {
 };
 
 export function CollapsibleSection({
+  id,
   title,
   subtitle,
   defaultOpen = false,
@@ -35,30 +37,28 @@ export function CollapsibleSection({
   }
 
   return (
-    <div className="habits-collapsible">
-      <div className="habits-collapsible__toggle">
+    <section className={`hb-library${isSectionOpen ? " is-open" : ""}`} id={id}>
+      <header className="hb-library__header">
         <button
           type="button"
-          className="habits-collapsible__toggle-button"
+          className="hb-library__toggle"
           onClick={handleToggle}
           aria-expanded={isSectionOpen}
           aria-controls={bodyId}
         >
-          <div>
-            <h2 className="habits-collapsible__title">{title}</h2>
-            {subtitle ? <p className="habits-collapsible__subtitle">{subtitle}</p> : null}
-          </div>
-          <span
-            className={`habits-collapsible__chevron${isSectionOpen ? " habits-collapsible__chevron--open" : ""}`}
-          >
-            &#x25B8;
-          </span>
+          <svg className="hb-library__chevron" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+            <path d="M6 3.5 10.5 8 6 12.5" />
+          </svg>
+          <h2 className="hb-library__title">{title}</h2>
+          {subtitle ? <span className="hb-library__count">{subtitle}</span> : null}
         </button>
-        <div className="habits-collapsible__right">
-          {trailing ?? null}
+        {trailing ? <div className="hb-library__trailing">{trailing}</div> : null}
+      </header>
+      {isSectionOpen ? (
+        <div className="hb-library__body" id={bodyId}>
+          {children}
         </div>
-      </div>
-      {isSectionOpen ? <div className="habits-collapsible__body" id={bodyId}>{children}</div> : null}
-    </div>
+      ) : null}
+    </section>
   );
 }

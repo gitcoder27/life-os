@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   calculateHabitActiveStreak,
+  calculateHabitRecentDays,
   calculateHabitRisk,
   calculateWeeklyHabitChallenge,
 } from "../../src/lib/habits/guidance.js";
@@ -106,5 +107,59 @@ describe("habit guidance helpers", () => {
         completedCount7d: 4,
       }),
     );
+  });
+
+  it("builds the last seven days oldest first with rest and open states", () => {
+    const checkins = [
+      { occurredOn: new Date("2026-03-09T00:00:00.000Z"), status: "COMPLETED" as const },
+      { occurredOn: new Date("2026-03-11T00:00:00.000Z"), status: "SKIPPED" as const },
+      { occurredOn: new Date("2026-03-13T00:00:00.000Z"), status: "COMPLETED" as const },
+    ];
+    const pauseWindows = [
+      { startsOn: new Date("2026-03-12T00:00:00.000Z"), endsOn: new Date("2026-03-12T00:00:00.000Z") },
+    ];
+
+    expect(calculateHabitRecentDays(checkins, {}, "2026-03-15", pauseWindows)).toEqual([
+      { date: "2026-03-09", state: "done" },
+      { date: "2026-03-10", state: "missed" },
+      { date: "2026-03-11", state: "missed" },
+      { date: "2026-03-12", state: "rest" },
+      { date: "2026-03-13", state: "done" },
+      { date: "2026-03-14", state: "missed" },
+      { date: "2026-03-15", state: "open" },
+    ]);
+
+    const completedToday = calculateHabitRecentDays(
+      [...checkins, { occurredOn: new Date("2026-03-15T00:00:00.000Z"), status: "COMPLETED" as const }],
+      {},
+      "2026-03-15",
+      pauseWindows,
+    );
+
+    expect(completedToday.at(-1)).toEqual({ date: "2026-03-15", state: "done" });
+  });
+
+  it("marks partial multi-target days and unscheduled days", () => {
+    const days = calculateHabitRecentDays(
+      [
+        { occurredOn: new Date("2026-03-09T00:00:00.000Z"), status: "COMPLETED", completionCount: 1 },
+        { occurredOn: new Date("2026-03-10T00:00:00.000Z"), status: "COMPLETED", completionCount: 2 },
+        { occurredOn: new Date("2026-03-14T00:00:00.000Z"), status: "COMPLETED", completionCount: 2 },
+      ],
+      { daysOfWeek: [1, 2, 3, 4, 5] },
+      "2026-03-15",
+      [],
+      2,
+    );
+
+    expect(days.map((day) => day.state)).toEqual([
+      "partial",
+      "done",
+      "missed",
+      "missed",
+      "missed",
+      "done",
+      "not_due",
+    ]);
   });
 });

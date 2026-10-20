@@ -1,7 +1,7 @@
 import { InlineErrorState } from "../../../shared/ui/PageState";
 
 import type { WeeklyChallenge } from "../types";
-import { ChallengeProgressRing } from "./ChallengeProgressRing";
+import { Tally } from "./Tally";
 
 type SignalsSectionProps = {
   weeklyChallenge: WeeklyChallenge;
@@ -18,10 +18,12 @@ export function SignalsSection({
   momentumErrorMessage,
   onRetry,
 }: SignalsSectionProps) {
+  if (!weeklyChallenge && !isMomentumError) return null;
+
   return (
-    <div className="habits-signals">
+    <div className="hb-signals">
       {weeklyChallenge ? (
-        <WeeklyChallengeCard
+        <WeeklyCommitment
           weeklyChallenge={weeklyChallenge}
           highlight={highlightWeeklyChallenge}
         />
@@ -29,7 +31,7 @@ export function SignalsSection({
 
       {isMomentumError ? (
         <InlineErrorState
-          message={momentumErrorMessage ?? "Consistency data could not load."}
+          message={momentumErrorMessage ?? "Consistency data didn't load."}
           onRetry={onRetry}
         />
       ) : null}
@@ -37,60 +39,48 @@ export function SignalsSection({
   );
 }
 
-function WeeklyChallengeCard({
+function statusText(weeklyChallenge: NonNullable<WeeklyChallenge>) {
+  if (weeklyChallenge.completedToday) return "Done today";
+  if (weeklyChallenge.status === "due_today") return "Due today";
+  if (weeklyChallenge.status === "behind") return "Still time this week";
+  return "On track";
+}
+
+function WeeklyCommitment({
   weeklyChallenge,
   highlight = false,
 }: {
   weeklyChallenge: NonNullable<WeeklyChallenge>;
   highlight?: boolean;
 }) {
-  const isDueAndIncomplete =
-    weeklyChallenge.status === "due_today" && !weeklyChallenge.completedToday;
+  const isDueAndOpen = weeklyChallenge.status === "due_today" && !weeklyChallenge.completedToday;
 
   return (
     <div
       id="habits-weekly-challenge"
-      className={`challenge-card${weeklyChallenge.status === "behind" ? " challenge-card--behind" : ""}${highlight ? " challenge-card--highlighted" : ""}`}
+      className={`hb-commitment${isDueAndOpen ? " is-due" : ""}${highlight ? " is-highlighted" : ""}`}
+      title={weeklyChallenge.message}
     >
-      <ChallengeProgressRing
-        completions={weeklyChallenge.weekCompletions}
-        target={weeklyChallenge.weekTarget}
-      />
-      <div className="challenge-card__body">
-        <div className="challenge-card__label">This week's commitment</div>
-        <div className="challenge-card__title">{weeklyChallenge.title}</div>
-        <div className="challenge-card__meta">
-          {weeklyChallenge.weekCompletions}/{weeklyChallenge.weekTarget} this week
-          {weeklyChallenge.streakCount > 0
-            ? ` \u00b7 ${weeklyChallenge.streakCount} day streak`
-            : ""}
-          {isDueAndIncomplete ? " \u00b7 due today" : ""}
-        </div>
-        {weeklyChallenge.message ? (
-          <div
-            className="challenge-card__meta"
-            style={{ marginTop: "0.15rem", fontStyle: "italic" }}
-          >
-            {weeklyChallenge.message}
-          </div>
-        ) : null}
-        <div className="challenge-card__hint">Set during your weekly review</div>
+      <div className="hb-commitment__body">
+        <span className="hb-commitment__label" title="Set during your weekly review">
+          This week's commitment
+        </span>
+        <span className="hb-commitment__title">{weeklyChallenge.title}</span>
       </div>
-      <span className="challenge-card__status">
-        {weeklyChallenge.completedToday ? (
-          <span className="tag tag--positive">done today</span>
-        ) : (
-          <span
-            className={`tag ${weeklyChallenge.status === "on_track" ? "tag--positive" : weeklyChallenge.status === "due_today" ? "tag--warning" : "tag--negative"}`}
-          >
-            {weeklyChallenge.status === "on_track"
-              ? "on track"
-              : weeklyChallenge.status === "due_today"
-                ? "due today"
-                : "behind"}
-          </span>
-        )}
-      </span>
+      <div className="hb-commitment__progress">
+        <span className="hb-commitment__count">
+          {weeklyChallenge.weekCompletions} of {weeklyChallenge.weekTarget}
+          {weeklyChallenge.streakCount > 0 ? (
+            <span className="hb-commitment__streak">{weeklyChallenge.streakCount} in a row</span>
+          ) : null}
+        </span>
+        <Tally
+          total={weeklyChallenge.weekTarget}
+          filled={weeklyChallenge.weekCompletions}
+          label={`${weeklyChallenge.weekCompletions} of ${weeklyChallenge.weekTarget} this week`}
+        />
+        <span className="hb-commitment__status">{statusText(weeklyChallenge)}</span>
+      </div>
     </div>
   );
 }

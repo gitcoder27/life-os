@@ -1,0 +1,67 @@
+import type { DueHabit, Routine } from "./types";
+
+export function habit(overrides: Partial<DueHabit>): DueHabit {
+  return {
+    id: "habit",
+    title: "Habit",
+    category: null,
+    habitType: "maintenance",
+    scheduleRule: {},
+    recurrence: null,
+    goalId: null,
+    goal: null,
+    targetPerDay: 1,
+    durationMinutes: 10,
+    timingMode: "anytime",
+    anchorText: null,
+    targetTimeMinutes: null,
+    windowStartMinutes: null,
+    windowEndMinutes: null,
+    timingStatusToday: "none",
+    timingLabel: null,
+    minimumVersion: null,
+    standardVersion: null,
+    stretchVersion: null,
+    obstaclePlan: null,
+    repairRule: null,
+    identityMeaning: null,
+    status: "active",
+    dueToday: true,
+    skippedToday: false,
+    completedToday: false,
+    completedCountToday: 0,
+    achievedLevelToday: null,
+    streakCount: 0,
+    risk: {
+      level: "none",
+      reason: null,
+      message: null,
+      dueCount7d: 0,
+      completedCount7d: 0,
+      completionRate7d: 100,
+    },
+    recentDays: [],
+    pauseWindows: [],
+    ...overrides,
+  };
+}
+
+export function routine(overrides: Partial<Routine>): Routine {
+  return {
+    id: "routine",
+    name: "Routine",
+    sortOrder: 0,
+    status: "active",
+    timingMode: "custom_window",
+    period: null,
+    windowStartMinutes: null,
+    windowEndMinutes: null,
+    timingStatusToday: "none",
+    timingLabel: null,
+    completedAtToday: null,
+    completedItems: 0,
+    totalItems: 0,
+    items: [],
+    ...overrides,
+  };
+}

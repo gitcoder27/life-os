@@ -1,47 +1,20 @@
 import { useEffect, useState } from "react";
 
-import {
-  formatFullRecurrenceSummary,
-  isRecurring,
-} from "../../../shared/lib/recurrence";
-
 import type {
   HabitFormValues,
   HabitItem,
   HabitPauseFormValues,
 } from "../types";
+import {
+  habitMetaItems,
+  pauseWindowActionLabel,
+  pauseWindowLabel,
+} from "../libraryFormat";
 import { formatMinutesToTimeInput } from "../timing";
+import { ActionMenu, type ActionMenuItem } from "./ActionMenu";
 import { CollapsibleSection } from "./CollapsibleSection";
 import { HabitForm } from "./HabitForm";
-
-function formatPauseDate(isoDate: string) {
-  try {
-    return new Date(`${isoDate}T12:00:00`).toLocaleDateString(undefined, {
-      month: "short",
-      day: "numeric",
-    });
-  } catch {
-    return isoDate;
-  }
-}
-
-function formatPauseWindowLabel(window: HabitItem["pauseWindows"][number]) {
-  const kindLabel = window.kind === "rest_day" ? "Rest day" : "Vacation";
-  const dateLabel =
-    window.startsOn === window.endsOn
-      ? formatPauseDate(window.startsOn)
-      : `${formatPauseDate(window.startsOn)} to ${formatPauseDate(window.endsOn)}`;
-
-  return `${kindLabel}${window.isActiveToday ? " now" : ""} \u00b7 ${dateLabel}`;
-}
-
-function getPauseWindowActionLabel(window: HabitItem["pauseWindows"][number]) {
-  if (window.kind === "vacation") {
-    return window.isActiveToday ? "End vacation" : "Remove vacation";
-  }
-
-  return window.isActiveToday ? "End rest day" : "Remove rest day";
-}
+import { ArchiveConfirm, ArchivedList, FormPanel, InlineError } from "./LibraryParts";
 
 type ManageHabitsSectionProps = {
   allHabits: HabitItem[];
@@ -82,6 +55,35 @@ type ManageHabitsSectionProps = {
   onCancelArchiveHabit: () => void;
   onConfirmArchiveHabit: (habitId: string) => void;
 };
+
+function toFormValues(habit: HabitItem): HabitFormValues {
+  return {
+    title: habit.title,
+    category: habit.category ?? "",
+    habitType: habit.habitType,
+    targetPerDay: String(habit.targetPerDay),
+    durationMinutes: String(habit.durationMinutes),
+    recurrenceRule: habit.recurrence?.rule ?? null,
+    goalId: habit.goalId ?? "",
+    timingMode: habit.timingMode,
+    anchorText: habit.anchorText ?? "",
+    targetTime: formatMinutesToTimeInput(habit.targetTimeMinutes),
+    windowStartTime: formatMinutesToTimeInput(habit.windowStartMinutes),
+    windowEndTime: formatMinutesToTimeInput(habit.windowEndMinutes),
+    minimumVersion: habit.minimumVersion ?? "",
+    standardVersion: habit.standardVersion ?? "",
+    stretchVersion: habit.stretchVersion ?? "",
+    obstaclePlan: habit.obstaclePlan ?? "",
+    repairRule: habit.repairRule ?? "",
+    identityMeaning: habit.identityMeaning ?? "",
+  };
+}
+
+function countLabel(habits: HabitItem[]) {
+  const active = habits.filter((habit) => habit.status === "active").length;
+  const paused = habits.filter((habit) => habit.status === "paused").length;
+  return paused > 0 ? `${active} active, ${paused} paused` : `${active} active`;
+}
 
 export function ManageHabitsSection({
   allHabits,
@@ -126,10 +128,35 @@ export function ManageHabitsSection({
     }
   }, [hasOpenForm]);
 
+  function menuItems(habit: HabitItem): ActionMenuItem[] {
+    const items: ActionMenuItem[] = [];
+
+    if (habit.status === "active") {
+      const restingToday = habit.pauseWindows.some((window) => window.isActiveToday);
+      items.push(
+        { label: "Rest day today", onSelect: () => onRestDay(habit.id), disabled: pausePending || restingToday },
+        { label: "Plan a vacation", onSelect: () => onOpenVacation(habit.id) },
+        { label: "Pause habit", onSelect: () => onChangeHabitStatus(habit.id, "paused"), disabled: updatePending },
+      );
+    } else if (habit.status === "paused") {
+      items.push({ label: "Resume habit", onSelect: () => onChangeHabitStatus(habit.id, "active"), disabled: updatePending });
+    }
+
+    items.push({
+      label: "Archive",
+      tone: "danger",
+      onSelect: () => onRequestArchiveHabit(habit.id),
+      disabled: updatePending,
+    });
+
+    return items;
+  }
+
   return (
     <CollapsibleSection
-      title="Manage habits"
-      subtitle={`${allHabits.filter((habit) => habit.status === "active").length} active`}
+      id="habits-manage-habits"
+      title="All habits"
+      subtitle={countLabel(allHabits)}
       defaultOpen={allHabits.length === 0}
       isOpen={isOpen}
       onOpenChange={setIsOpen}
@@ -138,285 +165,155 @@ export function ManageHabitsSection({
           <button
             className="button button--ghost button--small"
             type="button"
-            onClick={(event) => {
-              event.stopPropagation();
+            onClick={() => {
               setIsOpen(true);
               onOpenAddHabit();
             }}
           >
-            + Add habit
+            New habit
           </button>
         ) : null
       }
     >
       {showAddHabit ? (
-        <HabitForm
-          submitLabel="Create habit"
-          isPending={createPending}
-          onSubmit={onCreateHabit}
-          onCancel={() => {
-            onCloseAddHabit();
-            if (allHabits.length === 0) {
-              setIsOpen(true);
-            }
-          }}
-        />
+        <FormPanel title="New habit">
+          <HabitForm
+            submitLabel="Create habit"
+            isPending={createPending}
+            onSubmit={onCreateHabit}
+            onCancel={onCloseAddHabit}
+          />
+        </FormPanel>
       ) : null}
 
       {createError ? (
-        <InlineError message={createError.message || "Could not create habit."} />
+        <InlineError message={createError.message || "Couldn't create the habit."} />
       ) : null}
 
       {nonArchivedHabits.length > 0 ? (
-        <div className="manage-list">
+        <ul className="hb-items">
           {nonArchivedHabits.map((habit) => (
-            <div key={habit.id} className="manage-list__item">
+            <li key={habit.id} className="hb-item" id={`habits-manage-${habit.id}`}>
               {editingHabitId === habit.id ? (
-                <HabitForm
-                  initial={{
-                    title: habit.title,
-                    category: habit.category ?? "",
-                    habitType: habit.habitType,
-                    targetPerDay: String(habit.targetPerDay),
-                    durationMinutes: String(habit.durationMinutes),
-                    recurrenceRule: habit.recurrence?.rule ?? null,
-                    goalId: habit.goalId ?? "",
-                    timingMode: habit.timingMode,
-                    anchorText: habit.anchorText ?? "",
-                    targetTime: formatMinutesToTimeInput(habit.targetTimeMinutes),
-                    windowStartTime: formatMinutesToTimeInput(habit.windowStartMinutes),
-                    windowEndTime: formatMinutesToTimeInput(habit.windowEndMinutes),
-                    minimumVersion: habit.minimumVersion ?? "",
-                    standardVersion: habit.standardVersion ?? "",
-                    stretchVersion: habit.stretchVersion ?? "",
-                    obstaclePlan: habit.obstaclePlan ?? "",
-                    repairRule: habit.repairRule ?? "",
-                    identityMeaning: habit.identityMeaning ?? "",
-                  }}
-                  submitLabel="Save changes"
-                  isPending={updatePending}
-                  onSubmit={(values) => onUpdateHabit(habit.id, values)}
-                  onCancel={onCancelEditHabit}
-                />
+                <FormPanel title={`Edit ${habit.title}`}>
+                  <HabitForm
+                    initial={toFormValues(habit)}
+                    submitLabel="Save changes"
+                    isPending={updatePending}
+                    onSubmit={(values) => onUpdateHabit(habit.id, values)}
+                    onCancel={onCancelEditHabit}
+                  />
+                </FormPanel>
               ) : (
-                <div>
-                  <div className="manage-list__row">
-                    <div className="manage-list__info">
-                      <div className="manage-list__name">
-                        <span className={`status-dot status-dot--${habit.status}`} />
+                <>
+                  <div className={`hb-item__row${habit.status === "paused" ? " is-paused" : ""}`}>
+                    <span className={`hb-item__dot hb-item__dot--${habit.status}`} aria-hidden="true" />
+                    <div className="hb-item__body">
+                      <span className="hb-item__name">
                         {habit.title}
-                        {habit.pauseWindows.some((window) => window.isActiveToday) ? (
-                          <span className="tag tag--warning" style={{ marginLeft: "0.3rem" }}>
-                            paused today
-                          </span>
-                        ) : null}
-                      </div>
-                      <div className="manage-list__meta">
-                        {habit.category || "Uncategorized"}
-                        {habit.habitType ? ` · ${habit.habitType}` : ""}
-                        {` · ${habit.durationMinutes}m`}
-                        {habit.streakCount > 0 ? ` · ${habit.streakCount} streak` : ""}
-                        {habit.goal ? ` · ${habit.goal.title}` : ""}
-                        {habit.recurrence && isRecurring(habit.recurrence) ? (
-                          <span className="manage-list__recurrence">
-                            {" · ↻ "}
-                            {formatFullRecurrenceSummary(habit.recurrence.rule)}
-                          </span>
-                        ) : null}
-                      </div>
-                      {habit.timingLabel || habit.minimumVersion || habit.repairRule ? (
-                        <div className="manage-list__meta">
-                          {habit.timingLabel ? `Timing: ${habit.timingLabel}` : ""}
-                          {habit.minimumVersion ? ` · Min: ${habit.minimumVersion}` : ""}
-                          {habit.repairRule ? ` · Repair: ${habit.repairRule}` : ""}
-                        </div>
-                      ) : null}
+                        {habit.status === "paused" ? <span className="hb-item__state">Paused</span> : null}
+                      </span>
+                      <span className="hb-item__meta">
+                        {habitMetaItems(habit).map((item, index) => (
+                          <span key={index}>{item}</span>
+                        ))}
+                      </span>
                       {habit.pauseWindows.length > 0 ? (
-                        <div
-                          style={{
-                            display: "flex",
-                            flexWrap: "wrap",
-                            gap: "0.5rem",
-                            marginTop: "0.7rem",
-                          }}
-                        >
+                        <ul className="hb-item__pauses">
                           {habit.pauseWindows.map((window) => (
-                            <div key={window.id} className="habits-pause-pill">
-                              <span
-                                className={`habits-pause-pill__label${window.isActiveToday ? " habits-pause-pill__label--active" : ""}`}
-                                title={window.note ?? undefined}
-                              >
-                                {formatPauseWindowLabel(window)}
-                              </span>
+                            <li
+                              key={window.id}
+                              className={`hb-item__pause${window.isActiveToday ? " is-active" : ""}`}
+                              title={window.note ?? undefined}
+                            >
+                              <span>{pauseWindowLabel(window)}</span>
                               <button
-                                className="habits-pause-pill__remove"
+                                className="hb-item__pause-action"
                                 type="button"
                                 onClick={() => onDeletePauseWindow(habit.id, window.id)}
                                 disabled={deletePausePending}
+                                aria-label={`${pauseWindowActionLabel(window)} ${pauseWindowLabel(window).toLowerCase()} for ${habit.title}`}
                               >
-                                {getPauseWindowActionLabel(window)}
+                                {pauseWindowActionLabel(window)}
                               </button>
-                            </div>
+                            </li>
                           ))}
-                        </div>
+                        </ul>
                       ) : null}
                     </div>
-                    <div className="habits-manage-actions">
+                    <div className="hb-item__actions">
                       <button
-                        className="button button--ghost button--small"
+                        className="hb-item__edit"
                         type="button"
                         onClick={() => onEditHabit(habit.id)}
+                        aria-label={`Edit ${habit.title}`}
                       >
                         Edit
                       </button>
-                      {habit.status === "active" ? (
-                        <>
-                          <button
-                            className="button button--ghost button--small"
-                            type="button"
-                            onClick={() => onRestDay(habit.id)}
-                            disabled={pausePending}
-                          >
-                            Rest day
-                          </button>
-                          <button
-                            className="button button--ghost button--small"
-                            type="button"
-                            onClick={() => onOpenVacation(habit.id)}
-                          >
-                            Vacation
-                          </button>
-                          <button
-                            className="button button--ghost button--small"
-                            type="button"
-                            onClick={() => onChangeHabitStatus(habit.id, "paused")}
-                            disabled={updatePending}
-                          >
-                            Pause
-                          </button>
-                        </>
-                      ) : habit.status === "paused" ? (
-                        <button
-                          className="button button--ghost button--small"
-                          type="button"
-                          onClick={() => onChangeHabitStatus(habit.id, "active")}
-                          disabled={updatePending}
-                        >
-                          Resume
-                        </button>
-                      ) : null}
-                      {habit.status !== "archived" ? (
-                        confirmArchiveHabitId === habit.id ? (
-                          <span className="confirm-archive">
-                            <span className="confirm-archive__label">Archive?</span>
-                            <button
-                              className="button button--ghost button--small"
-                              type="button"
-                              style={{ color: "var(--negative)" }}
-                              onClick={() => onConfirmArchiveHabit(habit.id)}
-                              disabled={updatePending}
-                            >
-                              Yes
-                            </button>
-                            <button
-                              className="button button--ghost button--small"
-                              type="button"
-                              onClick={onCancelArchiveHabit}
-                            >
-                              No
-                            </button>
-                          </span>
-                        ) : (
-                          <button
-                            className="button button--ghost button--small"
-                            type="button"
-                            style={{ color: "var(--negative)" }}
-                            onClick={() => onRequestArchiveHabit(habit.id)}
-                            disabled={updatePending}
-                          >
-                            Archive
-                          </button>
-                        )
-                      ) : null}
+                      <ActionMenu label={`More actions for ${habit.title}`} items={menuItems(habit)} />
                     </div>
                   </div>
-                  {vacationHabitId === habit.id ? (
-                    <VacationForm
-                      vacationForm={vacationForm}
-                      isPending={pausePending}
-                      onChange={onVacationFormChange}
-                      onCancel={onCloseVacation}
-                      onSubmit={() => onSaveVacation(habit.id)}
+
+                  {confirmArchiveHabitId === habit.id ? (
+                    <ArchiveConfirm
+                      name={habit.title}
+                      detail="It leaves today's list and stops counting. You can restore it later."
+                      isPending={updatePending}
+                      onConfirm={() => onConfirmArchiveHabit(habit.id)}
+                      onCancel={onCancelArchiveHabit}
                     />
                   ) : null}
-                </div>
+
+                  {vacationHabitId === habit.id ? (
+                    <FormPanel title={`Vacation for ${habit.title}`}>
+                      <VacationForm
+                        vacationForm={vacationForm}
+                        isPending={pausePending}
+                        onChange={onVacationFormChange}
+                        onCancel={onCloseVacation}
+                        onSubmit={() => onSaveVacation(habit.id)}
+                      />
+                    </FormPanel>
+                  ) : null}
+                </>
               )}
-            </div>
+            </li>
           ))}
-        </div>
+        </ul>
       ) : !showAddHabit ? (
-        <div className="habits-group__empty">
-          <span className="habits-group__empty-text">
-            No habits yet. Add your first habit to start tracking consistency.
-          </span>
+        <div className="hb-library__empty">
+          <span>No habits yet. Add one to start checking in.</span>
           <button
             className="button button--ghost button--small"
             type="button"
             onClick={onOpenAddHabit}
           >
-            + Add your first habit
+            Add your first habit
           </button>
         </div>
       ) : null}
 
       {archivedHabits.length > 0 ? (
-        <CollapsibleSection
-          title="Archived habits"
-          subtitle={`${archivedHabits.length} archived`}
-        >
-          <div className="manage-list manage-list--archived">
-            {archivedHabits.map((habit) => (
-              <div key={habit.id} className="manage-list__item">
-                <div className="manage-list__row">
-                  <div className="manage-list__info">
-                    <div className="manage-list__name">
-                      <span className="status-dot status-dot--archived" />
-                      {habit.title}
-                    </div>
-                    <div className="manage-list__meta">
-                      {habit.category || "Uncategorized"}
-                      {habit.streakCount > 0 ? ` · ${habit.streakCount} streak` : ""}
-                    </div>
-                  </div>
-                  <div className="habits-manage-actions">
-                    <button
-                      className="button button--ghost button--small"
-                      type="button"
-                      onClick={() => onChangeHabitStatus(habit.id, "active")}
-                      disabled={updatePending}
-                    >
-                      Restore
-                    </button>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </CollapsibleSection>
+        <ArchivedList
+          noun="habit"
+          items={archivedHabits.map((habit) => ({
+            id: habit.id,
+            name: habit.title,
+            meta: habit.streakCount > 0 ? `${habit.streakCount} in a row before archiving` : null,
+          }))}
+          isPending={updatePending}
+          onRestore={(habitId) => onChangeHabitStatus(habitId, "active")}
+        />
       ) : null}
 
       {updateError ? (
-        <InlineError message={updateError.message || "Could not update habit."} />
+        <InlineError message={updateError.message || "Couldn't update the habit."} />
       ) : null}
       {pauseError ? (
-        <InlineError
-          message={pauseError.message || "Could not save the temporary pause."}
-        />
+        <InlineError message={pauseError.message || "Couldn't save the pause."} />
       ) : null}
       {deletePauseError ? (
-        <InlineError
-          message={deletePauseError.message || "Could not remove the temporary pause."}
-        />
+        <InlineError message={deletePauseError.message || "Couldn't remove the pause."} />
       ) : null}
     </CollapsibleSection>
   );
@@ -440,7 +337,6 @@ function VacationForm({
   return (
     <form
       className="manage-form"
-      style={{ marginTop: "0.85rem" }}
       onSubmit={(event) => {
         event.preventDefault();
         onSubmit();
@@ -504,13 +400,5 @@ function VacationForm({
         </button>
       </div>
     </form>
-  );
-}
-
-function InlineError({ message }: { message: string }) {
-  return (
-    <div className="inline-state inline-state--error" style={{ marginTop: "0.5rem" }}>
-      {message}
-    </div>
   );
 }

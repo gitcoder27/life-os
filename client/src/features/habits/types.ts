@@ -15,6 +15,8 @@ export type WeeklyChallenge = HabitsData["weeklyChallenge"];
 export type DailyScore = ReturnType<typeof useDailyScoreQuery>["data"];
 export type WeeklyMomentum = ReturnType<typeof useWeeklyMomentumQuery>["data"];
 export type ConsistencyBar = NonNullable<WeeklyMomentum>["dailyScores"][number];
+export type HabitDayMark = DueHabit["recentDays"][number];
+export type HabitCheckinLevel = NonNullable<DueHabit["achievedLevelToday"]>;
 
 export type HabitFormValues = {
   title: string;

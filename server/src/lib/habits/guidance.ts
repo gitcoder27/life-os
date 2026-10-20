@@ -1,4 +1,6 @@
 import type {
+  HabitDayMark,
+  HabitDayState,
   HabitRiskState,
   HabitScheduleRule,
   IsoDateString,
@@ -12,6 +14,7 @@ import {
   getHabitCompletionCountForIsoDate,
   isHabitCompletedOnIsoDate,
   isHabitDueOnIsoDate,
+  isHabitPausedOnIsoDate,
   type HabitPauseWindowLike,
 } from "./schedule.js";
 
@@ -135,6 +138,39 @@ export function calculateHabitRisk(
     completedCount7d,
     completionRate7d,
   };
+}
+
+export function calculateHabitRecentDays(
+  checkins: HabitCheckinLike[],
+  scheduleInput: HabitScheduleRule | RecurrenceDefinition,
+  targetIsoDate: IsoDateString,
+  pauseWindows: HabitPauseWindowLike[] = [],
+  targetPerDay = 1,
+): HabitDayMark[] {
+  const target = Math.max(1, targetPerDay);
+  const days: HabitDayMark[] = [];
+
+  for (let offset = 6; offset >= 0; offset -= 1) {
+    const date = addIsoDays(targetIsoDate, -offset);
+    const count = getHabitCompletionCountForIsoDate(checkins, date);
+    const scheduled = isHabitDueOnIsoDate(scheduleInput, date);
+    const due = scheduled && !isHabitPausedOnIsoDate(pauseWindows, date);
+    let state: HabitDayState;
+
+    if (count >= target) {
+      state = "done";
+    } else if (!due) {
+      state = scheduled ? "rest" : "not_due";
+    } else if (offset === 0) {
+      state = "open";
+    } else {
+      state = count > 0 ? "partial" : "missed";
+    }
+
+    days.push({ date, state });
+  }
+
+  return days;
 }
 
 export function calculateWeeklyHabitChallenge(input: {
